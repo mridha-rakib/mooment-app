@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import React, { useState } from "react";
+import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type AccountType = "personal" | "business";
 
@@ -110,7 +110,7 @@ export default function SignUp() {
               activeOpacity={0.7}
             >
               <View style={[styles.checkbox, keepSignedIn && styles.checkboxChecked]}>
-                {keepSignedIn && <Feather name="check" size={12} color="#0D0D12" />}
+                {keepSignedIn && <Feather name="check" size={12} color="#0e0d12" />}
               </View>
               <Text style={styles.checkboxText}>Keep me signed in</Text>
             </TouchableOpacity>
@@ -135,7 +135,7 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0D0D12",
+    backgroundColor: "#0e0d12",
   },
   container: {
     flex: 1,
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   signupButtonText: {
-    color: "#0D0D12",
+    color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
   },
