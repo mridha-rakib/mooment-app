@@ -7,6 +7,7 @@ import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
 import FeedPost, { PostData } from "../../components/FeedPost";
 import LiveChatBanner from "../../components/LiveChatBanner";
 import FeaturedProducts, { ProductData } from "../../components/FeaturedProducts";
+import HighlightsCarousel, { HighlightData } from "../../components/HighlightsCarousel";
 
 const { width } = Dimensions.get("window");
 
@@ -17,6 +18,14 @@ const MOCK_STORIES: StoryData[] = [
   { id: '3', type: 'standard', title: 'Enjoying\nsummer', imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop' },
   { id: '4', type: 'standard', title: 'First\nday @office', imageUri: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop' },
   { id: '5', type: 'muted', imageUri: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200&auto=format&fit=crop' },
+];
+
+const MOCK_HIGHLIGHTS: HighlightData[] = [
+  { id: '1', title: 'Birthday\nParty', imageUri: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=200&auto=format&fit=crop', ringColor: '#B624A9' },
+  { id: '2', title: 'Enjoying\nsummer', imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop', ringColor: '#42B0D5' },
+  { id: '3', title: 'First\nday @office', imageUri: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop', ringColor: '#C4708A' },
+  { id: '4', title: 'Birthday\nParty', imageUri: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop', ringColor: '#D4B0EB' },
+  { id: '5', title: 'Day Out', imageUri: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=200&auto=format&fit=crop', ringColor: '#B624A9' },
 ];
 
 const MOCK_PRODUCTS: ProductData[] = [
@@ -140,6 +149,10 @@ export default function HomeFeed() {
                   
                   <FeaturedProducts products={MOCK_PRODUCTS} />
                 </>
+              )}
+              {/* After 'p3' (Event post), insert HighlightsCarousel */}
+              {post.id === 'p3' && (
+                <HighlightsCarousel highlights={MOCK_HIGHLIGHTS} />
               )}
             </React.Fragment>
           ))}
