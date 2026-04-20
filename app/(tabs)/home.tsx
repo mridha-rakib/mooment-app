@@ -6,6 +6,7 @@ import { Feather } from "@expo/vector-icons";
 import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
 import FeedPost, { PostData } from "../../components/FeedPost";
 import LiveChatBanner from "../../components/LiveChatBanner";
+import FeaturedProducts, { ProductData } from "../../components/FeaturedProducts";
 
 const { width } = Dimensions.get("window");
 
@@ -16,6 +17,13 @@ const MOCK_STORIES: StoryData[] = [
   { id: '3', type: 'standard', title: 'Enjoying\nsummer', imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop' },
   { id: '4', type: 'standard', title: 'First\nday @office', imageUri: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop' },
   { id: '5', type: 'muted', imageUri: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200&auto=format&fit=crop' },
+];
+
+const MOCK_PRODUCTS: ProductData[] = [
+  { id: '1', title: 'T-Shirt', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=200&auto=format&fit=crop' },
+  { id: '2', title: 'Overalls', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?q=80&w=200&auto=format&fit=crop' },
+  { id: '3', title: 'T-Shirt', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=200&auto=format&fit=crop' },
+  { id: '4', title: 'Dress', brand: 'DJ Loko', price: '£55', imageUri: 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?q=80&w=200&auto=format&fit=crop' },
 ];
 
 const MOCK_POSTS: PostData[] = [
@@ -86,18 +94,22 @@ export default function HomeFeed() {
             <React.Fragment key={post.id}>
               <FeedPost post={post} />
               
-              {/* Insert LiveChatBanner after the Dj Koko post to match screenshot exactly */}
+              {/* Insert Conditional Plugins between feed items */}
               {post.id === 'p1' && (
-                <LiveChatBanner 
-                  title="Pre-show chat with DJ Nova"
-                  listeningCount={412}
-                  avatars={[
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?q=80&w=150&auto=format&fit=crop'
-                  ]}
-                />
+                <>
+                  <LiveChatBanner 
+                    title="Pre-show chat with DJ Nova"
+                    listeningCount={412}
+                    avatars={[
+                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+                      'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
+                      'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop',
+                      'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?q=80&w=150&auto=format&fit=crop'
+                    ]}
+                  />
+                  
+                  <FeaturedProducts products={MOCK_PRODUCTS} />
+                </>
               )}
             </React.Fragment>
           ))}
