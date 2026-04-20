@@ -1,13 +1,13 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Platform } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Dimensions, Platform, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 
 // Components
-import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
-import FeedPost, { PostData } from "../../components/FeedPost";
-import LiveChatBanner from "../../components/LiveChatBanner";
 import FeaturedProducts, { ProductData } from "../../components/FeaturedProducts";
+import FeedPost, { PostData } from "../../components/FeedPost";
 import HighlightsCarousel, { HighlightData } from "../../components/HighlightsCarousel";
+import HomeHeader from "../../components/HomeHeader";
+import LiveChatBanner from "../../components/LiveChatBanner";
+import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
 
 const { width } = Dimensions.get("window");
 
@@ -135,24 +135,7 @@ export default function HomeFeed() {
       <View style={styles.container}>
         
         {/* Top Navigation */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.feedBtn} activeOpacity={0.8}>
-            <View style={styles.greenDot} />
-            <Text style={styles.feedText}>Feed</Text>
-            <Feather name="chevron-down" size={14} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <Text style={styles.logoText}>Mooment</Text>
-
-          <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-              <Feather name="search" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-              <Feather name="sliders" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <HomeHeader />
 
         {/* Main Feed Content */}
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -192,48 +175,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? 24 : 0,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    height: 60,
-  },
-  feedBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1A1A22",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  greenDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#2DB46D",
-    marginRight: 6,
-  },
-  feedText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "bold",
-    marginRight: 4,
-  },
-  logoText: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "bold",
-    fontFamily: "serif",
-    fontStyle: "italic",
-    position: 'absolute',
-    left: width / 2 - 45,
-  },
-  headerIcons: {
-    flexDirection: "row",
-  },
-  iconBtn: {
-    marginLeft: 20,
   },
 });
