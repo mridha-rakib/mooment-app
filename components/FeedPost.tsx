@@ -1,21 +1,34 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
-import { Feather, Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
+
+export type EventDetails = {
+  isLive?: boolean;
+  tags?: { label: string; bg?: string; color?: string }[];
+  title?: string;
+  datetime?: string;
+  distance?: string;
+  attendeesAvatars?: string[];
+  attendeesCount?: number;
+};
 
 export type PostData = {
   id: string;
   authorName: string;
   authorAvatar: string;
   timeAgo: string;
-  caption: string;
+  caption?: string; 
   mediaUris: string[];
   ticketsCount?: number;
   likedBy?: string;
+  headerLabel?: string;
+  isPublic?: boolean;
   likesCount?: number;
   commentsCount?: number;
   sharesCount?: number;
+  eventDetails?: EventDetails;
 };
 
 export default function FeedPost({ post }: { post: PostData }) {
@@ -32,6 +45,10 @@ export default function FeedPost({ post }: { post: PostData }) {
 
   return (
     <View style={styles.postWrapper}>
+      {/* Header Context Labels */}
+      {post.headerLabel && (
+        <Text style={styles.headerLabelText}>{post.headerLabel}</Text>
+      )}
       {post.likedBy && (
         <Text style={styles.likedByText}>
           <Text style={styles.likedByNormal}>liked by </Text>
@@ -46,7 +63,15 @@ export default function FeedPost({ post }: { post: PostData }) {
             <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
             <View>
               <Text style={styles.postAuthor}>{post.authorName}</Text>
-              <Text style={styles.postTime}>{post.timeAgo}</Text>
+              <View style={styles.timeRow}>
+                <Text style={styles.postTime}>{post.timeAgo}</Text>
+                {post.isPublic && (
+                  <>
+                    <Text style={styles.dotSeparator}> • </Text>
+                    <Feather name="globe" size={10} color="#8E8E9B" />
+                  </>
+                )}
+              </View>
             </View>
           </View>
           
@@ -62,10 +87,12 @@ export default function FeedPost({ post }: { post: PostData }) {
         </View>
 
         {/* Post Text */}
-        <Text style={styles.postCaption}>{post.caption}</Text>
+        {post.caption ? (
+          <Text style={styles.postCaption}>{post.caption}</Text>
+        ) : null}
 
         {/* Post Media - Dynamic Horizontal Scrolling Carousel */}
-        <View style={styles.postMediaContainer}>
+        <View style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}>
           <ScrollView 
             horizontal 
             pagingEnabled 
@@ -81,23 +108,76 @@ export default function FeedPost({ post }: { post: PostData }) {
               />
             ))}
           </ScrollView>
-          
-          {/* Media Counters & Badges */}
-          {post.mediaUris.length > 1 && (
-            <View style={styles.imageCounter}>
-              <Text style={styles.imageCounterText}>
-                {currentMediaIndex + 1}/{post.mediaUris.length}
-              </Text>
-            </View>
-          )}
 
-          {post.ticketsCount !== undefined && post.ticketsCount > 0 && (
-            <TouchableOpacity style={styles.ticketFab} activeOpacity={0.9}>
-              <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
-              <View style={styles.ticketBadge}>
-                <Text style={styles.ticketBadgeText}>{post.ticketsCount}</Text>
+          {/* Conditional Layout: Standard vs Event Details */}
+          {post.eventDetails ? (
+            <>
+              {/* Event Live Badge */}
+              {post.eventDetails.isLive && (
+                <View style={styles.liveNowBadge}>
+                  <View style={styles.liveNowDot} />
+                  <Text style={styles.liveNowText}>Live Now</Text>
+                </View>
+              )}
+
+              {/* Event Overlay Bottom Info */}
+              <View style={styles.eventOverlayBottom}>
+                <View style={styles.eventTagsRow}>
+                  {post.eventDetails.tags?.map((tag, i) => (
+                    <View key={i} style={[styles.eventTag, { backgroundColor: tag.bg || '#FFFFFF' }]}>
+                      <Text style={[styles.eventTagText, { color: tag.color || '#000000' }]}>{tag.label}</Text>
+                    </View>
+                  ))}
+                </View>
+                
+                <Text style={styles.eventTitle}>{post.eventDetails.title}</Text>
+                <Text style={styles.eventSubtitle}>
+                  {post.eventDetails.datetime} • {post.eventDetails.distance}
+                </Text>
+                
+                <View style={styles.eventAttendeesRow}>
+                  <View style={styles.avatarCluster}>
+                    {post.eventDetails.attendeesAvatars?.map((uri, i) => (
+                      <Image 
+                        key={i} 
+                        source={{ uri }} 
+                        style={[
+                          styles.avatarSmall, 
+                          { zIndex: (post.eventDetails?.attendeesAvatars?.length || 0) - i },
+                          i > 0 && { marginLeft: -8 }
+                        ]} 
+                      />
+                    ))}
+                  </View>
+                  <Text style={styles.attendeesText}>{post.eventDetails.attendeesCount} going</Text>
+                </View>
+
+                {/* View Map Button inside Overlay */}
+                <TouchableOpacity style={styles.viewMapBtn} activeOpacity={0.8}>
+                  <Text style={styles.viewMapText}>View Map</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {/* Media Counters & Badges (Standard) */}
+              {post.mediaUris.length > 1 && (
+                <View style={styles.imageCounter}>
+                  <Text style={styles.imageCounterText}>
+                    {currentMediaIndex + 1}/{post.mediaUris.length}
+                  </Text>
+                </View>
+              )}
+
+              {post.ticketsCount !== undefined && post.ticketsCount > 0 && (
+                <TouchableOpacity style={styles.ticketFab} activeOpacity={0.9}>
+                  <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
+                  <View style={styles.ticketBadge}>
+                    <Text style={styles.ticketBadgeText}>{post.ticketsCount}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
@@ -132,6 +212,13 @@ export default function FeedPost({ post }: { post: PostData }) {
 const styles = StyleSheet.create({
   postWrapper: {
     marginBottom: 20,
+  },
+  headerLabelText: {
+    color: "#8E8E9B",
+    fontSize: 14,
+    fontWeight: "500",
+    marginHorizontal: 16,
+    marginBottom: 8,
   },
   likedByText: {
     color: "#FFFFFF",
@@ -171,10 +258,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
   },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
   postTime: {
     color: "#8E8E9B",
     fontSize: 11,
-    marginTop: 2,
+  },
+  dotSeparator: {
+    color: "#8E8E9B",
+    fontSize: 10,
   },
   postHeaderActions: {
     flexDirection: "row",
@@ -212,8 +307,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
+  mediaNoTopMargin: {
+    marginTop: 4, // Add a tiny bit of space if no caption exists
+  },
   postImage: {
-    width: width - 64, // Accounts for postCard margin (16 * 2) and padding (16 * 2)
+    width: width - 64, 
     height: "100%",
   },
   imageCounter: {
@@ -274,5 +372,100 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginLeft: 6,
+  },
+  /* Event Overlay Styles */
+  liveNowBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(22, 216, 105, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 216, 105, 0.4)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  liveNowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16D869',
+    marginRight: 6,
+  },
+  liveNowText: {
+    color: '#16D869',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  eventOverlayBottom: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFFFFF',
+    paddingLeft: 12,
+  },
+  eventTagsRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  eventTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  eventTagText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  eventTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  eventSubtitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  eventAttendeesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarCluster: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  avatarSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#000000',
+  },
+  attendeesText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+  },
+  viewMapBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  viewMapText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

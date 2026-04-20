@@ -56,6 +56,36 @@ const MOCK_POSTS: PostData[] = [
     ],
     likesCount: 142,
     commentsCount: 12
+  },
+  {
+    id: 'p3',
+    headerLabel: 'Nearby Events going on',
+    authorName: 'Dj Koko',
+    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '2 min ago',
+    isPublic: true,
+    mediaUris: [
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
+    ],
+    eventDetails: {
+      isLive: true,
+      tags: [
+        { label: 'Music Party', bg: '#FFFFFF', color: '#000000' },
+        { label: 'Busy', bg: '#FFFFFF', color: '#F2545B' }
+      ],
+      title: 'Rooftop Session Vol.4',
+      datetime: 'Sat, Sep 9 • 9:00 - 4:00 PM',
+      distance: '0.3mi',
+      attendeesAvatars: [
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop'
+      ],
+      attendeesCount: 41
+    },
+    likesCount: 25,
+    commentsCount: 25,
+    sharesCount: 25
   }
 ];
 
