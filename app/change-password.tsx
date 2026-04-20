@@ -3,9 +3,13 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-export default function NewPassword() {
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+export default function ChangePassword() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -23,18 +27,35 @@ export default function NewPassword() {
             <Text style={styles.subtitle}>Set a new password and continue using this app</Text>
           </View>
 
+          <Text style={styles.inputLabel}>CURRENT PASSWORD</Text>
           <View style={styles.inputContainer}>
             <Feather name="lock" size={20} color="#7A7A85" style={styles.icon} />
             <TextInput
               style={styles.input}
               placeholder="........"
               placeholderTextColor="#7A7A85"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
+              secureTextEntry={!showCurrentPassword}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#7A7A85" />
+            <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)} style={styles.eyeBtn}>
+              <Feather name={showCurrentPassword ? "eye" : "eye-off"} size={20} color="#7A7A85" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.inputLabel}>NEW PASSWORD</Text>
+          <View style={styles.inputContainer}>
+            <Feather name="lock" size={20} color="#7A7A85" style={styles.icon} />
+            <TextInput
+              style={styles.input}
+              placeholder="........"
+              placeholderTextColor="#7A7A85"
+              secureTextEntry={!showNewPassword}
+              value={newPassword}
+              onChangeText={setNewPassword}
+            />
+            <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)} style={styles.eyeBtn}>
+              <Feather name={showNewPassword ? "eye" : "eye-off"} size={20} color="#7A7A85" />
             </TouchableOpacity>
           </View>
 
@@ -55,11 +76,11 @@ export default function NewPassword() {
           </View>
 
           <TouchableOpacity 
-            style={styles.continueButton} 
+            style={styles.doneButton} 
             activeOpacity={0.8}
             onPress={() => router.push("/success-changed")}
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -90,7 +111,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontFamily: "serif",
     fontStyle: "italic",
-    marginBottom: 48,
+    marginBottom: 32,
   },
   title: {
     fontSize: 22,
@@ -121,7 +142,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     height: 56,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   icon: {
     marginRight: 14,
@@ -134,16 +155,16 @@ const styles = StyleSheet.create({
   eyeBtn: {
     padding: 4,
   },
-  continueButton: {
+  doneButton: {
     backgroundColor: "#B59EBE",
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 32,
-    marginTop: 8,
+    marginTop: 12,
   },
-  continueButtonText: {
+  doneButtonText: {
     color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
