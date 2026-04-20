@@ -36,8 +36,10 @@ const MOCK_PRODUCTS: ProductData[] = [
 ];
 
 const MOCK_POSTS: PostData[] = [
+  // --- PREVIOUS STANDARD POSTS ---
   {
-    id: 'p1',
+    id: 'p_old1',
+    postType: 'standard',
     authorName: 'Dj Koko',
     authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
     timeAgo: '2 min ago',
@@ -54,7 +56,8 @@ const MOCK_POSTS: PostData[] = [
     sharesCount: 25
   },
   {
-    id: 'p2',
+    id: 'p_old2',
+    postType: 'standard',
     authorName: 'Sarah Jenna',
     authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&auto=format&fit=crop',
     timeAgo: '1 hr ago',
@@ -66,21 +69,66 @@ const MOCK_POSTS: PostData[] = [
     likesCount: 142,
     commentsCount: 12
   },
+
+  // --- NEW CUSTOM POSTS FROM SCREENSHOT ---
+  {
+    id: 'p1',
+    postType: 'audio',
+    authorName: 'Brooklyn Simmons',
+    authorContextNodes: [
+      { text: ' with ', type: 'muted' },
+      { text: 'Ketty Perera', type: 'bold' },
+      { text: ' at ', type: 'muted' },
+      { text: 'Rooftop Series Vol.4', type: 'bold' }
+    ],
+    authorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '2 min ago',
+    caption: 'Behind the scenes at Saturday market',
+    mediaUris: [],
+    audioDetails: {
+      duration: '2:13',
+      currentTime: '0:47'
+    },
+    likesCount: 25,
+    commentsCount: 25,
+    sharesCount: 25
+  },
+  {
+    id: 'p2',
+    postType: 'standard', // no media means it's a Text post effectively
+    authorName: 'Tuval Mor',
+    authorContextNodes: [
+      { text: ' with ', type: 'muted' },
+      { text: 'Ketty Perera', type: 'bold' }
+    ],
+    authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
+    isFollowing: true,
+    timeAgo: '2 min ago',
+    caption: 'Behind the scenes at Saturday market',
+    mediaUris: [],
+    likesCount: 25,
+    commentsCount: 25,
+    sharesCount: 25
+  },
   {
     id: 'p3',
-    headerLabel: 'Nearby Events going on',
+    postType: 'event',
     authorName: 'Dj Koko',
+    authorContextNodes: [
+      { text: ' hosting ', type: 'muted' },
+      { text: 'Rooftop Session Vol.4', type: 'bold' },
+      { text: ' event', type: 'muted' },
+    ],
     authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
     timeAgo: '2 min ago',
-    isPublic: true,
     mediaUris: [
       'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
     ],
     eventDetails: {
       isLive: true,
       tags: [
-        { label: 'Music Party', bg: '#FFFFFF', color: '#000000' },
-        { label: 'Busy', bg: '#FFFFFF', color: '#F2545B' }
+        { label: 'Food & Drinks', bg: '#FFFFFF', color: '#E06B3B' },
+        { label: 'Packed', bg: '#FFFFFF', color: '#F2545B' }
       ],
       title: 'Rooftop Session Vol.4',
       datetime: 'Sat, Sep 9 • 9:00 - 4:00 PM',
@@ -90,7 +138,8 @@ const MOCK_POSTS: PostData[] = [
         'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
         'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop'
       ],
-      attendeesCount: 41
+      attendeesCount: 41,
+      priceLabel: 'Free'
     },
     likesCount: 25,
     commentsCount: 25,
@@ -106,10 +155,14 @@ type FeedItem =
   | { type: 'highlights'; id: string; data: HighlightData[] };
 
 const MOCK_FEED: FeedItem[] = [
-  { type: 'post', id: 'f1', data: MOCK_POSTS[0] }, // Dj Koko standard post
+  { type: 'post', id: 'f0', data: MOCK_POSTS[0] }, // Original DJ Koko
+  { type: 'post', id: 'f_old', data: MOCK_POSTS[1] }, // Original Sarah Jenna
+  { type: 'post', id: 'f1', data: MOCK_POSTS[2] }, // Audio Post
+  { type: 'post', id: 'f2', data: MOCK_POSTS[3] }, // Text Post
+  { type: 'post', id: 'f3', data: MOCK_POSTS[4] }, // Event Post
   { 
     type: 'live_chat', 
-    id: 'f2', 
+    id: 'f4', 
     data: { 
       contextBold: 'Dickenson, Johnson',
       contextNormal: 'are on the live room',
@@ -123,9 +176,7 @@ const MOCK_FEED: FeedItem[] = [
       ]
     }
   },
-  { type: 'featured_products', id: 'f3', data: MOCK_PRODUCTS },
-  { type: 'post', id: 'f4', data: MOCK_POSTS[1] }, // Sarah Jenna post
-  { type: 'post', id: 'f5', data: MOCK_POSTS[2] }, // Dj Koko Event post
+  { type: 'featured_products', id: 'f5', data: MOCK_PRODUCTS },
   { type: 'highlights', id: 'f6', data: MOCK_HIGHLIGHTS }
 ];
 

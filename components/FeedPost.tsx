@@ -4,6 +4,19 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
+// Hardcoded visual waveform for Audio posts
+const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38, 22, 16, 32, 24, 14, 28, 36, 18, 12, 30, 42, 24, 16, 38, 28, 14, 45, 20, 12, 32, 24, 18, 10, 26, 14, 10];
+
+export type PostContextNode = {
+  text: string;
+  type: 'bold' | 'muted';
+};
+
+export type AudioDetails = {
+  duration: string;
+  currentTime: string;
+};
+
 export type EventDetails = {
   isLive?: boolean;
   tags?: { label: string; bg?: string; color?: string }[];
@@ -12,15 +25,19 @@ export type EventDetails = {
   distance?: string;
   attendeesAvatars?: string[];
   attendeesCount?: number;
+  priceLabel?: string;
 };
 
 export type PostData = {
   id: string;
+  postType: 'standard' | 'audio' | 'event';
   authorName: string;
+  authorContextNodes?: PostContextNode[];
   authorAvatar: string;
+  isFollowing?: boolean;
   timeAgo: string;
   caption?: string; 
-  mediaUris: string[];
+  mediaUris?: string[];
   ticketsCount?: number;
   likedBy?: string;
   headerLabel?: string;
@@ -29,6 +46,7 @@ export type PostData = {
   commentsCount?: number;
   sharesCount?: number;
   eventDetails?: EventDetails;
+  audioDetails?: AudioDetails;
 };
 
 export default function FeedPost({ post }: { post: PostData }) {
@@ -61,8 +79,16 @@ export default function FeedPost({ post }: { post: PostData }) {
         <View style={styles.postHeader}>
           <View style={styles.postAuthorInfo}>
             <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
-            <View>
-              <Text style={styles.postAuthor}>{post.authorName}</Text>
+            <View style={styles.authorTextContainer}>
+              <Text style={styles.authorLine} numberOfLines={2}>
+                <Text style={styles.postAuthor}>{post.authorName}</Text>
+                {post.authorContextNodes?.map((node, i) => (
+                  <Text key={i} style={node.type === 'muted' ? styles.authorMuted : styles.postAuthor}>
+                    {node.text}
+                  </Text>
+                ))}
+              </Text>
+              
               <View style={styles.timeRow}>
                 <Text style={styles.postTime}>{post.timeAgo}</Text>
                 {post.isPublic && (
@@ -76,10 +102,17 @@ export default function FeedPost({ post }: { post: PostData }) {
           </View>
           
           <View style={styles.postHeaderActions}>
-            <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
-              <Feather name="plus" size={12} color="#D4B0EB" />
-              <Text style={styles.followBtnText}>Follow</Text>
-            </TouchableOpacity>
+            {post.isFollowing ? (
+              <TouchableOpacity style={styles.followingBtn} activeOpacity={0.8}>
+                <Text style={styles.followingBtnText}>Following</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
+                <Feather name="plus" size={12} color="#D4B0EB" />
+                <Text style={styles.followBtnText}>Follow</Text>
+              </TouchableOpacity>
+            )}
+            
             <TouchableOpacity style={styles.moreBtn}>
               <Feather name="more-horizontal" size={20} color="#8E8E9B" />
             </TouchableOpacity>
@@ -91,95 +124,127 @@ export default function FeedPost({ post }: { post: PostData }) {
           <Text style={styles.postCaption}>{post.caption}</Text>
         ) : null}
 
-        {/* Post Media - Dynamic Horizontal Scrolling Carousel */}
-        <View style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}>
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleScroll}
-            scrollEventThrottle={16}
-          >
-            {post.mediaUris.map((uri, index) => (
-              <Image 
-                key={index}
-                source={{ uri }} 
-                style={styles.postImage} 
-              />
-            ))}
-          </ScrollView>
+        {/* Dynamic Media Section based on Post Type */}
+        {post.postType === 'audio' && post.audioDetails && (
+          <View style={styles.audioContainer}>
+            <View style={styles.waveformRow}>
+               {WAVEFORM_HEIGHTS.map((h, i) => (
+                 <View 
+                   key={i} 
+                   style={[
+                     styles.waveBar, 
+                     { height: h, backgroundColor: i < 15 ? '#8E54E9' : '#454555' }
+                   ]} 
+                 />
+               ))}
+            </View>
+            <View style={styles.audioControlsRow}>
+               <TouchableOpacity style={styles.playBtn} activeOpacity={0.8}>
+                  <Ionicons name="play" size={16} color="#000000" style={{marginLeft: 2}} />
+               </TouchableOpacity>
+               <Text style={styles.audioTimeText}>{post.audioDetails.currentTime} / {post.audioDetails.duration}</Text>
+            </View>
+          </View>
+        )}
 
-          {/* Conditional Layout: Standard vs Event Details */}
-          {post.eventDetails ? (
-            <>
-              {/* Event Live Badge */}
-              {post.eventDetails.isLive && (
-                <View style={styles.liveNowBadge}>
-                  <View style={styles.liveNowDot} />
-                  <Text style={styles.liveNowText}>Live Now</Text>
-                </View>
-              )}
+        {(post.postType === 'standard' || post.postType === 'event') && post.mediaUris && post.mediaUris.length > 0 && (
+          <View style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}>
+            <ScrollView 
+              horizontal 
+              pagingEnabled 
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handleScroll}
+              scrollEventThrottle={16}
+            >
+              {post.mediaUris.map((uri, index) => (
+                <Image 
+                  key={index}
+                  source={{ uri }} 
+                  style={styles.postImage} 
+                />
+              ))}
+            </ScrollView>
 
-              {/* Event Overlay Bottom Info */}
-              <View style={styles.eventOverlayBottom}>
-                <View style={styles.eventTagsRow}>
-                  {post.eventDetails.tags?.map((tag, i) => (
-                    <View key={i} style={[styles.eventTag, { backgroundColor: tag.bg || '#FFFFFF' }]}>
-                      <Text style={[styles.eventTagText, { color: tag.color || '#000000' }]}>{tag.label}</Text>
-                    </View>
-                  ))}
-                </View>
-                
-                <Text style={styles.eventTitle}>{post.eventDetails.title}</Text>
-                <Text style={styles.eventSubtitle}>
-                  {post.eventDetails.datetime} • {post.eventDetails.distance}
-                </Text>
-                
-                <View style={styles.eventAttendeesRow}>
-                  <View style={styles.avatarCluster}>
-                    {post.eventDetails.attendeesAvatars?.map((uri, i) => (
-                      <Image 
-                        key={i} 
-                        source={{ uri }} 
-                        style={[
-                          styles.avatarSmall, 
-                          { zIndex: (post.eventDetails?.attendeesAvatars?.length || 0) - i },
-                          i > 0 && { marginLeft: -8 }
-                        ]} 
-                      />
+            {/* Conditional Layout: Event Details Overlay */}
+            {post.postType === 'event' && post.eventDetails ? (
+              <>
+                {/* Event Live Badge */}
+                {post.eventDetails.isLive && (
+                  <View style={styles.liveNowBadge}>
+                    <View style={styles.liveNowDot} />
+                    <Text style={styles.liveNowText}>Live Now</Text>
+                  </View>
+                )}
+
+                {/* Event Overlay Bottom Info */}
+                <View style={styles.eventOverlayBottom}>
+                  <View style={styles.eventTagsRow}>
+                    {post.eventDetails.tags?.map((tag, i) => (
+                      <View key={i} style={[styles.eventTag, { backgroundColor: tag.bg || '#FFFFFF' }]}>
+                        <Text style={[styles.eventTagText, { color: tag.color || '#000000' }]}>{tag.label}</Text>
+                      </View>
                     ))}
                   </View>
-                  <Text style={styles.attendeesText}>{post.eventDetails.attendeesCount} going</Text>
-                </View>
-
-                {/* View Map Button inside Overlay */}
-                <TouchableOpacity style={styles.viewMapBtn} activeOpacity={0.8}>
-                  <Text style={styles.viewMapText}>View Map</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
-              {/* Media Counters & Badges (Standard) */}
-              {post.mediaUris.length > 1 && (
-                <View style={styles.imageCounter}>
-                  <Text style={styles.imageCounterText}>
-                    {currentMediaIndex + 1}/{post.mediaUris.length}
+                  
+                  <Text style={styles.eventTitle}>{post.eventDetails.title}</Text>
+                  <Text style={styles.eventSubtitle}>
+                    {post.eventDetails.datetime} • {post.eventDetails.distance}
                   </Text>
-                </View>
-              )}
-
-              {post.ticketsCount !== undefined && post.ticketsCount > 0 && (
-                <TouchableOpacity style={styles.ticketFab} activeOpacity={0.9}>
-                  <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
-                  <View style={styles.ticketBadge}>
-                    <Text style={styles.ticketBadgeText}>{post.ticketsCount}</Text>
+                  
+                  <View style={styles.eventAttendeesRow}>
+                    <View style={styles.avatarCluster}>
+                      {post.eventDetails.attendeesAvatars?.map((uri, i) => (
+                        <Image 
+                          key={i} 
+                          source={{ uri }} 
+                          style={[
+                            styles.avatarSmall, 
+                            { zIndex: (post.eventDetails?.attendeesAvatars?.length || 0) - i },
+                            i > 0 && { marginLeft: -8 }
+                          ]} 
+                        />
+                      ))}
+                    </View>
+                    <Text style={styles.attendeesText}>{post.eventDetails.attendeesCount} going</Text>
                   </View>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
+
+                  {/* Buttons on Right */}
+                  <View style={styles.eventActionsCol}>
+                    <TouchableOpacity style={styles.viewMapBtn} activeOpacity={0.8}>
+                      <Text style={styles.viewMapText}>View Map</Text>
+                    </TouchableOpacity>
+                    {post.eventDetails.priceLabel && (
+                      <TouchableOpacity style={styles.priceBtn} activeOpacity={0.8}>
+                        <Text style={styles.priceBtnText}>{post.eventDetails.priceLabel}</Text>
+                        <Feather name="chevron-right" size={14} color="#000000" style={{marginTop: 1}}/>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </>
+            ) : post.postType === 'standard' && (
+              <>
+                {/* Media Counters & Badges (Standard) */}
+                {post.mediaUris.length > 1 && (
+                  <View style={styles.imageCounter}>
+                    <Text style={styles.imageCounterText}>
+                      {currentMediaIndex + 1}/{post.mediaUris.length}
+                    </Text>
+                  </View>
+                )}
+
+                {post.ticketsCount !== undefined && post.ticketsCount > 0 && (
+                  <TouchableOpacity style={styles.ticketFab} activeOpacity={0.9}>
+                    <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
+                    <View style={styles.ticketBadge}>
+                      <Text style={styles.ticketBadgeText}>{post.ticketsCount}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        )}
 
         {/* Post Footer Actions */}
         {(post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
@@ -240,23 +305,35 @@ const styles = StyleSheet.create({
   postHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   postAuthorInfo: {
     flexDirection: "row",
-    alignItems: "center",
+    flex: 1,
   },
   postAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    marginRight: 12,
+    marginRight: 10,
+  },
+  authorTextContainer: {
+    flex: 1,
+    paddingRight: 8,
+    justifyContent: "center",
+  },
+  authorLine: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   postAuthor: {
     color: "#FFFFFF",
-    fontSize: 14,
     fontWeight: "bold",
+  },
+  authorMuted: {
+    color: "#8E8E9B",
+    fontWeight: "normal",
   },
   timeRow: {
     flexDirection: "row",
@@ -274,6 +351,7 @@ const styles = StyleSheet.create({
   postHeaderActions: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 4,
   },
   followBtn: {
     flexDirection: "row",
@@ -283,7 +361,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginRight: 12,
+    marginRight: 10,
   },
   followBtnText: {
     color: "#D4B0EB",
@@ -291,8 +369,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 4,
   },
+  followingBtn: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 10,
+  },
+  followingBtnText: {
+    color: "#D0D0D8",
+    fontSize: 11,
+    fontWeight: "600",
+  },
   moreBtn: {
-    padding: 4,
+    padding: 2,
   },
   postCaption: {
     color: "#D0D0D8", 
@@ -308,11 +398,46 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   mediaNoTopMargin: {
-    marginTop: 4, // Add a tiny bit of space if no caption exists
+    marginTop: 4,
   },
   postImage: {
     width: width - 64, 
     height: "100%",
+  },
+  /* Audio Post Styles */
+  audioContainer: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  waveformRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 60,
+    marginBottom: 16,
+  },
+  waveBar: {
+    width: 3,
+    borderRadius: 2,
+    marginRight: 4,
+  },
+  audioControlsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  playBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#D0D0D8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  audioTimeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
   },
   imageCounter: {
     position: "absolute",
@@ -405,7 +530,7 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     borderLeftWidth: 3,
-    borderLeftColor: '#FFFFFF',
+    borderLeftColor: '#D4B0EB', // Violet matching the screenshot accent
     paddingLeft: 12,
   },
   eventTagsRow: {
@@ -452,20 +577,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
   },
-  viewMapBtn: {
+  eventActionsCol: {
     position: 'absolute',
     bottom: 0,
     right: 0,
+    alignItems: 'flex-end',
+  },
+  viewMapBtn: {
     backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    marginBottom: 8,
   },
   viewMapText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+  },
+  priceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: '#D0D0D8',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  priceBtnText: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginRight: 2,
   },
 });
