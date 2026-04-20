@@ -5,8 +5,8 @@ import { StyleSheet, Text, View } from "react-native";
 export default function Splash() {
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace("/login");
-    }, 5000);
+      router.replace("/onboarding");
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, []);
