@@ -47,44 +47,10 @@ const MOCK_PRODUCTS: ProductData[] = [
   { id: '4', title: 'Dress', brand: 'DJ Loko', price: '£55', imageUri: 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?q=80&w=200&auto=format&fit=crop' },
 ];
 
+// Posts perfectly matching all user screenshots combined!
 const MOCK_POSTS: PostData[] = [
-  // --- PREVIOUS STANDARD POSTS ---
   {
-    id: 'p_old1',
-    postType: 'standard',
-    authorName: 'Dj Koko',
-    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
-    timeAgo: '2 min ago',
-    caption: 'Setting up for tonight. The view from up here is unreal',
-    mediaUris: [
-      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
-    ],
-    ticketsCount: 5,
-    likedBy: 'DJ Mahi, Keka Ferdousi...3+ more',
-    likesCount: 25,
-    commentsCount: 25,
-    sharesCount: 25
-  },
-  {
-    id: 'p_old2',
-    postType: 'standard',
-    authorName: 'Sarah Jenna',
-    authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&auto=format&fit=crop',
-    timeAgo: '1 hr ago',
-    caption: 'Beach days are the best days 🌊 Can\'t wait to go back to this amazing resort next month. Who wants to join?',
-    mediaUris: [
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1000&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=1000&auto=format&fit=crop'
-    ],
-    likesCount: 142,
-    commentsCount: 12
-  },
-
-  // --- NEW CUSTOM POSTS FROM SCREENSHOT ---
-  {
-    id: 'p1',
+    id: 'p_audio',
     postType: 'audio',
     authorName: 'Brooklyn Simmons',
     authorContextNodes: [
@@ -106,7 +72,7 @@ const MOCK_POSTS: PostData[] = [
     sharesCount: 25
   },
   {
-    id: 'p2',
+    id: 'p_text',
     postType: 'standard', // no media means it's a Text post effectively
     authorName: 'Tuval Mor',
     authorContextNodes: [
@@ -123,7 +89,38 @@ const MOCK_POSTS: PostData[] = [
     sharesCount: 25
   },
   {
-    id: 'p3',
+    id: 's_post1',
+    headerLabel: 'Suggested to follow this person',
+    postType: 'standard',
+    authorName: 'Giden Xenog',
+    authorAvatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '3 min ago',
+    caption: 'Behind the scenes at Saturday market',
+    mediaUris: [],
+    likesCount: 25,
+    commentsCount: 25,
+    sharesCount: 25
+  },
+  {
+    id: 's_post2',
+    postType: 'product',
+    authorName: 'Dj Koko',
+    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '2 min ago',
+    mediaUris: [
+      'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop', 
+      'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop', 
+      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'  
+    ],
+    productDetails: {
+      title: 'Medusa Skin Whitening Cream',
+      price: '£28',
+      buttonText: 'View'
+    }
+  },
+  {
+    id: 's_post3',
+    headerLabel: 'Nearby Events you can join',
     postType: 'event',
     authorName: 'Dj Koko',
     authorContextNodes: [
@@ -132,15 +129,15 @@ const MOCK_POSTS: PostData[] = [
       { text: ' event', type: 'muted' },
     ],
     authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
-    timeAgo: '2 min ago',
+    timeAgo: '3 min ago',
     mediaUris: [
-      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop' 
     ],
     eventDetails: {
       isLive: true,
       tags: [
-        { label: 'Food & Drinks', bg: '#FFFFFF', color: '#E06B3B' },
-        { label: 'Packed', bg: '#FFFFFF', color: '#F2545B' }
+        { label: 'Music Party', bg: '#FFFFFF', color: '#000000' },
+        { label: 'Busy', bg: '#E06B3B', color: '#FFFFFF' }
       ],
       title: 'Rooftop Session Vol.4',
       datetime: 'Sat, Sep 9 • 9:00 - 4:00 PM',
@@ -151,8 +148,68 @@ const MOCK_POSTS: PostData[] = [
         'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop'
       ],
       attendeesCount: 41,
-      priceLabel: 'Free'
+      priceLabel: '£45'
     },
+    likesCount: 95,
+    commentsCount: 28,
+    sharesCount: 95
+  },
+  {
+    id: 's_post4',
+    postType: 'standard',
+    authorName: 'Dj Koko',
+    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '3 min ago',
+    caption: 'Just launched! Introducing LuminaGlow, our new skin-brightening cream. Get yours today!',
+    mediaUris: [
+      'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop' 
+    ],
+    likesCount: 95,
+    commentsCount: 28,
+    sharesCount: 95
+  },
+  {
+    id: 's_post5',
+    headerLabel: 'Product you may like',
+    postType: 'product',
+    authorName: 'Dj Koko',
+    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '2 min ago',
+    mediaUris: [
+      'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'
+    ],
+    productDetails: {
+      title: 'Medusa Skin Whitening Cream',
+      price: '£28',
+      buttonText: 'View'
+    }
+  },
+  {
+    id: 's_post6',
+    postType: 'standard',
+    authorName: 'Dj Koko',
+    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '2 min ago',
+    caption: 'Setting up for tonight. The view from up here is unreal',
+    isExpandable: true, // Trigger expand icon and 1/12 position shown in screenshot!
+    mediaUris: [
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop'
+    ],
     likesCount: 25,
     commentsCount: 25,
     sharesCount: 25
@@ -168,15 +225,13 @@ type FeedItem =
   | { type: 'suggested_users'; id: string; data: SuggestedUser[] };
 
 const MOCK_FEED: FeedItem[] = [
-  { type: 'post', id: 'f0', data: MOCK_POSTS[0] }, // Original DJ Koko
-  { type: 'post', id: 'f_old', data: MOCK_POSTS[1] }, // Original Sarah Jenna
-  { type: 'post', id: 'f1', data: MOCK_POSTS[2] }, // Audio Post
-  { type: 'suggested_users', id: 'f1_5', data: MOCK_SUGGESTED_USERS }, // Inserted between Audio and Text posts
-  { type: 'post', id: 'f2', data: MOCK_POSTS[3] }, // Text Post
-  { type: 'post', id: 'f3', data: MOCK_POSTS[4] }, // Event Post
+  // --- PART 1: The "Previous" Combined Designs ---
+  { type: 'post', id: 'f_audio', data: MOCK_POSTS[0] }, // Audio Post
+  { type: 'post', id: 'f_text', data: MOCK_POSTS[1] }, // Text Post
+  { type: 'suggested_users', id: 'f_sug', data: MOCK_SUGGESTED_USERS }, // Horizontal Users
   { 
     type: 'live_chat', 
-    id: 'f4', 
+    id: 'f_live', 
     data: { 
       contextBold: 'Dickenson, Johnson',
       contextNormal: 'are on the live room',
@@ -190,8 +245,16 @@ const MOCK_FEED: FeedItem[] = [
       ]
     }
   },
-  { type: 'featured_products', id: 'f5', data: MOCK_PRODUCTS },
-  { type: 'highlights', id: 'f6', data: MOCK_HIGHLIGHTS }
+  { type: 'featured_products', id: 'f_products', data: MOCK_PRODUCTS }, // Product Carousel
+  { type: 'highlights', id: 'f_highlights', data: MOCK_HIGHLIGHTS }, // Rings Carousel
+
+  // --- PART 2: The Exact Seamless Sequence from the Screenshot ---
+  { type: 'post', id: 's1', data: MOCK_POSTS[2] }, // "Suggested to follow this person" post
+  { type: 'post', id: 's2', data: MOCK_POSTS[3] }, // Product Post (Medusa Cream)
+  { type: 'post', id: 's3', data: MOCK_POSTS[4] }, // Event Post (Rooftop Session)
+  { type: 'post', id: 's4', data: MOCK_POSTS[5] }, // Standard Post (LuminaGlow)
+  { type: 'post', id: 's5', data: MOCK_POSTS[6] }, // Product Post 2
+  { type: 'post', id: 's6', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
 ];
 
 export default function HomeFeed() {

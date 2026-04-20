@@ -28,9 +28,15 @@ export type EventDetails = {
   priceLabel?: string;
 };
 
+export type ProductDetails = {
+  title: string;
+  price: string;
+  buttonText: string;
+};
+
 export type PostData = {
   id: string;
-  postType: 'standard' | 'audio' | 'event';
+  postType: 'standard' | 'audio' | 'event' | 'product';
   authorName: string;
   authorContextNodes?: PostContextNode[];
   authorAvatar: string;
@@ -47,6 +53,8 @@ export type PostData = {
   sharesCount?: number;
   eventDetails?: EventDetails;
   audioDetails?: AudioDetails;
+  productDetails?: ProductDetails;
+  isExpandable?: boolean;
 };
 
 export default function FeedPost({ post }: { post: PostData }) {
@@ -147,7 +155,7 @@ export default function FeedPost({ post }: { post: PostData }) {
           </View>
         )}
 
-        {(post.postType === 'standard' || post.postType === 'event') && post.mediaUris && post.mediaUris.length > 0 && (
+        {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && post.mediaUris && post.mediaUris.length > 0 && (
           <View style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}>
             <ScrollView 
               horizontal 
@@ -222,15 +230,21 @@ export default function FeedPost({ post }: { post: PostData }) {
                   </View>
                 </View>
               </>
-            ) : post.postType === 'standard' && (
+            ) : (post.postType === 'standard' || post.postType === 'product') && (
               <>
-                {/* Media Counters & Badges (Standard) */}
+                {/* Media Counters & Badges (Standard & Product) */}
                 {post.mediaUris.length > 1 && (
-                  <View style={styles.imageCounter}>
+                  <View style={[styles.imageCounter, post.isExpandable && styles.imageCounterBottom]}>
                     <Text style={styles.imageCounterText}>
                       {currentMediaIndex + 1}/{post.mediaUris.length}
                     </Text>
                   </View>
+                )}
+
+                {post.isExpandable && (
+                  <TouchableOpacity style={styles.expandBtn} activeOpacity={0.8}>
+                    <Feather name="maximize-2" size={14} color="#D0D0D8" />
+                  </TouchableOpacity>
                 )}
 
                 {post.ticketsCount !== undefined && post.ticketsCount > 0 && (
@@ -246,8 +260,21 @@ export default function FeedPost({ post }: { post: PostData }) {
           </View>
         )}
 
-        {/* Post Footer Actions */}
-        {(post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
+        {/* Product Post Footer */}
+        {post.postType === 'product' && post.productDetails && (
+          <View style={styles.productFooterContainer}>
+             <View style={styles.productFooterTextCol}>
+                <Text style={styles.productFooterTitle}>{post.productDetails.title}</Text>
+                <Text style={styles.productFooterPrice}>{post.productDetails.price}</Text>
+             </View>
+             <TouchableOpacity style={styles.productViewBtn} activeOpacity={0.8}>
+                <Text style={styles.productViewBtnText}>{post.productDetails.buttonText}</Text>
+             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Normal Post Footer Actions */}
+        {post.postType !== 'product' && (post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
           <View style={styles.postFooter}>
             {post.likesCount !== undefined && (
               <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
@@ -281,7 +308,7 @@ const styles = StyleSheet.create({
   headerLabelText: {
     color: "#8E8E9B",
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
     marginHorizontal: 16,
     marginBottom: 8,
   },
@@ -448,10 +475,25 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
   },
+  imageCounterBottom: {
+    top: undefined,
+    bottom: 12,
+  },
   imageCounterText: {
     color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "bold",
+  },
+  expandBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   ticketFab: {
     position: "absolute",
@@ -610,5 +652,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginRight: 2,
+  },
+  /* Product Footer Styles */
+  productFooterContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 12,
+  },
+  productFooterTextCol: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  productFooterTitle: {
+    color: '#8E8E9B', // Grayish descriptive text
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  productFooterPrice: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  productViewBtn: {
+    backgroundColor: '#D0D0D8',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  productViewBtnText: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
