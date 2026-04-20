@@ -1,8 +1,55 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, SafeAreaView, Dimensions, Platform } from "react-native";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Platform } from "react-native";
+import { Feather } from "@expo/vector-icons";
+
+// Components
+import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
+import FeedPost, { PostData } from "../../components/FeedPost";
+import LiveChatBanner from "../../components/LiveChatBanner";
 
 const { width } = Dimensions.get("window");
+
+// Dynamic Mock Data
+const MOCK_STORIES: StoryData[] = [
+  { id: '1', type: 'add' },
+  { id: '2', type: 'live', imageUri: 'https://images.unsplash.com/photo-1540039155732-68420e6e72ca?q=80&w=200&auto=format&fit=crop' },
+  { id: '3', type: 'standard', title: 'Enjoying\nsummer', imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop' },
+  { id: '4', type: 'standard', title: 'First\nday @office', imageUri: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop' },
+  { id: '5', type: 'muted', imageUri: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200&auto=format&fit=crop' },
+];
+
+const MOCK_POSTS: PostData[] = [
+  {
+    id: 'p1',
+    authorName: 'Dj Koko',
+    authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '2 min ago',
+    caption: 'Setting up for tonight. The view from up here is unreal',
+    mediaUris: [
+      'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
+    ],
+    ticketsCount: 5,
+    likedBy: 'DJ Mahi, Keka Ferdousi...3+ more',
+    likesCount: 25,
+    commentsCount: 25,
+    sharesCount: 25
+  },
+  {
+    id: 'p2',
+    authorName: 'Sarah Jenna',
+    authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&auto=format&fit=crop',
+    timeAgo: '1 hr ago',
+    caption: 'Beach days are the best days 🌊 Can\'t wait to go back to this amazing resort next month. Who wants to join?',
+    mediaUris: [
+      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=1000&auto=format&fit=crop'
+    ],
+    likesCount: 142,
+    commentsCount: 12
+  }
+];
 
 export default function HomeFeed() {
   return (
@@ -29,107 +76,34 @@ export default function HomeFeed() {
           </View>
         </View>
 
+        {/* Main Feed Content */}
         <ScrollView showsVerticalScrollIndicator={false}>
-          
-          {/* Stories Row */}
-          <View style={styles.storiesContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storiesScroll}>
+          {/* Dynamic Stories Component */}
+          <StoryCarousel stories={MOCK_STORIES} />
+
+          {/* Dynamic Feed Posts Components */}
+          {MOCK_POSTS.map((post) => (
+            <React.Fragment key={post.id}>
+              <FeedPost post={post} />
               
-              {/* Add Story */}
-              <TouchableOpacity style={styles.addStoryBtn} activeOpacity={0.8}>
-                <Feather name="plus" size={24} color="#8E8E9B" />
-              </TouchableOpacity>
+              {/* Insert LiveChatBanner after the Dj Koko post to match screenshot exactly */}
+              {post.id === 'p1' && (
+                <LiveChatBanner 
+                  title="Pre-show chat with DJ Nova"
+                  listeningCount={412}
+                  avatars={[
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?q=80&w=150&auto=format&fit=crop'
+                  ]}
+                />
+              )}
+            </React.Fragment>
+          ))}
 
-              {/* Live Story */}
-              <TouchableOpacity style={styles.storyItem} activeOpacity={0.8}>
-                <View style={[styles.storyRing, styles.storyRingLive]}>
-                  <Image source={{ uri: "https://images.unsplash.com/photo-1540039155732-68420e6e72ca?q=80&w=200&auto=format&fit=crop" }} style={styles.storyImage} />
-                  <View style={styles.liveBadge}>
-                    <View style={styles.liveDot} />
-                    <Text style={styles.liveText}>Live</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              {/* Standard Story 1 */}
-              <TouchableOpacity style={styles.storyItem} activeOpacity={0.8}>
-                <View style={[styles.storyRing, styles.storyRingStandard]}>
-                  <Image source={{ uri: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop" }} style={styles.storyImage} />
-                  <View style={styles.storyOverlayTextContainer}>
-                    <Text style={styles.storyOverlayText} numberOfLines={2}>Enjoying{"\n"}summer</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              {/* Standard Story 2 */}
-              <TouchableOpacity style={styles.storyItem} activeOpacity={0.8}>
-                <View style={[styles.storyRing, styles.storyRingStandard]}>
-                  <Image source={{ uri: "https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop" }} style={styles.storyImage} />
-                  <View style={styles.storyOverlayTextContainer}>
-                     <Text style={styles.storyOverlayText} numberOfLines={2}>First{"\n"}day @office</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              {/* Standard Story 3 */}
-              <TouchableOpacity style={styles.storyItem} activeOpacity={0.8}>
-                <View style={[styles.storyRing, styles.storyRingMuted]}>
-                  <Image source={{ uri: "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200&auto=format&fit=crop" }} style={styles.storyImage} />
-                </View>
-              </TouchableOpacity>
-
-            </ScrollView>
-          </View>
-
-          {/* Feed Post */}
-          <View style={styles.postCard}>
-            {/* Post Header */}
-            <View style={styles.postHeader}>
-              <View style={styles.postAuthorInfo}>
-                <Image source={{ uri: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop" }} style={styles.postAvatar} />
-                <View>
-                  <Text style={styles.postAuthor}>Dj Koko</Text>
-                  <Text style={styles.postTime}>2 min ago</Text>
-                </View>
-              </View>
-              
-              <View style={styles.postHeaderActions}>
-                <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
-                  <Feather name="plus" size={12} color="#D4B0EB" />
-                  <Text style={styles.followBtnText}>Follow</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.moreBtn}>
-                  <Feather name="more-horizontal" size={20} color="#8E8E9B" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Post Text */}
-            <Text style={styles.postCaption}>
-              Setting up for tonight. The view from up here is unreal
-            </Text>
-
-            {/* Post Media */}
-            <View style={styles.postMediaContainer}>
-              <Image 
-                source={{ uri: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop" }} 
-                style={styles.postImage} 
-              />
-              
-              {/* Media Counters & Badges */}
-              <View style={styles.imageCounter}>
-                <Text style={styles.imageCounterText}>1/3</Text>
-              </View>
-
-              <TouchableOpacity style={styles.ticketFab} activeOpacity={0.9}>
-                <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
-                <View style={styles.ticketBadge}>
-                  <Text style={styles.ticketBadgeText}>5</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-
+          {/* Additional padding at the bottom of feed */}
+          <View style={{ height: 40 }} />
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -187,202 +161,5 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 20,
-  },
-  storiesContainer: {
-    marginTop: 10,
-    marginBottom: 24,
-  },
-  storiesScroll: {
-    paddingHorizontal: 20,
-    alignItems: "center",
-  },
-  addStoryBtn: {
-    width: 68,
-    height: 86,
-    borderRadius: 34,
-    backgroundColor: "#2B2B36",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  storyItem: {
-    marginRight: 16,
-  },
-  storyRing: {
-    width: 74,
-    height: 92,
-    borderRadius: 37,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 2, 
-  },
-  storyRingLive: {
-    backgroundColor: "#F2245C", 
-  },
-  storyRingStandard: {
-    backgroundColor: "#42B0D5",
-  },
-  storyRingMuted: {
-    backgroundColor: "transparent",
-  },
-  storyImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 35,
-    borderWidth: 2,
-    borderColor: "#0e0d12", 
-  },
-  liveBadge: {
-    position: "absolute",
-    top: 6,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  liveDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#16D869",
-    marginRight: 4,
-  },
-  liveText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "bold",
-  },
-  storyOverlayTextContainer: {
-    position: "absolute",
-    top: 10,
-    width: "100%",
-    alignItems: "center",
-  },
-  storyOverlayText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "bold",
-    textAlign: "center",
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  postCard: {
-    backgroundColor: "#13131A", 
-    borderRadius: 16,
-    marginHorizontal: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  postHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  postAuthorInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  postAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
-  },
-  postAuthor: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  postTime: {
-    color: "#8E8E9B",
-    fontSize: 11,
-    marginTop: 2,
-  },
-  postHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  followBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#D4B0EB", 
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 12,
-  },
-  followBtnText: {
-    color: "#D4B0EB",
-    fontSize: 11,
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  moreBtn: {
-    padding: 4,
-  },
-  postCaption: {
-    color: "#D0D0D8", 
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  postMediaContainer: {
-    width: "100%",
-    height: 340,
-    borderRadius: 12,
-    overflow: "hidden",
-    position: "relative",
-  },
-  postImage: {
-    width: "100%",
-    height: "100%",
-  },
-  imageCounter: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  imageCounterText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "bold",
-  },
-  ticketFab: {
-    position: "absolute",
-    bottom: 16,
-    right: 16,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "rgba(14, 13, 18, 0.7)", 
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  ticketBadge: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    backgroundColor: "#F2245C", 
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  ticketBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "bold",
   },
 });
