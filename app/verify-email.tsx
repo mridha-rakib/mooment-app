@@ -89,7 +89,11 @@ export default function VerifyEmail() {
             />
           </View>
 
-          <TouchableOpacity style={styles.continueButton} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.continueButton} 
+            activeOpacity={0.8}
+            onPress={() => router.push("/set-password-info")}
+          >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
 
