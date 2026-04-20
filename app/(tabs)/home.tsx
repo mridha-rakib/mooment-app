@@ -7,6 +7,7 @@ import FeedPost, { PostData } from "../../components/FeedPost";
 import HighlightsCarousel, { HighlightData } from "../../components/HighlightsCarousel";
 import HomeHeader from "../../components/HomeHeader";
 import LiveChatBanner from "../../components/LiveChatBanner";
+import PeopleToFollow, { SuggestedUser } from "../../components/PeopleToFollow";
 import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
 
 const { width } = Dimensions.get("window");
@@ -18,6 +19,17 @@ const MOCK_STORIES: StoryData[] = [
   { id: '3', type: 'standard', title: 'Enjoying\nsummer', imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop' },
   { id: '4', type: 'standard', title: 'First\nday @office', imageUri: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop' },
   { id: '5', type: 'muted', imageUri: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200&auto=format&fit=crop' },
+];
+
+const MOCK_SUGGESTED_USERS: SuggestedUser[] = [
+  { id: '1', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop' },
+  { id: '2', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=80&w=150&auto=format&fit=crop' },
+  { id: '3', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
+  { id: '4', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
+  { id: '5', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop' },
+   { id: '6', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
+  { id: '7', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
+  { id: '8', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop' },
 ];
 
 const MOCK_HIGHLIGHTS: HighlightData[] = [
@@ -152,12 +164,14 @@ type FeedItem =
   | { type: 'post'; id: string; data: PostData }
   | { type: 'live_chat'; id: string; data: any }
   | { type: 'featured_products'; id: string; data: ProductData[] }
-  | { type: 'highlights'; id: string; data: HighlightData[] };
+  | { type: 'highlights'; id: string; data: HighlightData[] }
+  | { type: 'suggested_users'; id: string; data: SuggestedUser[] };
 
 const MOCK_FEED: FeedItem[] = [
   { type: 'post', id: 'f0', data: MOCK_POSTS[0] }, // Original DJ Koko
   { type: 'post', id: 'f_old', data: MOCK_POSTS[1] }, // Original Sarah Jenna
   { type: 'post', id: 'f1', data: MOCK_POSTS[2] }, // Audio Post
+  { type: 'suggested_users', id: 'f1_5', data: MOCK_SUGGESTED_USERS }, // Inserted between Audio and Text posts
   { type: 'post', id: 'f2', data: MOCK_POSTS[3] }, // Text Post
   { type: 'post', id: 'f3', data: MOCK_POSTS[4] }, // Event Post
   { 
@@ -206,6 +220,9 @@ export default function HomeFeed() {
             }
             if (item.type === 'highlights') {
               return <HighlightsCarousel key={item.id} highlights={item.data} />;
+            }
+            if (item.type === 'suggested_users') {
+              return <PeopleToFollow key={item.id} users={item.data} />;
             }
             return null;
           })}
