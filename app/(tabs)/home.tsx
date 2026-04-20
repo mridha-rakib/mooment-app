@@ -98,6 +98,37 @@ const MOCK_POSTS: PostData[] = [
   }
 ];
 
+// Feed Engine - Polymorphic Architecture
+type FeedItem = 
+  | { type: 'post'; id: string; data: PostData }
+  | { type: 'live_chat'; id: string; data: any }
+  | { type: 'featured_products'; id: string; data: ProductData[] }
+  | { type: 'highlights'; id: string; data: HighlightData[] };
+
+const MOCK_FEED: FeedItem[] = [
+  { type: 'post', id: 'f1', data: MOCK_POSTS[0] }, // Dj Koko standard post
+  { 
+    type: 'live_chat', 
+    id: 'f2', 
+    data: { 
+      contextBold: 'Dickenson, Johnson',
+      contextNormal: 'are on the live room',
+      title: 'Pre-show chat with DJ Nova',
+      listeningCount: 412,
+      avatars: [
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop',
+        'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?q=80&w=150&auto=format&fit=crop'
+      ]
+    }
+  },
+  { type: 'featured_products', id: 'f3', data: MOCK_PRODUCTS },
+  { type: 'post', id: 'f4', data: MOCK_POSTS[1] }, // Sarah Jenna post
+  { type: 'post', id: 'f5', data: MOCK_POSTS[2] }, // Dj Koko Event post
+  { type: 'highlights', id: 'f6', data: MOCK_HIGHLIGHTS }
+];
+
 export default function HomeFeed() {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -128,34 +159,22 @@ export default function HomeFeed() {
           {/* Dynamic Stories Component */}
           <StoryCarousel stories={MOCK_STORIES} />
 
-          {/* Dynamic Feed Posts Components */}
-          {MOCK_POSTS.map((post) => (
-            <React.Fragment key={post.id}>
-              <FeedPost post={post} />
-              
-              {/* Insert Conditional Plugins between feed items */}
-              {post.id === 'p1' && (
-                <>
-                  <LiveChatBanner 
-                    title="Pre-show chat with DJ Nova"
-                    listeningCount={412}
-                    avatars={[
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
-                      'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
-                      'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=150&auto=format&fit=crop',
-                      'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?q=80&w=150&auto=format&fit=crop'
-                    ]}
-                  />
-                  
-                  <FeaturedProducts products={MOCK_PRODUCTS} />
-                </>
-              )}
-              {/* After 'p3' (Event post), insert HighlightsCarousel */}
-              {post.id === 'p3' && (
-                <HighlightsCarousel highlights={MOCK_HIGHLIGHTS} />
-              )}
-            </React.Fragment>
-          ))}
+          {/* Core Polymorphic Feed Engine */}
+          {MOCK_FEED.map((item) => {
+            if (item.type === 'post') {
+              return <FeedPost key={item.id} post={item.data} />;
+            }
+            if (item.type === 'live_chat') {
+              return <LiveChatBanner key={item.id} {...item.data} />;
+            }
+            if (item.type === 'featured_products') {
+              return <FeaturedProducts key={item.id} products={item.data} />;
+            }
+            if (item.type === 'highlights') {
+              return <HighlightsCarousel key={item.id} highlights={item.data} />;
+            }
+            return null;
+          })}
 
           {/* Additional padding at the bottom of feed */}
           <View style={{ height: 40 }} />

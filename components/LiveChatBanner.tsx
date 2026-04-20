@@ -2,61 +2,86 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 
 export type LiveChatBannerProps = {
+  contextBold?: string;
+  contextNormal?: string;
   title: string;
   listeningCount: number;
   avatars: string[];
 };
 
-export default function LiveChatBanner({ title, listeningCount, avatars }: LiveChatBannerProps) {
+export default function LiveChatBanner({ contextBold, contextNormal, title, listeningCount, avatars }: LiveChatBannerProps) {
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.9}>
-      <View style={styles.content}>
-        
-        {/* Live Badge */}
-        <View style={styles.liveBadge}>
-          <Text style={styles.liveText}>Live</Text>
-        </View>
-        
-        <View style={styles.detailsContainer}>
-          <Text style={styles.title}>{title}</Text>
+    <View style={styles.wrapper}>
+      {(contextBold || contextNormal) && (
+        <Text style={styles.contextText}>
+          {contextBold && <Text style={styles.contextBold}>{contextBold}</Text>}
+          {contextNormal && <Text style={styles.contextNormal}> {contextNormal}</Text>}
+        </Text>
+      )}
+      
+      <TouchableOpacity style={styles.card} activeOpacity={0.9}>
+        <View style={styles.content}>
           
-          <View style={styles.infoRow}>
-            {/* Avatar Cluster */}
-            <View style={styles.avatarCluster}>
-              {avatars.map((uri, i) => (
-                <Image 
-                  key={i} 
-                  source={{ uri }} 
-                  style={[
-                    styles.avatar, 
-                    { zIndex: avatars.length - i },
-                    i > 0 && { marginLeft: -8 } // Overlapping effect
-                  ]} 
-                />
-              ))}
-            </View>
-            <Text style={styles.listeningText}>{listeningCount} listening</Text>
+          {/* Live Badge */}
+          <View style={styles.liveBadge}>
+            <Text style={styles.liveText}>Live</Text>
           </View>
+          
+          <View style={styles.detailsContainer}>
+            <Text style={styles.title}>{title}</Text>
+            
+            <View style={styles.infoRow}>
+              {/* Avatar Cluster */}
+              <View style={styles.avatarCluster}>
+                {avatars.map((uri, i) => (
+                  <Image 
+                    key={i} 
+                    source={{ uri }} 
+                    style={[
+                      styles.avatar, 
+                      { zIndex: avatars.length - i },
+                      i > 0 && { marginLeft: -8 } // Overlapping effect
+                    ]} 
+                  />
+                ))}
+              </View>
+              <Text style={styles.listeningText}>{listeningCount} listening</Text>
+            </View>
+          </View>
+
+          {/* Join Button */}
+          <TouchableOpacity style={styles.joinBtn} activeOpacity={0.8}>
+            <Text style={styles.joinBtnText}>Join</Text>
+          </TouchableOpacity>
+
         </View>
-
-        {/* Join Button */}
-        <TouchableOpacity style={styles.joinBtn} activeOpacity={0.8}>
-          <Text style={styles.joinBtnText}>Join</Text>
-        </TouchableOpacity>
-
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    marginBottom: 20,
+  },
+  contextText: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  contextBold: {
+    color: '#D0D0D8',
+    fontWeight: 'bold',
+  },
+  contextNormal: {
+    color: '#8E8E9B',
+  },
   card: {
     marginHorizontal: 16,
-    marginBottom: 20,
     borderRadius: 16,
-    backgroundColor: "#13131A", // Dark fill
+    backgroundColor: "#13131A", 
     borderWidth: 1,
-    borderColor: "rgba(142, 84, 233, 0.4)", // Purple/violet border glow approximation
+    borderColor: "rgba(142, 84, 233, 0.4)", 
   },
   content: {
     flexDirection: "row",
