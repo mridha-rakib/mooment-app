@@ -34,7 +34,11 @@ export default function ForgotPassword() {
             />
           </View>
 
-          <TouchableOpacity style={styles.continueButton} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.continueButton} 
+            activeOpacity={0.8}
+            onPress={() => router.push("/verify-email")}
+          >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
 
