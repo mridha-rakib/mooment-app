@@ -57,7 +57,7 @@ export type PostData = {
   isExpandable?: boolean;
 };
 
-export default function FeedPost({ post }: { post: PostData }) {
+export default function FeedPost({ post, onCommentPress, onSharePress }: { post: PostData; onCommentPress?: () => void; onSharePress?: () => void }) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
 
   const handleScroll = (event: any) => {
@@ -283,13 +283,13 @@ export default function FeedPost({ post }: { post: PostData }) {
               </TouchableOpacity>
             )}
             {post.commentsCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
                 <Feather name="message-circle" size={22} color="#8E8E9B" />
                 <Text style={styles.actionText}>{post.commentsCount}</Text>
               </TouchableOpacity>
             )}
             {post.sharesCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
                 <Feather name="share" size={22} color="#8E8E9B" />
                 <Text style={styles.actionText}>{post.sharesCount}</Text>
               </TouchableOpacity>

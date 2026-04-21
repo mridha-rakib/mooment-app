@@ -5,6 +5,8 @@ import { Dimensions, Platform, SafeAreaView, ScrollView, StyleSheet, View } from
 import FeaturedProducts, { ProductData } from "../../components/FeaturedProducts";
 import FeedPost, { PostData } from "../../components/FeedPost";
 import HighlightsCarousel, { HighlightData } from "../../components/HighlightsCarousel";
+import CommentsModal from "../../components/CommentsModal";
+import ShareModal from "../../components/ShareModal";
 import HomeHeader from "../../components/HomeHeader";
 import LiveChatBanner from "../../components/LiveChatBanner";
 import PeopleToFollow, { SuggestedUser } from "../../components/PeopleToFollow";
@@ -262,6 +264,17 @@ const MOCK_FEED: FeedItem[] = [
 ];
 
 export default function HomeFeed() {
+  const [commentModalVisible, setCommentModalVisible] = React.useState(false);
+  const [shareModalVisible, setShareModalVisible] = React.useState(false);
+
+  const handleCommentPress = () => {
+    setCommentModalVisible(true);
+  };
+
+  const handleSharePress = () => {
+    setShareModalVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -277,7 +290,7 @@ export default function HomeFeed() {
           {/* Core Polymorphic Feed Engine */}
           {MOCK_FEED.map((item) => {
             if (item.type === 'post') {
-              return <FeedPost key={item.id} post={item.data} />;
+              return <FeedPost key={item.id} post={item.data} onCommentPress={handleCommentPress} onSharePress={handleSharePress} />;
             }
             if (item.type === 'live_chat') {
               return <LiveChatBanner key={item.id} {...item.data} />;
@@ -298,6 +311,16 @@ export default function HomeFeed() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </View>
+
+      <CommentsModal 
+        visible={commentModalVisible} 
+        onClose={() => setCommentModalVisible(false)} 
+      />
+
+      <ShareModal 
+        visible={shareModalVisible} 
+        onClose={() => setShareModalVisible(false)} 
+      />
     </SafeAreaView>
   );
 }
