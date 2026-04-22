@@ -5,63 +5,55 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Dimensions,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+  Dimensions, Image, Platform, SafeAreaView,
+  ScrollView, StatusBar, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from 'react-native';
-
 
 const { width } = Dimensions.get('window');
 
-const MOCK_MEDIA = [
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop',
-];
-
+// ── Gallery images ────────────────────────────────────────────────────────
 const GALLERY_IMAGES = [
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=300&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=300&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=300&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=300&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=300&auto=format&fit=crop',
+  { uri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop', isVideo: false },
+  { uri: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=400&auto=format&fit=crop', isVideo: false },
+  { uri: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=400&auto=format&fit=crop', isVideo: true },
+  { uri: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=400&auto=format&fit=crop', isVideo: false },
+  { uri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=400&auto=format&fit=crop', isVideo: false },
+  { uri: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=400&auto=format&fit=crop', isVideo: false },
+  { uri: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?q=80&w=400&auto=format&fit=crop', isVideo: true },
+  { uri: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=400&auto=format&fit=crop', isVideo: false },
+  { uri: 'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?q=80&w=400&auto=format&fit=crop', isVideo: false },
 ];
 
-type PostMode = 'Post' | 'Moment';
-type PostStep = 'compose' | 'preview';
+const ITEM_SIZE = (width - 32 - 6) / 3;
 
-export default function CreatePostScreen() {
+export default function CreateMomentScreen() {
   const router = useRouter();
-  const [mode, setMode] = useState<PostMode>('Post');
-  const [step, setStep] = useState<PostStep>('compose');
+
   const [caption, setCaption] = useState('');
-  const [selectedMedia, setSelectedMedia] = useState<string[]>([MOCK_MEDIA[0], MOCK_MEDIA[1]]);
+  const [selectedMedia, setSelectedMedia] = useState<string[]>([GALLERY_IMAGES[0].uri]);
+  const [featuredUri, setFeaturedUri] = useState(GALLERY_IMAGES[0].uri);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
-  const [audience, setAudience] = useState<string>('Public');
+  const [audience, setAudience] = useState('Public');
   const [location, setLocation] = useState<string | null>('Rooftop Bar, London');
   const [showEventModal, setShowEventModal] = useState(false);
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [showAudienceModal, setShowAudienceModal] = useState(false);
-  const [activeMediaIdx, setActiveMediaIdx] = useState(0);
 
-  const handlePublish = () => {
-    router.back();
+  const canPublish = caption.trim().length > 0 || selectedMedia.length > 0;
+
+  const tapGalleryItem = (uri: string) => {
+    setFeaturedUri(uri);
+    setSelectedMedia(prev =>
+      prev.includes(uri) ? prev : [uri, ...prev.filter(u => u !== uri)]
+    );
   };
 
-  const toggleMediaSelect = (uri: string) => {
-    setSelectedMedia(prev =>
-      prev.includes(uri) ? prev.filter(u => u !== uri) : [...prev, uri]
-    );
+  const removeFeatured = () => {
+    const next = selectedMedia.filter(u => u !== featuredUri);
+    setSelectedMedia(next);
+    setFeaturedUri(next[0] ?? '');
   };
 
   return (
@@ -70,34 +62,52 @@ export default function CreatePostScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-          <Feather name="x" size={22} color="#FFFFFF" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBack} activeOpacity={0.8}>
+          <Feather name="chevron-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        {/* Mode Toggle */}
-        <View style={styles.modeToggle}>
-          {(['Post', 'Moment'] as PostMode[]).map(m => (
-            <TouchableOpacity
-              key={m}
-              style={[styles.modeBtn, mode === m && styles.modeBtnActive]}
-              onPress={() => setMode(m)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.modeBtnText, mode === m && styles.modeBtnTextActive]}>{m}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <Text style={styles.headerTitle}>Create moment</Text>
 
         <TouchableOpacity
-          style={[styles.publishBtn, (!caption && selectedMedia.length === 0) && styles.publishBtnDisabled]}
-          onPress={handlePublish}
+          style={[styles.postBtn, !canPublish && styles.postBtnDisabled]}
+          onPress={() => router.back()}
+          disabled={!canPublish}
           activeOpacity={0.8}
         >
-          <Text style={styles.publishBtnText}>Post</Text>
+          <Text style={styles.postBtnText}>Post</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 50 }}
+      >
+
+        {/* ── Featured Image ── */}
+        <View style={styles.featuredContainer}>
+          {featuredUri ? (
+            <>
+              <Image source={{ uri: featuredUri }} style={styles.featuredImage} />
+              {/* Dim overlay */}
+              <View style={styles.featuredOverlay} />
+              {/* Remove button */}
+              <TouchableOpacity style={styles.removeBtn} onPress={removeFeatured} activeOpacity={0.8}>
+                <Feather name="x" size={15} color="#FFF" />
+              </TouchableOpacity>
+              {/* Expand button */}
+              <TouchableOpacity style={styles.expandBtn} activeOpacity={0.8}>
+                <Feather name="maximize-2" size={14} color="#FFF" />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.featuredEmpty} activeOpacity={0.8}>
+              <Feather name="image" size={36} color="#2A2A3A" />
+              <Text style={styles.featuredEmptyText}>Tap gallery below to add media</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* ── Author Row ── */}
         <View style={styles.authorRow}>
@@ -105,10 +115,13 @@ export default function CreatePostScreen() {
             source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop' }}
             style={styles.avatar}
           />
-          <View style={styles.authorMeta}>
+          <View style={styles.authorInfo}>
             <Text style={styles.authorName}>Alex Johnson</Text>
-            {/* Audience Pill */}
-            <TouchableOpacity style={styles.audiencePill} onPress={() => setShowAudienceModal(true)} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.audiencePill}
+              onPress={() => setShowAudienceModal(true)}
+              activeOpacity={0.8}
+            >
               <Feather name="globe" size={10} color="#D4B0EB" />
               <Text style={styles.audiencePillText}>{audience}</Text>
               <Feather name="chevron-down" size={10} color="#D4B0EB" />
@@ -119,228 +132,319 @@ export default function CreatePostScreen() {
         {/* ── Caption Input ── */}
         <TextInput
           style={styles.captionInput}
-          placeholder={mode === 'Post' ? "What's on your mind?" : "Share your moment..."}
+          placeholder="Share what's happening in this moment..."
           placeholderTextColor="#454555"
           value={caption}
           onChangeText={setCaption}
           multiline
           maxLength={500}
         />
-
-        {/* ── Selected Media Preview ── */}
-        {selectedMedia.length > 0 && (
-          <View style={styles.mediaPreviewContainer}>
-            <ScrollView
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={e => {
-                const idx = Math.round(e.nativeEvent.contentOffset.x / (width - 32));
-                setActiveMediaIdx(idx);
-              }}
-            >
-              {selectedMedia.map((uri, i) => (
-                <View key={i} style={styles.mediaSlide}>
-                  <Image source={{ uri }} style={styles.mediaImage} />
-                  <TouchableOpacity
-                    style={styles.removeMediaBtn}
-                    onPress={() => toggleMediaSelect(uri)}
-                    activeOpacity={0.8}
-                  >
-                    <Feather name="x" size={14} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-            {selectedMedia.length > 1 && (
-              <View style={styles.dotRow}>
-                {selectedMedia.map((_, i) => (
-                  <View key={i} style={[styles.dot, i === activeMediaIdx && styles.dotActive]} />
-                ))}
-              </View>
-            )}
-          </View>
+        {caption.length > 0 && (
+          <Text style={styles.charCount}>{500 - caption.length} remaining</Text>
         )}
 
-        {/* ── Metadata Pills ── */}
-        <View style={styles.metaSection}>
+        {/* ── Metadata Card ── */}
+        <View style={styles.metaCard}>
           {/* Event */}
           <TouchableOpacity style={styles.metaRow} onPress={() => setShowEventModal(true)} activeOpacity={0.8}>
-            <View style={styles.metaIconWrap}>
+            <View style={[styles.metaIcon, { backgroundColor: 'rgba(212,176,235,0.15)' }]}>
               <Ionicons name="calendar-outline" size={18} color="#D4B0EB" />
             </View>
-            <View style={styles.metaTextCol}>
+            <View style={styles.metaText}>
               <Text style={styles.metaLabel}>Event</Text>
-              <Text style={styles.metaValue}>{selectedEvent || 'Link to an event'}</Text>
+              <Text style={styles.metaValue} numberOfLines={1}>
+                {selectedEvent ?? 'Link to an event'}
+              </Text>
             </View>
-            <Feather name="chevron-right" size={16} color="#454555" />
+            <Feather name="chevron-right" size={16} color="#2A2A3A" />
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          <View style={styles.metaDivider} />
 
-          {/* Tag People */}
+          {/* Tag people */}
           <TouchableOpacity style={styles.metaRow} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-            <View style={styles.metaIconWrap}>
-              <Feather name="users" size={18} color="#D4B0EB" />
+            <View style={[styles.metaIcon, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
+              <Feather name="users" size={18} color="#3B82F6" />
             </View>
-            <View style={styles.metaTextCol}>
+            <View style={styles.metaText}>
               <Text style={styles.metaLabel}>Tag People</Text>
-              <Text style={styles.metaValue}>
+              <Text style={styles.metaValue} numberOfLines={1}>
                 {taggedPeople.length > 0 ? taggedPeople.join(', ') : 'Who are you with?'}
               </Text>
             </View>
-            <Feather name="chevron-right" size={16} color="#454555" />
+            {taggedPeople.length > 0 ? (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{taggedPeople.length}</Text>
+              </View>
+            ) : (
+              <Feather name="chevron-right" size={16} color="#2A2A3A" />
+            )}
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          <View style={styles.metaDivider} />
 
           {/* Location */}
           <TouchableOpacity style={styles.metaRow} activeOpacity={0.8}>
-            <View style={styles.metaIconWrap}>
-              <Feather name="map-pin" size={18} color="#D4B0EB" />
+            <View style={[styles.metaIcon, { backgroundColor: 'rgba(22,216,105,0.15)' }]}>
+              <Feather name="map-pin" size={18} color="#16D869" />
             </View>
-            <View style={styles.metaTextCol}>
+            <View style={styles.metaText}>
               <Text style={styles.metaLabel}>Location</Text>
-              <Text style={styles.metaValue}>{location || 'Add location'}</Text>
+              <Text style={styles.metaValue} numberOfLines={1}>
+                {location ?? 'Add a location'}
+              </Text>
             </View>
-            {location && (
+            {location ? (
               <TouchableOpacity onPress={() => setLocation(null)} activeOpacity={0.8}>
-                <Feather name="x-circle" size={16} color="#454555" />
+                <Feather name="x-circle" size={16} color="#2A2A3A" />
               </TouchableOpacity>
+            ) : (
+              <Feather name="chevron-right" size={16} color="#2A2A3A" />
             )}
-            {!location && <Feather name="chevron-right" size={16} color="#454555" />}
           </TouchableOpacity>
         </View>
 
-        {/* ── Gallery Picker ── */}
+        {/* ── Gallery Section ── */}
         <View style={styles.gallerySection}>
-          <Text style={styles.gallerySectionTitle}>Gallery</Text>
+          <View style={styles.gallerySectionHeader}>
+            <Text style={styles.gallerySectionTitle}>Gallery</Text>
+            <TouchableOpacity activeOpacity={0.8}>
+              <Text style={styles.gallerySeeAll}>Browse all</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.galleryGrid}>
-            {GALLERY_IMAGES.map((uri, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.galleryItem, selectedMedia.includes(uri) && styles.galleryItemSelected]}
-                onPress={() => toggleMediaSelect(uri)}
-                activeOpacity={0.85}
-              >
-                <Image source={{ uri }} style={styles.galleryImage} />
-                {selectedMedia.includes(uri) && (
-                  <View style={styles.galleryCheckOverlay}>
-                    <View style={styles.galleryCheckBadge}>
-                      <Feather name="check" size={12} color="#FFF" />
+            {GALLERY_IMAGES.map((item, i) => {
+              const isSelected = selectedMedia.includes(item.uri);
+              const isFeatured = featuredUri === item.uri;
+              const selIdx = selectedMedia.indexOf(item.uri);
+              return (
+                <TouchableOpacity
+                  key={i}
+                  style={[
+                    styles.galleryItem,
+                    isFeatured && styles.galleryItemFeatured,
+                  ]}
+                  onPress={() => tapGalleryItem(item.uri)}
+                  activeOpacity={0.85}
+                >
+                  <Image source={{ uri: item.uri }} style={styles.galleryImg} />
+
+                  {/* Video badge */}
+                  {item.isVideo && (
+                    <View style={styles.videoBadge}>
+                      <Feather name="play" size={10} color="#FFF" />
                     </View>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+                  )}
+
+                  {/* Selection overlay */}
+                  {isSelected && (
+                    <View style={styles.galleryOverlay}>
+                      <View style={[styles.gallerySelBadge, isFeatured && styles.gallerySelBadgeFeatured]}>
+                        <Text style={styles.gallerySelNum}>{selIdx + 1}</Text>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        {/* ── Bottom Actions Bar ── */}
-        <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.bottomAction} activeOpacity={0.8}>
-            <Feather name="image" size={22} color="#8E8E9B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomAction} activeOpacity={0.8}>
-            <Feather name="camera" size={22} color="#8E8E9B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomAction} activeOpacity={0.8}>
-            <Feather name="music" size={22} color="#8E8E9B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomAction} activeOpacity={0.8}>
-            <Feather name="map-pin" size={22} color="#8E8E9B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomAction} activeOpacity={0.8}>
-            <Feather name="tag" size={22} color="#8E8E9B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomAction} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="sticker-emoji" size={22} color="#8E8E9B" />
-          </TouchableOpacity>
+        {/* ── Bottom Toolbar ── */}
+        <View style={styles.toolbar}>
+          {[
+            { icon: 'camera', label: 'Camera' },
+            { icon: 'music', label: 'Music' },
+            { icon: 'type', label: 'Text' },
+            { icon: 'tag', label: 'Tag' },
+            { icon: 'smile', label: 'Feeling' },
+            { icon: 'more-horizontal', label: 'More' },
+          ].map(t => (
+            <TouchableOpacity key={t.label} style={styles.toolbarItem} activeOpacity={0.8}>
+              <Feather name={t.icon as any} size={20} color="#8E8E9B" />
+              <Text style={styles.toolbarLabel}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
 
       {/* ── Modals ── */}
       <EventPickerModal
         visible={showEventModal}
         onClose={() => setShowEventModal(false)}
-        onSelect={(event) => { setSelectedEvent(event); setShowEventModal(false); }}
+        onSelect={ev => { setSelectedEvent(ev); setShowEventModal(false); }}
       />
       <PeopleTagModal
         visible={showPeopleModal}
         onClose={() => setShowPeopleModal(false)}
-        onSelect={(people) => { setTaggedPeople(people); setShowPeopleModal(false); }}
+        onSelect={people => { setTaggedPeople(people); setShowPeopleModal(false); }}
         selected={taggedPeople}
       />
       <AudiencePickerModal
         visible={showAudienceModal}
         onClose={() => setShowAudienceModal(false)}
-        onSelect={(aud) => { setAudience(aud); setShowAudienceModal(false); }}
+        onSelect={aud => { setAudience(aud); setShowAudienceModal(false); }}
         current={audience}
       />
     </SafeAreaView>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  safe: {
+    flex: 1,
+    backgroundColor: '#0e0d12',
+    paddingTop: Platform.OS === 'android' ? 32 : 0,
+  },
 
   /* Header */
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1A1A2E' },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  modeToggle: { flex: 1, flexDirection: 'row', justifyContent: 'center', marginHorizontal: 12, backgroundColor: '#1A1A2E', borderRadius: 20, padding: 3 },
-  modeBtn: { flex: 1, paddingVertical: 7, borderRadius: 18, alignItems: 'center' },
-  modeBtnActive: { backgroundColor: '#D4B0EB' },
-  modeBtnText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  modeBtnTextActive: { color: '#0e0d12' },
-  publishBtn: { backgroundColor: '#D4B0EB', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18 },
-  publishBtnDisabled: { opacity: 0.5 },
-  publishBtnText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 14 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#13131A',
+  },
+  headerBack: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#13131A', justifyContent: 'center', alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1, color: '#FFFFFF', fontWeight: 'bold', fontSize: 17,
+    textAlign: 'center',
+  },
+  postBtn: {
+    backgroundColor: '#16D869',
+    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18,
+  },
+  postBtnDisabled: { opacity: 0.4 },
+  postBtnText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 14 },
 
-  /* Body */
-  body: { flex: 1 },
+  /* Featured image */
+  featuredContainer: {
+    marginHorizontal: 16, marginTop: 14,
+    height: 220, borderRadius: 16, overflow: 'hidden',
+    backgroundColor: '#13131A',
+  },
+  featuredImage: { width: '100%', height: '100%' },
+  featuredOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(14,13,18,0.25)',
+  },
+  removeBtn: {
+    position: 'absolute', top: 10, right: 10,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  expandBtn: {
+    position: 'absolute', top: 10, right: 46,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  featuredEmpty: {
+    flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12,
+  },
+  featuredEmptyText: { color: '#2A2A3A', fontSize: 13 },
 
   /* Author */
-  authorRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, marginBottom: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
-  authorMeta: { flex: 1 },
+  authorRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 14, marginBottom: 6,
+  },
+  avatar: { width: 42, height: 42, borderRadius: 21, marginRight: 12 },
+  authorInfo: { flex: 1 },
   authorName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15, marginBottom: 5 },
-  audiencePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(212,176,235,0.12)', borderWidth: 1, borderColor: 'rgba(212,176,235,0.3)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start', gap: 4 },
-  audiencePillText: { color: '#D4B0EB', fontSize: 11, fontWeight: '600', marginHorizontal: 2 },
+  audiencePill: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(212,176,235,0.1)',
+    borderWidth: 1, borderColor: 'rgba(212,176,235,0.25)',
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+    alignSelf: 'flex-start', gap: 4,
+  },
+  audiencePillText: { color: '#D4B0EB', fontSize: 11, fontWeight: '600' },
 
   /* Caption */
-  captionInput: { color: '#FFFFFF', fontSize: 16, paddingHorizontal: 16, lineHeight: 24, minHeight: 80 },
+  captionInput: {
+    color: '#FFFFFF', fontSize: 15, lineHeight: 22,
+    paddingHorizontal: 16, minHeight: 72,
+  },
+  charCount: {
+    color: '#454555', fontSize: 11,
+    textAlign: 'right', paddingRight: 16, marginBottom: 8,
+  },
 
-  /* Media Preview */
-  mediaPreviewContainer: { marginHorizontal: 16, marginBottom: 16, borderRadius: 14, overflow: 'hidden' },
-  mediaSlide: { width: width - 32, height: 220, position: 'relative' },
-  mediaImage: { width: '100%', height: '100%' },
-  removeMediaBtn: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  dotRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, gap: 5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#454555' },
-  dotActive: { backgroundColor: '#D4B0EB', width: 18 },
-
-  /* Meta Section */
-  metaSection: { marginHorizontal: 16, backgroundColor: '#13131A', borderRadius: 14, marginBottom: 20, overflow: 'hidden' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13 },
-  metaIconWrap: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(212,176,235,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  metaTextCol: { flex: 1 },
-  metaLabel: { color: '#FFFFFF', fontWeight: '600', fontSize: 14, marginBottom: 2 },
-  metaValue: { color: '#454555', fontSize: 12 },
-  divider: { height: 1, backgroundColor: '#1A1A2E', marginLeft: 60 },
+  /* Meta card */
+  metaCard: {
+    marginHorizontal: 16, marginTop: 4, marginBottom: 20,
+    backgroundColor: '#13131A', borderRadius: 14, overflow: 'hidden',
+  },
+  metaRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  metaIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  metaText: { flex: 1 },
+  metaLabel: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+  metaValue: { color: '#454555', fontSize: 12, marginTop: 2 },
+  metaDivider: { height: 1, backgroundColor: '#1A1A2E', marginLeft: 62 },
+  countBadge: {
+    minWidth: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#D4B0EB',
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5,
+  },
+  countBadgeText: { color: '#0e0d12', fontSize: 11, fontWeight: 'bold' },
 
   /* Gallery */
-  gallerySection: { marginHorizontal: 16, marginBottom: 16 },
-  gallerySectionTitle: { color: '#8E8E9B', fontWeight: '600', fontSize: 13, marginBottom: 10 },
-  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  galleryItem: { width: (width - 32 - 8) / 3, height: (width - 32 - 8) / 3, borderRadius: 8, overflow: 'hidden' },
-  galleryItemSelected: { borderWidth: 2, borderColor: '#D4B0EB' },
-  galleryImage: { width: '100%', height: '100%' },
-  galleryCheckOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(212,176,235,0.25)', justifyContent: 'flex-start', alignItems: 'flex-end', padding: 6 },
-  galleryCheckBadge: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center' },
+  gallerySection: { marginHorizontal: 16, marginBottom: 20 },
+  gallerySectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 10,
+  },
+  gallerySectionTitle: {
+    color: '#8E8E9B', fontSize: 13, fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: 0.6,
+  },
+  gallerySeeAll: { color: '#D4B0EB', fontSize: 13, fontWeight: '600' },
+  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
+  galleryItem: {
+    width: ITEM_SIZE, height: ITEM_SIZE,
+    borderRadius: 8, overflow: 'hidden',
+    borderWidth: 2, borderColor: 'transparent',
+  },
+  galleryItemFeatured: { borderColor: '#16D869' },
+  galleryImg: { width: '100%', height: '100%' },
+  videoBadge: {
+    position: 'absolute', bottom: 5, left: 5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8, padding: 3,
+  },
+  galleryOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(22,216,105,0.15)',
+    justifyContent: 'flex-end', alignItems: 'flex-end', padding: 5,
+  },
+  gallerySelBadge: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#8E54E9',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  gallerySelBadgeFeatured: { backgroundColor: '#16D869' },
+  gallerySelNum: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
 
-  /* Bottom Bar */
-  bottomBar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#1A1A2E', paddingVertical: 12, paddingHorizontal: 8 },
-  bottomAction: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  /* Toolbar */
+  toolbar: {
+    flexDirection: 'row',
+    paddingHorizontal: 8, paddingVertical: 14,
+    borderTopWidth: 1, borderTopColor: '#13131A',
+  },
+  toolbarItem: { flex: 1, alignItems: 'center', gap: 5 },
+  toolbarLabel: { color: '#454555', fontSize: 10 },
 });
