@@ -204,7 +204,14 @@ export default function CreateMomentScreen() {
           <Text style={[styles.checkboxLabel, mode === 'feed' && styles.checkboxLabelActive]}>Feed</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.checkboxItem, { marginLeft: 20 }]} onPress={() => setMode('event')} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.checkboxItem, { marginLeft: 20 }]}
+          onPress={() => {
+            setMode('event');
+            setShowEventModal(true); // open event picker immediately
+          }}
+          activeOpacity={0.8}
+        >
           <View style={[styles.checkbox, mode === 'event' && styles.checkboxActive]}>
             {mode === 'event' && <Feather name="check" size={11} color="#FFFFFF" />}
           </View>

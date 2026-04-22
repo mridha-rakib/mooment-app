@@ -1,18 +1,50 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
-  FlatList, Image, TextInput, Platform,
+  FlatList, Image, Modal, Platform, StyleSheet,
+  Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+
+type EventStatus = 'live' | 'active' | 'upcoming';
 
 const MOCK_EVENTS = [
-  { id: '1', title: 'Rooftop Session Vol.4', date: 'Sat, Sep 9 • 9:00 PM', location: '0.3mi away', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop', tag: 'Music Party', isLive: true },
-  { id: '2', title: 'Jazz Night at the Loft', date: 'Sun, Sep 10 • 8:00 PM', location: '1.1mi away', image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop', tag: 'Jazz', isLive: false },
-  { id: '3', title: 'City Vibes Block Party', date: 'Fri, Sep 15 • 6:00 PM', location: '2.0mi away', image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=200&auto=format&fit=crop', tag: 'Street', isLive: false },
-  { id: '4', title: 'Deep House Underground', date: 'Sat, Sep 16 • 10:00 PM', location: '0.8mi away', image: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=200&auto=format&fit=crop', tag: 'Club', isLive: false },
+  {
+    id: '1',
+    title: 'Rooftop Session Vol 4',
+    organizer: 'DJ Kojo',
+    time: 'Tonight • 9pm',
+    distance: '0.3mi',
+    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+    status: 'live' as EventStatus,
+  },
+  {
+    id: '2',
+    title: 'Rooftop Session Vol 4',
+    organizer: 'DJ Kojo',
+    time: 'Tonight • 9pm',
+    distance: '0.3mi',
+    image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=200&auto=format&fit=crop',
+    status: 'active' as EventStatus,
+  },
+  {
+    id: '3',
+    title: 'Rooftop Session Vol 4',
+    organizer: 'DJ Kojo',
+    time: 'Tonight • 9pm',
+    distance: '0.3mi',
+    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop',
+    status: 'upcoming' as EventStatus,
+  },
+  {
+    id: '4',
+    title: 'Jazz Night at the Loft',
+    organizer: 'Blue Note',
+    time: 'Tomorrow • 8pm',
+    distance: '1.1mi',
+    image: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=200&auto=format&fit=crop',
+    status: 'upcoming' as EventStatus,
+  },
 ];
-
-type Event = typeof MOCK_EVENTS[0];
 
 type Props = {
   visible: boolean;
@@ -20,91 +52,108 @@ type Props = {
   onSelect: (eventTitle: string) => void;
 };
 
+// Status badge configs
+const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bg: string; dot: boolean }> = {
+  live:     { label: 'Live',     color: '#16D869', bg: 'rgba(22,216,105,0.12)',  dot: true },
+  active:   { label: 'Active',   color: '#16D869', bg: 'transparent',            dot: false },
+  upcoming: { label: 'Upcoming', color: '#F59E0B', bg: 'transparent',            dot: false },
+};
+
 export default function EventPickerModal({ visible, onClose, onSelect }: Props) {
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const filtered = MOCK_EVENTS.filter(e =>
-    e.title.toLowerCase().includes(search.toLowerCase())
+    e.title.toLowerCase().includes(search.toLowerCase()) ||
+    e.organizer.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleSelect = (id: string, title: string) => {
+    setSelectedId(id);
+    onSelect(title);  // immediately update parent
+    // keep modal open so user sees selection, closes via outside tap or Done
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
       <View style={styles.overlay}>
+        {/* Tap outside to close */}
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+
         <View style={styles.sheet}>
           {/* Handle */}
           <View style={styles.handle} />
 
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Events</Text>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.8}>
-              <Feather name="x" size={22} color="#8E8E9B" />
-            </TouchableOpacity>
-          </View>
+          {/* Title */}
+          <Text style={styles.title}>Events</Text>
 
           {/* Search */}
           <View style={styles.searchRow}>
-            <Feather name="search" size={16} color="#454555" style={{ marginRight: 8 }} />
+            <Feather name="search" size={16} color="#454555" style={{ marginRight: 10 }} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search events..."
+              placeholder="Search events"
               placeholderTextColor="#454555"
               value={search}
               onChangeText={setSearch}
             />
-          </View>
-
-          {/* List */}
-          <FlatList
-            data={filtered}
-            keyExtractor={item => item.id}
-            showsVerticalScrollIndicator={false}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.eventRow, selected === item.id && styles.eventRowSelected]}
-                onPress={() => setSelected(item.id)}
-                activeOpacity={0.85}
-              >
-                <Image source={{ uri: item.image }} style={styles.eventImage} />
-                <View style={styles.eventInfo}>
-                  <View style={styles.eventTopRow}>
-                    <View style={styles.eventTagPill}>
-                      <Text style={styles.eventTagText}>{item.tag}</Text>
-                    </View>
-                    {item.isLive && (
-                      <View style={styles.liveBadge}>
-                        <View style={styles.liveDot} />
-                        <Text style={styles.liveText}>Live</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.eventMeta}>{item.date}</Text>
-                  <Text style={styles.eventMeta}>{item.location}</Text>
-                </View>
-                <View style={[styles.radioOuter, selected === item.id && styles.radioOuterActive]}>
-                  {selected === item.id && <View style={styles.radioInner} />}
-                </View>
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} activeOpacity={0.8}>
+                <Feather name="x" size={15} color="#454555" />
               </TouchableOpacity>
             )}
-          />
-
-          {/* Confirm */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.confirmBtn, !selected && styles.confirmBtnDisabled]}
-              onPress={() => {
-                const ev = MOCK_EVENTS.find(e => e.id === selected);
-                if (ev) onSelect(ev.title);
-              }}
-              activeOpacity={0.8}
-              disabled={!selected}
-            >
-              <Text style={styles.confirmText}>Link Event</Text>
-            </TouchableOpacity>
           </View>
+
+          {/* Event list OR empty state */}
+          {filtered.length > 0 ? (
+            <FlatList
+              data={filtered}
+              keyExtractor={item => item.id}
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 340 }}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              renderItem={({ item }) => {
+                const cfg = STATUS_CONFIG[item.status];
+                const isSelected = selectedId === item.id;
+                return (
+                  <TouchableOpacity
+                    style={[styles.eventRow, isSelected && styles.eventRowSelected]}
+                    onPress={() => handleSelect(item.id, item.title)}
+                    activeOpacity={0.85}
+                  >
+                    <Image source={{ uri: item.image }} style={styles.eventImage} />
+                    <View style={styles.eventInfo}>
+                      <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={styles.eventMeta}>
+                        {item.organizer} • {item.time} • {item.distance}
+                      </Text>
+                    </View>
+                    <View style={[
+                      styles.statusBadge,
+                      { borderColor: cfg.color + (item.status === 'live' ? '00' : '55') },
+                      item.status !== 'live' && { borderWidth: 1 },
+                      { backgroundColor: cfg.bg },
+                    ]}>
+                      {cfg.dot && <View style={[styles.statusDot, { backgroundColor: cfg.color }]} />}
+                      <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          ) : (
+            /* ── Empty State ── */
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                Currently you did not buy any ticket, browse events to book
+              </Text>
+              <TouchableOpacity style={styles.browseBtn} onPress={onClose} activeOpacity={0.8}>
+                <Text style={styles.browseBtnText}>Browse Event</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
         </View>
       </View>
     </Modal>
@@ -112,31 +161,92 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#13131A', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: Platform.OS === 'ios' ? 34 : 20, maxHeight: '85%' },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#2A2A3A', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
-  title: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 18 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 12, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#13131A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: '#2A2A3A',
+    alignSelf: 'center', marginBottom: 16,
+  },
+  title: {
+    color: '#FFFFFF', fontWeight: 'bold',
+    fontSize: 18, textAlign: 'center', marginBottom: 14,
+  },
+
+  /* Search */
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1A1A2E', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 11,
+    marginBottom: 8,
+  },
   searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
+
+  /* List */
   separator: { height: 1, backgroundColor: '#1A1A2E' },
-  eventRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  eventRowSelected: { backgroundColor: 'rgba(212,176,235,0.06)' },
-  eventImage: { width: 56, height: 56, borderRadius: 10, marginRight: 12 },
+  eventRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 2,
+  },
+  eventRowSelected: {
+    backgroundColor: 'rgba(212,176,235,0.06)',
+    borderRadius: 10,
+  },
+  eventImage: {
+    width: 52, height: 52, borderRadius: 10, marginRight: 12,
+  },
   eventInfo: { flex: 1 },
-  eventTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 6 },
-  eventTagPill: { backgroundColor: 'rgba(212,176,235,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  eventTagText: { color: '#D4B0EB', fontSize: 10, fontWeight: '600' },
-  liveBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(22,216,105,0.12)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, gap: 4 },
-  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#16D869' },
-  liveText: { color: '#16D869', fontSize: 10, fontWeight: '700' },
-  eventTitle: { color: '#FFFFFF', fontWeight: '600', fontSize: 14, marginBottom: 2 },
-  eventMeta: { color: '#8E8E9B', fontSize: 11 },
-  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#454555', justifyContent: 'center', alignItems: 'center' },
-  radioOuterActive: { borderColor: '#D4B0EB' },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#D4B0EB' },
-  footer: { paddingHorizontal: 16, paddingTop: 16 },
-  confirmBtn: { backgroundColor: '#D4B0EB', paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
-  confirmBtnDisabled: { opacity: 0.4 },
-  confirmText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 15 },
+  eventTitle: {
+    color: '#FFFFFF', fontWeight: '700',
+    fontSize: 14, marginBottom: 4,
+  },
+  eventMeta: { color: '#8E8E9B', fontSize: 12 },
+
+  /* Status badge */
+  statusBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 10, gap: 5,
+  },
+  statusDot: {
+    width: 6, height: 6, borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 12, fontWeight: '700',
+  },
+
+  /* Empty state */
+  emptyState: {
+    paddingVertical: 36,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    gap: 18,
+  },
+  emptyText: {
+    color: '#8E8E9B',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  browseBtn: {
+    backgroundColor: '#2A2A3A',
+    paddingHorizontal: 28,
+    paddingVertical: 11,
+    borderRadius: 20,
+  },
+  browseBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
 });
