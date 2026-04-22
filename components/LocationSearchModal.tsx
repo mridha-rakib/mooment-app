@@ -19,6 +19,11 @@ const RECENT_LOCATIONS = [
 export default function LocationSearchModal({ visible, onClose, onSelectLocation }: LocationSearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
+  const filteredLocations = RECENT_LOCATIONS.filter(loc => 
+    loc.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) || 
+    loc.country.toLowerCase().includes(searchQuery.toLowerCase().trim())
+  );
+
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
       <SafeAreaView style={styles.safeArea}>
@@ -49,7 +54,8 @@ export default function LocationSearchModal({ visible, onClose, onSelectLocation
 
           {/* Recent Locations List */}
           <ScrollView style={styles.listContainer}>
-            {RECENT_LOCATIONS.map((loc, index) => (
+            {filteredLocations.length > 0 ? (
+              filteredLocations.map((loc, index) => (
               <View key={`${loc.id}-${index}`}>
                 <TouchableOpacity 
                   style={styles.locationItem} 
@@ -70,7 +76,10 @@ export default function LocationSearchModal({ visible, onClose, onSelectLocation
                 </TouchableOpacity>
                 <View style={styles.separator} />
               </View>
-            ))}
+            ))
+            ) : (
+              <Text style={{color: '#8E8E9B', marginTop: 40, textAlign: 'center'}}>No locations found</Text>
+            )}
           </ScrollView>
 
         </View>

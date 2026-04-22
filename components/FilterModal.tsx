@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, SafeAreaView, Platform, ScrollView, Switch } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, SafeAreaView, Platform, ScrollView, Switch, PanResponder } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import LocationSearchModal from './LocationSearchModal';
 
@@ -22,6 +22,25 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
   
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState('Los Angeles, CA');
+
+  const [radius, setRadius] = useState(75);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => updateRadius(evt.nativeEvent.locationX),
+      onPanResponderMove: (evt) => updateRadius(evt.nativeEvent.locationX),
+    })
+  ).current;
+
+  const updateRadius = (x: number) => {
+    if (trackWidth > 0) {
+      let percent = Math.max(0, Math.min(1, x / trackWidth));
+      setRadius(Math.round(percent * 200));
+    }
+  };
 
   const renderPills = (options: string[], active: string, onSelect: (val: string) => void) => {
     return (
@@ -132,11 +151,15 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
               <View style={styles.radiusContainer}>
                 <View style={styles.radiusHeader}>
                   <Text style={styles.inputText}>Radius</Text>
-                  <Text style={styles.radiusValueText}>75 miles</Text>
+                  <Text style={styles.radiusValueText}>{radius} miles</Text>
                 </View>
-                <View style={styles.sliderTrack}>
-                  <View style={[styles.sliderFill, { width: '37.5%' }]} />
-                  <View style={styles.sliderThumb} />
+                <View 
+                  style={styles.sliderTrack}
+                  onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+                  {...panResponder.panHandlers}
+                >
+                  <View style={[styles.sliderFill, { width: `${(radius / 200) * 100}%` }]} />
+                  <View style={[styles.sliderThumb, { left: `${(radius / 200) * 100}%` }]} />
                 </View>
                 <View style={styles.radiusLabels}>
                   <Text style={styles.radiusLabelText}>0</Text>
@@ -319,7 +342,6 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: '#FFFFFF',
     position: 'absolute',
-    left: '37.5%',
     transform: [{ translateX: -7 }],
   },
   radiusLabels: {

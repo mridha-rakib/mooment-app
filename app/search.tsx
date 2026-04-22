@@ -55,7 +55,7 @@ export default function SearchScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         {/* People Section */}
-        {filteredPeople.length > 0 && (
+        {(activeFilter === 'All' || activeFilter === 'People') && filteredPeople.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>People you know</Text>
             {filteredPeople.map((person) => (
@@ -71,7 +71,7 @@ export default function SearchScreen() {
         )}
 
         {/* Events Section */}
-        {filteredEvents.length > 0 && (
+        {(activeFilter === 'All' || activeFilter === 'Events' || activeFilter === 'Trending') && filteredEvents.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Events</Text>
           {filteredEvents.map((event) => (
@@ -87,7 +87,7 @@ export default function SearchScreen() {
         )}
 
         {/* Products Section */}
-        {filteredProducts.length > 0 && (
+        {(activeFilter === 'All' || activeFilter === 'Products' || activeFilter === 'Trending') && filteredProducts.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Products</Text>
           {filteredProducts.map((product) => (
