@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export type LiveChatBannerProps = {
   contextBold?: string;
@@ -10,6 +11,8 @@ export type LiveChatBannerProps = {
 };
 
 export default function LiveChatBanner({ contextBold, contextNormal, title, listeningCount, avatars }: LiveChatBannerProps) {
+  const router = useRouter();
+
   return (
     <View style={styles.wrapper}>
       {(contextBold || contextNormal) && (
@@ -19,7 +22,11 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
         </Text>
       )}
       
-      <TouchableOpacity style={styles.card} activeOpacity={0.9}>
+      <TouchableOpacity 
+        style={styles.card} 
+        activeOpacity={0.9}
+        onPress={() => router.push('/live-video')}
+      >
         <View style={styles.content}>
           
           {/* Live Badge */}

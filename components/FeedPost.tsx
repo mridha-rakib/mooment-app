@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
-
+import { useRouter } from 'expo-router';
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
@@ -59,6 +59,7 @@ export type PostData = {
 
 export default function FeedPost({ post, onCommentPress, onSharePress }: { post: PostData; onCommentPress?: () => void; onSharePress?: () => void }) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const router = useRouter();
 
   const handleScroll = (event: any) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
@@ -156,7 +157,15 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
         )}
 
         {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && post.mediaUris && post.mediaUris.length > 0 && (
-          <View style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}>
+          <TouchableOpacity 
+            activeOpacity={post.postType === 'event' ? 0.9 : 1}
+            onPress={() => {
+              if (post.postType === 'event') {
+                router.push('/live-video');
+              }
+            }}
+            style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
+          >
             <ScrollView 
               horizontal 
               pagingEnabled 
@@ -257,7 +266,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                 )}
               </>
             )}
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Product Post Footer */}
