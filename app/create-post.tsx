@@ -225,21 +225,22 @@ export default function CreateMomentScreen() {
             style={styles.avatar}
           />
           <View style={styles.authorInfo}>
-            {mode === 'feed' ? (
-              <Text style={styles.authorName}>Tuval Mor</Text>
-            ) : (
-              <Text style={styles.authorNameFull} numberOfLines={2}>
-                <Text style={styles.authorBold}>Tuval Mor</Text>
-                {taggedPeople.length > 0 && (
-                  <>
-                    <Text style={styles.authorMuted}> with </Text>
-                    <Text style={styles.authorBold}>{taggedLabel}</Text>
-                  </>
-                )}
-                <Text style={styles.authorMuted}> at </Text>
-                <Text style={styles.authorBold}>{selectedEvent}</Text>
-              </Text>
-            )}
+            {/* Both Feed and Event show tagged people dynamically */}
+            <Text style={styles.authorNameFull} numberOfLines={2}>
+              <Text style={styles.authorBold}>Tuval Mor</Text>
+              {taggedPeople.length > 0 && (
+                <>
+                  <Text style={styles.authorMuted}> with </Text>
+                  <Text style={styles.authorBold}>{taggedLabel}</Text>
+                </>
+              )}
+              {mode === 'event' && (
+                <>
+                  <Text style={styles.authorMuted}> at </Text>
+                  <Text style={styles.authorBold}>{selectedEvent}</Text>
+                </>
+              )}
+            </Text>
           </View>
 
           {mode === 'event' && (
@@ -355,7 +356,7 @@ export default function CreateMomentScreen() {
       <PeopleTagModal
         visible={showPeopleModal}
         onClose={() => setShowPeopleModal(false)}
-        onSelect={people => { setTaggedPeople(people); setShowPeopleModal(false); }}
+        onSelect={people => setTaggedPeople(people)}
         selected={taggedPeople}
       />
       <AudiencePickerModal
