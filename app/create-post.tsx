@@ -232,15 +232,16 @@ export default function CreateMomentScreen() {
             style={styles.avatar}
           />
           <View style={styles.authorInfo}>
-            {/* Both Feed and Event show tagged people dynamically */}
             <Text style={styles.authorNameFull} numberOfLines={2}>
               <Text style={styles.authorBold}>Tuval Mor</Text>
-              {taggedPeople.length > 0 && (
+              {/* Tagged people only in Feed mode */}
+              {mode === 'feed' && taggedPeople.length > 0 && (
                 <>
                   <Text style={styles.authorMuted}> with </Text>
                   <Text style={styles.authorBold}>{taggedLabel}</Text>
                 </>
               )}
+              {/* Event link only in Event mode */}
               {mode === 'event' && (
                 <>
                   <Text style={styles.authorMuted}> at </Text>
