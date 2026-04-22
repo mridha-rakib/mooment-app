@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import FilterModal from './FilterModal';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeHeader() {
   const router = useRouter();
+  const [filterVisible, setFilterVisible] = useState(false);
   
   return (
     <View style={styles.header}>
@@ -22,10 +24,12 @@ export default function HomeHeader() {
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/search')}>
           <Feather name="search" size={20} color="#FFFFFF" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
           <Feather name="sliders" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
     </View>
   );
 }
