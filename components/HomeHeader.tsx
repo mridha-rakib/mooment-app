@@ -1,10 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeHeader() {
+  const router = useRouter();
+  
   return (
     <View style={styles.header}>
       <TouchableOpacity style={styles.feedBtn} activeOpacity={0.8}>
@@ -16,7 +19,7 @@ export default function HomeHeader() {
       <Text style={styles.logoText}>Mooment</Text>
 
       <View style={styles.headerIcons}>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/search')}>
           <Feather name="search" size={20} color="#FFFFFF" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>

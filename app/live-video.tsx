@@ -49,7 +49,7 @@ export default function LiveVideoScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/search')}>
             <Feather name="search" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
