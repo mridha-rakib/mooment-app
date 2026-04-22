@@ -52,7 +52,7 @@ const OPTIONS = [
     iconLib: 'feather',
     color: '#3B82F6',
     bg: '#3B82F620',
-    route: '/live-video',
+    route: '/live-room-setup',
   },
   {
     id: 'scan',
