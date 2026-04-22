@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export type StoryData = {
   id: string;
@@ -10,13 +11,20 @@ export type StoryData = {
 };
 
 export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
+  const router = useRouter();
+
   return (
     <View style={styles.storiesContainer}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storiesScroll}>
         {stories.map((story) => {
           if (story.type === 'add') {
             return (
-              <TouchableOpacity key={story.id} style={styles.addStoryBtn} activeOpacity={0.8}>
+              <TouchableOpacity 
+                key={story.id} 
+                style={styles.addStoryBtn} 
+                activeOpacity={0.8}
+                onPress={() => router.push('/add-story')}
+              >
                 <Feather name="plus" size={24} color="#8E8E9B" />
               </TouchableOpacity>
             );

@@ -74,7 +74,16 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
     <View style={styles.postWrapper}>
       {/* Header Context Labels */}
       {post.headerLabel && (
-        <Text style={styles.headerLabelText}>{post.headerLabel}</Text>
+        <TouchableOpacity 
+          activeOpacity={0.8}
+          onPress={() => {
+            if (post.headerLabel?.toLowerCase().includes('follow')) {
+              router.push('/people-to-follow');
+            }
+          }}
+        >
+          <Text style={styles.headerLabelText}>{post.headerLabel}</Text>
+        </TouchableOpacity>
       )}
       {post.likedBy && (
         <Text style={styles.likedByText}>
@@ -158,10 +167,12 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
 
         {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && post.mediaUris && post.mediaUris.length > 0 && (
           <TouchableOpacity 
-            activeOpacity={post.postType === 'event' ? 0.9 : 1}
+            activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
             onPress={() => {
               if (post.postType === 'event') {
                 router.push('/live-video');
+              } else if (post.postType === 'standard') {
+                router.push('/view-post');
               }
             }}
             style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
@@ -209,7 +220,11 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                   </Text>
                   
                   <View style={styles.eventAttendeesRow}>
-                    <View style={styles.avatarCluster}>
+                    <TouchableOpacity 
+                      style={styles.avatarCluster}
+                      activeOpacity={0.8}
+                      onPress={() => router.push('/attendees-list')}
+                    >
                       {post.eventDetails.attendeesAvatars?.map((uri, i) => (
                         <Image 
                           key={i} 
@@ -221,7 +236,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                           ]} 
                         />
                       ))}
-                    </View>
+                    </TouchableOpacity>
                     <Text style={styles.attendeesText}>{post.eventDetails.attendeesCount} going</Text>
                   </View>
 
