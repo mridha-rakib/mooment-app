@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
 
 
 
-  stitchInput: { color: '#FFFFFF', fontSize: 15, paddingHorizontal: 16, lineHeight: 22, minHeight: 50 },
+  stitchInput: { color: '#FFFFFF', fontSize: 15, paddingHorizontal: 16, lineHeight: 22, minHeight: 180 },
   eventCaptionInput: { color: '#FFFFFF', fontSize: 14, paddingHorizontal: 16, lineHeight: 22, minHeight: 220 },
 
   toolbar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#13131A', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#0e0d12' },
