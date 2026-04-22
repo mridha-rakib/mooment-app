@@ -14,7 +14,6 @@ import {
 const { width, height } = Dimensions.get('window');
 
 const MOCK_EVENT = 'Roofstope Series Vol1.';
-const MOCK_TAGGED = 'Ketty Perera';
 
 // Gallery images for the picker sheet
 const GALLERY_ITEMS = [
@@ -179,9 +178,7 @@ export default function CreateMomentScreen() {
     setMode('feed'); // switch to feed mode when image selected
   };
 
-  const taggedLabel = taggedPeople.length > 0
-    ? taggedPeople.join(', ')
-    : MOCK_TAGGED;
+  const taggedLabel = taggedPeople.join(', ');
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -232,10 +229,14 @@ export default function CreateMomentScreen() {
               <Text style={styles.authorName}>Tuval Mor</Text>
             ) : (
               <Text style={styles.authorNameFull} numberOfLines={2}>
-                <Text style={styles.authorBold}>Tuval Mor </Text>
-                <Text style={styles.authorMuted}>with </Text>
-                <Text style={styles.authorBold}>{taggedLabel} </Text>
-                <Text style={styles.authorMuted}>at </Text>
+                <Text style={styles.authorBold}>Tuval Mor</Text>
+                {taggedPeople.length > 0 && (
+                  <>
+                    <Text style={styles.authorMuted}> with </Text>
+                    <Text style={styles.authorBold}>{taggedLabel}</Text>
+                  </>
+                )}
+                <Text style={styles.authorMuted}> at </Text>
                 <Text style={styles.authorBold}>{selectedEvent}</Text>
               </Text>
             )}

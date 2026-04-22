@@ -26,19 +26,27 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
   const [search, setSearch] = useState('');
   const [localSelected, setLocalSelected] = useState<string[]>(selected);
 
+  // Sync if parent resets
+  React.useEffect(() => {
+    setLocalSelected(selected);
+  }, [visible]);
+
   const filtered = MOCK_PEOPLE.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.handle.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Fire immediately so author row updates in real-time
   const toggle = (name: string) => {
-    setLocalSelected(prev =>
-      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
-    );
+    const next = localSelected.includes(name)
+      ? localSelected.filter(n => n !== name)
+      : [...localSelected, name];
+    setLocalSelected(next);
+    onSelect(next); // ← instant update to parent
   };
 
   const handleDone = () => {
-    onSelect(localSelected);
+    onClose(); // selection already synced live
   };
 
   return (
@@ -109,12 +117,12 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
           {/* Done button */}
           <View style={styles.footer}>
             <TouchableOpacity
-              style={[styles.doneBtn, localSelected.length === 0 && styles.doneBtnDisabled]}
+              style={styles.doneBtn}
               onPress={handleDone}
               activeOpacity={0.8}
             >
               <Text style={styles.doneBtnText}>
-                {localSelected.length > 0 ? `Done  (${localSelected.length})` : 'Done'}
+                {localSelected.length > 0 ? `Done  (${localSelected.length} tagged)` : 'Done'}
               </Text>
             </TouchableOpacity>
           </View>
