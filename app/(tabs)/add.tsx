@@ -62,7 +62,7 @@ const OPTIONS = [
     iconLib: 'feather',
     color: '#16D869',
     bg: '#16D86920',
-    route: null,
+    route: '/scan-qr',
   },
 ];
 
