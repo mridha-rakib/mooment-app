@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     paddingHorizontal: 18,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 6,
   },
   addBtnActive: {
     borderColor: '#D4B0EB',
