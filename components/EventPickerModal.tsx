@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   FlatList, Image, Modal, Platform, StyleSheet,
@@ -60,6 +61,7 @@ const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bg: str
 };
 
 export default function EventPickerModal({ visible, onClose, onSelect }: Props) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -71,7 +73,8 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
   const handleSelect = (id: string, title: string) => {
     setSelectedId(id);
     onSelect(title);  // immediately update parent
-    // keep modal open so user sees selection, closes via outside tap or Done
+    onClose();        // close modal
+    router.push({ pathname: '/event-details', params: { id, title } });
   };
 
   return (
