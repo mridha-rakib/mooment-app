@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import FilterModal from './FilterModal';
 
 const { width } = Dimensions.get('window');
@@ -18,7 +18,8 @@ export default function HomeHeader() {
         <Feather name="chevron-down" size={14} color="#FFFFFF" />
       </TouchableOpacity>
 
-      <Text style={styles.logoText}>Mooment</Text>
+      {/* <Text style={styles.logoText}>Mooment</Text> */}
+      <Image source={require('../assets/images/Mooment.png')} style={styles.logoText} />
 
       <View style={styles.headerIcons}>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/search')}>

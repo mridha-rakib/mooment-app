@@ -1,7 +1,9 @@
+import { OleoScript_400Regular, useFonts } from '@expo-google-fonts/oleo-script';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
+  ActivityIndicator,
   Image,
   Platform,
   SafeAreaView,
@@ -75,6 +77,15 @@ const OPTIONS = [
 
 export default function AddScreen() {
   const router = useRouter();
+  const [fontsLoaded] = useFonts({ OleoScript_400Regular });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={[styles.root, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#8E54E9" />
+      </View>
+    );
+  }
 
   const handleOption = (route: string | null) => {
     if (route) router.push(route as any);
@@ -180,9 +191,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   bgHeaderText: {
+    fontFamily: 'OleoScript_400Regular',
+    fontWeight: '400',
+    fontSize: 24,
+    lineHeight: 18,
+    letterSpacing: 0,
+    textAlign: 'center',
     color: 'rgba(255,255,255,0.4)',
-    fontSize: 22,
-    fontWeight: 'bold',
   },
   storyRow: {
     flexGrow: 0,
