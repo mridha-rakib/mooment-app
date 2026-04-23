@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
@@ -6,11 +6,8 @@ import {
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
-
 const { width } = Dimensions.get('window');
 const QR_SIZE = width * 0.72;
-
-// Mock QR code image (black & white pattern via unsplash)
 const QR_IMG = 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/480px-QR_code_for_mobile_English_Wikipedia.svg.png';
 
 export default function QRCodeScreen() {
