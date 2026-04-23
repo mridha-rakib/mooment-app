@@ -1,74 +1,183 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Dimensions, Image, Platform, SafeAreaView,
+  Alert, Animated, Dimensions, Image, Platform, SafeAreaView,
   ScrollView, StatusBar, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
-/* ─── Mock Data ─── */
-const CHAT_MESSAGES = [
-  {
-    id: '1',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop',
-    name: 'Dj Koko',
-    role: 'Host',
-    time: '9:02pm',
-    text: 'Welcome everyone! Goint lie in a few mins',
-  },
-  {
-    id: '2',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop',
-    name: 'Tuval',
-    role: null,
-    time: '9:02pm',
-    text: 'Cant wait, already at the venue',
-  },
-  {
-    id: '3',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop',
-    name: 'Nosel',
-    role: null,
-    time: '9:02pm',
-    text: 'What track are you opening wiwth tonigt?',
-  },
+/* ─── Types ─── */
+type ChatMessage = { id: string; avatar: string; name: string; role: string | null; time: string; text: string };
+type Participant = { id: string; name: string; avatar: string; micMuted: boolean; hidden: boolean };
+
+/* ─── Initial Data ─── */
+const INITIAL_MESSAGES: ChatMessage[] = [
+  { id: '1', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop', name: 'Dj Koko', role: 'Host', time: '9:02pm', text: 'Welcome everyone! Going lie in a few mins' },
+  { id: '2', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop', name: 'Tuval', role: null, time: '9:02pm', text: 'Cant wait, already at the venue' },
+  { id: '3', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop', name: 'Nosel', role: null, time: '9:02pm', text: 'What track are you opening with tonight?' },
 ];
 
-const PARTICIPANTS = [
+const INITIAL_PARTICIPANTS: Participant[] = [
   { id: '1', name: 'Lister', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: false },
   { id: '2', name: 'Kate', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop', micMuted: true, hidden: true },
   { id: '3', name: 'Sona', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: true },
 ];
 
-/* ─── Audio Bars Component ─── */
+const SIMULATED_MSGS = [
+  { name: 'Alex', text: 'This is going to be fire 🔥' },
+  { name: 'Maya', text: 'Can you play some house music?' },
+  { name: 'Jordan', text: 'First time here, loving the vibes!' },
+  { name: 'Priya', text: 'Let\'s gooo 🎶' },
+  { name: 'Sam', text: 'Shoutout from London!' },
+];
+
+const USER_AVATAR = 'https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop';
+
+/* ─── Helpers ─── */
+function getTimeNow() {
+  const d = new Date();
+  const h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h > 12 ? h - 12 : h || 12}:${m}${h >= 12 ? 'pm' : 'am'}`;
+}
+
+/* ─── Animated Audio Bars ─── */
 function AudioBars() {
-  const barHeights = [8, 14, 20, 12, 18, 10, 16, 22, 14, 8, 18, 12, 20, 10, 16];
+  const BAR_COUNT = 15;
+  const anims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(Math.random() * 16 + 6))).current;
+
+  useEffect(() => {
+    const loops = anims.map((a) => {
+      const animate = () => {
+        Animated.sequence([
+          Animated.timing(a, { toValue: Math.random() * 20 + 4, duration: 200 + Math.random() * 300, useNativeDriver: false }),
+          Animated.timing(a, { toValue: Math.random() * 10 + 4, duration: 200 + Math.random() * 300, useNativeDriver: false }),
+        ]).start(animate);
+      };
+      animate();
+      return a;
+    });
+    return () => loops.forEach((a) => a.stopAnimation());
+  }, []);
+
   return (
     <View style={styles.audioBarsRow}>
-      {barHeights.map((h, i) => (
-        <View
-          key={i}
-          style={[
-            styles.audioBar,
-            { height: h, backgroundColor: i % 3 === 0 ? '#FF4444' : i % 3 === 1 ? '#FF6B3D' : '#FFD93D' },
-          ]}
-        />
+      {anims.map((a, i) => (
+        <Animated.View key={i} style={[styles.audioBar, { height: a, backgroundColor: i % 3 === 0 ? '#FF4444' : i % 3 === 1 ? '#FF6B3D' : '#FFD93D' }]} />
       ))}
     </View>
   );
 }
 
+/* ─── Pulsing Live Dot ─── */
+function PulsingDot() {
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, { toValue: 1.6, duration: 800, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ]),
+      ]),
+    ).start();
+  }, []);
+
+  return <Animated.View style={[styles.liveDot, { transform: [{ scale }], opacity }]} />;
+}
+
+/* ═══════════════════ MAIN ═══════════════════ */
 export default function EventDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; title?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'permission'>('chat');
   const [allowAll, setAllowAll] = useState(true);
   const [comment, setComment] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
+  const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
+  const [listenerCount, setListenerCount] = useState(412);
+  const [isSpeaking, setIsSpeaking] = useState(true);
+  const nextId = useRef(10);
+  const simIdx = useRef(0);
 
   const hostName = params.title || 'DJ Nova';
+
+  // Simulate incoming messages every 8s
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const msg = SIMULATED_MSGS[simIdx.current % SIMULATED_MSGS.length];
+      simIdx.current++;
+      setMessages((prev) => [...prev, {
+        id: String(nextId.current++),
+        avatar: `https://i.pravatar.cc/100?u=${msg.name}`,
+        name: msg.name, role: null, time: getTimeNow(), text: msg.text,
+      }]);
+      setListenerCount((c) => c + Math.floor(Math.random() * 5) - 1);
+    }, 8000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Toggle speaking indicator
+  useEffect(() => {
+    const iv = setInterval(() => setIsSpeaking((s) => !s), 4000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Auto-scroll on new message
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    }
+  }, [messages, activeTab]);
+
+  const handleSend = useCallback(() => {
+    const trimmed = comment.trim();
+    if (!trimmed) return;
+    setMessages((prev) => [...prev, {
+      id: String(nextId.current++),
+      avatar: USER_AVATAR, name: 'You', role: null, time: getTimeNow(), text: trimmed,
+    }]);
+    setComment('');
+  }, [comment]);
+
+  const toggleMic = useCallback((id: string) => {
+    setParticipants((prev) => prev.map((p) => p.id === id ? { ...p, micMuted: !p.micMuted } : p));
+  }, []);
+
+  const toggleHidden = useCallback((id: string) => {
+    setParticipants((prev) => prev.map((p) => p.id === id ? { ...p, hidden: !p.hidden } : p));
+  }, []);
+
+  const handleLeave = useCallback(() => {
+    Alert.alert('Leave Room', 'Are you sure you want to leave?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+    ]);
+  }, [router]);
+
+  const handleAllowAll = useCallback(() => {
+    const next = !allowAll;
+    setAllowAll(next);
+    if (next) setParticipants((prev) => prev.map((p) => ({ ...p, micMuted: false })));
+    else setParticipants((prev) => prev.map((p) => ({ ...p, micMuted: true })));
+  }, [allowAll]);
+
+  const deleteMessage = useCallback((id: string) => {
+    Alert.alert('Delete Message', 'Remove this message?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => setMessages((prev) => prev.filter((m) => m.id !== id)) },
+    ]);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -85,107 +194,78 @@ export default function EventDetailsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* ── Status Bar ── */}
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* ── Status Row ── */}
         <View style={styles.statusRow}>
           <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
+            <PulsingDot />
             <Text style={styles.liveText}>Live</Text>
           </View>
           <View style={styles.listenersRow}>
             <Feather name="headphones" size={13} color="#8E8E9B" />
-            <Text style={styles.listenersText}>412 listening</Text>
+            <Text style={styles.listenersText}>{listenerCount} listening</Text>
           </View>
-          <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.8} onPress={handleLeave}>
             <Text style={styles.leaveText}>Leave</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Speaker Avatar ── */}
         <View style={styles.speakerSection}>
-          {/* Purple glow ring */}
           <View style={styles.avatarGlow}>
             <View style={styles.avatarRingOuter}>
-              <View style={styles.avatarRingInner}>
-                <Image
-                  source={{ uri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop' }}
-                  style={styles.speakerAvatar}
-                />
+              <View style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking]}>
+                <Image source={{ uri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop' }} style={styles.speakerAvatar} />
               </View>
             </View>
-            {/* Speaking badge */}
-            <View style={styles.speakingBadge}>
-              <View style={styles.speakingDot} />
-              <Text style={styles.speakingText}>Speaking</Text>
-            </View>
+            {isSpeaking && (
+              <View style={styles.speakingBadge}>
+                <View style={styles.speakingDot} />
+                <Text style={styles.speakingText}>Speaking</Text>
+              </View>
+            )}
           </View>
-
-          {/* Host name & badge */}
           <View style={styles.hostNameRow}>
             <Text style={styles.hostName}>{hostName}</Text>
-            <View style={styles.hostBadge}>
-              <Text style={styles.hostBadgeText}>Host</Text>
-            </View>
+            <View style={styles.hostBadge}><Text style={styles.hostBadgeText}>Host</Text></View>
           </View>
-
-          {/* Audio bars / equalizer */}
-          <AudioBars />
+          {isSpeaking && <AudioBars />}
         </View>
 
-        {/* ── Tab Switcher ── */}
+        {/* ── Tabs ── */}
         <View style={styles.tabRow}>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'chat' && styles.tabItemActive]}
-            onPress={() => setActiveTab('chat')}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={[styles.tabItem, activeTab === 'chat' && styles.tabItemActive]} onPress={() => setActiveTab('chat')} activeOpacity={0.8}>
             <Text style={[styles.tabLabel, activeTab === 'chat' && styles.tabLabelActive]}>Live Chat</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'permission' && styles.tabItemActive]}
-            onPress={() => setActiveTab('permission')}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={[styles.tabItem, activeTab === 'permission' && styles.tabItemActive]} onPress={() => setActiveTab('permission')} activeOpacity={0.8}>
             <Text style={[styles.tabLabel, activeTab === 'permission' && styles.tabLabelActive]}>Permission</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Tab Content ── */}
         {activeTab === 'chat' ? (
-          /* ─ Live Chat ─ */
           <View style={styles.chatContainer}>
-            {CHAT_MESSAGES.map((msg) => (
+            {messages.map((msg) => (
               <View key={msg.id} style={styles.chatRow}>
                 <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
                 <View style={styles.chatContent}>
                   <View style={styles.chatMeta}>
                     <Text style={styles.chatName}>{msg.name}</Text>
-                    {msg.role && (
-                      <>
-                        <Text style={styles.chatDot}> • </Text>
-                        <Text style={styles.chatRole}>{msg.role}</Text>
-                      </>
-                    )}
+                    {msg.role && (<><Text style={styles.chatDot}> • </Text><Text style={styles.chatRole}>{msg.role}</Text></>)}
                     <Text style={styles.chatDot}> • </Text>
                     <Text style={styles.chatTime}>{msg.time}</Text>
                   </View>
                   <Text style={styles.chatText}>{msg.text}</Text>
                 </View>
-                <TouchableOpacity style={styles.chatMore} activeOpacity={0.6}>
+                <TouchableOpacity style={styles.chatMore} activeOpacity={0.6} onPress={() => deleteMessage(msg.id)}>
                   <Feather name="more-horizontal" size={16} color="#555" />
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         ) : (
-          /* ─ Permission Tab ─ */
           <View style={styles.permissionContainer}>
-            {/* Allow all toggle */}
-            <TouchableOpacity
-              style={styles.allowAllRow}
-              activeOpacity={0.7}
-              onPress={() => setAllowAll(!allowAll)}
-            >
+            <TouchableOpacity style={styles.allowAllRow} activeOpacity={0.7} onPress={handleAllowAll}>
               <View style={styles.allowAllTextCol}>
                 <Text style={styles.allowAllTitle}>Allow all participants to speak</Text>
                 <Text style={styles.allowAllSub}>You can manually mute individual person as you want</Text>
@@ -195,31 +275,16 @@ export default function EventDetailsScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* Participants list */}
-            {PARTICIPANTS.map((p) => (
+            {participants.map((p) => (
               <View key={p.id} style={styles.participantRow}>
                 <Image source={{ uri: p.avatar }} style={styles.participantAvatar} />
                 <Text style={styles.participantName}>{p.name}</Text>
                 <View style={styles.participantActions}>
-                  <TouchableOpacity
-                    style={[styles.pActionBtn, p.micMuted && styles.pActionBtnRed]}
-                    activeOpacity={0.7}
-                  >
-                    <Feather
-                      name={p.micMuted ? 'mic-off' : 'mic'}
-                      size={16}
-                      color={p.micMuted ? '#FFFFFF' : '#AAAAAA'}
-                    />
+                  <TouchableOpacity style={[styles.pActionBtn, p.micMuted && styles.pActionBtnRed]} activeOpacity={0.7} onPress={() => toggleMic(p.id)}>
+                    <Feather name={p.micMuted ? 'mic-off' : 'mic'} size={16} color={p.micMuted ? '#FFF' : '#AAA'} />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.pActionBtn, p.hidden && styles.pActionBtnRed]}
-                    activeOpacity={0.7}
-                  >
-                    <Feather
-                      name={p.hidden ? 'eye-off' : 'eye'}
-                      size={16}
-                      color={p.hidden ? '#FFFFFF' : '#AAAAAA'}
-                    />
+                  <TouchableOpacity style={[styles.pActionBtn, p.hidden && styles.pActionBtnRed]} activeOpacity={0.7} onPress={() => toggleHidden(p.id)}>
+                    <Feather name={p.hidden ? 'eye-off' : 'eye'} size={16} color={p.hidden ? '#FFF' : '#AAA'} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -228,7 +293,7 @@ export default function EventDetailsScreen() {
         )}
       </ScrollView>
 
-      {/* ── Bottom Comment Bar ── */}
+      {/* ── Bottom Bar ── */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
           <Feather name="bell" size={20} color="#FFFFFF" />
@@ -243,9 +308,11 @@ export default function EventDetailsScreen() {
             placeholderTextColor="#555"
             value={comment}
             onChangeText={setComment}
+            onSubmitEditing={handleSend}
+            returnKeyType="send"
           />
         </View>
-        <TouchableOpacity style={styles.sendBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.sendBtn} activeOpacity={0.7} onPress={handleSend}>
           <Feather name="send" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -255,372 +322,80 @@ export default function EventDetailsScreen() {
 
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? 32 : 0,
-  },
-
-  /* Header */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 17,
-    textAlign: 'center',
-  },
-  menuBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
+  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, textAlign: 'center' },
+  menuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 20 },
 
-  /* Status Row */
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  liveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginRight: 16,
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#16D869',
-  },
-  liveText: {
-    color: '#16D869',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  listenersRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flex: 1,
-  },
-  listenersText: {
-    color: '#8E8E9B',
-    fontSize: 13,
-  },
-  leaveBtn: {
-    borderWidth: 1,
-    borderColor: '#FF3B3B',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  leaveText: {
-    color: '#FF3B3B',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  /* Status */
+  statusRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 20 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 16 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#16D869' },
+  liveText: { color: '#16D869', fontSize: 13, fontWeight: '700' },
+  listenersRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
+  listenersText: { color: '#8E8E9B', fontSize: 13 },
+  leaveBtn: { borderWidth: 1, borderColor: '#FF3B3B', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  leaveText: { color: '#FF3B3B', fontSize: 13, fontWeight: '600' },
 
-  /* Speaker Section */
-  speakerSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  avatarGlow: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarRingOuter: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(155, 89, 182, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarRingInner: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    borderWidth: 3,
-    borderColor: '#9B59B6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  speakerAvatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-  },
-  speakingBadge: {
-    position: 'absolute',
-    bottom: -4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#16D869',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  speakingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#FFFFFF',
-  },
-  speakingText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  hostNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  hostName: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  hostBadge: {
-    backgroundColor: '#1A1A2E',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  hostBadgeText: {
-    color: '#8E8E9B',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  audioBarsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    height: 24,
-  },
-  audioBar: {
-    width: 3,
-    borderRadius: 1.5,
-  },
+  /* Speaker */
+  speakerSection: { alignItems: 'center', marginBottom: 24 },
+  avatarGlow: { alignItems: 'center', marginBottom: 12 },
+  avatarRingOuter: { width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(155,89,182,0.15)', justifyContent: 'center', alignItems: 'center' },
+  avatarRingInner: { width: 104, height: 104, borderRadius: 52, borderWidth: 3, borderColor: '#444', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  avatarRingSpeaking: { borderColor: '#9B59B6' },
+  speakerAvatar: { width: 96, height: 96, borderRadius: 48 },
+  speakingBadge: { position: 'absolute', bottom: -4, flexDirection: 'row', alignItems: 'center', backgroundColor: '#16D869', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  speakingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' },
+  speakingText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  hostNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  hostName: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  hostBadge: { backgroundColor: '#1A1A2E', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
+  hostBadgeText: { color: '#8E8E9B', fontSize: 11, fontWeight: '600' },
+  audioBarsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 24 },
+  audioBar: { width: 3, borderRadius: 1.5 },
 
-  /* Tab Switcher */
-  tabRow: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1A2E',
-    marginBottom: 8,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabItemActive: {
-    borderBottomColor: '#FFFFFF',
-  },
-  tabLabel: {
-    color: '#555',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  tabLabelActive: {
-    color: '#FFFFFF',
-  },
+  /* Tabs */
+  tabRow: { flexDirection: 'row', marginHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#1A1A2E', marginBottom: 8 },
+  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabItemActive: { borderBottomColor: '#FFFFFF' },
+  tabLabel: { color: '#555', fontSize: 14, fontWeight: '600' },
+  tabLabelActive: { color: '#FFFFFF' },
 
-  /* Live Chat */
-  chatContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  chatRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 18,
-  },
-  chatAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-  },
-  chatContent: {
-    flex: 1,
-  },
-  chatMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-    flexWrap: 'wrap',
-  },
-  chatName: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  chatDot: {
-    color: '#555',
-    fontSize: 12,
-  },
-  chatRole: {
-    color: '#8E8E9B',
-    fontSize: 12,
-  },
-  chatTime: {
-    color: '#555',
-    fontSize: 12,
-  },
-  chatText: {
-    color: '#CCCCCC',
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  chatMore: {
-    paddingLeft: 8,
-    paddingTop: 4,
-  },
+  /* Chat */
+  chatContainer: { paddingHorizontal: 16, paddingTop: 8 },
+  chatRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 },
+  chatAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
+  chatContent: { flex: 1 },
+  chatMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' },
+  chatName: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  chatDot: { color: '#555', fontSize: 12 },
+  chatRole: { color: '#8E8E9B', fontSize: 12 },
+  chatTime: { color: '#555', fontSize: 12 },
+  chatText: { color: '#CCCCCC', fontSize: 13, lineHeight: 19 },
+  chatMore: { paddingLeft: 8, paddingTop: 4 },
 
-  /* Permission Tab */
-  permissionContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  allowAllRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  allowAllTextCol: {
-    flex: 1,
-  },
-  allowAllTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  allowAllSub: {
-    color: '#555',
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#555',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  checkboxActive: {
-    backgroundColor: '#4A90D9',
-    borderColor: '#4A90D9',
-  },
+  /* Permission */
+  permissionContainer: { paddingHorizontal: 16, paddingTop: 12 },
+  allowAllRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  allowAllTextCol: { flex: 1 },
+  allowAllTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 3 },
+  allowAllSub: { color: '#555', fontSize: 12, lineHeight: 17 },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, borderColor: '#555', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
+  checkboxActive: { backgroundColor: '#4A90D9', borderColor: '#4A90D9' },
+  participantRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  participantAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
+  participantName: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', flex: 1 },
+  participantActions: { flexDirection: 'row', gap: 10 },
+  pActionBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  pActionBtnRed: { backgroundColor: '#E53935' },
 
-  participantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  participantAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
-  },
-  participantName: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  participantActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  pActionBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pActionBtnRed: {
-    backgroundColor: '#E53935',
-  },
-
-  /* Bottom Comment Bar */
-  bottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#1A1A2E',
-    gap: 10,
-  },
-  bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  commentInputWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A2E',
-    borderRadius: 24,
-    paddingHorizontal: 14,
-    height: 42,
-  },
-  emojiBtn: {
-    marginRight: 8,
-  },
-  commentInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    padding: 0,
-  },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  /* Bottom Bar */
+  bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#1A1A2E', gap: 10 },
+  bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  commentInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 24, paddingHorizontal: 14, height: 42 },
+  emojiBtn: { marginRight: 8 },
+  commentInput: { flex: 1, color: '#FFFFFF', fontSize: 14, padding: 0 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
 });

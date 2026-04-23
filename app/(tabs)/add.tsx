@@ -1,10 +1,17 @@
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  Platform, StatusBar, Image, ScrollView,
+  Image,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
 // Mock story/highlight data shown in background
 const STORY_AVATARS = [
@@ -26,13 +33,13 @@ const OPTIONS = [
   },
   {
     id: 'story',
-    label: 'Create Story',
+    label: 'Create Plan',
     description: 'Show your upcoming activity',
     icon: 'book-open',
     iconLib: 'feather',
     color: '#16D869',
     bg: '#16D86920',
-    route: '/add-story',
+    route: '/create-plan',
   },
   {
     id: 'event',
