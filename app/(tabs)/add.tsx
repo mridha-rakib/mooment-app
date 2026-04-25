@@ -140,7 +140,7 @@ export default function AddScreen() {
           {OPTIONS.map((opt, i) => (
             <TouchableOpacity
               key={opt.id}
-              style={[styles.optionRow, i < OPTIONS.length - 1 && styles.optionBorder]}
+              style={styles.optionRow}
               onPress={() => handleOption(opt.route)}
               activeOpacity={0.75}
             >
@@ -277,11 +277,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    marginBottom: 12,
+    backgroundColor: '#1A1A22',
   },
-  optionBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#13131A',
-  },
+
   optionIcon: {
     width: 44,
     height: 44,
