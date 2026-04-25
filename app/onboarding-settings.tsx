@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0e0d12",
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#2B2B36",
+    borderColor: "#E2E2E0",
     padding: 16,
     marginBottom: 16,
   },
@@ -204,14 +204,14 @@ const styles = StyleSheet.create({
 
   /* 🔥 Custom Switch */
   track: {
-    width: 55,
-    height: 25,
+    width: 48,
+    height: 24,
     borderRadius: 20,
     justifyContent: "center",
   },
   thumb: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: 9,
     backgroundColor: "#5C30BB",
     position: "absolute",
