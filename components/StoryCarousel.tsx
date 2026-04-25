@@ -36,7 +36,12 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
             styles.storyRingMuted;
 
           return (
-            <TouchableOpacity key={story.id} style={styles.storyItem} activeOpacity={0.8}>
+            <TouchableOpacity 
+              key={story.id} 
+              style={styles.storyItem} 
+              activeOpacity={0.8}
+              onPress={() => router.push('/event-screen/event')}
+            >
               <View style={[styles.storyRing, ringStyle]}>
                 {story.imageUri && (
                   <Image source={{ uri: story.imageUri }} style={styles.storyImage} />
