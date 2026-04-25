@@ -28,7 +28,11 @@ export default function NewPassword() {
         <View style={styles.content}>
           <View style={styles.header}>
             {/* <Text style={styles.logoText}>Mooment</Text> */}
-            <Image source={require("../assets/images/Mooment.png")} />
+            <Image
+              source={require("../assets/images/Mooment.png")}
+              style={{ width: 147, height: 32, marginBottom: 40 }}
+              contentFit="contain"
+            />
             <Text style={styles.title}>New Password</Text>
             <Text style={styles.subtitle}>
               Set a new password and continue using this app
