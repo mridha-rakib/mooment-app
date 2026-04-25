@@ -2,14 +2,14 @@ import React from "react";
 import { Dimensions, Platform, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 
 // Components
+import HomeHeader from "@/components/HomeHeader";
+import CommentsModal from "../../components/CommentsModal";
 import FeaturedProducts, { ProductData } from "../../components/FeaturedProducts";
 import FeedPost, { PostData } from "../../components/FeedPost";
 import HighlightsCarousel, { HighlightData } from "../../components/HighlightsCarousel";
-import CommentsModal from "../../components/CommentsModal";
-import ShareModal from "../../components/ShareModal";
-import HomeHeader from "../../components/HomeHeader";
 import LiveChatBanner from "../../components/LiveChatBanner";
 import PeopleToFollow, { SuggestedUser } from "../../components/PeopleToFollow";
+import ShareModal from "../../components/ShareModal";
 import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
 
 const { width } = Dimensions.get("window");
@@ -280,7 +280,7 @@ export default function HomeFeed() {
       <View style={styles.container}>
         
         {/* Top Navigation */}
-        <HomeHeader />
+        <HomeHeader/>
 
         {/* Main Feed Content */}
         <ScrollView showsVerticalScrollIndicator={false}>
