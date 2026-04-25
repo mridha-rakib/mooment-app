@@ -70,7 +70,7 @@ const OPTIONS = [
     icon: 'maximize',
     iconLib: 'feather',
     color: '#16D869',
-    bg: '#16D86920',
+    bg: '#85B7EB',
     route: '/scan-qr',
   },
 ];
@@ -156,7 +156,7 @@ export default function AddScreen() {
               </View>
 
               {/* Arrow */}
-              <Feather name="chevron-right" size={18} color="#2A2A3A" />
+              <Feather name="chevron-right" size={18} color="#B3B3B3" />
             </TouchableOpacity>
           ))}
         </View>
