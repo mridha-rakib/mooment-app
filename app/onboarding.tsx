@@ -1,12 +1,12 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, SafeAreaView, Dimensions } from "react-native";
 import { router } from "expo-router";
+import React from "react";
+import { ImageBackground, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function Onboarding() {
   return (
     <View style={styles.container}>
       <ImageBackground
-        source={{ uri: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1470&auto=format&fit=crop" }}
+        source={require("../assets/images/splash.png")}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
