@@ -1,4 +1,5 @@
-import { Feather } from "@expo/vector-icons";
+import { ChevronLeft } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import React from "react";
@@ -24,7 +25,7 @@ export default function SuccessChanged() {
             activeOpacity={0.8}
             onPress={() => router.push("/login")}
           >
-            <Feather name="chevron-left" size={16} color="#8E8E9B" />
+            <HugeiconsIcon icon={ChevronLeft} size={16} color="#8E8E9B" />
             <Text style={styles.backLinkText}>Back to Login</Text>
           </TouchableOpacity>
         </View>

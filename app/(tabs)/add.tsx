@@ -1,5 +1,13 @@
 import { OleoScript_400Regular, useFonts } from '@expo-google-fonts/oleo-script';
-import { Feather } from '@expo/vector-icons';
+import {
+  AudioWave01Icon,
+  Calendar01Icon,
+  ChevronRight,
+  PencilEdit01Icon,
+  QrCodeIcon,
+  Ticket02Icon
+} from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
@@ -27,49 +35,44 @@ const OPTIONS = [
     id: 'moment',
     label: 'Mooment',
     description: 'Share one to your followers in just about on event you\'re attending',
-    icon: 'zap',
-    iconLib: 'feather',
-    color: '#8E54E9',
-    bg: '#8E54E920',
+    icon: PencilEdit01Icon,
+    color: '#54268F',
+    bg: '#AFA9EC',
     route: '/create-post',
   },
   {
     id: 'story',
     label: 'Create Plan',
     description: 'Show your upcoming activity',
-    icon: 'book-open',
-    iconLib: 'feather',
-    color: '#16D869',
-    bg: '#16D86920',
+    icon: Calendar01Icon,
+    color: '#173414',
+    bg: '#5DCAA5',
     route: '/create-plan',
   },
   {
     id: 'event',
     label: 'Create Event',
     description: 'Post a real-world experience',
-    icon: 'calendar',
-    iconLib: 'feather',
-    color: '#E06B3B',
-    bg: '#E06B3B20',
+    icon: Ticket02Icon,
+    color: '#631C1C',
+    bg: '#DE7777',
     route: '/create-post',
   },
   {
     id: 'live',
     label: 'Live Room',
     description: 'Go live audio live room',
-    icon: 'radio',
-    iconLib: 'feather',
-    color: '#3B82F6',
-    bg: '#3B82F620',
+    icon: AudioWave01Icon,
+    color: '#5D3925',
+    bg: '#EF9F27',
     route: '/live-room-setup',
   },
   {
     id: 'scan',
     label: 'Scan QR',
     description: 'Scan to open on product links',
-    icon: 'maximize',
-    iconLib: 'feather',
-    color: '#16D869',
+    icon: QrCodeIcon,
+    color: '#0C447C',
     bg: '#85B7EB',
     route: '/scan-qr',
   },
@@ -146,7 +149,7 @@ export default function AddScreen() {
             >
               {/* Icon */}
               <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
-                <Feather name={opt.icon as any} size={20} color={opt.color} />
+                <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />
               </View>
 
               {/* Text */}
@@ -156,7 +159,7 @@ export default function AddScreen() {
               </View>
 
               {/* Arrow */}
-              <Feather name="chevron-right" size={18} color="#B3B3B3" />
+              <HugeiconsIcon icon={ChevronRight} size={18} color="#B3B3B3" />
             </TouchableOpacity>
           ))}
         </View>
