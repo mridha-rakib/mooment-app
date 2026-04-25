@@ -254,18 +254,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sheetTitle: {
-    color: '#8E8E9B',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 6,
+    marginBottom: 16,
     paddingHorizontal: 4,
+    textAlign: 'center',
   },
 
   /* Options */
   optionsList: {
-    backgroundColor: '#1A1A2E',
+    // backgroundColor: '#1A1A2E',
     borderRadius: 16,
     overflow: 'hidden',
   },
