@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   forgotText: {
-    color: "#B59EBE",
+    color: "#AC86D4",
     fontSize: 10,
     fontWeight: "bold",
     letterSpacing: 0.5,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   createOneText: {
-    color: "#B59EBE",
+    color: "#AC86D4",
     fontSize: 14,
     fontWeight: "bold",
   },

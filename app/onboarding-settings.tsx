@@ -81,7 +81,7 @@ export default function OnboardingSettings() {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={styles.iconContainer}>
-                <Feather name="map-pin" size={20} color="#8E8E9B" />
+                <Feather name="map-pin" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.cardTextContainer}>
                 <Text style={styles.cardTitle}>Location Service</Text>
@@ -101,7 +101,7 @@ export default function OnboardingSettings() {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={styles.iconContainer}>
-                <Feather name="bell" size={20} color="#8E8E9B" />
+                <Feather name="bell" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.cardTextContainer}>
                 <Text style={styles.cardTitle}>Notifications</Text>
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#2B2B36",
+    backgroundColor: "#666666",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
