@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router } from "expo-router";
+import React, { useState } from "react";
+import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -15,7 +16,13 @@ export default function ForgotPassword() {
         <View style={styles.content}>
           <View style={styles.header}>
             {/* Logo placeholder */}
-            <Text style={styles.logoText}>Mooment</Text>
+            {/* <Text style={styles.logoText}>Mooment</Text> */}
+            <Image
+  source={require("../assets/images/Mooment.png")}
+  style={{ width: 147, height: 32, paddingBottom:60 }}
+  contentFit="contain"
+/>
+ 
             
             <Text style={styles.title}>Forget Password</Text>
             <Text style={styles.subtitle}>Type your email to recover your account</Text>
