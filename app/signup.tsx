@@ -1,7 +1,7 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type AccountType = "personal" | "business";
 
@@ -13,6 +13,7 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -116,7 +117,11 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.signupButton} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.signupButton} 
+            activeOpacity={0.8}
+            onPress={() => setShowSuccessModal(true)}
+          >
             <Text style={styles.signupButtonText}>Sign Up</Text>
           </TouchableOpacity>
 
@@ -128,6 +133,37 @@ export default function SignUp() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Post-Signup Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.starContainer}>
+              <Feather name="star" size={60} color="#FFFFFF" />
+            </View>
+            
+            <Text style={styles.modalTitle}>One Last step</Text>
+            <Text style={styles.modalSubtitle}>
+              We just need a few quick details to personalized your experience and get your account fully ready to go
+            </Text>
+
+            <TouchableOpacity 
+              style={styles.modalButton}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.push("/onboarding-settings");
+              }}
+            >
+              <Text style={styles.modalButtonText}>Add My Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -255,6 +291,52 @@ const styles = StyleSheet.create({
   loginText: {
     color: "#B59EBE",
     fontSize: 13,
+    fontWeight: "bold",
+  },
+  /* Success Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    backgroundColor: "#13131A",
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+  },
+  starContainer: {
+    marginBottom: 32,
+    marginTop: 8,
+  },
+  modalTitle: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  modalSubtitle: {
+    color: "#8E8E9B",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 40,
+    paddingHorizontal: 10,
+  },
+  modalButton: {
+    backgroundColor: "#B59EBE",
+    width: "100%",
+    height: 56,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#17121B",
+    fontSize: 16,
     fontWeight: "bold",
   },
 });
