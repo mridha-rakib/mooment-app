@@ -30,7 +30,7 @@ export default function NewPassword() {
             {/* <Text style={styles.logoText}>Mooment</Text> */}
             <Image
               source={require("../assets/images/Mooment.png")}
-              style={{ width: 147, height: 32, marginBottom: 40 }}
+              style={{ width: 147, height: 120, marginBottom: 40 }}
               contentFit="contain"
             />
             <Text style={styles.title}>New Password</Text>

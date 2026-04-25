@@ -1,19 +1,16 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
-import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { router } from "expo-router";
+import React from "react";
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function SuccessChanged() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.content}>
-          <View style={styles.graphicContainer}>
-            <View style={styles.glow} />
-            <View style={styles.iconCircle}>
-              <Feather name="check" size={32} color="#2DB46D" />
-            </View>
-          </View>
+          
+          <Image source={require("../assets/images/success.png")} style={{ width: 147, height: 170, marginBottom: 40 }} />
 
           <View style={styles.textContainer}>
             <Text style={styles.title}>Successfully Changed</Text>

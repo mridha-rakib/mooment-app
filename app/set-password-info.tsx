@@ -19,7 +19,7 @@ export default function SetPasswordInfo() {
             source={require("../assets/images/set-password.png")}
             style={styles.graphic}
             width={218}
-            height={212}
+            height={312}
             resizeMode="contain"
           />
         </View>
@@ -73,28 +73,28 @@ const styles = StyleSheet.create({
     marginBottom: 86,
   },
   title: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "bold",
     color: "#FFFFFF",
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 10,
-    color: "#B7B3BD",
+    fontSize: 13,
+    color: "#8E8E9B",
     textAlign: "center",
-    paddingHorizontal: 72,
-    lineHeight: 14,
+    paddingHorizontal: 40,
+    lineHeight: 20,
   },
   continueButton: {
-    backgroundColor: "#B9B0C2",
-    height: 48,
-    borderRadius: 8,
+    backgroundColor: "#B59EBE",
+    height: 56,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
   continueButtonText: {
-    color: "#17121B",
-    fontSize: 11,
-    fontWeight: "500",
+    color: "#0e0d12",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
