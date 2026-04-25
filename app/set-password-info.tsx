@@ -62,16 +62,21 @@ const styles = StyleSheet.create({
 
   glow: {
     position: "absolute",
-    width: 150,
-    height: 150,
+    width: 100,
+    height: 100,
     borderRadius: 75,
-    backgroundColor: "rgba(50, 54, 133, 0.9)",
-    shadowColor: "rgba(142, 84, 233, 0.8)",
+
+    // lighter background glow
+    backgroundColor: "rgba(142, 84, 233, 0.25)",
+
+    // iOS shadow
+    shadowColor: "#C6A6FF",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
-    shadowRadius: 55, // big blur for strong glow
+    shadowRadius: 190,
 
-    elevation: 25, // Android support
+    // Android shadow
+    elevation: 30,
   },
 
   graphic: {

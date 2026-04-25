@@ -1,7 +1,17 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router } from "expo-router";
+import React, { useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function NewPassword() {
   const [password, setPassword] = useState("");
@@ -11,20 +21,32 @@ export default function NewPassword() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
-        style={styles.container} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.logoText}>Mooment</Text>
-            
+            {/* <Text style={styles.logoText}>Mooment</Text> */}
+            <Image
+              source={require("../assets/images/Mooment.png")}
+              style={styles.logo}
+              contentFit="contain"
+            />
+
             <Text style={styles.title}>New Password</Text>
-            <Text style={styles.subtitle}>Set a new password and continue using this app</Text>
+            <Text style={styles.subtitle}>
+              Set a new password and continue using this app
+            </Text>
           </View>
 
           <View style={styles.inputContainer}>
-            <Feather name="lock" size={20} color="#7A7A85" style={styles.icon} />
+            <Feather
+              name="lock"
+              size={20}
+              color="#7A7A85"
+              style={styles.icon}
+            />
             <TextInput
               style={styles.input}
               placeholder="........"
@@ -33,14 +55,26 @@ export default function NewPassword() {
               value={password}
               onChangeText={setPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#7A7A85" />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeBtn}
+            >
+              <Feather
+                name={showPassword ? "eye" : "eye-off"}
+                size={20}
+                color="#7A7A85"
+              />
             </TouchableOpacity>
           </View>
 
           <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
           <View style={styles.inputContainer}>
-            <Feather name="lock" size={20} color="#7A7A85" style={styles.icon} />
+            <Feather
+              name="lock"
+              size={20}
+              color="#7A7A85"
+              style={styles.icon}
+            />
             <TextInput
               style={styles.input}
               placeholder="........"
@@ -49,13 +83,20 @@ export default function NewPassword() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
             />
-            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeBtn}>
-              <Feather name={showConfirmPassword ? "eye" : "eye-off"} size={20} color="#7A7A85" />
+            <TouchableOpacity
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              style={styles.eyeBtn}
+            >
+              <Feather
+                name={showConfirmPassword ? "eye" : "eye-off"}
+                size={20}
+                color="#7A7A85"
+              />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity 
-            style={styles.continueButton} 
+          <TouchableOpacity
+            style={styles.continueButton}
             activeOpacity={0.8}
             onPress={() => router.push("/success-changed")}
           >
@@ -90,6 +131,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontFamily: "serif",
     fontStyle: "italic",
+    marginBottom: 48,
+  },
+  logo: {
+    width: 128,
+    height: 34,
     marginBottom: 48,
   },
   title: {
