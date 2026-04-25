@@ -14,10 +14,12 @@ export default function SetPasswordInfo() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.graphicContainer}>
-          <View style={styles.glow} />
+          <View />
           <Image
-            source={require("../assets/images/Verify_sucsess.png")}
+            source={require("../assets/images/set-password.png")}
             style={styles.graphic}
+            width={218}
+            height={212}
             resizeMode="contain"
           />
         </View>
@@ -54,34 +56,17 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -6 }],
   },
   graphicContainer: {
-    height: 150,
+    height: 212,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 26,
   },
 
-  glow: {
-    position: "absolute",
-    width: 100,
-    height: 100,
-    borderRadius: 75,
 
-    // lighter background glow
-    backgroundColor: "rgba(142, 84, 233, 0.25)",
-
-    // iOS shadow
-    shadowColor: "#C6A6FF",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 190,
-
-    // Android shadow
-    elevation: 30,
-  },
 
   graphic: {
-    width: 150,
-    height: 150,
+    width: 218,
+    height: 212,
   },
   textContainer: {
     alignItems: "center",
