@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
@@ -59,6 +59,7 @@ export type PostData = {
 
 export default function FeedPost({ post, onCommentPress, onSharePress }: { post: PostData; onCommentPress?: () => void; onSharePress?: () => void }) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const router = useRouter();
 
   const handleScroll = (event: any) => {
@@ -131,7 +132,10 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity style={styles.moreBtn}>
+            <TouchableOpacity 
+              style={styles.moreBtn}
+              onPress={() => setShowMoreMenu(true)}
+            >
               <Feather name="more-horizontal" size={20} color="#8E8E9B" />
             </TouchableOpacity>
           </View>
@@ -320,6 +324,42 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             )}
           </View>
         )}
+
+        {/* More Actions Menu Popup */}
+        <Modal
+          visible={showMoreMenu}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowMoreMenu(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowMoreMenu(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.moreMenuContainer}>
+                <Text style={styles.moreMenuLabel}>more</Text>
+                <View style={styles.moreMenuBox}>
+                  <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
+                    <Feather name="flag" size={20} color="#FFFFFF" style={styles.menuIcon} />
+                    <Text style={styles.menuText}>Report</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.menuSeparator} />
+                  
+                  <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
+                    <Feather name="slash" size={20} color="#FFFFFF" style={styles.menuIcon} />
+                    <Text style={styles.menuText}>Block</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.menuSeparator} />
+                  
+                  <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
+                    <Feather name="bookmark" size={20} color="#FFFFFF" style={styles.menuIcon} />
+                    <Text style={styles.menuText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
       </View>
     </View>
   );
@@ -708,5 +748,50 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  /* Modal & More Menu Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  moreMenuContainer: {
+    width: 160,
+  },
+  moreMenuLabel: {
+    color: "#8E8E9B",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  moreMenuBox: {
+    backgroundColor: "#2B2B36",
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  moreMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  menuIcon: {
+    marginRight: 14,
+  },
+  menuText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  menuSeparator: {
+    height: 1,
+    backgroundColor: "#3A3A4A",
   },
 });

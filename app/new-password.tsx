@@ -30,16 +30,14 @@ export default function NewPassword() {
             {/* <Text style={styles.logoText}>Mooment</Text> */}
             <Image
               source={require("../assets/images/Mooment.png")}
-              style={styles.logo}
+              style={{ width: 147, height: 120, marginBottom: 40 }}
               contentFit="contain"
             />
-
             <Text style={styles.title}>New Password</Text>
             <Text style={styles.subtitle}>
               Set a new password and continue using this app
             </Text>
           </View>
-
           <View style={styles.inputContainer}>
             <Feather
               name="lock"
@@ -131,11 +129,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontFamily: "serif",
     fontStyle: "italic",
-    marginBottom: 48,
-  },
-  logo: {
-    width: 128,
-    height: 34,
     marginBottom: 48,
   },
   title: {
