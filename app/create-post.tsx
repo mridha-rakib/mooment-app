@@ -182,7 +182,6 @@ export default function CreateMomentScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
-
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn} activeOpacity={0.8}>

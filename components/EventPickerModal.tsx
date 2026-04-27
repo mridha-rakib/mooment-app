@@ -55,9 +55,9 @@ type Props = {
 
 // Status badge configs
 const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bg: string; dot: boolean }> = {
-  live:     { label: 'Live',     color: '#16D869', bg: 'rgba(22,216,105,0.12)',  dot: true },
-  active:   { label: 'Active',   color: '#16D869', bg: 'transparent',            dot: false },
-  upcoming: { label: 'Upcoming', color: '#F59E0B', bg: 'transparent',            dot: false },
+  live:     { label: 'Live',     color: '#16D869', bg: 'rgba(22,216,105,0.12)', dot: true },
+  active:   { label: 'Active',   color: '#16D869', bg: 'transparent',           dot: false },
+  upcoming: { label: 'Upcoming', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  dot: false },
 };
 
 export default function EventPickerModal({ visible, onClose, onSelect }: Props) {
@@ -96,7 +96,7 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
             <TextInput
               style={styles.searchInput}
               placeholder="Search events"
-              placeholderTextColor="#454555"
+              placeholderTextColor="#B3B3B3"
               value={search}
               onChangeText={setSearch}
             />
@@ -113,8 +113,7 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
               data={filtered}
               keyExtractor={item => item.id}
               showsVerticalScrollIndicator={false}
-              style={{ maxHeight: 340 }}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              style={{ maxHeight: 400 }}
               renderItem={({ item }) => {
                 const cfg = STATUS_CONFIG[item.status];
                 const isSelected = selectedId === item.id;
@@ -166,19 +165,19 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(17, 17, 17, 0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#13131A',
+    backgroundColor: '#1E1E1E',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 16,
     paddingTop: 10,
   },
   handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#2A2A3A',
+    width: 80, height: 3, borderRadius: 2,
+    backgroundColor: '#ffff',
     alignSelf: 'center', marginBottom: 16,
   },
   title: {
@@ -189,9 +188,11 @@ const styles = StyleSheet.create({
   /* Search */
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1A1A2E', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 11,
-    marginBottom: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1, borderColor: '#454555',
+    borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 10,
+    marginBottom: 12,
   },
   searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
 
@@ -207,6 +208,7 @@ const styles = StyleSheet.create({
   },
   eventImage: {
     width: 52, height: 52, borderRadius: 10, marginRight: 12,
+    borderWidth: 1.5, borderColor: '#8E54E9',
   },
   eventInfo: { flex: 1 },
   eventTitle: {
@@ -218,7 +220,7 @@ const styles = StyleSheet.create({
   /* Status badge */
   statusBadge: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 5,
+    paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: 10, gap: 5,
   },
   statusDot: {
