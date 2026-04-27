@@ -89,7 +89,7 @@ const PaymentSuccessScreen = () => {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity 
           style={styles.primaryBtn}
-          onPress={() => router.push({ pathname: "/qr-code", params: { type: "event" } })}
+          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "event" } })}
         >
           <Text style={styles.primaryBtnText}>View my ticket</Text>
         </TouchableOpacity>

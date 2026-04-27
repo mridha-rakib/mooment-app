@@ -23,7 +23,7 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
                 key={story.id} 
                 style={styles.addStoryBtn} 
                 activeOpacity={0.8}
-                onPress={() => router.push('/add-story')}
+                onPress={() => router.push('/post-screen/add-story')}
               >
                 <Feather name="plus" size={24} color="#8E8E9B" />
               </TouchableOpacity>

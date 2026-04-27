@@ -1,15 +1,15 @@
 import React, { useState } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
-import { PostData } from "./FeedPost";
-import ProfileActions from "./profile/ProfileActions";
-import ProfileBio from "./profile/ProfileBio";
-import ProfileContent from "./profile/ProfileContent";
-import ProfileHeader, { ProfileStats } from "./profile/ProfileHeader";
-import ProfileTabs, { ProfileTabType } from "./profile/ProfileTabs";
-import CommentsModal from "./CommentsModal";
-import AddProductModal from "./profile/AddProductModal";
-import ProfileMenuDrawer from "./profile/ProfileMenuDrawer";
-import ShareModal from "./ShareModal";
+import { PostData } from "../post/FeedPost";
+import ProfileActions from "./ProfileActions";
+import ProfileBio from "./ProfileBio";
+import ProfileContent from "./ProfileContent";
+import ProfileHeader, { ProfileStats } from "./ProfileHeader";
+import ProfileTabs, { ProfileTabType } from "./ProfileTabs";
+import CommentsModal from "../post/CommentsModal";
+import AddProductModal from "./AddProductModal";
+import ProfileMenuDrawer from "./ProfileMenuDrawer";
+import ShareModal from "../post/ShareModal";
 
 export type UserProfileData = {
   id: string;

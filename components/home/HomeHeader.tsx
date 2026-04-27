@@ -19,10 +19,10 @@ export default function HomeHeader() {
       </TouchableOpacity>
 
       {/* <Text style={styles.logoText}>Mooment</Text> */}
-      <Image source={require('../assets/images/Mooment.png')} style={styles.logoText} />
+      <Image source={require('../../assets/images/Mooment.png')} style={styles.logoText} />
 
       <View style={styles.headerIcons}>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/search')}>
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
           <Feather name="search" size={20} color="#FFFFFF" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>

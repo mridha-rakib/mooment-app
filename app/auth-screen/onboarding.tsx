@@ -6,7 +6,7 @@ export default function Onboarding() {
   return (
     <View style={styles.container}>
       <ImageBackground
-        source={require("../assets/images/splash.png")}
+        source={require("../../assets/images/splash.png")}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
@@ -28,7 +28,7 @@ export default function Onboarding() {
                 <TouchableOpacity 
                   style={styles.button} 
                   activeOpacity={0.8}
-                  onPress={() => router.push("/onboarding-settings")}
+                  onPress={() => router.push('/auth-screen/onboarding-settings')}
                 >
                   <Text style={styles.buttonText}>Get Started</Text>
                 </TouchableOpacity>

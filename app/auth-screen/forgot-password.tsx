@@ -18,7 +18,7 @@ export default function ForgotPassword() {
             {/* Logo placeholder */}
             {/* <Text style={styles.logoText}>Mooment</Text> */}
             <Image
-  source={require("../assets/images/Mooment.png")}
+  source={require("../../assets/images/Mooment.png")}
   style={{ width: 147, height: 32, paddingBottom:60 }}
   contentFit="contain"
 />
@@ -44,13 +44,13 @@ export default function ForgotPassword() {
           <TouchableOpacity 
             style={styles.continueButton} 
             activeOpacity={0.8}
-            onPress={() => router.push("/verify-email")}
+            onPress={() => router.push('/auth-screen/verify-email')}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <TouchableOpacity onPress={() => router.push("/login")}>
+            <TouchableOpacity onPress={() => router.push('/auth-screen/login')}>
               <Text style={styles.backLoginText}>Back to Log In</Text>
             </TouchableOpacity>
           </View>

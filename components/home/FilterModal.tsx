@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, SafeAreaView, Platform, ScrollView, Switch, PanResponder } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import LocationSearchModal from './LocationSearchModal';
+import LocationSearchModal from '@/components/post/LocationSearchModal';
 
 export type FilterModalProps = {
   visible: boolean;

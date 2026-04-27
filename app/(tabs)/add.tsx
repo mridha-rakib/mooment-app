@@ -38,7 +38,7 @@ const OPTIONS = [
     icon: PencilEdit01Icon,
     color: '#54268F',
     bg: '#AFA9EC',
-    route: '/create-post',
+    route: '/post-screen/create-post',
   },
   {
     id: 'story',
@@ -47,7 +47,7 @@ const OPTIONS = [
     icon: Calendar01Icon,
     color: '#173414',
     bg: '#5DCAA5',
-    route: '/create-plan',
+    route: '/plan-screen/create-plan',
   },
   {
     id: 'event',
@@ -56,7 +56,7 @@ const OPTIONS = [
     icon: Ticket02Icon,
     color: '#631C1C',
     bg: '#DE7777',
-    route: '/create-post',
+    route: '/post-screen/create-post',
   },
   {
     id: 'live',
@@ -65,7 +65,7 @@ const OPTIONS = [
     icon: AudioWave01Icon,
     color: '#5D3925',
     bg: '#EF9F27',
-    route: '/live-room-setup',
+    route: '/live-screen/live-room-setup',
   },
   {
     id: 'scan',
@@ -74,7 +74,7 @@ const OPTIONS = [
     icon: QrCodeIcon,
     color: '#0C447C',
     bg: '#85B7EB',
-    route: '/scan-qr',
+    route: '/event-screen/scan-qr',
   },
 ];
 

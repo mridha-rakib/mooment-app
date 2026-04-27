@@ -1,6 +1,6 @@
 import React from "react";
-import ProfileView, { UserProfileData } from "../../components/ProfileView";
-import { PostData } from "../../components/FeedPost";
+import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
+import { PostData } from "@/components/post/FeedPost";
 
 const MOCK_ME: UserProfileData = {
   id: 'me',

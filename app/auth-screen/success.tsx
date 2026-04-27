@@ -25,7 +25,7 @@ export default function Success() {
           <TouchableOpacity 
             style={styles.continueButton} 
             activeOpacity={0.8}
-            onPress={() => router.push("/login")}
+            onPress={() => router.push('/auth-screen/login')}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>

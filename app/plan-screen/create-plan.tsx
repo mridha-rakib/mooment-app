@@ -31,7 +31,7 @@ export default function CreatePlanScreen() {
     }
     // Navigate to My Plan (daily plan) view with the created plan data
     router.replace({
-      pathname: '/my-plan' as any,
+      pathname: '/plan-screen/my-plan' as any,
       params: { planName: name, planDate: date, planTime: time, planEvent: selectedEvent, planFriends: selectedFriends },
     });
   };

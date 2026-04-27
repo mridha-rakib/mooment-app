@@ -16,7 +16,7 @@ import {
   TermsAgreement,
   CheckoutFooter,
   COLORS,
-} from "../../components/event/checkout";
+} from "@/components/event/checkout";
 
 const EventCheckoutScreen = () => {
   const router = useRouter();

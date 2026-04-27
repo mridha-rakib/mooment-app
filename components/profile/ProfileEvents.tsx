@@ -1,7 +1,7 @@
 import { BlurView } from "expo-blur";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import FeedPost, { PostData } from "../FeedPost";
+import FeedPost, { PostData } from "../post/FeedPost";
 
 const MOCK_EVENTS: PostData[] = [
   {

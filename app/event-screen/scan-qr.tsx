@@ -47,7 +47,7 @@ export default function ScanQRScreen() {
         enableTorch={flash}
         onBarcodeScanned={({ data }) => {
           // Navigate to QR result screen with scanned data
-          router.push({ pathname: '/qr-code', params: { data, type: 'scan' } });
+          router.push({ pathname: '/event-screen/qr-code', params: { data, type: 'scan' } });
         }}
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
       />
@@ -96,7 +96,7 @@ export default function ScanQRScreen() {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.captureCircle}
-          onPress={() => router.push({ pathname: '/qr-code', params: { type: 'event' } })}
+          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: 'event' } })}
           activeOpacity={0.9}
         />
       </View>

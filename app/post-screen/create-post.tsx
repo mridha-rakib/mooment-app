@@ -1,6 +1,6 @@
-import AudiencePickerModal from '@/components/AudiencePickerModal';
-import EventPickerModal from '@/components/EventPickerModal';
-import PeopleTagModal from '@/components/PeopleTagModal';
+import AudiencePickerModal from '@/components/post/AudiencePickerModal';
+import EventPickerModal from '@/components/post/EventPickerModal';
+import PeopleTagModal from '@/components/post/PeopleTagModal';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { AddTeamIcon, Image01Icon, MusicNote04Icon, Video02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';

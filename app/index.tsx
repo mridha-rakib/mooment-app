@@ -5,7 +5,7 @@ import { StyleSheet, ImageBackground } from "react-native";
 export default function Splash() {
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace("/onboarding");
+      router.replace('/auth-screen/onboarding');
     }, 2000);
 
     return () => clearTimeout(timer);

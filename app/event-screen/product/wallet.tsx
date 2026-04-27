@@ -143,7 +143,7 @@ const ProductWalletScreen = () => {
                       <Text style={styles.priceText}>{item.price}</Text>
                       <TouchableOpacity 
                         style={styles.viewQrBtn}
-                        onPress={() => router.push({ pathname: "/qr-code", params: { type: "product" } })}
+                        onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "product" } })}
                       >
                         <Text style={styles.viewQrText}>View QR</Text>
                         <Feather name="arrow-right" size={14} color={COLORS.textMuted} />

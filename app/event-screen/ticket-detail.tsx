@@ -133,7 +133,7 @@ const TicketDetailScreen = () => {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
         <TouchableOpacity 
           style={styles.primaryBtn}
-          onPress={() => router.push({ pathname: "/qr-code", params: { type: "event" } })}
+          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "event" } })}
         >
           <Text style={styles.primaryBtnText}>Show QR</Text>
         </TouchableOpacity>
