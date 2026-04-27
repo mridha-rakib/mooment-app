@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from "react-native";
 import FeedPost, { PostData } from "../FeedPost";
 import { ProfileTabType } from "./ProfileTabs";
 
+import ProfileEvents from "./ProfileEvents";
+
 type ProfileContentProps = {
   activeTab: ProfileTabType;
   posts: PostData[];
@@ -11,7 +13,7 @@ type ProfileContentProps = {
 export default function ProfileContent({ activeTab, posts }: ProfileContentProps) {
   return (
     <View style={styles.container}>
-      {activeTab === 'feed' ? (
+      {activeTab === 'feed' && (
         posts.map((post) => (
           <FeedPost 
             key={post.id} 
@@ -20,9 +22,15 @@ export default function ProfileContent({ activeTab, posts }: ProfileContentProps
             onSharePress={() => {}} 
           />
         ))
-      ) : (
+      )}
+      
+      {activeTab === 'events' && (
+        <ProfileEvents />
+      )}
+      
+      {activeTab === 'shop' && (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No content in this category yet.</Text>
+          <Text style={styles.emptyText}>No products listed yet.</Text>
         </View>
       )}
     </View>

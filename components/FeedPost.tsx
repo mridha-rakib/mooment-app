@@ -306,22 +306,30 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
         {/* Normal Post Footer Actions */}
         {post.postType !== 'product' && (post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
           <View style={styles.postFooter}>
-            {post.likesCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-                <Ionicons name="heart" size={22} color="#F2245C" />
-                <Text style={styles.actionText}>{post.likesCount}</Text>
-              </TouchableOpacity>
-            )}
-            {post.commentsCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
-                <HugeiconsIcon icon={Comment02Icon} size={20} color="#8E8E9B" />
-                <Text style={styles.actionText}>{post.commentsCount}</Text>
-              </TouchableOpacity>
-            )}
-            {post.sharesCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
-                <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" />
-                <Text style={styles.actionText}>{post.sharesCount}</Text>
+            <View style={styles.footerStats}>
+              {post.likesCount !== undefined && (
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+                  <Ionicons name="heart" size={22} color="#F2245C" />
+                  <Text style={styles.actionText}>{post.likesCount}</Text>
+                </TouchableOpacity>
+              )}
+              {post.commentsCount !== undefined && (
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
+                  <HugeiconsIcon icon={Comment02Icon} size={20} color="#8E8E9B" />
+                  <Text style={styles.actionText}>{post.commentsCount}</Text>
+                </TouchableOpacity>
+              )}
+              {post.sharesCount !== undefined && (
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
+                  <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" />
+                  <Text style={styles.actionText}>{post.sharesCount}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {post.postType === 'event' && (
+              <TouchableOpacity style={styles.statBtn} activeOpacity={0.8}>
+                <Text style={styles.statBtnText}>View Stat</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -593,7 +601,23 @@ const styles = StyleSheet.create({
   postFooter: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: 'space-between',
     marginTop: 16,
+  },
+  footerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statBtn: {
+    backgroundColor: '#B2ABBA',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  statBtnText: {
+    color: '#0e0d12',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   actionBtn: {
     flexDirection: "row",
