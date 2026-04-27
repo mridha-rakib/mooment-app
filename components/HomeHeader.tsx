@@ -31,7 +31,7 @@ export default function HomeHeader() {
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/messages')}>
           <Feather name="message-square" size={20} color="#FFFFFF" />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.iconBtn, styles.profileBtn]} activeOpacity={0.8} onPress={() => router.push('/profile')}>
+        <TouchableOpacity style={[styles.iconBtn, styles.profileBtn]} activeOpacity={0.8} onPress={() => router.push('/profile/profile')}>
           <Image 
             source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop" }} 
             style={styles.avatarMini} 
