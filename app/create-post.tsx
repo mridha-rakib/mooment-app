@@ -175,7 +175,6 @@ export default function CreateMomentScreen() {
 
   const handleImageSelect = (uri: string) => {
     setSelectedImage(uri);
-    setMode('feed'); // switch to feed mode when image selected
   };
 
   const taggedLabel = taggedPeople.join(', ');
@@ -260,40 +259,24 @@ export default function CreateMomentScreen() {
           )}
         </View>
 
-        {/* ── FEED MODE: Image + stitch ── */}
-        {mode === 'feed' && (
-          <>
-            {selectedImage ? (
-              <View style={styles.imageWrapper}>
-                <Image source={{ uri: selectedImage }} style={styles.momentImage} resizeMode="cover" />
-                <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setSelectedImage(null)} activeOpacity={0.8}>
-                  <Feather name="x" size={13} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
+        {/* ── Content Section (Image + Caption) ── */}
+        {selectedImage ? (
+          <View style={styles.imageWrapper}>
+            <Image source={{ uri: selectedImage }} style={styles.momentImage} resizeMode="cover" />
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setSelectedImage(null)} activeOpacity={0.8}>
+              <Feather name="x" size={13} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
-            <TextInput
-              style={styles.stitchInput}
-              placeholder="Write your stitch here. . ."
-              placeholderTextColor="#454555"
-              value={caption}
-              onChangeText={setCaption}
-              multiline
-            />
-          </>
-        )}
-
-        {/* ── EVENT MODE: Text caption ── */}
-        {mode === 'event' && (
-          <TextInput
-            style={styles.eventCaptionInput}
-            placeholder="Share what this moment means to you..."
-            placeholderTextColor="#454555"
-            value={caption}
-            onChangeText={setCaption}
-            multiline
-          />
-        )}
+        <TextInput
+          style={styles.stitchInput}
+          placeholder={mode === 'feed' ? "Write your stitch here. . ." : "Share what this moment means to you..."}
+          placeholderTextColor="#454555"
+          value={caption}
+          onChangeText={setCaption}
+          multiline
+        />
 
         <View style={{ minHeight: 120 }} />
       </ScrollView>
