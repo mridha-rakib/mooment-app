@@ -3,6 +3,7 @@ import { UploadCircle01Icon, ViewIcon, Delete02Icon } from "@hugeicons/core-free
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, SafeAreaView, KeyboardAvoidingView, Platform, Image, ImageBackground, Alert } from "react-native";
 
@@ -20,6 +21,13 @@ const InputLabel = ({ label, sublabel }: { label: string; sublabel?: string }) =
 
 export default function AddProductModal({ visible, onClose }: AddProductModalProps) {
   const [images, setImages] = useState<string[]>([]);
+  const router = useRouter();
+
+  const handlePublish = () => {
+    // Logic for publishing (mocked)
+    onClose();
+    router.push('/profile/inventory');
+  };
 
   const handleUpload = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -184,7 +192,7 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
               <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.publishBtn}>
+              <TouchableOpacity style={styles.publishBtn} onPress={handlePublish}>
                 <Text style={styles.publishText}>Publish</Text>
               </TouchableOpacity>
             </View>
