@@ -21,10 +21,9 @@ export type UserProfileData = {
 type ProfileViewProps = {
   user: UserProfileData;
   posts: PostData[];
-  isOwnProfile?: boolean;
 };
 
-export default function ProfileView({ user, posts, isOwnProfile = false }: ProfileViewProps) {
+export default function ProfileView({ user, posts }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
 
   return (
@@ -32,7 +31,7 @@ export default function ProfileView({ user, posts, isOwnProfile = false }: Profi
       <ScrollView showsVerticalScrollIndicator={false}>
         <ProfileHeader avatar={user.avatar} stats={user.stats} />
         <ProfileBio name={user.name} handle={user.handle} bio={user.bio} />
-        <ProfileActions isOwnProfile={isOwnProfile} />
+        <ProfileActions />
         
         <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
         <ProfileContent activeTab={activeTab} posts={posts} />

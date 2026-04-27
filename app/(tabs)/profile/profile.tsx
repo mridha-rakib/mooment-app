@@ -48,7 +48,6 @@ export default function ProfileTab() {
     <ProfileView 
       user={MOCK_ME} 
       posts={MOCK_POSTS} 
-      isOwnProfile={true} 
     />
   );
 }

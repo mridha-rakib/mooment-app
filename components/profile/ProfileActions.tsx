@@ -3,11 +3,7 @@ import { BlurView } from 'expo-blur';
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-type ProfileActionsProps = {
-  isOwnProfile?: boolean;
-};
-
-export default function ProfileActions({ isOwnProfile = false }: ProfileActionsProps) {
+export default function ProfileActions() {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.chatBtn} activeOpacity={0.8}>
@@ -17,7 +13,7 @@ export default function ProfileActions({ isOwnProfile = false }: ProfileActionsP
       </TouchableOpacity>
       
       <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
-        <Text style={styles.followBtnText}>{isOwnProfile ? 'Edit Profile' : 'Follow'}</Text>
+        <Text style={styles.followBtnText}>Follow</Text>
       </TouchableOpacity>
     </View>
   );
