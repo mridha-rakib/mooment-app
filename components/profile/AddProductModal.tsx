@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import { ImageUploadIcon } from "@hugeicons/core-free-icons";
+import { UploadCircle01Icon, ViewIcon, Delete02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
-import React from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, SafeAreaView, KeyboardAvoidingView, Platform } from "react-native";
+import * as ImagePicker from 'expo-image-picker';
+import React, { useState } from "react";
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, SafeAreaView, KeyboardAvoidingView, Platform, Image, ImageBackground, Alert } from "react-native";
 
 type AddProductModalProps = {
   visible: boolean;
@@ -18,6 +19,33 @@ const InputLabel = ({ label, sublabel }: { label: string; sublabel?: string }) =
 );
 
 export default function AddProductModal({ visible, onClose }: AddProductModalProps) {
+  const [images, setImages] = useState<string[]>([]);
+
+  const handleUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Needed', 'We need camera roll permissions to upload images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const newUris = result.assets.map(asset => asset.uri);
+      setImages([...images, ...newUris]);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    const newImages = [...images];
+    newImages.splice(index, 1);
+    setImages(newImages);
+  };
+
   return (
     <Modal
       visible={visible}
@@ -44,14 +72,43 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             {/* Image Upload */}
             <InputLabel label="IMAGE" />
-            <TouchableOpacity style={styles.uploadBox} activeOpacity={0.7}>
-              <Text style={styles.uploadHint}>You can upload multiple images</Text>
-              <View style={styles.uploadBtn}>
-                <HugeiconsIcon icon={ImageUploadIcon} size={20} color="#0e0d12" />
-                <Text style={styles.uploadBtnText}>Upload Image</Text>
+            
+            {images.length > 0 ? (
+              <View style={styles.galleryContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScroll}>
+                  {images.map((uri, index) => (
+                    <ImageBackground 
+                      key={index} 
+                      source={{ uri }} 
+                      style={styles.thumbnail}
+                      imageStyle={{ borderRadius: 12 }}
+                    >
+                      <View style={styles.thumbOverlay}>
+                        <TouchableOpacity style={styles.thumbAction}>
+                          <HugeiconsIcon icon={ViewIcon} size={16} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.thumbAction} onPress={() => removeImage(index)}>
+                          <HugeiconsIcon icon={Delete02Icon} size={16} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </ImageBackground>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity style={styles.uploadBtnSmall} onPress={handleUpload}>
+                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color="#0e0d12" />
+                  <Text style={styles.uploadBtnText}>Upload Image</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.fileHint}>JPEG, or PNG</Text>
-            </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.uploadBox} activeOpacity={0.7} onPress={handleUpload}>
+                <Text style={styles.uploadHint}>You can upload multiple images</Text>
+                <View style={styles.uploadBtn}>
+                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color="#0e0d12" />
+                  <Text style={styles.uploadBtnText}>Upload Image</Text>
+                </View>
+                <Text style={styles.fileHint}>JPEG, or PNG</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Category */}
             <InputLabel label="CATEGORY" />
@@ -198,6 +255,44 @@ const styles = StyleSheet.create({
     color: '#8E8E9B',
     fontSize: 13,
     marginBottom: 15,
+  },
+  galleryContainer: {
+    alignItems: 'center',
+    gap: 15,
+  },
+  thumbScroll: {
+    width: '100%',
+  },
+  thumbnail: {
+    width: 100,
+    height: 100,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  thumbOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+  },
+  thumbAction: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#B2ABBA',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 8,
+    alignSelf: 'center',
   },
   uploadBtn: {
     flexDirection: 'row',
