@@ -199,7 +199,7 @@ export default function CreateMomentScreen() {
       <View style={styles.checkboxRow}>
         <TouchableOpacity style={styles.checkboxItem} onPress={() => setMode('feed')} activeOpacity={0.8}>
           <View style={[styles.checkbox, mode === 'feed' && styles.checkboxActive]}>
-            {mode === 'feed' && <Feather name="check" size={11} color="#FFFFFF" />}
+            {mode === 'feed' && <Feather name="check" size={11} color="#111111" />}
           </View>
           <Text style={[styles.checkboxLabel, mode === 'feed' && styles.checkboxLabelActive]}>Feed</Text>
         </TouchableOpacity>
@@ -213,7 +213,7 @@ export default function CreateMomentScreen() {
           activeOpacity={0.8}
         >
           <View style={[styles.checkbox, mode === 'event' && styles.checkboxActive]}>
-            {mode === 'event' && <Feather name="check" size={11} color="#FFFFFF" />}
+            {mode === 'event' && <Feather name="check" size={11} color="#111111" />}
           </View>
           <Text style={[styles.checkboxLabel, mode === 'event' && styles.checkboxLabelActive]}>Event</Text>
         </TouchableOpacity>
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
   checkboxItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#454555', justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: { backgroundColor: '#8E8E9B', borderColor: '#8E8E9B' },
+  checkboxActive: { backgroundColor: '#B2ABBA', borderColor: '#B2ABBA' },
   checkboxLabel: { color: '#8E8E9B', fontSize: 14, fontWeight: '500' },
   checkboxLabelActive: { color: '#FFFFFF', fontWeight: '600' },
 
