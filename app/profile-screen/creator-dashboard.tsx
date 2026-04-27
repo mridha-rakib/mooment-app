@@ -99,7 +99,11 @@ export default function CreatorDashboardScreen() {
           <Text style={styles.eventsTitle}>All Events</Text>
           
           {[1, 2, 3].map((item, index) => (
-            <TouchableOpacity key={index} style={styles.eventCard}>
+            <TouchableOpacity 
+              key={index} 
+              style={styles.eventCard}
+              onPress={() => router.push('/profile-screen/event-dashboard')}
+            >
               <Image 
                 source={{ uri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200' }} 
                 style={styles.eventImage} 
