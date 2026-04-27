@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
   headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, marginLeft: 12 },
-  doneBtn: { backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
+  doneBtn: { backgroundColor: '#B2ABBA', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 12 },
   doneBtnText: { color: '#0e0d12', fontWeight: '700', fontSize: 14 },
 
   checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
