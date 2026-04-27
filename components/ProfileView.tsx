@@ -7,6 +7,7 @@ import ProfileContent from "./profile/ProfileContent";
 import ProfileHeader, { ProfileStats } from "./profile/ProfileHeader";
 import ProfileTabs, { ProfileTabType } from "./profile/ProfileTabs";
 import CommentsModal from "./CommentsModal";
+import AddProductModal from "./profile/AddProductModal";
 import ProfileMenuDrawer from "./profile/ProfileMenuDrawer";
 import ShareModal from "./ShareModal";
 
@@ -30,6 +31,7 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [addProductVisible, setAddProductVisible] = useState(false);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -60,8 +62,17 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
       <ProfileMenuDrawer 
         visible={menuVisible} 
         onClose={() => setMenuVisible(false)} 
+        onAddProductPress={() => {
+          setMenuVisible(false);
+          setAddProductVisible(true);
+        }}
         userName={user.name}
         userHandle={user.handle}
+      />
+
+      <AddProductModal 
+        visible={addProductVisible} 
+        onClose={() => setAddProductVisible(false)} 
       />
     </SafeAreaView>
   );

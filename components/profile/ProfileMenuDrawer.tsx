@@ -23,6 +23,7 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, SafeAreaVi
 type MenuDrawerProps = {
   visible: boolean;
   onClose: () => void;
+  onAddProductPress: () => void;
   userName: string;
   userHandle: string;
 };
@@ -47,7 +48,7 @@ const SectionLabel = ({ label }: { label: string }) => (
   <Text style={styles.sectionLabel}>{label}</Text>
 );
 
-export default function ProfileMenuDrawer({ visible, onClose, userName, userHandle }: MenuDrawerProps) {
+export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress, userName, userHandle }: MenuDrawerProps) {
   return (
     <Modal
       visible={visible}
@@ -89,7 +90,7 @@ export default function ProfileMenuDrawer({ visible, onClose, userName, userHand
             <View style={styles.separator} />
 
             <SectionLabel label="PRODUCT" />
-            <MenuItem icon={Add01Icon} label="Add Product" onPress={() => {}} />
+            <MenuItem icon={Add01Icon} label="Add Product" onPress={onAddProductPress} />
             <MenuItem icon={Archive01Icon} label="My Inventory" onPress={() => {}} />
 
             <View style={styles.separator} />
