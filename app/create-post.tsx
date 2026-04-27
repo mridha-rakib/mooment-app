@@ -205,10 +205,7 @@ export default function CreateMomentScreen() {
 
         <TouchableOpacity
           style={[styles.checkboxItem, { marginLeft: 20 }]}
-          onPress={() => {
-            setMode('event');
-            setShowEventModal(true); // open event picker immediately
-          }}
+          onPress={() => setMode('event')}
           activeOpacity={0.8}
         >
           <View style={[styles.checkbox, mode === 'event' && styles.checkboxActive]}>
