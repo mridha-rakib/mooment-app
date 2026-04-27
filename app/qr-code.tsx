@@ -102,17 +102,26 @@ export default function QRCodeScreen() {
               <Text style={styles.ticketMeta}>Tonight • 9pm</Text>
             </View>
 
-            {/* Order number */}
-            <View style={styles.orderRow}>
-              <Text style={styles.orderNumber}>MOM-2026-8741</Text>
-              <TouchableOpacity onPress={handleCopy} activeOpacity={0.8} style={{ marginLeft: 8 }}>
-                <Feather name="copy" size={15} color="#8E8E9B" />
-              </TouchableOpacity>
+            {/* Payment & Status Info */}
+            <View style={styles.paymentStatusRow}>
+              <View style={styles.paymentInfo}>
+                <Text style={styles.payLabel}>Pay <Text style={styles.payAmount}>$45</Text> at Door</Text>
+              </View>
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingText}>Pending</Text>
+              </View>
+            </View>
+
+            {/* Ticket ID */}
+            <View style={styles.ticketIdRow}>
+              <Text style={styles.ticketIdText}>MOM-2026-8741</Text>
             </View>
 
             {/* QR Code */}
             <View style={styles.qrWrapper}>
-              <Image source={{ uri: QR_IMG }} style={styles.qrImage} resizeMode="contain" />
+              <View style={styles.qrContainer}>
+                <Image source={{ uri: QR_IMG }} style={styles.qrImage} resizeMode="contain" />
+              </View>
             </View>
           </>
         )}
@@ -166,6 +175,7 @@ const styles = StyleSheet.create({
   orderRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, marginBottom: 20,
+    justifyContent: 'center',
   },
   orderLabel: { color: '#8E8E9B', fontSize: 13, marginRight: 8 },
   orderNumber: { color: '#8E8E9B', fontSize: 13 },
@@ -173,12 +183,19 @@ const styles = StyleSheet.create({
   /* QR */
   qrWrapper: {
     alignItems: 'center', marginBottom: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
+  },
+  qrContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    width: QR_SIZE + 32,
+    height: QR_SIZE + 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   qrImage: {
     width: QR_SIZE, height: QR_SIZE,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16, padding: 12,
   },
 
   /* Success banner */
@@ -191,8 +208,50 @@ const styles = StyleSheet.create({
   successText: { color: '#16D869', fontSize: 13, flex: 1, lineHeight: 19 },
 
   /* Event ticket */
-  ticketHeader: { alignItems: 'center', paddingVertical: 20, paddingHorizontal: 24 },
-  ticketForLabel: { color: '#8E8E9B', fontSize: 13, marginBottom: 8 },
-  ticketEventName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 22, textAlign: 'center', marginBottom: 6 },
-  ticketMeta: { color: '#8E8E9B', fontSize: 13 },
+  ticketHeader: { alignItems: 'center', paddingTop: 20, paddingBottom: 30, paddingHorizontal: 24 },
+  ticketForLabel: { color: '#8E8E9B', fontSize: 14, marginBottom: 10 },
+  ticketEventName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 24, textAlign: 'center', marginBottom: 8 },
+  ticketMeta: { color: '#8E8E9B', fontSize: 14 },
+
+  /* New styles for Ticket Detail match */
+  paymentStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  paymentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  payLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+  },
+  payAmount: {
+    color: '#16D869',
+    fontWeight: 'bold',
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(120, 53, 15, 0.4)', // Darker orange
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(120, 53, 15, 0.8)',
+  },
+  pendingText: {
+    color: '#F97316', // Orange
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  ticketIdRow: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  ticketIdText: {
+    color: '#8E8E9B',
+    fontSize: 14,
+  },
 });

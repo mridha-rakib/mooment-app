@@ -229,7 +229,7 @@ type FeedItem =
 const MOCK_FEED: FeedItem[] = [
   // --- PART 1: The "Previous" Combined Designs ---
   { type: 'post', id: 'f_text', data: MOCK_POSTS[1] }, // Text Post
-   { type: 'post', id: 's6', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+   { type: 'post', id: 's6_1', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
   { type: 'post', id: 'f_audio', data: MOCK_POSTS[0] }, // Audio Post
  
   { 
@@ -256,11 +256,11 @@ const MOCK_FEED: FeedItem[] = [
   { type: 'post', id: 's2', data: MOCK_POSTS[3] }, // Product Post (Medusa Cream)
   { type: 'post', id: 's3', data: MOCK_POSTS[4] }, // Event Post (Rooftop Session)
   { type: 'post', id: 's4', data: MOCK_POSTS[5] }, // Standard Post (LuminaGlow)
-   { type: 'post', id: 's6', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
-    { type: 'post', id: 's6', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+   { type: 'post', id: 's6_2', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+    { type: 'post', id: 's6_3', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
   { type: 'post', id: 's5', data: MOCK_POSTS[6] }, // Product Post 2
    { type: 'suggested_users', id: 'f_sug', data: MOCK_SUGGESTED_USERS }, // Horizontal Users
-  { type: 'post', id: 's6', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+  { type: 'post', id: 's6_4', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
 ];
 
 export default function HomeFeed() {

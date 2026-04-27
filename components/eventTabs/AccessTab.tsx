@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   StyleSheet,
@@ -281,39 +283,58 @@ const AccessTab = () => {
   return (
     <View>
       {/* Sub-Tabs / Toggle */}
-      <View style={styles.subTabBg}>
-        <TouchableOpacity
-          onPress={() => setAccessSubTab("Tickets")}
-          style={[
-            styles.subTabItem,
-            accessSubTab === "Tickets" && styles.subTabItemActive,
-          ]}
+      <View style={styles.tabWrapper}>
+        <LinearGradient
+          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          start={{ x: 1, y: 1 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.subTabBorder}
         >
-          <Text
-            style={[
-              styles.subTabText,
-              accessSubTab === "Tickets" && styles.subTabTextActive,
-            ]}
-          >
-            Tickets
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setAccessSubTab("Rewards")}
-          style={[
-            styles.subTabItem,
-            accessSubTab === "Rewards" && styles.subTabItemActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.subTabText,
-              accessSubTab === "Rewards" && styles.subTabTextActive,
-            ]}
-          >
-            Rewards
-          </Text>
-        </TouchableOpacity>
+          <BlurView intensity={40} tint="dark" style={styles.subTabBg}>
+            <TouchableOpacity
+              onPress={() => setAccessSubTab("Tickets")}
+              style={styles.subTabItem}
+            >
+              {accessSubTab === "Tickets" ? (
+                <LinearGradient
+                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.activeBtnBorder}
+                >
+                  <View style={styles.activeBtnInner}>
+                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                      Tickets
+                    </Text>
+                  </View>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.subTabText}>Tickets</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAccessSubTab("Rewards")}
+              style={styles.subTabItem}
+            >
+              {accessSubTab === "Rewards" ? (
+                <LinearGradient
+                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.activeBtnBorder}
+                >
+                  <View style={styles.activeBtnInner}>
+                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                      Rewards
+                    </Text>
+                  </View>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.subTabText}>Rewards</Text>
+              )}
+            </TouchableOpacity>
+          </BlurView>
+        </LinearGradient>
       </View>
 
       {accessSubTab === "Tickets" ? renderTickets() : renderRewards()}
@@ -324,25 +345,46 @@ const AccessTab = () => {
 export default AccessTab;
 
 const styles = StyleSheet.create({
+  tabWrapper: {
+    borderRadius: 12,
+  },
+  subTabBorder: {
+    borderRadius: 12,
+    overflow: "hidden",
+    padding: 0.5,
+  },
   subTabBg: {
     flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 12,
-    padding: 4,
+    backgroundColor: "#1c1b20",
+    borderRadius: 11,
+    padding: 6,
+    height: 50,
+    overflow: "hidden",
+    gap: 4,
   },
   subTabItem: {
     flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 10,
+    alignItems: "stretch",
+    justifyContent: "center",
+    borderRadius: 8,
   },
-  subTabItemActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  activeBtnBorder: {
+    flex: 1,
+    borderRadius: 8,
+    padding: 0.5,
+  },
+  activeBtnInner: {
+    backgroundColor: "#38373a",
+    borderRadius: 7,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   subTabText: {
     color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "600",
+    textAlign: "center",
   },
   subTabTextActive: {
     color: COLORS.text,

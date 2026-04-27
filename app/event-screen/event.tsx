@@ -1,5 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -43,10 +44,32 @@ const EventScreen = () => {
         style={styles.headerBtn}
         activeOpacity={0.8}
       >
-        <Feather name="chevron-left" size={24} color={COLORS.text} />
+        <LinearGradient
+          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.headerBtnBorder}
+        >
+          <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+            <Feather name="chevron-left" size={24} color={COLORS.text} />
+          </BlurView>
+        </LinearGradient>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.headerBtn} activeOpacity={0.8}>
-        <Feather name="more-horizontal" size={24} color={COLORS.text} />
+      <TouchableOpacity 
+        style={styles.headerBtn} 
+        activeOpacity={0.8}
+        onPress={() => router.push("/event-screen/wallet")}
+      >
+        <LinearGradient
+          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.headerBtnBorder}
+        >
+          <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+            <Feather name="more-horizontal" size={24} color={COLORS.text} />
+          </BlurView>
+        </LinearGradient>
       </TouchableOpacity>
     </View>
   );
@@ -219,7 +242,11 @@ const EventScreen = () => {
           <Text style={styles.priceLabel}>From</Text>
           <Text style={styles.priceValue}>£45</Text>
         </View>
-        <TouchableOpacity style={styles.buyBtn} activeOpacity={0.8}>
+        <TouchableOpacity 
+          style={styles.buyBtn} 
+          activeOpacity={0.8}
+          onPress={() => router.push("/event-screen/checkout")}
+        >
           <Text style={styles.buyBtnText}>Buy Now</Text>
         </TouchableOpacity>
       </View>
@@ -246,11 +273,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius:100,
+  },
+  headerBtnBorder: {
+    flex: 1,
+    padding: 0.5,
+    borderRadius: 100,
+  },
+  headerBtnBg: {
+    flex: 1,
+    backgroundColor: "#1e1d21",
+    borderRadius:100,
+    justifyContent: "center",          
     alignItems: "center",
   },
   imageContainer: {

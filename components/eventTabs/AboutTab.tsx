@@ -1,5 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   Dimensions,
@@ -8,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import FullScreen from "../event/FullScreen";
 
 const { width } = Dimensions.get("window");
@@ -30,22 +31,58 @@ const AboutTab = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const GALLERY_IMAGES = [
-    { id: '1', uri: 'https://images.unsplash.com/photo-1531050171669-01912ad4110b?q=80&w=600&auto=format&fit=crop', type: 'image' },
-    { id: '2', uri: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop', type: 'image' },
-    { id: '3', uri: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop', type: 'image' },
-    { id: '4', uri: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop', type: 'carousel' },
-    { id: '5', uri: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?q=80&w=600&auto=format&fit=crop', type: 'video' },
-    { id: '6', uri: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?q=80&w=600&auto=format&fit=crop', type: 'video' },
-    { id: '7', uri: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=600&auto=format&fit=crop', type: 'carousel' },
-    { id: '8', uri: 'https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?q=80&w=600&auto=format&fit=crop', type: 'video' },
-    { id: '9', uri: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?q=80&w=600&auto=format&fit=crop', type: 'image' },
+    {
+      id: "1",
+      uri: "https://images.unsplash.com/photo-1531050171669-01912ad4110b?q=80&w=600&auto=format&fit=crop",
+      type: "image",
+    },
+    {
+      id: "2",
+      uri: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
+      type: "image",
+    },
+    {
+      id: "3",
+      uri: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop",
+      type: "image",
+    },
+    {
+      id: "4",
+      uri: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+      type: "carousel",
+    },
+    {
+      id: "5",
+      uri: "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?q=80&w=600&auto=format&fit=crop",
+      type: "video",
+    },
+    {
+      id: "6",
+      uri: "https://images.unsplash.com/photo-1506157786151-b8491531f063?q=80&w=600&auto=format&fit=crop",
+      type: "video",
+    },
+    {
+      id: "7",
+      uri: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=600&auto=format&fit=crop",
+      type: "carousel",
+    },
+    {
+      id: "8",
+      uri: "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?q=80&w=600&auto=format&fit=crop",
+      type: "video",
+    },
+    {
+      id: "9",
+      uri: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?q=80&w=600&auto=format&fit=crop",
+      type: "image",
+    },
   ];
 
   const renderGallery = () => (
     <View style={styles.galleryGrid}>
       {GALLERY_IMAGES.map((item) => (
-        <TouchableOpacity 
-          key={item.id} 
+        <TouchableOpacity
+          key={item.id}
           style={styles.galleryItemContainer}
           onPress={() => setSelectedImage(item.uri)}
           activeOpacity={0.9}
@@ -68,46 +105,65 @@ const AboutTab = () => {
 
   return (
     <View>
-      <FullScreen 
-        visible={!!selectedImage} 
-        imageUri={selectedImage} 
-        onClose={() => setSelectedImage(null)} 
+      <FullScreen
+        visible={!!selectedImage}
+        imageUri={selectedImage}
+        onClose={() => setSelectedImage(null)}
       />
 
       {/* Sub-Tabs / Toggle */}
-      <View style={styles.subTabBg}>
-        <TouchableOpacity
-          onPress={() => setSubTab("Description")}
-          style={[
-            styles.subTabItem,
-            subTab === "Description" && styles.subTabItemActive,
-          ]}
+      <View style={styles.tabWrapper}>
+        <LinearGradient
+          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          start={{ x: 1, y: 1 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.subTabBorder}
         >
-          <Text
-            style={[
-              styles.subTabText,
-              subTab === "Description" && styles.subTabTextActive,
-            ]}
-          >
-            Description
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setSubTab("Gallery")}
-          style={[
-            styles.subTabItem,
-            subTab === "Gallery" && styles.subTabItemActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.subTabText,
-              subTab === "Gallery" && styles.subTabTextActive,
-            ]}
-          >
-            Gallery
-          </Text>
-        </TouchableOpacity>
+          <BlurView intensity={40} tint="dark" style={styles.subTabBg}>
+            <TouchableOpacity
+              onPress={() => setSubTab("Description")}
+              style={styles.subTabItem}
+            >
+              {subTab === "Description" ? (
+                <LinearGradient
+                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.activeBtnBorder}
+                >
+                  <View style={styles.activeBtnInner}>
+                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                      Description
+                    </Text>
+                  </View>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.subTabText}>Description</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSubTab("Gallery")}
+              style={styles.subTabItem}
+            >
+              {subTab === "Gallery" ? (
+                <LinearGradient
+                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.activeBtnBorder}
+                >
+                  <View style={styles.activeBtnInner}>
+                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                      Gallery
+                    </Text>
+                  </View>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.subTabText}>Gallery</Text>
+              )}
+            </TouchableOpacity>
+          </BlurView>
+        </LinearGradient>
       </View>
 
       <View style={{ marginTop: 20 }}>
@@ -218,25 +274,47 @@ const AboutTab = () => {
 export default AboutTab;
 
 const styles = StyleSheet.create({
+  tabWrapper: {
+    padding: 1, // border thickness
+    borderRadius: 12,
+  },
+  subTabBorder: {
+    borderRadius: 12,
+    overflow: "hidden",
+    padding: 0.5,
+  },
   subTabBg: {
     flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 12,
-    padding: 4,
+    backgroundColor: "#1c1b20",
+    borderRadius: 11,
+    padding: 6,
+    height: 50,
+    overflow: "hidden",
+    gap: 4,
   },
   subTabItem: {
     flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 10,
+    alignItems: "stretch", // Stretch to fill height
+    justifyContent: "center",
+    borderRadius: 8,
   },
-  subTabItemActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  activeBtnBorder: {
+    flex: 1, // Use flex instead of height 100% for better behavior in stretch
+    borderRadius: 8,
+    padding: 0.5,
+  },
+  activeBtnInner: {
+    backgroundColor: "#38373a",
+    borderRadius: 7,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   subTabText: {
     color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "600",
+    textAlign: "center",
   },
   subTabTextActive: {
     color: COLORS.text,
@@ -443,7 +521,8 @@ const styles = StyleSheet.create({
   galleryIcon: {
     position: "absolute",
     top: 10,
-    right: 10,
+    left: "50%",
+    transform: [{ translateX: -12 }],
     backgroundColor: "rgba(0,0,0,0.5)",
     width: 24,
     height: 24,
