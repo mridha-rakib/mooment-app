@@ -239,7 +239,10 @@ export default function EventDashboardScreen() {
         {/* Products Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>All Product</Text>
-          <TouchableOpacity style={styles.seeAllBtn}>
+          <TouchableOpacity 
+            style={styles.seeAllBtn}
+            onPress={() => router.push('/profile-screen/product-stat')}
+          >
             <Text style={styles.seeAllText}>See Stat</Text>
             <HugeiconsIcon icon={ArrowRight02Icon} size={14} color="#FFFFFF" />
           </TouchableOpacity>
