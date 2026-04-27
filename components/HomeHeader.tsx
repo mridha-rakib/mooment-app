@@ -77,6 +77,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   iconBtn: {
-    marginLeft: 20,
+    marginLeft: 15,
+  },
+  profileBtn: {
+    marginLeft: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  avatarMini: {
+    width: '100%',
+    height: '100%',
   },
 });

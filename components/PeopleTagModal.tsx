@@ -45,9 +45,6 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
     onSelect(next); // ← instant update to parent
   };
 
-  const handleDone = () => {
-    onClose(); // selection already synced live
-  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
@@ -68,7 +65,7 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
             <TextInput
               style={styles.searchInput}
               placeholder="Search with @username or just name"
-              placeholderTextColor="#454555"
+              placeholderTextColor="#B3B3B3"
               value={search}
               onChangeText={setSearch}
             />
@@ -85,7 +82,6 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
             style={{ maxHeight: 340 }}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => {
               const isAdded = localSelected.includes(item.name);
               return (
@@ -114,18 +110,6 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
             }}
           />
 
-          {/* Done button */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={handleDone}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.doneBtnText}>
-                {localSelected.length > 0 ? `Done  (${localSelected.length} tagged)` : 'Done'}
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
         </View>
@@ -137,19 +121,19 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(17, 17, 17, 0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#13131A',
+    backgroundColor: '#1E1E1E',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 16,
     paddingTop: 10,
   },
   handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#2A2A3A',
+    width: 80, height: 3, borderRadius: 2,
+    backgroundColor: '#ffff',
     alignSelf: 'center', marginBottom: 16,
   },
 
@@ -162,9 +146,11 @@ const styles = StyleSheet.create({
   /* Search */
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1A1A2E', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 11,
-    marginBottom: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1, borderColor: '#454555',
+    borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 10,
+    marginBottom: 12,
   },
   searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
 
@@ -200,12 +186,4 @@ const styles = StyleSheet.create({
     color: '#D4B0EB',
   },
 
-  /* Footer */
-  footer: { paddingTop: 14 },
-  doneBtn: {
-    backgroundColor: '#D4B0EB',
-    paddingVertical: 14, borderRadius: 16, alignItems: 'center',
-  },
-  doneBtnDisabled: { opacity: 0.4 },
-  doneBtnText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 15 },
 });

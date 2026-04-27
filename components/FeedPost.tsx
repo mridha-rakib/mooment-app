@@ -1,4 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { Share01Icon, Comment02Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
@@ -304,22 +306,30 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
         {/* Normal Post Footer Actions */}
         {post.postType !== 'product' && (post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
           <View style={styles.postFooter}>
-            {post.likesCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-                <Ionicons name="heart" size={22} color="#F2245C" />
-                <Text style={styles.actionText}>{post.likesCount}</Text>
-              </TouchableOpacity>
-            )}
-            {post.commentsCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
-                <Feather name="message-circle" size={22} color="#8E8E9B" />
-                <Text style={styles.actionText}>{post.commentsCount}</Text>
-              </TouchableOpacity>
-            )}
-            {post.sharesCount !== undefined && (
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
-                <Feather name="share" size={22} color="#8E8E9B" />
-                <Text style={styles.actionText}>{post.sharesCount}</Text>
+            <View style={styles.footerStats}>
+              {post.likesCount !== undefined && (
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+                  <Ionicons name="heart" size={22} color="#F2245C" />
+                  <Text style={styles.actionText}>{post.likesCount}</Text>
+                </TouchableOpacity>
+              )}
+              {post.commentsCount !== undefined && (
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
+                  <HugeiconsIcon icon={Comment02Icon} size={20} color="#8E8E9B" />
+                  <Text style={styles.actionText}>{post.commentsCount}</Text>
+                </TouchableOpacity>
+              )}
+              {post.sharesCount !== undefined && (
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
+                  <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" />
+                  <Text style={styles.actionText}>{post.sharesCount}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {post.postType === 'event' && (
+              <TouchableOpacity style={styles.statBtn} activeOpacity={0.8}>
+                <Text style={styles.statBtnText}>View Stat</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -451,7 +461,7 @@ const styles = StyleSheet.create({
     borderColor: "#D4B0EB", 
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
     marginRight: 10,
   },
   followBtnText: {
@@ -464,7 +474,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
     marginRight: 10,
   },
   followingBtnText: {
@@ -591,7 +601,23 @@ const styles = StyleSheet.create({
   postFooter: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: 'space-between',
     marginTop: 16,
+  },
+  footerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statBtn: {
+    backgroundColor: '#B2ABBA',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  statBtnText: {
+    color: '#0e0d12',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   actionBtn: {
     flexDirection: "row",
@@ -735,18 +761,18 @@ const styles = StyleSheet.create({
   },
   productFooterPrice: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
   },
   productViewBtn: {
-    backgroundColor: '#D0D0D8',
+    backgroundColor: '#B2ABBA',
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   productViewBtnText: {
-    color: '#000000',
-    fontSize: 12,
+    color: '#0e0d12',
+    fontSize: 13,
     fontWeight: 'bold',
   },
   /* Modal & More Menu Styles */

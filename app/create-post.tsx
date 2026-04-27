@@ -2,9 +2,13 @@ import AudiencePickerModal from '@/components/AudiencePickerModal';
 import EventPickerModal from '@/components/EventPickerModal';
 import PeopleTagModal from '@/components/PeopleTagModal';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { AddTeamIcon, Image01Icon, MusicNote04Icon, Video02Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Alert, Dimensions, Image, Modal, Platform,
   SafeAreaView, ScrollView, StatusBar, StyleSheet,
@@ -175,7 +179,6 @@ export default function CreateMomentScreen() {
 
   const handleImageSelect = (uri: string) => {
     setSelectedImage(uri);
-    setMode('feed'); // switch to feed mode when image selected
   };
 
   const taggedLabel = taggedPeople.join(', ');
@@ -183,7 +186,6 @@ export default function CreateMomentScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
-
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn} activeOpacity={0.8}>
@@ -199,21 +201,18 @@ export default function CreateMomentScreen() {
       <View style={styles.checkboxRow}>
         <TouchableOpacity style={styles.checkboxItem} onPress={() => setMode('feed')} activeOpacity={0.8}>
           <View style={[styles.checkbox, mode === 'feed' && styles.checkboxActive]}>
-            {mode === 'feed' && <Feather name="check" size={11} color="#FFFFFF" />}
+            {mode === 'feed' && <Feather name="check" size={11} color="#111111" />}
           </View>
           <Text style={[styles.checkboxLabel, mode === 'feed' && styles.checkboxLabelActive]}>Feed</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.checkboxItem, { marginLeft: 20 }]}
-          onPress={() => {
-            setMode('event');
-            setShowEventModal(true); // open event picker immediately
-          }}
+          onPress={() => setMode('event')}
           activeOpacity={0.8}
         >
           <View style={[styles.checkbox, mode === 'event' && styles.checkboxActive]}>
-            {mode === 'event' && <Feather name="check" size={11} color="#FFFFFF" />}
+            {mode === 'event' && <Feather name="check" size={11} color="#111111" />}
           </View>
           <Text style={[styles.checkboxLabel, mode === 'event' && styles.checkboxLabelActive]}>Event</Text>
         </TouchableOpacity>
@@ -260,40 +259,24 @@ export default function CreateMomentScreen() {
           )}
         </View>
 
-        {/* ── FEED MODE: Image + stitch ── */}
-        {mode === 'feed' && (
-          <>
-            {selectedImage ? (
-              <View style={styles.imageWrapper}>
-                <Image source={{ uri: selectedImage }} style={styles.momentImage} resizeMode="cover" />
-                <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setSelectedImage(null)} activeOpacity={0.8}>
-                  <Feather name="x" size={13} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
+        {/* ── Content Section (Image + Caption) ── */}
+        {selectedImage ? (
+          <View style={styles.imageWrapper}>
+            <Image source={{ uri: selectedImage }} style={styles.momentImage} resizeMode="cover" />
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setSelectedImage(null)} activeOpacity={0.8}>
+              <Feather name="x" size={13} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
-            <TextInput
-              style={styles.stitchInput}
-              placeholder="Write your stitch here. . ."
-              placeholderTextColor="#454555"
-              value={caption}
-              onChangeText={setCaption}
-              multiline
-            />
-          </>
-        )}
-
-        {/* ── EVENT MODE: Text caption ── */}
-        {mode === 'event' && (
-          <TextInput
-            style={styles.eventCaptionInput}
-            placeholder="Share what this moment means to you..."
-            placeholderTextColor="#454555"
-            value={caption}
-            onChangeText={setCaption}
-            multiline
-          />
-        )}
+        <TextInput
+          style={styles.stitchInput}
+          placeholder={mode === 'feed' ? "Write your stitch here. . ." : "Share what this moment means to you..."}
+          placeholderTextColor="#454555"
+          value={caption}
+          onChangeText={setCaption}
+          multiline
+        />
 
         <View style={{ minHeight: 120 }} />
       </ScrollView>
@@ -302,33 +285,33 @@ export default function CreateMomentScreen() {
       <View style={styles.toolbar}>
         {/* People */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="users" size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#FFFFFF'} />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#B3B3B3'} />
+          </BlurView>
           <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && { color: '#D4B0EB' }]}>People</Text>
         </TouchableOpacity>
 
         {/* Image / Gallery */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="image" size={22} color={selectedImage && mode === 'feed' ? '#D4B0EB' : '#FFFFFF'} />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage && mode === 'feed' ? '#D4B0EB' : '#B3B3B3'} />
+          </BlurView>
           <Text style={[styles.toolbarLabel, selectedImage && mode === 'feed' && { color: '#D4B0EB' }]}>Image</Text>
         </TouchableOpacity>
 
         {/* Camera */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowCamera(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="camera" size={22} color="#FFFFFF" />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <Feather name="camera" size={22} color="#B3B3B3" />
+          </BlurView>
           <Text style={styles.toolbarLabel}>Camera</Text>
         </TouchableOpacity>
 
         {/* Video */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="video" size={22} color="#FFFFFF" />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={Video02Icon} size={22} color="#B3B3B3" />
+          </BlurView>
           <Text style={styles.toolbarLabel}>Video</Text>
         </TouchableOpacity>
 
@@ -338,9 +321,9 @@ export default function CreateMomentScreen() {
           onPress={() => Alert.alert('Audio', 'Record or choose audio for your moment')}
           activeOpacity={0.8}
         >
-          <View style={styles.toolbarIconBox}>
-            <MaterialCommunityIcons name="music-note" size={22} color="#FFFFFF" />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={MusicNote04Icon} size={22} color="#B3B3B3" />
+          </BlurView>
           <Text style={styles.toolbarLabel}>Audio</Text>
         </TouchableOpacity>
       </View>
@@ -384,13 +367,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
   headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, marginLeft: 12 },
-  doneBtn: { backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
+  doneBtn: { backgroundColor: '#B2ABBA', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 12 },
   doneBtnText: { color: '#0e0d12', fontWeight: '700', fontSize: 14 },
 
   checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
   checkboxItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#454555', justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: { backgroundColor: '#8E8E9B', borderColor: '#8E8E9B' },
+  checkboxActive: { backgroundColor: '#B2ABBA', borderColor: '#B2ABBA' },
   checkboxLabel: { color: '#8E8E9B', fontSize: 14, fontWeight: '500' },
   checkboxLabelActive: { color: '#FFFFFF', fontWeight: '600' },
 
@@ -417,6 +400,6 @@ const styles = StyleSheet.create({
 
   toolbar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#13131A', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#0e0d12' },
   toolbarItem: { flex: 1, alignItems: 'center', gap: 5 },
-  toolbarIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#13131A', justifyContent: 'center', alignItems: 'center' },
+  toolbarIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(104, 104, 104, 0.1)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   toolbarLabel: { color: '#8E8E9B', fontSize: 11 },
 });
