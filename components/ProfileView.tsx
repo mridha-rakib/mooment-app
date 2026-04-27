@@ -24,9 +24,10 @@ export type UserProfileData = {
 type ProfileViewProps = {
   user: UserProfileData;
   posts: PostData[];
+  isOwnProfile?: boolean;
 };
 
-export default function ProfileView({ user, posts }: ProfileViewProps) {
+export default function ProfileView({ user, posts, isOwnProfile = true }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
@@ -34,9 +35,9 @@ export default function ProfileView({ user, posts }: ProfileViewProps) {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <ProfileHeader avatar={user.avatar} stats={user.stats} />
+        <ProfileHeader avatar={user.avatar} stats={user.stats} isOwnProfile={isOwnProfile} />
         <ProfileBio name={user.name} handle={user.handle} bio={user.bio} />
-        <ProfileActions />
+        <ProfileActions isOwnProfile={isOwnProfile} />
         
         <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
         <ProfileContent 

@@ -3,7 +3,13 @@ import { BlurView } from 'expo-blur';
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-export default function ProfileActions() {
+type ProfileActionsProps = {
+  isOwnProfile?: boolean;
+};
+
+export default function ProfileActions({ isOwnProfile = true }: ProfileActionsProps) {
+  if (isOwnProfile) return null;
+
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.chatBtn} activeOpacity={0.8}>
