@@ -10,6 +10,15 @@ import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 type AddProductModalProps = {
   visible: boolean;
   onClose: () => void;
+  initialData?: {
+    name: string;
+    description: string;
+    price: string;
+    discount: string;
+    stock: string;
+    tag: string;
+    images: string[];
+  };
 };
 
 const InputLabel = ({ label, sublabel }: { label: string; sublabel?: string }) => (
@@ -19,14 +28,36 @@ const InputLabel = ({ label, sublabel }: { label: string; sublabel?: string }) =
   </View>
 );
 
-export default function AddProductModal({ visible, onClose }: AddProductModalProps) {
-  const [images, setImages] = useState<string[]>([]);
+export default function AddProductModal({ visible, onClose, initialData }: AddProductModalProps) {
+  const [images, setImages] = useState<string[]>(initialData?.images || []);
+  const [name, setName] = useState(initialData?.name || '');
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [price, setPrice] = useState(initialData?.price || '');
+  const [discount, setDiscount] = useState(initialData?.discount || '');
+  const [stock, setStock] = useState(initialData?.stock || '');
+  const [tag, setTag] = useState(initialData?.tag || '');
+  
   const router = useRouter();
 
+  // Reset state when modal opens with new data
+  React.useEffect(() => {
+    if (visible) {
+      setImages(initialData?.images || []);
+      setName(initialData?.name || '');
+      setDescription(initialData?.description || '');
+      setPrice(initialData?.price || '');
+      setDiscount(initialData?.discount || '');
+      setStock(initialData?.stock || '');
+      setTag(initialData?.tag || '');
+    }
+  }, [visible, initialData]);
+
   const handlePublish = () => {
-    // Logic for publishing (mocked)
+    // Logic for publishing/saving (mocked)
     onClose();
-    router.push('/profile/inventory');
+    if (!initialData) {
+      router.push('/profile/inventory');
+    }
   };
 
   const handleUpload = async () => {
@@ -73,7 +104,7 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
                 <Feather name="x" size={20} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Add Product</Text>
+            <Text style={styles.headerTitle}>{initialData ? 'Edit Product' : 'Add Product'}</Text>
             <View style={{ width: 40 }} /> 
           </View>
 
@@ -131,6 +162,8 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
               style={styles.input} 
               placeholder="Name" 
               placeholderTextColor="#555"
+              value={name}
+              onChangeText={setName}
             />
 
             {/* Description */}
@@ -140,6 +173,8 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
               placeholder="Detail about ticket" 
               placeholderTextColor="#555"
               multiline
+              value={description}
+              onChangeText={setDescription}
             />
 
             {/* Set Tag */}
@@ -148,6 +183,8 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
               style={styles.input} 
               placeholder="Skin Care" 
               placeholderTextColor="#555"
+              value={tag}
+              onChangeText={setTag}
             />
 
             {/* Price & Discount */}
@@ -161,6 +198,8 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
                     placeholder="185" 
                     placeholderTextColor="#555"
                     keyboardType="numeric"
+                    value={price}
+                    onChangeText={setPrice}
                   />
                 </View>
               </View>
@@ -173,6 +212,8 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
                     placeholder="0" 
                     placeholderTextColor="#555"
                     keyboardType="numeric"
+                    value={discount}
+                    onChangeText={setDiscount}
                   />
                 </View>
               </View>
@@ -185,6 +226,8 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
               placeholder="185" 
               placeholderTextColor="#555"
               keyboardType="numeric"
+              value={stock}
+              onChangeText={setStock}
             />
 
             {/* Actions */}
@@ -193,7 +236,7 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.publishBtn} onPress={handlePublish}>
-                <Text style={styles.publishText}>Publish</Text>
+                <Text style={styles.publishText}>{initialData ? 'Save Changes' : 'Publish'}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

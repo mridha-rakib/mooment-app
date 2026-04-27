@@ -49,7 +49,14 @@ export default function InventoryScreen() {
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.priceText}>{item.price}</Text>
-          <TouchableOpacity style={styles.viewBtn} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.viewBtn} 
+            activeOpacity={0.8}
+            onPress={() => router.push({
+              pathname: '/profile/product-details',
+              params: { name: item.name, image: item.image }
+            })}
+          >
             <Text style={styles.viewBtnText}>View</Text>
           </TouchableOpacity>
         </View>
