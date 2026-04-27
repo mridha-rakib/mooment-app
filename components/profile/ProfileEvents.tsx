@@ -34,7 +34,12 @@ const MOCK_EVENTS: PostData[] = [
   }
 ];
 
-export default function ProfileEvents() {
+type ProfileEventsProps = {
+  onCommentPress: () => void;
+  onSharePress: () => void;
+};
+
+export default function ProfileEvents({ onCommentPress, onSharePress }: ProfileEventsProps) {
   const [filter, setFilter] = useState<'active' | 'past'>('active');
 
   return (
@@ -63,8 +68,8 @@ export default function ProfileEvents() {
           <FeedPost 
             key={event.id} 
             post={event} 
-            onCommentPress={() => {}} 
-            onSharePress={() => {}} 
+            onCommentPress={onCommentPress} 
+            onSharePress={onSharePress} 
           />
         ))}
       </View>

@@ -8,9 +8,11 @@ import ProfileEvents from "./ProfileEvents";
 type ProfileContentProps = {
   activeTab: ProfileTabType;
   posts: PostData[];
+  onCommentPress: () => void;
+  onSharePress: () => void;
 };
 
-export default function ProfileContent({ activeTab, posts }: ProfileContentProps) {
+export default function ProfileContent({ activeTab, posts, onCommentPress, onSharePress }: ProfileContentProps) {
   return (
     <View style={styles.container}>
       {activeTab === 'feed' && (
@@ -18,14 +20,17 @@ export default function ProfileContent({ activeTab, posts }: ProfileContentProps
           <FeedPost 
             key={post.id} 
             post={post} 
-            onCommentPress={() => {}} 
-            onSharePress={() => {}} 
+            onCommentPress={onCommentPress} 
+            onSharePress={onSharePress} 
           />
         ))
       )}
       
       {activeTab === 'events' && (
-        <ProfileEvents />
+        <ProfileEvents 
+          onCommentPress={onCommentPress} 
+          onSharePress={onSharePress} 
+        />
       )}
       
       {activeTab === 'shop' && (

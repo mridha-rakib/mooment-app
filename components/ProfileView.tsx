@@ -9,6 +9,9 @@ import ProfileTabs, { ProfileTabType } from "./profile/ProfileTabs";
 
 const { width } = Dimensions.get("window");
 
+import CommentsModal from "./CommentsModal";
+import ShareModal from "./ShareModal";
+
 export type UserProfileData = {
   id: string;
   name: string;
@@ -25,6 +28,8 @@ type ProfileViewProps = {
 
 export default function ProfileView({ user, posts }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
+  const [commentsVisible, setCommentsVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -34,10 +39,18 @@ export default function ProfileView({ user, posts }: ProfileViewProps) {
         <ProfileActions />
         
         <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
-        <ProfileContent activeTab={activeTab} posts={posts} />
+        <ProfileContent 
+          activeTab={activeTab} 
+          posts={posts} 
+          onCommentPress={() => setCommentsVisible(true)}
+          onSharePress={() => setShareVisible(true)}
+        />
         
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <CommentsModal visible={commentsVisible} onClose={() => setCommentsVisible(false)} />
+      <ShareModal visible={shareVisible} onClose={() => setShareVisible(false)} />
     </SafeAreaView>
   );
 }
