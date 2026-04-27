@@ -1,4 +1,6 @@
 import { Feather } from "@expo/vector-icons";
+import { Home01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 
@@ -16,7 +18,7 @@ export default function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps
         style={[styles.tab, activeTab === 'feed' && styles.activeTab]} 
         onPress={() => onTabChange('feed')}
       >
-        <Feather name="home" size={20} color={activeTab === 'feed' ? '#FFFFFF' : '#8E8E9B'} />
+        <HugeiconsIcon icon={Home01Icon} size={20} color={activeTab === 'feed' ? '#FFFFFF' : '#8E8E9B'} />
       </TouchableOpacity>
       <TouchableOpacity 
         style={[styles.tab, activeTab === 'events' && styles.activeTab]} 
