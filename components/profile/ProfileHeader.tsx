@@ -18,16 +18,17 @@ type ProfileHeaderProps = {
   avatar: string;
   stats: ProfileStats;
   isOwnProfile?: boolean;
+  onMenuPress?: () => void;
 };
 
-export default function ProfileHeader({ avatar, stats, isOwnProfile = true }: ProfileHeaderProps) {
+export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
       {isOwnProfile ? (
         <View style={styles.brandedHeader}>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={onMenuPress}>
             <HugeiconsIcon icon={Menu01Icon} size={24} color="#FFFFFF" />
           </TouchableOpacity>
           

@@ -1,15 +1,13 @@
 import React, { useState } from "react";
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 import { PostData } from "./FeedPost";
 import ProfileActions from "./profile/ProfileActions";
 import ProfileBio from "./profile/ProfileBio";
 import ProfileContent from "./profile/ProfileContent";
 import ProfileHeader, { ProfileStats } from "./profile/ProfileHeader";
 import ProfileTabs, { ProfileTabType } from "./profile/ProfileTabs";
-
-const { width } = Dimensions.get("window");
-
 import CommentsModal from "./CommentsModal";
+import ProfileMenuDrawer from "./profile/ProfileMenuDrawer";
 import ShareModal from "./ShareModal";
 
 export type UserProfileData = {
@@ -31,11 +29,17 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <ProfileHeader avatar={user.avatar} stats={user.stats} isOwnProfile={isOwnProfile} />
+        <ProfileHeader 
+          avatar={user.avatar} 
+          stats={user.stats} 
+          isOwnProfile={isOwnProfile} 
+          onMenuPress={() => setMenuVisible(true)}
+        />
         <ProfileBio name={user.name} handle={user.handle} bio={user.bio} />
         <ProfileActions isOwnProfile={isOwnProfile} />
         
@@ -52,6 +56,13 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
 
       <CommentsModal visible={commentsVisible} onClose={() => setCommentsVisible(false)} />
       <ShareModal visible={shareVisible} onClose={() => setShareVisible(false)} />
+      
+      <ProfileMenuDrawer 
+        visible={menuVisible} 
+        onClose={() => setMenuVisible(false)} 
+        userName={user.name}
+        userHandle={user.handle}
+      />
     </SafeAreaView>
   );
 }
