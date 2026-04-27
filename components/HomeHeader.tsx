@@ -28,6 +28,15 @@ export default function HomeHeader() {
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
           <Feather name="sliders" size={20} color="#FFFFFF" />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/messages')}>
+          <Feather name="message-square" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.iconBtn, styles.profileBtn]} activeOpacity={0.8} onPress={() => router.push('/profile')}>
+          <Image 
+            source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop" }} 
+            style={styles.avatarMini} 
+          />
+        </TouchableOpacity>
       </View>
 
       <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
@@ -77,6 +86,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   iconBtn: {
-    marginLeft: 20,
+    marginLeft: 15,
+  },
+  profileBtn: {
+    marginLeft: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  avatarMini: {
+    width: '100%',
+    height: '100%',
   },
 });
