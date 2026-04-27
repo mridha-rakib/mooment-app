@@ -123,8 +123,8 @@ export default function EventDashboardScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Ticket Sales</Text>
           <TouchableOpacity style={styles.seeAllBtn}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <Feather name="chevron-down" size={14} color="#8E8E9B" />
+            <Text style={styles.seeAllText}>See Stat</Text>
+            <Feather name="chevron-right" size={14} color="#8E8E9B" />
           </TouchableOpacity>
         </View>
 
