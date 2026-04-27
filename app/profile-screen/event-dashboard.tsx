@@ -1,4 +1,6 @@
 import { Feather } from "@expo/vector-icons";
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
@@ -124,7 +126,7 @@ export default function EventDashboardScreen() {
           <Text style={styles.sectionTitle}>Ticket Sales</Text>
           <TouchableOpacity style={styles.seeAllBtn}>
             <Text style={styles.seeAllText}>See Stat</Text>
-            <Feather name="chevron-right" size={14} color="#8E8E9B" />
+            <HugeiconsIcon icon={ArrowRight02Icon} size={14} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -233,10 +235,10 @@ export default function EventDashboardScreen() {
 
         {/* Products Section */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>20 Products in</Text>
+          <Text style={styles.sectionTitle}>All Product</Text>
           <TouchableOpacity style={styles.seeAllBtn}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <Feather name="chevron-down" size={14} color="#8E8E9B" />
+            <Text style={styles.seeAllText}>See Stat</Text>
+            <HugeiconsIcon icon={ArrowRight02Icon} size={14} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -451,7 +453,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   seeAllText: {
-    color: '#8E8E9B',
+    color: '#FFFFFF',
     fontSize: 12,
   },
   ticketsList: {
