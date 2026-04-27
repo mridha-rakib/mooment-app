@@ -1,6 +1,8 @@
 import AudiencePickerModal from '@/components/AudiencePickerModal';
 import EventPickerModal from '@/components/EventPickerModal';
 import PeopleTagModal from '@/components/PeopleTagModal';
+import { AddTeamIcon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -282,7 +284,7 @@ export default function CreateMomentScreen() {
         {/* People */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
           <View style={styles.toolbarIconBox}>
-            <Feather name="users" size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#FFFFFF'} />
+            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#FFFFFF'} />
           </View>
           <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && { color: '#D4B0EB' }]}>People</Text>
         </TouchableOpacity>
