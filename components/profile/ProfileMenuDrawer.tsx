@@ -17,6 +17,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
+import { useRouter } from "expo-router";
 import React from "react";
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } from "react-native";
 
@@ -49,6 +50,8 @@ const SectionLabel = ({ label }: { label: string }) => (
 );
 
 export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress, userName, userHandle }: MenuDrawerProps) {
+  const router = useRouter();
+
   return (
     <Modal
       visible={visible}
@@ -76,7 +79,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem icon={Bookmark02Icon} label="Saved Posts" onPress={() => {}} />
             <MenuItem icon={Calendar03Icon} label="Draft Events" onPress={() => {}} />
             <MenuItem icon={Calendar01Icon} label="My Plan" onPress={() => {}} />
-            <MenuItem icon={Analytics01Icon} label="Creator Dashboard" onPress={() => {}} />
+            <MenuItem 
+              icon={Analytics01Icon} 
+              label="Creator Dashboard" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/creator-dashboard');
+              }} 
+            />
 
             <View style={styles.separator} />
 
