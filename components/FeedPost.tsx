@@ -1,5 +1,5 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { Share01Icon } from '@hugeicons/core-free-icons';
+import { Share01Icon, Comment02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -314,13 +314,13 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             )}
             {post.commentsCount !== undefined && (
               <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
-                <Feather name="message-circle" size={22} color="#8E8E9B" />
+                <HugeiconsIcon icon={Comment02Icon} size={20} color="#8E8E9B" />
                 <Text style={styles.actionText}>{post.commentsCount}</Text>
               </TouchableOpacity>
             )}
             {post.sharesCount !== undefined && (
               <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
-                <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" variant="stroke" />
+                <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" />
                 <Text style={styles.actionText}>{post.sharesCount}</Text>
               </TouchableOpacity>
             )}
