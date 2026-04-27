@@ -56,7 +56,7 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
     // Logic for publishing/saving (mocked)
     onClose();
     if (!initialData) {
-      router.push('/profile/inventory');
+      router.push('/profile-screen/inventory');
     }
   };
 

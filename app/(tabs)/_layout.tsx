@@ -47,7 +47,7 @@ export default function TabLayout() {
         }}
       />
       <ExpoTabs.Screen
-        name="profile/profile"
+        name="profile"
         options={{
           tabBarIcon: ({ color, focused }) => (
             <View style={[styles.profileAvatar, focused && styles.profileAvatarActive]}>

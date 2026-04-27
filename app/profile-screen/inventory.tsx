@@ -53,7 +53,7 @@ export default function InventoryScreen() {
             style={styles.viewBtn} 
             activeOpacity={0.8}
             onPress={() => router.push({
-              pathname: '/profile/product-details',
+              pathname: '/profile-screen/product-details',
               params: { name: item.name, image: item.image }
             })}
           >
