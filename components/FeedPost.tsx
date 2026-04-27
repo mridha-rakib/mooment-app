@@ -761,18 +761,18 @@ const styles = StyleSheet.create({
   },
   productFooterPrice: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
   },
   productViewBtn: {
-    backgroundColor: '#D0D0D8',
+    backgroundColor: '#B2ABBA',
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   productViewBtnText: {
-    color: '#000000',
-    fontSize: 12,
+    color: '#0e0d12',
+    fontSize: 13,
     fontWeight: 'bold',
   },
   /* Modal & More Menu Styles */

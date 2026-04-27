@@ -1,9 +1,9 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import FeedPost, { PostData } from "../FeedPost";
-import { ProfileTabType } from "./ProfileTabs";
-
 import ProfileEvents from "./ProfileEvents";
+import ProfileShop from "./ProfileShop";
+import { ProfileTabType } from "./ProfileTabs";
 
 type ProfileContentProps = {
   activeTab: ProfileTabType;
@@ -34,9 +34,10 @@ export default function ProfileContent({ activeTab, posts, onCommentPress, onSha
       )}
       
       {activeTab === 'shop' && (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No products listed yet.</Text>
-        </View>
+        <ProfileShop 
+          onCommentPress={onCommentPress} 
+          onSharePress={onSharePress} 
+        />
       )}
     </View>
   );
