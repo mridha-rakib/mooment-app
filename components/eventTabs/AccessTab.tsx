@@ -113,31 +113,33 @@ const AccessTab = () => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.ticketHeader}>
-          <Text style={styles.ticketType}>General Ticket</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>42 left</Text>
+        <View style={styles.ticketInnerCard}>
+          <View style={styles.ticketHeader}>
+            <Text style={styles.ticketType}>General Ticket</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>42 left</Text>
+            </View>
           </View>
-        </View>
-        <Text style={styles.ticketDesc}>Entry from 9pm. Standing only.</Text>
-        <Text style={styles.expiryText}>
-          Expires in • Sat, Sep 19 • 4:00 PM
-        </Text>
-        
-        <View style={styles.ticketFooter}>
-           <View>
-              <Text style={styles.ticketPrice}>£45</Text>
-              <Text style={styles.perTicketText}>per ticket</Text>
-           </View>
-           <View style={styles.counter}>
-              <TouchableOpacity style={styles.counterBtn}>
-                <Feather name="minus" size={14} color={COLORS.textMuted} />
-              </TouchableOpacity>
-              <Text style={styles.counterValue}>1</Text>
-              <TouchableOpacity style={styles.counterBtnActive}>
-                <Feather name="plus" size={14} color={COLORS.text} />
-              </TouchableOpacity>
-           </View>
+          <Text style={styles.ticketDesc}>Entry from 9pm. Standing only.</Text>
+          <Text style={styles.expiryText}>
+            Expires in • Sat, Sep 19 • 4:00 PM
+          </Text>
+          
+          <View style={styles.ticketFooter}>
+             <View>
+                <Text style={styles.ticketPrice}>£45</Text>
+                <Text style={styles.perTicketText}>per ticket</Text>
+             </View>
+             <View style={styles.counter}>
+                <TouchableOpacity style={styles.counterBtn}>
+                  <Feather name="minus" size={16} color={COLORS.text} />
+                </TouchableOpacity>
+                <Text style={styles.counterValue}>1</Text>
+                <TouchableOpacity style={styles.counterBtn}>
+                  <Feather name="plus" size={16} color={COLORS.text} />
+                </TouchableOpacity>
+             </View>
+          </View>
         </View>
       </View>
 
@@ -154,61 +156,65 @@ const AccessTab = () => {
           </View>
         </View>
 
-        <View style={styles.ticketHeader}>
-          <Text style={styles.ticketType}>VIP</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>42 left</Text>
+        <View style={styles.ticketInnerCard}>
+          <View style={styles.ticketHeader}>
+            <Text style={styles.ticketType}>VIP</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>42 left</Text>
+            </View>
           </View>
-        </View>
-        <Text style={styles.ticketDesc}>Priority entry. Includes seated area and complimentary drinks.</Text>
-        <Text style={styles.expiryText}>
-          Expires in • Sat, Sep 19 • 4:00 PM
-        </Text>
-        
-        <View style={styles.ticketFooter}>
-           <View>
-              <Text style={styles.ticketPrice}>£85</Text>
-              <Text style={styles.perTicketText}>per ticket</Text>
-           </View>
-           <View style={styles.counter}>
-              <TouchableOpacity style={styles.counterBtn}>
-                <Feather name="minus" size={14} color={COLORS.textMuted} />
-              </TouchableOpacity>
-              <Text style={styles.counterValue}>1</Text>
-              <TouchableOpacity style={styles.counterBtnActive}>
-                <Feather name="plus" size={14} color={COLORS.text} />
-              </TouchableOpacity>
-           </View>
+          <Text style={styles.ticketDesc}>Priority entry. Includes seated area and complimentary drinks.</Text>
+          <Text style={styles.expiryText}>
+            Expires in • Sat, Sep 19 • 4:00 PM
+          </Text>
+          
+          <View style={styles.ticketFooter}>
+             <View>
+                <Text style={styles.ticketPrice}>£85</Text>
+                <Text style={styles.perTicketText}>per ticket</Text>
+             </View>
+             <View style={styles.counter}>
+                <TouchableOpacity style={styles.counterBtn}>
+                  <Feather name="minus" size={16} color={COLORS.text} />
+                </TouchableOpacity>
+                <Text style={styles.counterValue}>1</Text>
+                <TouchableOpacity style={styles.counterBtn}>
+                  <Feather name="plus" size={16} color={COLORS.text} />
+                </TouchableOpacity>
+             </View>
+          </View>
         </View>
       </View>
 
       {/* Early Bird (Sold Out) */}
       <View style={[styles.ticketCard, { opacity: 0.5 }]}>
-        <View style={styles.ticketHeader}>
-          <Text style={styles.ticketType}>Early Bird</Text>
-          <View style={[styles.countBadge, { backgroundColor: 'rgba(255, 77, 77, 0.1)' }]}>
-            <Text style={[styles.countBadgeText, { color: '#FF4D4D' }]}>Sold Out</Text>
+        <View style={styles.ticketInnerCard}>
+          <View style={styles.ticketHeader}>
+            <Text style={styles.ticketType}>Early Bird</Text>
+            <View style={[styles.countBadge, { backgroundColor: 'rgba(255, 77, 77, 0.1)' }]}>
+              <Text style={[styles.countBadgeText, { color: '#FF4D4D' }]}>Sold Out</Text>
+            </View>
           </View>
-        </View>
-        <Text style={styles.ticketDesc}>Entry from 9pm. Standing only.</Text>
-        <Text style={styles.expiryText}>
-          Expires in • Sat, Sep 19 • 4:00 PM
-        </Text>
-        
-        <View style={styles.ticketFooter}>
-           <View>
-              <Text style={styles.ticketPrice}>£30</Text>
-              <Text style={styles.perTicketText}>per ticket</Text>
-           </View>
-           <View style={styles.counter}>
-              <View style={styles.counterBtn}>
-                <Feather name="minus" size={14} color={COLORS.border} />
-              </View>
-              <Text style={[styles.counterValue, { color: COLORS.border }]}>1</Text>
-              <View style={styles.counterBtn}>
-                <Feather name="plus" size={14} color={COLORS.border} />
-              </View>
-           </View>
+          <Text style={styles.ticketDesc}>Entry from 9pm. Standing only.</Text>
+          <Text style={styles.expiryText}>
+            Expires in • Sat, Sep 19 • 4:00 PM
+          </Text>
+          
+          <View style={styles.ticketFooter}>
+             <View>
+                <Text style={styles.ticketPrice}>£30</Text>
+                <Text style={styles.perTicketText}>per ticket</Text>
+             </View>
+             <View style={styles.counter}>
+                <View style={styles.counterBtn}>
+                  <Feather name="minus" size={16} color={COLORS.border} />
+                </View>
+                <Text style={[styles.counterValue, { color: COLORS.border }]}>1</Text>
+                <View style={styles.counterBtn}>
+                  <Feather name="plus" size={16} color={COLORS.border} />
+                </View>
+             </View>
+          </View>
         </View>
       </View>
 
@@ -431,45 +437,48 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   ticketCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: "#161521",
+    borderRadius: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    overflow: "hidden",
   },
   rewardAppliedRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+    padding: 16,
   },
   rewardLeft: {
     flex: 1,
   },
   rewardTitle: {
     color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "bold",
-    marginBottom: 2,
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 6,
   },
   rewardSub: {
     color: COLORS.textMuted,
-    fontSize: 12,
+    fontSize: 14,
   },
   claimBtn: {
     backgroundColor: COLORS.text,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
   claimBtnText: {
     color: "#000000",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "bold",
+  },
+  ticketInnerCard: {
+    backgroundColor: "#0F0E13",
+    borderRadius: 18,
+    margin: 4,
+    padding: 16,
   },
   claimedBadge: {
     flexDirection: "row",
@@ -488,77 +497,70 @@ const styles = StyleSheet.create({
   ticketHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
+    gap: 12,
+    marginBottom: 12,
   },
   ticketType: {
-    color: COLORS.text,
-    fontSize: 18,
+    color: "#B8B8C1",
+    fontSize: 22,
     fontWeight: "bold",
   },
   countBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
+    backgroundColor: "#313036",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   countBadgeText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: "bold",
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
   ticketDesc: {
-    color: COLORS.textMuted,
-    fontSize: 13,
+    color: "#8E8E9B",
+    fontSize: 15,
     marginBottom: 8,
   },
   expiryText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    marginBottom: 16,
+    color: "#8E8E9B",
+    fontSize: 13,
+    marginBottom: 20,
   },
   ticketFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "center",
   },
   ticketPrice: {
     color: COLORS.text,
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "bold",
   },
   perTicketText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
+    color: "#8E8E9B",
+    fontSize: 12,
+    marginTop: 2,
   },
   counter: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 12,
-    padding: 4,
-    gap: 12,
+    backgroundColor: "#222129",
+    borderRadius: 14,
+    padding: 6,
+    gap: 14,
   },
   counterBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  counterBtnActive: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#313036",
     justifyContent: "center",
     alignItems: "center",
   },
   counterValue: {
     color: COLORS.text,
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 24,
+    fontWeight: "600",
   },
   secureBadge: {
     flexDirection: "row",

@@ -6,9 +6,10 @@ import {
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
+
 const { width } = Dimensions.get('window');
 const QR_SIZE = width * 0.72;
-const QR_IMG = 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/480px-QR_code_for_mobile_English_Wikipedia.svg.png';
 
 export default function QRCodeScreen() {
   const router = useRouter();
@@ -82,7 +83,14 @@ export default function QRCodeScreen() {
 
             {/* QR Code */}
             <View style={styles.qrWrapper}>
-              <Image source={{ uri: QR_IMG }} style={styles.qrImage} resizeMode="contain" />
+              <View style={styles.qrContainer}>
+                <QRCode
+                  value="MOM-2026-8741"
+                  size={QR_SIZE}
+                  backgroundColor="white"
+                  color="black"
+                />
+              </View>
             </View>
 
             {/* Success message */}
@@ -120,7 +128,12 @@ export default function QRCodeScreen() {
             {/* QR Code */}
             <View style={styles.qrWrapper}>
               <View style={styles.qrContainer}>
-                <Image source={{ uri: QR_IMG }} style={styles.qrImage} resizeMode="contain" />
+                <QRCode
+                  value="MOM-2026-8741"
+                  size={QR_SIZE}
+                  backgroundColor="white"
+                  color="black"
+                />
               </View>
             </View>
           </>

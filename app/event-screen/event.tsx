@@ -59,7 +59,7 @@ const EventScreen = () => {
         style={styles.headerBtn} 
         activeOpacity={0.8}
         onPress={() => router.push("/event-screen/wallet")}
-      >
+      > 
         <LinearGradient
           colors={["#18181c", "#c1c0c5", "#18181c"]}
           start={{ x: 1, y: 0 }}
