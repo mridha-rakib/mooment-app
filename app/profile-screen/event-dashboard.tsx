@@ -124,7 +124,10 @@ export default function EventDashboardScreen() {
         {/* Ticket Sales */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Ticket Sales</Text>
-          <TouchableOpacity style={styles.seeAllBtn}>
+          <TouchableOpacity 
+            style={styles.seeAllBtn}
+            onPress={() => router.push('/profile-screen/ticket-stat')}
+          >
             <Text style={styles.seeAllText}>See Stat</Text>
             <HugeiconsIcon icon={ArrowRight02Icon} size={14} color="#FFFFFF" />
           </TouchableOpacity>
