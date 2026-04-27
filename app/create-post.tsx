@@ -1,12 +1,14 @@
 import AudiencePickerModal from '@/components/AudiencePickerModal';
 import EventPickerModal from '@/components/EventPickerModal';
 import PeopleTagModal from '@/components/PeopleTagModal';
-import { AddTeamIcon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { AddTeamIcon, Image01Icon, MusicNote04Icon, Video02Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Alert, Dimensions, Image, Modal, Platform,
   SafeAreaView, ScrollView, StatusBar, StyleSheet,
@@ -283,33 +285,33 @@ export default function CreateMomentScreen() {
       <View style={styles.toolbar}>
         {/* People */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#FFFFFF'} />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#B3B3B3'} />
+          </BlurView>
           <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && { color: '#D4B0EB' }]}>People</Text>
         </TouchableOpacity>
 
         {/* Image / Gallery */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="image" size={22} color={selectedImage && mode === 'feed' ? '#D4B0EB' : '#FFFFFF'} />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage && mode === 'feed' ? '#D4B0EB' : '#B3B3B3'} />
+          </BlurView>
           <Text style={[styles.toolbarLabel, selectedImage && mode === 'feed' && { color: '#D4B0EB' }]}>Image</Text>
         </TouchableOpacity>
 
         {/* Camera */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowCamera(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="camera" size={22} color="#FFFFFF" />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <Feather name="camera" size={22} color="#B3B3B3" />
+          </BlurView>
           <Text style={styles.toolbarLabel}>Camera</Text>
         </TouchableOpacity>
 
         {/* Video */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <View style={styles.toolbarIconBox}>
-            <Feather name="video" size={22} color="#FFFFFF" />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={Video02Icon} size={22} color="#B3B3B3" />
+          </BlurView>
           <Text style={styles.toolbarLabel}>Video</Text>
         </TouchableOpacity>
 
@@ -319,9 +321,9 @@ export default function CreateMomentScreen() {
           onPress={() => Alert.alert('Audio', 'Record or choose audio for your moment')}
           activeOpacity={0.8}
         >
-          <View style={styles.toolbarIconBox}>
-            <MaterialCommunityIcons name="music-note" size={22} color="#FFFFFF" />
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <HugeiconsIcon icon={MusicNote04Icon} size={22} color="#B3B3B3" />
+          </BlurView>
           <Text style={styles.toolbarLabel}>Audio</Text>
         </TouchableOpacity>
       </View>
@@ -398,6 +400,6 @@ const styles = StyleSheet.create({
 
   toolbar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#13131A', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#0e0d12' },
   toolbarItem: { flex: 1, alignItems: 'center', gap: 5 },
-  toolbarIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#13131A', justifyContent: 'center', alignItems: 'center' },
+  toolbarIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(104, 104, 104, 0.1)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   toolbarLabel: { color: '#8E8E9B', fontSize: 11 },
 });
