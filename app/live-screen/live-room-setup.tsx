@@ -22,7 +22,7 @@ export default function LiveRoomSetupScreen() {
 
   const handleContinue = () => {
     if (roomName.trim()) {
-      router.replace('/live-video' as any);
+      router.replace('/live-screen/live-video' as any);
     }
   };
 

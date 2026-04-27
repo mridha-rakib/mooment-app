@@ -16,7 +16,7 @@ export default function SetPasswordInfo() {
         <View style={styles.graphicContainer}>
           <View />
           <Image
-            source={require("../assets/images/set-password.png")}
+            source={require("../../assets/images/set-password.png")}
             style={styles.graphic}
             width={218}
             height={312}
@@ -34,7 +34,7 @@ export default function SetPasswordInfo() {
         <TouchableOpacity
           style={styles.continueButton}
           activeOpacity={0.8}
-          onPress={() => router.push("/new-password")}
+          onPress={() => router.push('/auth-screen/new-password')}
         >
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>

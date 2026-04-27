@@ -16,7 +16,7 @@ import {
   TermsAgreement,
   CheckoutFooter,
   COLORS,
-} from "../../../components/event/checkout";
+} from "@/components/event/checkout";
 
 const ProductCheckoutScreen = () => {
   const router = useRouter();
@@ -76,7 +76,7 @@ const ProductCheckoutScreen = () => {
 
       <View style={styles.footerWrapper}>
         <CheckoutFooter 
-          onPress={() => router.push({ pathname: "/qr-code", params: { type: "product" } })} 
+          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "product" } })} 
         />
       </View>
     </View>

@@ -40,7 +40,7 @@ export default function NewMessageScreen() {
   const handleNext = () => {
     if (selected.length === 0) return;
     const first = selected[0];
-    router.push({ pathname: '/chat-detail', params: { id: first.id, name: first.name, avatar: first.avatar } });
+    router.push({ pathname: '/chat-screen/chat-detail', params: { id: first.id, name: first.name, avatar: first.avatar } });
   };
 
   return (

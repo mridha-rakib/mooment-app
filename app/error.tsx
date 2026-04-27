@@ -29,7 +29,7 @@ export default function ErrorScreen() {
           <TouchableOpacity 
             style={styles.retryButton} 
             activeOpacity={0.8}
-            onPress={() => router.push("/verify-email")}
+            onPress={() => router.push('/auth-screen/verify-email')}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>

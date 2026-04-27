@@ -13,10 +13,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AboutTab from "../../components/eventTabs/AboutTab";
-import AccessTab from "../../components/eventTabs/AccessTab";
-import VibeTab from "../../components/eventTabs/VibeTab";
-import ProductTab from "../../components/eventTabs/ProductTab";
+import AboutTab from "@/components/eventTabs/AboutTab";
+import AccessTab from "@/components/eventTabs/AccessTab";
+import VibeTab from "@/components/eventTabs/VibeTab";
+import ProductTab from "@/components/eventTabs/ProductTab";
 
 const { width } = Dimensions.get("window");
 

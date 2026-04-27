@@ -106,7 +106,7 @@ const VibeTab = () => {
               
               <TouchableOpacity 
                 style={styles.joinBtn}
-                onPress={() => router.push("/event-details")}
+                onPress={() => router.push('/event-screen/event-details')}
               >
                 <Text style={styles.joinBtnText}>Join</Text>
               </TouchableOpacity>

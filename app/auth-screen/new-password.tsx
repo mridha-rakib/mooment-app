@@ -29,7 +29,7 @@ export default function NewPassword() {
           <View style={styles.header}>
             {/* <Text style={styles.logoText}>Mooment</Text> */}
             <Image
-              source={require("../assets/images/Mooment.png")}
+              source={require("../../assets/images/Mooment.png")}
               style={{ width: 147, height: 120, marginBottom: 40 }}
               contentFit="contain"
             />
@@ -96,7 +96,7 @@ export default function NewPassword() {
           <TouchableOpacity
             style={styles.continueButton}
             activeOpacity={0.8}
-            onPress={() => router.push("/success-changed")}
+            onPress={() => router.push('/auth-screen/success-changed')}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>

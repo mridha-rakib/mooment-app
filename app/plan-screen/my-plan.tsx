@@ -99,7 +99,7 @@ export default function MyPlanScreen() {
             <View style={s.emptyIcon}><Feather name="star" size={28} color="#8E8E9B" /></View>
             <Text style={s.emptyTitle}>No Activity yet</Text>
             <Text style={s.emptyDesc}>Make plan with your friends, and family. Search events that are currently going on map</Text>
-            <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/search' as any)}>
+            <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search' as any)}>
               <Text style={s.discoverText}>Go discover something</Text>
             </TouchableOpacity>
           </View>
@@ -191,7 +191,7 @@ export default function MyPlanScreen() {
                 <View style={s.emptyIcon}><Feather name="star" size={28} color="#8E8E9B" /></View>
                 <Text style={s.emptyTitle}>No Activity yet</Text>
                 <Text style={s.emptyDesc}>Make plan with your friends, and family. Search events that are currently going on map</Text>
-                <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/search' as any)}>
+                <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search' as any)}>
                   <Text style={s.discoverText}>Go discover something</Text>
                 </TouchableOpacity>
               </View>
@@ -210,7 +210,7 @@ export default function MyPlanScreen() {
                 {popupEvent.venue && <Text style={s.popupVenue}>{popupEvent.venue}</Text>}
                 <Text style={s.popupTime}>{popupEvent.time}</Text>
                 <View style={s.popupBtns}>
-                  <TouchableOpacity style={s.popupBtnMore} activeOpacity={0.8} onPress={() => { setPopupEvent(null); router.push('/event-details' as any); }}>
+                  <TouchableOpacity style={s.popupBtnMore} activeOpacity={0.8} onPress={() => { setPopupEvent(null); router.push('/event-screen/event-details' as any); }}>
                     <Text style={s.popupBtnMoreText}>More</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.popupBtnLeave} activeOpacity={0.8} onPress={() => setPopupEvent(null)}>

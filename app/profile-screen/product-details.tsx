@@ -5,7 +5,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Dimensions } from "react-native";
-import AddProductModal from "../../components/profile/AddProductModal";
+import AddProductModal from "@/components/profile/AddProductModal";
 
 const { width } = Dimensions.get('window');
 

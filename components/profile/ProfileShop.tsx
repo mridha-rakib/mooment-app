@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import FeedPost, { PostData } from "../FeedPost";
+import FeedPost, { PostData } from "../post/FeedPost";
 
 const MOCK_PRODUCTS: PostData[] = [
   {

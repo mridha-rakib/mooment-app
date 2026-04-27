@@ -123,7 +123,7 @@ export default function MessagesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, { marginLeft: 8 }]}
-            onPress={() => router.push('/new-message')}
+            onPress={() => router.push('/chat-screen/new-message')}
             activeOpacity={0.8}
           >
             <Feather name="plus" size={20} color="#FFFFFF" />
@@ -209,7 +209,7 @@ export default function MessagesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.convoRow}
-            onPress={() => router.push({ pathname: '/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+            onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
             activeOpacity={0.85}
           >
             {renderAvatar(item)}

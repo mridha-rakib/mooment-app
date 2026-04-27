@@ -127,7 +127,7 @@ export default function SignUp() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push("/login")}>
+            <TouchableOpacity onPress={() => router.push('/auth-screen/login')}>
               <Text style={styles.loginText}>Log In</Text>
             </TouchableOpacity>
           </View>
@@ -156,7 +156,7 @@ export default function SignUp() {
               activeOpacity={0.8}
               onPress={() => {
                 setShowSuccessModal(false);
-                router.push("/onboarding-settings");
+                router.push('/auth-screen/onboarding-settings');
               }}
             >
               <Text style={styles.modalButtonText}>Add My Profile</Text>

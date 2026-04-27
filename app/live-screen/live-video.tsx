@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, SafeAreaVi
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import CommentsModal from '../components/CommentsModal';
-import ShareModal from '../components/ShareModal';
+import CommentsModal from "@/components/post/CommentsModal";
+import ShareModal from "@/components/post/ShareModal";
 
 const { width, height } = Dimensions.get('window');
 
@@ -49,7 +49,7 @@ export default function LiveVideoScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/search')}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/discover-screen/search')}>
             <Feather name="search" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>

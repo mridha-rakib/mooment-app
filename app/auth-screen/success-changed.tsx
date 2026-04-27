@@ -11,7 +11,7 @@ export default function SuccessChanged() {
       <View style={styles.container}>
         <View style={styles.content}>
           
-          <Image source={require("../assets/images/success.png")} style={{ width: 147, height: 170, marginBottom: 40 }} />
+          <Image source={require("../../assets/images/success.png")} style={{ width: 147, height: 170, marginBottom: 40 }} />
 
           <View style={styles.textContainer}>
             <Text style={styles.title}>Successfully Changed</Text>
@@ -23,7 +23,7 @@ export default function SuccessChanged() {
           <TouchableOpacity 
             style={styles.backLink} 
             activeOpacity={0.8}
-            onPress={() => router.push("/login")}
+            onPress={() => router.push('/auth-screen/login')}
           >
             <HugeiconsIcon icon={ChevronLeft} size={16} color="#8E8E9B" />
             <Text style={styles.backLinkText}>Back to Login</Text>

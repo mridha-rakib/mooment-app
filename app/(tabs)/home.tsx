@@ -2,15 +2,15 @@ import React from "react";
 import { Dimensions, Platform, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 
 // Components
-import HomeHeader from "@/components/HomeHeader";
-import CommentsModal from "../../components/CommentsModal";
-import FeaturedProducts, { ProductData } from "../../components/FeaturedProducts";
-import FeedPost, { PostData } from "../../components/FeedPost";
-import HighlightsCarousel, { HighlightData } from "../../components/HighlightsCarousel";
-import LiveChatBanner from "../../components/LiveChatBanner";
-import PeopleToFollow, { SuggestedUser } from "../../components/PeopleToFollow";
-import ShareModal from "../../components/ShareModal";
-import StoryCarousel, { StoryData } from "../../components/StoryCarousel";
+import HomeHeader from "@/components/home/HomeHeader";
+import CommentsModal from "@/components/post/CommentsModal";
+import FeaturedProducts, { ProductData } from "@/components/home/FeaturedProducts";
+import FeedPost, { PostData } from "@/components/post/FeedPost";
+import HighlightsCarousel, { HighlightData } from "@/components/home/HighlightsCarousel";
+import LiveChatBanner from "@/components/live/LiveChatBanner";
+import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
+import ShareModal from "@/components/post/ShareModal";
+import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
 
 const { width } = Dimensions.get("window");
 
