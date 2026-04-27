@@ -1,3 +1,4 @@
+import { BlurView } from "expo-blur";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import FeedPost, { PostData } from "../FeedPost";
@@ -45,21 +46,23 @@ export default function ProfileEvents({ onCommentPress, onSharePress }: ProfileE
   return (
     <View style={styles.container}>
       {/* Toggle */}
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity 
-          style={[styles.toggleBtn, filter === 'active' && styles.toggleBtnActive]} 
-          onPress={() => setFilter('active')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.toggleText, filter === 'active' && styles.toggleTextActive]}>Active</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.toggleBtn, filter === 'past' && styles.toggleBtnActive]} 
-          onPress={() => setFilter('past')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.toggleText, filter === 'past' && styles.toggleTextActive]}>Past</Text>
-        </TouchableOpacity>
+      <View style={styles.toggleWrapper}>
+        <BlurView intensity={20} tint="dark" style={styles.toggleContainer}>
+          <TouchableOpacity 
+            style={[styles.toggleBtn, filter === 'active' && styles.toggleBtnActive]} 
+            onPress={() => setFilter('active')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.toggleText, filter === 'active' && styles.toggleTextActive]}>Active</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.toggleBtn, filter === 'past' && styles.toggleBtnActive]} 
+            onPress={() => setFilter('past')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.toggleText, filter === 'past' && styles.toggleTextActive]}>Past</Text>
+          </TouchableOpacity>
+        </BlurView>
       </View>
 
       {/* Events List */}
@@ -81,26 +84,31 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 15,
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#13131A',
+  toggleWrapper: {
     marginHorizontal: 16,
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(104, 104, 104, 0.1)', // #686868 at 10%
     padding: 4,
-    borderWidth: 1,
-    borderColor: '#1A1A22',
+    height: 40,
+    alignItems: 'center',
+    gap: 12, // Gap from Figma
   },
   toggleBtn: {
     flex: 1,
-    paddingVertical: 10,
+    height: '100%',
+    justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
   },
   toggleBtnActive: {
-    backgroundColor: '#2A2A3A',
+    backgroundColor: 'rgba(104, 104, 104, 0.4)', // #686868 at 40%
   },
   toggleText: {
-    color: '#8E8E9B',
+    color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 14,
     fontWeight: '600',
   },
