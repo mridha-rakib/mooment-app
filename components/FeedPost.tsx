@@ -1,4 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { Share01Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
@@ -318,7 +320,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             )}
             {post.sharesCount !== undefined && (
               <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
-                <Feather name="share" size={22} color="#8E8E9B" />
+                <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" variant="stroke" />
                 <Text style={styles.actionText}>{post.sharesCount}</Text>
               </TouchableOpacity>
             )}
@@ -451,7 +453,7 @@ const styles = StyleSheet.create({
     borderColor: "#D4B0EB", 
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
     marginRight: 10,
   },
   followBtnText: {
@@ -464,7 +466,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
     marginRight: 10,
   },
   followingBtnText: {

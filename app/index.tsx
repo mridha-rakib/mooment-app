@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import React, { useEffect } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, ImageBackground } from "react-native";
 
 export default function Splash() {
   useEffect(() => {
@@ -12,15 +12,11 @@ export default function Splash() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoContainer}>
-        <Image 
-          source={require("../assets/images/logo.png")} 
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
-    </View>
+    <ImageBackground 
+      source={require("../assets/images/Splash-one.jpg")}
+      style={styles.container}
+      resizeMode="cover"
+    />
   );
 }
 
@@ -30,21 +26,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
     justifyContent: "center",
     alignItems: "center",
-  },
-  logoContainer: {
-    width: 120,
-    height: 120,
-    justifyContent: "center",
-    alignItems: "center",
-    // Glowing aura effect
-    shadowColor: "#8E54E9",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 30,
-    elevation: 20,
-  },
-  logo: {
-    width: 100,
-    height: 100,
   },
 });
