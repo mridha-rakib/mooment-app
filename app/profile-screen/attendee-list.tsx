@@ -4,82 +4,77 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-type TicketStatItem = {
+type AttendeeItem = {
   id: string;
   name: string;
   handle: string;
   avatar: string;
   status: 'success' | 'failed' | 'pending';
-  ticketType: string;
-  amount: string;
+  isFollowing: boolean;
 };
 
-const STAT_DATA: TicketStatItem[] = [
+const ATTENDEE_DATA: AttendeeItem[] = [
   {
     id: '1',
-    name: 'Tuval Mor',
-    handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
+    name: 'Dj Koko',
+    handle: '@sdfd_d',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
     status: 'success',
-    ticketType: 'General Ticket',
-    amount: '$45.00',
+    isFollowing: false,
   },
   {
     id: '2',
-    name: 'Tuval Mor',
-    handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
-    status: 'failed',
-    ticketType: 'Early Bird',
-    amount: '$45.00',
+    name: 'Dj Koko',
+    handle: '@sdfd_d',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    status: 'success',
+    isFollowing: false,
   },
   {
     id: '3',
-    name: 'Tuval Mor',
-    handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
-    status: 'success',
-    ticketType: 'VIP',
-    amount: '$45.00',
+    name: 'Dj Koko',
+    handle: '@sdfd_d',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    status: 'pending',
+    isFollowing: false,
   },
   {
     id: '4',
-    name: 'Tuval Mor',
-    handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
-    status: 'pending',
-    ticketType: 'VIP',
-    amount: '$45.00',
+    name: 'Dj Koko',
+    handle: '@sdfd_d',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    status: 'failed',
+    isFollowing: true,
   },
 ];
 
-export default function TicketStatScreen() {
+export default function AttendeeListScreen() {
   const router = useRouter();
 
-  const getStatusIcon = (status: TicketStatItem['status']) => {
+  const getStatusIcon = (status: AttendeeItem['status']) => {
     switch (status) {
       case 'success':
         return (
-          <View style={[styles.statusCircle, { backgroundColor: '#2DB46D' }]}>
-            <Feather name="check" size={14} color="#FFFFFF" />
+          <View style={[styles.statusCircle, { backgroundColor: 'rgba(45, 180, 109, 0.15)' }]}>
+            <Feather name="check" size={14} color="#2DB46D" />
           </View>
         );
       case 'failed':
         return (
-          <View style={[styles.statusCircle, { backgroundColor: '#D64646' }]}>
-            <Feather name="x" size={14} color="#FFFFFF" />
+          <View style={[styles.statusCircle, { backgroundColor: 'rgba(214, 70, 70, 0.15)' }]}>
+            <Feather name="x" size={14} color="#D64646" />
           </View>
         );
       case 'pending':
         return (
-          <View style={[styles.statusCircle, { backgroundColor: '#8E8E9B' }]}>
-            <Feather name="minus" size={14} color="#0e0d12" />
+          <View style={[styles.statusCircle, { backgroundColor: 'rgba(142, 142, 155, 0.15)' }]}>
+            <Feather name="minus" size={14} color="#8E8E9B" />
           </View>
         );
     }
   };
 
-  const renderItem = ({ item }: { item: TicketStatItem }) => (
+  const renderItem = ({ item }: { item: AttendeeItem }) => (
     <View style={styles.statRow}>
       <View style={styles.userInfo}>
         <View style={styles.avatarContainer}>
@@ -91,12 +86,22 @@ export default function TicketStatScreen() {
         </View>
       </View>
       
-      <View style={styles.ticketInfo}>
+      <View style={styles.statusContainer}>
         {getStatusIcon(item.status)}
-        <Text style={styles.ticketType}>{item.ticketType}</Text>
       </View>
 
-      <Text style={styles.amount}>{item.amount}</Text>
+      <View style={styles.actionContainer}>
+        {item.isFollowing ? (
+          <TouchableOpacity style={styles.followingBtn}>
+            <Feather name="check" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.followingText}>Following</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.followBtn}>
+            <Text style={styles.followText}>Follow</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 
@@ -107,12 +112,12 @@ export default function TicketStatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="chevron-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ticket Stat</Text>
+        <Text style={styles.headerTitle}>Attendee List</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <FlatList
-        data={STAT_DATA}
+        data={ATTENDEE_DATA}
         keyExtractor={item => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
@@ -170,14 +175,14 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '40%', // Adjust width allocation
+    width: '45%',
   },
   avatarContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#D84B79', // Pinkish border as per design
+    borderColor: '#D84B79',
     padding: 2,
     marginRight: 12,
   },
@@ -196,30 +201,45 @@ const styles = StyleSheet.create({
     color: '#8E8E9B',
     fontSize: 12,
   },
-  ticketInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '40%',
+  statusContainer: {
+    flex: 1,
+    alignItems: 'flex-start',
   },
   statusCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
   },
-  ticketType: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  actionContainer: {
+    alignItems: 'flex-end',
+  },
+  followBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#3B3B45',
+    backgroundColor: 'transparent',
+  },
+  followText: {
+    color: '#E0E0E0',
+    fontSize: 12,
     fontWeight: '600',
   },
-  amount: {
+  followingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#1A1A22',
+  },
+  followingText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-    width: '20%',
-    textAlign: 'right',
+    fontSize: 12,
+    fontWeight: '600',
   },
   separator: {
     height: 1,

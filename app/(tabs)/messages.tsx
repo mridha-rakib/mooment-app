@@ -1,10 +1,19 @@
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
+import { PencilEdit02Icon } from '@hugeicons/core-free-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, Image, TextInput, Platform, StatusBar, Dimensions
+  Dimensions,
+  FlatList, Image,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -23,13 +32,7 @@ export type ConversationData = {
   isMuted?: boolean;
 };
 
-const ACTIVE_USERS = [
-  { id: 'a1', name: 'Brooklyn', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a2', name: 'Ketty', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a3', name: 'Dj Koko', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a4', name: 'Tuval', avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a5', name: 'Mavrick', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop' },
-];
+
 
 const CONVERSATIONS: ConversationData[] = [
   {
@@ -70,18 +73,56 @@ const CONVERSATIONS: ConversationData[] = [
     id: 'c8', name: 'Giden Xenog', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
     lastMessage: 'Check out this event!', time: '1d', unread: 0, isOnline: false, isGroup: false,
   },
+  {
+    id: 'c9', name: 'Adam Smith', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150',
+    lastMessage: 'Hello there, are you alive?!?', time: '1m ago', unread: 1, isOnline: false, isGroup: true, isMuted: true,
+  },
+  {
+    id: 'c10', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150',
+    lastMessage: 'Nice to meet you too!', time: '1m ago', unread: 0, isOnline: false, isGroup: true,
+  },
+  {
+    id: 'c11', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150',
+    lastMessage: 'Looking forward to our collaboration!', time: '20 min ago', unread: 0, isOnline: false, isGroup: true,
+  },
+  {
+    id: 'c12', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150',
+    lastMessage: 'Thanks for the update!', time: '15 min ago', unread: 0, isOnline: false, isGroup: true,
+  },
 ];
+
+const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
+  id: `r${i}`,
+  title: 'Pre-show chat with DJ Nova',
+  hostName: 'DJ Nova',
+  isHost: i === 0 || i === 2, // first item in each row has Host badge
+  hostAvatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
+  listeners: 412,
+  listenerAvatars: [
+    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+  ]
+}));
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'All' | 'Unread' | 'Groups'>('All');
+  const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Blocked'>('All');
+  const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
+  const [roomTab, setRoomTab] = useState<'Event Rooms' | 'General Rooms'>('Event Rooms');
 
   const filtered = CONVERSATIONS.filter(c => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
-    if (activeTab === 'Unread') return matchSearch && c.unread > 0;
-    if (activeTab === 'Groups') return matchSearch && c.isGroup;
-    return matchSearch;
+    let match = true;
+    if (topTab === 'Unread') match = c.unread > 0;
+    if (topTab === 'Blocked') match = c.isGroup;
+    
+    if (match) {
+      if (subTab === 'DMs') return !c.isGroup;
+      if (subTab === 'Groups') return c.isGroup;
+      return false;
+    }
+    return false;
   });
 
   const renderAvatar = (item: ConversationData) => {
@@ -110,131 +151,208 @@ export default function MessagesScreen() {
     );
   };
 
+  const renderConvoItem = ({ item }: { item: ConversationData }) => (
+    <TouchableOpacity
+      style={styles.convoRow}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+      activeOpacity={0.85}
+    >
+      {renderAvatar(item)}
+      <View style={styles.convoMeta}>
+        <View style={styles.convoTopRow}>
+          <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <View style={styles.convoTimeRow}>
+            {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
+            <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
+          </View>
+        </View>
+        <View style={styles.convoBottomRow}>
+          {renderMessage(item)}
+          {item.unread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderGroupItem = ({ item }: { item: ConversationData }) => (
+    <TouchableOpacity
+      style={styles.groupCard}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+      activeOpacity={0.85}
+    >
+      <Image source={{ uri: item.avatar }} style={styles.groupCardAvatar} />
+      <View style={styles.groupCardMeta}>
+        <View style={styles.groupCardTopRow}>
+          <Text style={styles.groupCardName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          {item.isMuted && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.groupCardDot}> • </Text>
+              <Feather name="bell-off" size={14} color="#8E8E9B" />
+            </View>
+          )}
+          <View style={{ flex: 1 }} />
+          <Text style={styles.groupCardTime}>{item.time}</Text>
+        </View>
+        <View style={styles.groupCardBottomRow}>
+          <Text style={styles.groupCardMsg} numberOfLines={1}>
+            {item.lastMessage}
+          </Text>
+          {item.unread > 0 && <View style={styles.groupCardUnreadDot} />}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
+    <TouchableOpacity style={styles.roomCard} activeOpacity={0.85}>
+      <View style={styles.roomCapsule}>
+        <View style={styles.roomAvatarWrap}>
+          <Image source={{ uri: item.hostAvatar }} style={styles.roomAvatar} />
+          <View style={styles.roomOnlineDot} />
+        </View>
+        {item.isHost && (
+          <View style={styles.roomHostBadge}>
+            <Text style={styles.roomHostText}>Host</Text>
+          </View>
+        )}
+        <TouchableOpacity style={styles.roomJoinBtn} activeOpacity={0.8}>
+          <Text style={styles.roomJoinText}>Join</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <Text style={styles.roomTitle} numberOfLines={2}>{item.title}</Text>
+      
+      <Text style={styles.roomSpeakerText}>
+        <Text style={styles.roomSpeakerName}>{item.hostName}</Text> is speaking
+      </Text>
+      
+      <View style={styles.roomListenersRow}>
+        <View style={styles.roomListenerAvatars}>
+          {item.listenerAvatars.map((av, idx) => (
+            <Image key={idx} source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0 }]} />
+          ))}
+        </View>
+        <Text style={styles.roomListenersText}>{item.listeners} listening</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
+        <Text style={styles.headerTitle}>Chats</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-            <Feather name="edit" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, { marginLeft: 8 }]}
-            onPress={() => router.push('/chat-screen/new-message')}
+          <TouchableOpacity 
+            style={styles.iconBtn} 
             activeOpacity={0.8}
+            onPress={() => router.push('/chat-screen/create-group')}
           >
-            <Feather name="plus" size={20} color="#FFFFFF" />
+            <HugeiconsIcon icon={PencilEdit02Icon} size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchWrap}>
-        <Feather name="search" size={16} color="#454555" style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search messages..."
-          placeholderTextColor="#454555"
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')} activeOpacity={0.8}>
-            <Feather name="x" size={16} color="#454555" />
-          </TouchableOpacity>
-        )}
-      </View>
 
-      {/* Tabs */}
-      <View style={styles.tabRow}>
-        {(['All', 'Unread', 'Groups'] as const).map(tab => (
+      
+      {/* Segmented Control */}
+      <View style={styles.segmentedControl}>
+        {(['DMs', 'Groups', 'Rooms'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
+            style={[styles.segmentTab, subTab === tab && styles.segmentTabActive]}
+            onPress={() => setSubTab(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-            {tab === 'Unread' && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>
-                  {CONVERSATIONS.filter(c => c.unread > 0).length}
-                </Text>
-              </View>
-            )}
+            <Text style={[styles.segmentTabText, subTab === tab && styles.segmentTabTextActive]}>
+              {tab}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Active Now Strip */}
-      {activeTab === 'All' && (
-        <View style={styles.activeSection}>
-          <Text style={styles.activeSectionTitle}>Active Now</Text>
-          <FlatList
-            data={ACTIVE_USERS}
-            horizontal
-            keyExtractor={i => i.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
-            ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.activeUser} activeOpacity={0.8}>
-                <View style={styles.activeAvatarWrap}>
-                  <Image source={{ uri: item.avatar }} style={styles.activeAvatar} />
-                  <View style={styles.activeOnlineDot} />
+      {/* Top Tabs (Only for DMs and Groups) */}
+      {subTab !== 'Rooms' && (
+        <View style={styles.tabRow}>
+          {(['All', 'Unread', 'Blocked'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, topTab === tab && styles.tabActive]}
+              onPress={() => setTopTab(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tabText, topTab === tab && styles.tabTextActive]}>{tab}</Text>
+              {tab === 'Unread' && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {CONVERSATIONS.filter(c => c.unread > 0).length}
+                  </Text>
                 </View>
-                <Text style={styles.activeUserName} numberOfLines={1}>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-          />
+              )}
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
-      {/* Conversation List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="chatbubble-ellipses-outline" size={48} color="#2A2A3A" />
-            <Text style={styles.emptyText}>No conversations found</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.convoRow}
-            onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
-            activeOpacity={0.85}
-          >
-            {renderAvatar(item)}
-            <View style={styles.convoMeta}>
-              <View style={styles.convoTopRow}>
-                <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={styles.convoTimeRow}>
-                  {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
-                  <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
-                </View>
-              </View>
-              <View style={styles.convoBottomRow}>
-                {renderMessage(item)}
-                {item.unread > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
-                  </View>
-                )}
-              </View>
+      {/* Room Tabs */}
+      {subTab === 'Rooms' && (
+        <View style={styles.roomTabsRow}>
+          {(['Event Rooms', 'General Rooms'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={styles.roomTab}
+              onPress={() => setRoomTab(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.roomTabText, roomTab === tab && styles.roomTabTextActive]}>{tab}</Text>
+              {roomTab === tab && <View style={styles.roomTabIndicator} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+
+
+
+      {/* Lists */}
+      {subTab === 'Rooms' ? (
+        <FlatList
+          key="rooms-grid"
+          data={MOCK_ROOMS}
+          keyExtractor={item => item.id}
+          numColumns={2}
+          columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100, paddingTop: 16 }}
+          renderItem={renderRoomItem}
+        />
+      ) : (
+        <FlatList
+          key="conversations-list"
+          data={filtered}
+          keyExtractor={item => item.id}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => subTab === 'Groups' ? null : <View style={styles.separator} />}
+          contentContainerStyle={subTab === 'Groups' ? { paddingBottom: 100, paddingTop: 12 } : { paddingBottom: 100 }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="chatbubble-ellipses-outline" size={48} color="#2A2A3A" />
+              <Text style={styles.emptyText}>No conversations found</Text>
             </View>
-          </TouchableOpacity>
-        )}
-      />
+          }
+          renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -247,24 +365,27 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
 
-  searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 14, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 14 },
-  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
-
-  tabRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 4 },
-  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginRight: 8, backgroundColor: '#13131A' },
-  tabActive: { backgroundColor: '#D4B0EB' },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 14 },
+  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'transparent', backgroundColor: '#333333' },
+  tabActive: { borderColor: '#FFFFFF' },
   tabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#0e0d12' },
+  tabTextActive: { color: '#FFFFFF' },
   tabBadge: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#F2245C', justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
   tabBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 
-  activeSection: { paddingTop: 8, paddingBottom: 12 },
-  activeSectionTitle: { color: '#8E8E9B', fontSize: 12, fontWeight: '600', paddingHorizontal: 20, marginBottom: 2 },
-  activeUser: { alignItems: 'center', width: 60 },
-  activeAvatarWrap: { position: 'relative', marginBottom: 5 },
-  activeAvatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#D4B0EB' },
-  activeOnlineDot: { position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#0e0d12' },
-  activeUserName: { color: '#8E8E9B', fontSize: 11, textAlign: 'center' },
+  segmentedControl: { flexDirection: 'row', backgroundColor: '#0e0d12', borderRadius: 24, borderWidth: 1, borderColor: '#2A2A3A', marginHorizontal: 16, marginBottom: 14, padding: 4 },
+  segmentTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
+  segmentTabActive: { backgroundColor: '#333333' },
+  segmentTabText: { color: '#8E8E9B', fontSize: 14, fontWeight: '600' },
+  segmentTabTextActive: { color: '#FFFFFF' },
+
+  roomTabsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#2A2A3A', marginHorizontal: 16, marginBottom: 8 },
+  roomTab: { flex: 1, paddingVertical: 12, alignItems: 'center', position: 'relative' },
+  roomTabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
+  roomTabTextActive: { color: '#FFFFFF' },
+  roomTabIndicator: { position: 'absolute', bottom: -1, width: '100%', height: 2, backgroundColor: '#D4B0EB' },
+
+
 
   separator: { height: 1, backgroundColor: '#13131A', marginLeft: 84 },
 
@@ -285,11 +406,43 @@ const styles = StyleSheet.create({
   convoTimeUnread: { color: '#D4B0EB', fontWeight: '600' },
   convoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   lastMsg: { color: '#454555', fontSize: 13, flex: 1, marginRight: 8 },
-  lastMsgUnread: { color: '#8E8E9B', fontWeight: '500' },
+  lastMsgUnread: { color: '#FFFFFF', fontWeight: '500' },
   typingText: { color: '#D4B0EB', fontStyle: 'italic' },
-  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
-  unreadBadgeText: { color: '#0e0d12', fontSize: 11, fontWeight: 'bold' },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#F2245C', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  unreadBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' },
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { color: '#454555', fontSize: 14 },
+
+  /* Rooms Grid */
+  roomCard: { width: (width - 48) / 2, marginBottom: 24, alignItems: 'center' },
+  roomCapsule: { width: 94, height: 146, borderRadius: 47, backgroundColor: '#130B24', borderWidth: 1, borderColor: '#2D1B4E', alignItems: 'center', paddingTop: 16, paddingBottom: 16, marginBottom: 12 },
+  roomAvatarWrap: { position: 'relative', marginBottom: 8 },
+  roomAvatar: { width: 44, height: 44, borderRadius: 22 },
+  roomOnlineDot: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#130B24' },
+  roomHostBadge: { borderColor: '#D4B0EB', borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 8 },
+  roomHostText: { color: '#D4B0EB', fontSize: 10, fontWeight: '600' },
+  roomJoinBtn: { backgroundColor: '#1A1A2E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6, marginTop: 'auto' },
+  roomJoinText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  
+  roomTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
+  roomSpeakerText: { color: '#8E8E9B', fontSize: 11, textAlign: 'center', marginBottom: 8 },
+  roomSpeakerName: { color: '#FFFFFF', fontWeight: 'bold' },
+  
+  roomListenersRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  roomListenerAvatars: { flexDirection: 'row', marginRight: 6 },
+  roomListenerAvatar: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: '#0e0d12' },
+  roomListenersText: { color: '#8E8E9B', fontSize: 10 },
+
+  /* Group Card */
+  groupCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 20, marginHorizontal: 16, marginBottom: 12, padding: 16 },
+  groupCardAvatar: { width: 44, height: 44, borderRadius: 22, marginRight: 16, backgroundColor: '#1A1A2E' },
+  groupCardMeta: { flex: 1 },
+  groupCardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  groupCardName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
+  groupCardDot: { color: '#454555', fontSize: 14, marginHorizontal: 2 },
+  groupCardTime: { color: '#8E8E9B', fontSize: 12 },
+  groupCardBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  groupCardMsg: { color: '#8E8E9B', fontSize: 13, flex: 1, marginRight: 8 },
+  groupCardUnreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F2245C' },
 });

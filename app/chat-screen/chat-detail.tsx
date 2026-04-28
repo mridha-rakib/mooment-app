@@ -1,11 +1,13 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
+import { AttachmentIcon } from '@hugeicons/core-free-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
   Dimensions, FlatList, Image, KeyboardAvoidingView,
   Platform, SafeAreaView,
   StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+  StyleSheet, Text, TextInput, TouchableOpacity, View, Modal
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -24,60 +26,37 @@ type Message = {
   eventTitle?: string;
   eventDate?: string;
   eventImage?: string;
+  locationTitle?: string;
+  locationDesc?: string;
   reactions?: Reaction[];
   time: string;
   delivered?: boolean;
   read?: boolean;
+  senderName?: string;
+  senderAvatar?: string;
+  isHost?: boolean;
 };
 
 // ── Mock Data ──────────────────────────────────────────────────────────────
 const MOCK_MESSAGES: Message[] = [
   {
     id: 'm1', fromMe: false, type: 'text',
-    text: 'Hey! Did you see the lineup for Rooftop Session this weekend? 🎧',
-    time: '9:41 AM',
+    senderName: 'DJ Koko', isHost: true, senderAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+    text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
+    locationTitle: 'Sky Terrace, Floor 7',
+    locationDesc: 'Tap to open in maps',
+    time: '8:30pm',
   },
   {
-    id: 'm2', fromMe: true, type: 'text',
-    text: 'Yes! Dj Koko is headlining right? I\'m so down!',
-    time: '9:42 AM', delivered: true, read: true,
+    id: 'm2', fromMe: false, type: 'text',
+    senderName: 'Jane Cooper', isHost: false, senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+    text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
+    time: '8:30pm',
   },
   {
-    id: 'm3', fromMe: false, type: 'text',
-    text: 'Exactly 🙌 We should go together',
-    time: '9:43 AM', reactions: [{ emoji: '❤️', count: 1 }],
-  },
-  {
-    id: 'm4', fromMe: true, type: 'image',
-    imageUri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
-    time: '9:44 AM', delivered: true, read: true,
-  },
-  {
-    id: 'm5', fromMe: false, type: 'text',
-    text: 'Oh wow that looks insane 🔥 What time are you thinking?',
-    time: '9:45 AM',
-  },
-  {
-    id: 'm6', fromMe: true, type: 'audio',
-    audioDuration: '0:24', time: '9:46 AM', delivered: true,
-  },
-  {
-    id: 'm7', fromMe: false, type: 'event',
-    eventTitle: 'Rooftop Session Vol.4',
-    eventDate: 'Sat, Sep 9 • 9:00 PM',
-    eventImage: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop',
-    time: '9:47 AM',
-  },
-  {
-    id: 'm8', fromMe: true, type: 'text',
-    text: 'Saved us both a spot 🎉 See you there!',
-    time: '9:48 AM', delivered: true, read: true,
-    reactions: [{ emoji: '🎉', count: 2 }],
-  },
-  {
-    id: 'm9', fromMe: false, type: 'text',
-    text: 'Can\'t wait! 🙌',
-    time: '9:49 AM',
+    id: 'm3', fromMe: true, type: 'text',
+    text: 'See you all up there!',
+    time: '8:30pm', delivered: true,
   },
 ];
 
@@ -85,20 +64,40 @@ const WAVEFORM_HEIGHTS = [8, 14, 20, 12, 28, 16, 24, 10, 18, 22, 14, 26, 8, 20, 
 
 // ── Bubble Components ──────────────────────────────────────────────────────
 function TextBubble({ msg }: { msg: Message }) {
+  const isHostMsg = !msg.fromMe && msg.isHost;
+
   return (
-    <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : styles.bubbleThem]}>
+    <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : (isHostMsg ? styles.bubbleHost : styles.bubbleThem)]}>
+      {/* Sender Name Row */}
+      {!msg.fromMe && msg.senderName && (
+        <View style={styles.bubbleSenderRow}>
+          <Text style={[styles.bubbleSenderName, isHostMsg && { color: '#D4B0EB' }]}>{msg.senderName}</Text>
+          {msg.isHost && <Text style={styles.bubbleHostTag}> Host</Text>}
+        </View>
+      )}
+
       <Text style={[styles.bubbleText, msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
         {msg.text}
       </Text>
-      <View style={styles.bubbleMeta}>
-        <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>{msg.time}</Text>
-        {msg.fromMe && (
-          <Ionicons
-            name={msg.read ? 'checkmark-done' : 'checkmark'}
-            size={12} color={msg.read ? '#D4B0EB' : 'rgba(255,255,255,0.5)'}
-            style={{ marginLeft: 4 }}
-          />
-        )}
+
+      {/* Location Attachment */}
+      {msg.locationTitle && (
+        <TouchableOpacity style={styles.locationBox} activeOpacity={0.8}>
+          <View style={styles.locationIconWrap}>
+            <Feather name="map-pin" size={16} color="#FFFFFF" />
+          </View>
+          <View>
+            <Text style={styles.locationTitle}>{msg.locationTitle}</Text>
+            <Text style={styles.locationDesc}>{msg.locationDesc}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <View style={[styles.bubbleMeta, !msg.fromMe && { justifyContent: 'flex-start' }]}>
+        <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>
+          {msg.time}
+          {msg.fromMe && msg.delivered ? ' • Delivered' : ''}
+        </Text>
       </View>
     </View>
   );
@@ -180,9 +179,10 @@ export default function ChatDetailScreen() {
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const [showAttach, setShowAttach] = useState(false);
   const [isTyping] = useState(true);
+  const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const listRef = useRef<FlatList>(null);
 
-  const name = params.name || 'Brooklyn Simmons';
+  const name = params.name || 'Eleanor Pena';
   const avatar = params.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
 
   const sendMessage = () => {
@@ -216,14 +216,11 @@ export default function ChatDetailScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
+          <Feather name="chevron-left" size={20} color="#FFFFFF" />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.headerCenter} activeOpacity={0.8}>
-          <View style={styles.headerAvatarWrap}>
-            <Image source={{ uri: avatar }} style={styles.headerAvatar} />
-            <View style={styles.headerOnlineDot} />
-          </View>
+          <Image source={{ uri: avatar }} style={styles.headerAvatar} />
           <View>
             <Text style={styles.headerName}>{name}</Text>
             <Text style={styles.headerStatus}>{isTyping ? 'Typing...' : 'Online'}</Text>
@@ -231,14 +228,8 @@ export default function ChatDetailScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-            <Feather name="phone" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconBtn, { marginLeft: 8 }]} activeOpacity={0.8}>
-            <Feather name="video" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconBtn, { marginLeft: 8 }]} activeOpacity={0.8}>
-            <Feather name="more-vertical" size={18} color="#FFFFFF" />
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(true)}>
+            <Feather name="more-vertical" size={20} color="#8E8E9B" />
           </TouchableOpacity>
         </View>
       </View>
@@ -275,7 +266,7 @@ export default function ChatDetailScreen() {
                   {/* Avatar for them */}
                   {!item.fromMe ? (
                     showAvatar
-                      ? <Image source={{ uri: avatar }} style={styles.msgAvatar} />
+                      ? <Image source={{ uri: item.senderAvatar || avatar }} style={styles.msgAvatar} />
                       : <View style={{ width: 30, marginRight: 8 }} />
                   ) : null}
 
@@ -335,40 +326,63 @@ export default function ChatDetailScreen() {
 
         {/* ── Input Bar ── */}
         <View style={styles.inputBar}>
-          <TouchableOpacity
-            style={[styles.inputAction, showAttach && styles.inputActionActive]}
-            onPress={() => setShowAttach(p => !p)}
-            activeOpacity={0.8}
-          >
-            <Feather name={showAttach ? 'x' : 'plus'} size={22} color={showAttach ? '#D4B0EB' : '#8E8E9B'} />
-          </TouchableOpacity>
-
           <View style={styles.inputWrap}>
+            <TouchableOpacity style={styles.emojiBtn} activeOpacity={0.8}>
+              <Feather name="smile" size={20} color="#8E8E9B" />
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
-              placeholder="Message..."
-              placeholderTextColor="#454555"
+              placeholder="Add Comment"
+              placeholderTextColor="#8E8E9B"
               value={inputText}
               onChangeText={setInputText}
               multiline
               maxLength={500}
             />
-            <TouchableOpacity style={styles.emojiBtn} activeOpacity={0.8}>
-              <MaterialCommunityIcons name="sticker-emoji" size={22} color="#8E8E9B" />
+            <TouchableOpacity style={styles.fileBtn} activeOpacity={0.8}>
+              <HugeiconsIcon icon={AttachmentIcon} size={20} color="#8E8E9B" />
             </TouchableOpacity>
           </View>
 
-          {inputText.trim().length > 0 ? (
-            <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} activeOpacity={0.8}>
-              <Ionicons name="send" size={18} color="#0e0d12" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.inputAction} activeOpacity={0.8}>
-              <Feather name="mic" size={22} color="#8E8E9B" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} activeOpacity={0.8}>
+            <Feather name="send" size={18} color="#0e0d12" style={{ marginLeft: -2, marginTop: 2 }} />
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── More Options Modal ── */}
+      <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
+          <View style={styles.moreMenuContainer}>
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Block</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.moreMenuSeparator} />
+            
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Create Plan</Text>
+            </TouchableOpacity>
+
+            <View style={styles.moreMenuSeparator} />
+
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Feather name="calendar" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Share Calendar</Text>
+            </TouchableOpacity>
+
+            <View style={styles.moreMenuSeparator} />
+
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Feather name="trash-2" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -378,16 +392,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
 
   /* Header */
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#13131A' },
-  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
-  headerAvatarWrap: { position: 'relative', marginRight: 10 },
-  headerAvatar: { width: 40, height: 40, borderRadius: 20 },
-  headerOnlineDot: { position: 'absolute', bottom: 1, right: 1, width: 11, height: 11, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#0e0d12' },
-  headerName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
-  headerStatus: { color: '#D4B0EB', fontSize: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 16, padding: 12, borderRadius: 8 },
+  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 18, marginRight: 12 },
+  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
+  headerName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
+  headerStatus: { color: '#8E8E9B', fontSize: 12 },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
-  iconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#13131A', justifyContent: 'center', alignItems: 'center' },
+  iconBtn: { width: 34, height: 34, justifyContent: 'center', alignItems: 'center' },
 
   /* Messages */
   messagesContainer: { paddingHorizontal: 12, paddingTop: 16, paddingBottom: 12 },
@@ -400,15 +412,25 @@ const styles = StyleSheet.create({
   msgAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },
 
   /* Text Bubble */
-  bubble: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, maxWidth: '100%' },
-  bubbleMe: { backgroundColor: '#3B1F5E', borderBottomRightRadius: 4 },
-  bubbleThem: { backgroundColor: '#1A1A2E', borderBottomLeftRadius: 4 },
+  bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, maxWidth: '85%' },
+  bubbleMe: { backgroundColor: '#C2B5CD', borderBottomRightRadius: 4 },
+  bubbleThem: { backgroundColor: '#161622', borderTopLeftRadius: 4, borderWidth: 1, borderColor: '#2A2A3A' },
+  bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 4 },
+  bubbleSenderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  bubbleSenderName: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
+  bubbleHostTag: { color: '#8E8E9B', fontSize: 12, fontWeight: '400' },
   bubbleText: { fontSize: 14, lineHeight: 20 },
-  bubbleTextMe: { color: '#FFFFFF' },
-  bubbleTextThem: { color: '#D0D0D8' },
-  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
-  bubbleTime: { color: 'rgba(142,142,155,0.8)', fontSize: 10 },
-  bubbleTimeMe: { color: 'rgba(212,176,235,0.7)' },
+  bubbleTextMe: { color: '#0e0d12' },
+  bubbleTextThem: { color: '#FFFFFF' },
+  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 6 },
+  bubbleTime: { color: '#8E8E9B', fontSize: 10 },
+  bubbleTimeMe: { color: 'rgba(14, 13, 18, 0.6)' },
+
+  /* Location Box */
+  locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginTop: 12, marginBottom: 4 },
+  locationIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#5D35B0', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  locationTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
+  locationDesc: { color: '#8E8E9B', fontSize: 11 },
 
   /* Image Bubble */
   imageBubble: { borderRadius: 16, overflow: 'hidden', position: 'relative' },
@@ -460,11 +482,18 @@ const styles = StyleSheet.create({
   attachLabel: { color: '#8E8E9B', fontSize: 12 },
 
   /* Input Bar */
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#13131A', backgroundColor: '#0e0d12', gap: 8 },
-  inputAction: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center', borderRadius: 19 },
-  inputActionActive: { backgroundColor: 'rgba(212,176,235,0.1)' },
-  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#13131A', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 8, minHeight: 44 },
-  input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginRight: 4 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0e0d12', gap: 12 },
+  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minHeight: 48, borderWidth: 1, borderColor: '#2A2A3A' },
+  input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginLeft: 12, marginRight: 12 },
   emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center' },
+  fileBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
+  sendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
+
+  /* Modal */
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'flex-start', alignItems: 'flex-end' },
+  moreMenuContainer: { width: 180, backgroundColor: '#45454A', borderRadius: 8, marginTop: 75, marginRight: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#55555A' },
+  moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
+  moreMenuIcon: { marginRight: 12 },
+  moreMenuText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  moreMenuSeparator: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
 });

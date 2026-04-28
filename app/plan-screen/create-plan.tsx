@@ -2,8 +2,8 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert, Platform, SafeAreaView, ScrollView, StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View,
+    Alert, Platform, SafeAreaView, ScrollView, StatusBar,
+    StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
 /* ─── Fake Event / Friends Dropdown Data ─── */
@@ -20,8 +20,10 @@ export default function CreatePlanScreen() {
   const [date, setDate] = useState(params.planDate || 'Sep 9, 2026');
   const [time, setTime] = useState(params.planTime || '10:00 AM');
   const [selectedEvent, setSelectedEvent] = useState(params.planEvent || '');
+  const [selectedLocation, setSelectedLocation] = useState('123, Main Street NYC');
   const [selectedFriends, setSelectedFriends] = useState(params.planFriends || '');
   const [showEventDropdown, setShowEventDropdown] = useState(false);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showFriendsDropdown, setShowFriendsDropdown] = useState(false);
 
   const handleDone = () => {
@@ -29,10 +31,10 @@ export default function CreatePlanScreen() {
       Alert.alert('Required', 'Please enter a plan name.');
       return;
     }
-    // Navigate to My Plan (daily plan) view with the created plan data
-    router.replace({
-      pathname: '/plan-screen/my-plan' as any,
-      params: { planName: name, planDate: date, planTime: time, planEvent: selectedEvent, planFriends: selectedFriends },
+    // Navigate to Map Selection screen
+    router.push({
+      pathname: '/plan-screen/map-selection' as any,
+      params: { planName: name, planDate: date, planTime: time, planEvent: selectedEvent, planFriends: selectedFriends, planLocation: selectedLocation },
     });
   };
 
@@ -124,12 +126,43 @@ export default function CreatePlanScreen() {
           </View>
         )}
 
+        {/* ── Location Selector ── */}
+        <Text style={styles.label}>LOCATION</Text>
+        <TouchableOpacity
+          style={styles.dropdownBtn}
+          activeOpacity={0.8}
+          onPress={() => { setShowLocationDropdown(!showLocationDropdown); setShowEventDropdown(false); setShowFriendsDropdown(false); }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Feather name="map-pin" size={14} color="#8E8E9B" style={{ marginRight: 8 }} />
+            <Text style={[styles.dropdownText, !selectedLocation && styles.dropdownPlaceholder]}>
+              {selectedLocation || 'Select Location'}
+            </Text>
+          </View>
+          <Feather name={showLocationDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#8E8E9B" />
+        </TouchableOpacity>
+        {showLocationDropdown && (
+          <View style={styles.dropdownList}>
+            {['123, Main Street NYC', 'Los Angeles, CA', 'Central Park'].map((loc) => (
+              <TouchableOpacity
+                key={loc}
+                style={[styles.dropdownItem, selectedLocation === loc && styles.dropdownItemActive]}
+                onPress={() => { setSelectedLocation(loc); setShowLocationDropdown(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.dropdownItemText, selectedLocation === loc && styles.dropdownItemTextActive]}>{loc}</Text>
+                {selectedLocation === loc && <Feather name="check" size={14} color="#16D869" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* ── Friends Selector ── */}
         <Text style={styles.label}>ADD FRIENDS</Text>
         <TouchableOpacity
           style={styles.dropdownBtn}
           activeOpacity={0.8}
-          onPress={() => { setShowFriendsDropdown(!showFriendsDropdown); setShowEventDropdown(false); }}
+          onPress={() => { setShowFriendsDropdown(!showFriendsDropdown); setShowEventDropdown(false); setShowLocationDropdown(false); }}
         >
           <Text style={[styles.dropdownText, !selectedFriends && styles.dropdownPlaceholder]}>
             {selectedFriends || 'Select Friends'}
@@ -165,7 +198,7 @@ export default function CreatePlanScreen() {
       {/* ── Bottom Buttons ── */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.cancelBtn} activeOpacity={0.8} onPress={handleCancel}>
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text style={styles.cancelText}>Canel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.doneBtn} activeOpacity={0.8} onPress={handleDone}>
           <Text style={styles.doneText}>Done</Text>
@@ -237,7 +270,7 @@ const styles = StyleSheet.create({
   cancelText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   doneBtn: {
     flex: 1, height: 48, borderRadius: 12,
-    backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center',
   },
   doneText: { color: '#0e0d12', fontSize: 15, fontWeight: '700' },
 });

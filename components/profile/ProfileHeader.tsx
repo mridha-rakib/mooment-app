@@ -32,7 +32,7 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             <HugeiconsIcon icon={Menu01Icon} size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
-          <Text style={styles.logoText}>Mooment</Text>
+          <Image source={require('@/assets/images/Mooment.png')} style={styles.logoImage} resizeMode="contain" />
           
           <TouchableOpacity style={styles.iconBtn}>
             <HugeiconsIcon icon={Search01Icon} size={24} color="#FFFFFF" />
@@ -70,10 +70,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/followers')}>
             <Text style={styles.statValue}>{stats.followers}</Text>
             <Text style={styles.statLabel}>Followers</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{stats.following}</Text>
@@ -107,12 +107,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A22',
   },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: 'bold',
-    fontStyle: 'italic',
-    letterSpacing: -1,
+  logoImage: {
+    height: 32,
+    width: 140,
   },
   topRow: {
     flexDirection: 'row',

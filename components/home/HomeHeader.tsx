@@ -1,7 +1,9 @@
 import { Feather } from '@expo/vector-icons';
+import { Search01Icon, FilterHorizontalIcon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import FilterModal from './FilterModal';
 
 const { width } = Dimensions.get('window');
@@ -9,26 +11,63 @@ const { width } = Dimensions.get('window');
 export default function HomeHeader() {
   const router = useRouter();
   const [filterVisible, setFilterVisible] = useState(false);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [selectedType, setSelectedType] = useState('Feed');
   
   return (
     <View style={styles.header}>
-      <TouchableOpacity style={styles.feedBtn} activeOpacity={0.8}>
+      <TouchableOpacity 
+        style={styles.feedBtn} 
+        activeOpacity={0.8}
+        onPress={() => setDropdownVisible(true)}
+      >
         <View style={styles.greenDot} />
-        <Text style={styles.feedText}>Feed</Text>
+        <Text style={styles.feedText}>{selectedType}</Text>
         <Feather name="chevron-down" size={14} color="#FFFFFF" />
       </TouchableOpacity>
 
-      {/* <Text style={styles.logoText}>Mooment</Text> */}
       <Image source={require('../../assets/images/Mooment.png')} style={styles.logoText} />
 
       <View style={styles.headerIcons}>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
-          <Feather name="search" size={20} color="#FFFFFF" />
+          <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
-          <Feather name="sliders" size={20} color="#FFFFFF" />
+          <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Feed/Map Dropdown */}
+      <Modal
+        visible={dropdownVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDropdownVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setDropdownVisible(false)}>
+          <View style={styles.dropdownOverlay}>
+            <View style={styles.dropdownMenu}>
+              <TouchableOpacity 
+                style={styles.dropdownItem} 
+                onPress={() => { setSelectedType('Feed'); setDropdownVisible(false); }}
+              >
+                <View style={styles.greenDot} />
+                <Text style={styles.dropdownText}>Feed</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.dropdownSeparator} />
+              
+              <TouchableOpacity 
+                style={styles.dropdownItem} 
+                onPress={() => { setSelectedType('Map'); setDropdownVisible(false); }}
+              >
+                <View style={styles.greenDot} />
+                <Text style={styles.dropdownText}>Map</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
     </View>
@@ -42,6 +81,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     height: 60,
+    zIndex: 100,
   },
   feedBtn: {
     flexDirection: "row",
@@ -56,7 +96,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#2DB46D",
-    marginRight: 6,
+    marginRight: 8,
   },
   feedText: {
     color: "#FFFFFF",
@@ -65,13 +105,11 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   logoText: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "bold",
-    fontFamily: "serif",
-    fontStyle: "italic",
+    width: 100,
+    height: 25,
+    resizeMode: 'contain',
     position: 'absolute',
-    left: width / 2 - 45, // approximate center
+    left: width / 2 - 50,
   },
   headerIcons: {
     flexDirection: "row",
@@ -79,17 +117,38 @@ const styles = StyleSheet.create({
   iconBtn: {
     marginLeft: 15,
   },
-  profileBtn: {
-    marginLeft: 15,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    overflow: 'hidden',
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.1)',
   },
-  avatarMini: {
-    width: '100%',
-    height: '100%',
+  dropdownMenu: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    backgroundColor: '#35353A',
+    borderRadius: 12,
+    paddingVertical: 8,
+    width: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  dropdownSeparator: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: 12,
   },
 });

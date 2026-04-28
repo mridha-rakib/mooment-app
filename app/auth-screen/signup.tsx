@@ -1,4 +1,6 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
+import { UserIcon, Building03Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { router } from "expo-router";
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -33,9 +35,9 @@ export default function SignUp() {
               onPress={() => setAccountType("personal")}
               activeOpacity={0.8}
             >
-              <Feather 
-                name="user" 
-                size={36} 
+              <HugeiconsIcon 
+                icon={UserIcon} 
+                size={32} 
                 color={accountType === "personal" ? "#FFFFFF" : "#7A7A85"} 
               />
             </TouchableOpacity>
@@ -45,9 +47,9 @@ export default function SignUp() {
               onPress={() => setAccountType("business")}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons 
-                name="office-building-outline" 
-                size={40} 
+              <HugeiconsIcon 
+                icon={Building03Icon} 
+                size={32} 
                 color={accountType === "business" ? "#FFFFFF" : "#7A7A85"} 
               />
             </TouchableOpacity>
