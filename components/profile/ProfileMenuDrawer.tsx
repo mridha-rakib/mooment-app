@@ -99,7 +99,15 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 router.push('/profile-screen/creator-dashboard');
               }} 
             />
-            <MenuItem icon={ShoppingCart01Icon} label="My Cart" onPress={() => {}} hideSeparator />
+            <MenuItem 
+              icon={ShoppingCart01Icon} 
+              label="My Cart" 
+              onPress={() => {
+                onClose();
+                router.push('/event-screen/product/cart');
+              }} 
+              hideSeparator 
+            />
 
             <SectionLabel label="WALLET" />
             <MenuItem 
