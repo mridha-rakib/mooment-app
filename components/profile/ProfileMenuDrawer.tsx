@@ -135,7 +135,15 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }} 
             />
             <MenuItem icon={Ticket01Icon} label="Ticket Wallet" onPress={() => {}} />
-            <MenuItem icon={ShoppingBag01Icon} label="Product Wallet" onPress={() => {}} hideSeparator />
+            <MenuItem 
+              icon={ShoppingBag01Icon} 
+              label="Product Wallet" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/product-wallet');
+              }} 
+              hideSeparator 
+            />
 
             <SectionLabel label="PRODUCT" />
             <MenuItem icon={Add01Icon} label="Add Product" onPress={onAddProductPress} />
