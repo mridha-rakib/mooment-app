@@ -134,7 +134,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 router.push('/profile-screen/mooment-wallet');
               }} 
             />
-            <MenuItem icon={Ticket01Icon} label="Ticket Wallet" onPress={() => {}} />
+            <MenuItem 
+              icon={Ticket01Icon} 
+              label="Ticket Wallet" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/ticket-wallet');
+              }} 
+            />
             <MenuItem 
               icon={ShoppingBag01Icon} 
               label="Product Wallet" 
