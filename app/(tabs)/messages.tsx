@@ -1,4 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
+import { PencilEdit02Icon } from '@hugeicons/core-free-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -251,15 +253,12 @@ export default function MessagesScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Chats</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-            <Feather name="edit" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, { marginLeft: 8 }]}
-            onPress={() => router.push('/chat-screen/new-message')}
+          <TouchableOpacity 
+            style={styles.iconBtn} 
             activeOpacity={0.8}
+            onPress={() => router.push('/chat-screen/create-group')}
           >
-            <Feather name="plus" size={20} color="#FFFFFF" />
+            <HugeiconsIcon icon={PencilEdit02Icon} size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
