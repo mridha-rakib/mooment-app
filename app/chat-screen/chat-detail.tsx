@@ -7,7 +7,7 @@ import {
   Dimensions, FlatList, Image, KeyboardAvoidingView,
   Platform, SafeAreaView,
   StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+  StyleSheet, Text, TextInput, TouchableOpacity, View, Modal
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -141,6 +141,7 @@ export default function ChatDetailScreen() {
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const [showAttach, setShowAttach] = useState(false);
   const [isTyping] = useState(true);
+  const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   const name = params.name || 'Eleanor Pena';
@@ -189,7 +190,7 @@ export default function ChatDetailScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(true)}>
             <Feather name="more-vertical" size={20} color="#8E8E9B" />
           </TouchableOpacity>
         </View>
@@ -310,6 +311,40 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── More Options Modal ── */}
+      <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
+          <View style={styles.moreMenuContainer}>
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Block</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.moreMenuSeparator} />
+            
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Create Plan</Text>
+            </TouchableOpacity>
+
+            <View style={styles.moreMenuSeparator} />
+
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Feather name="calendar" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Share Calendar</Text>
+            </TouchableOpacity>
+
+            <View style={styles.moreMenuSeparator} />
+
+            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <Feather name="trash-2" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+              <Text style={styles.moreMenuText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -405,4 +440,12 @@ const styles = StyleSheet.create({
   emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
   fileBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
   sendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
+
+  /* Modal */
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'flex-start', alignItems: 'flex-end' },
+  moreMenuContainer: { width: 180, backgroundColor: '#45454A', borderRadius: 8, marginTop: 75, marginRight: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#55555A' },
+  moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
+  moreMenuIcon: { marginRight: 12 },
+  moreMenuText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  moreMenuSeparator: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
 });
