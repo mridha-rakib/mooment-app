@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Dimensions, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function EventDashboardScreen() {
   const router = useRouter();
@@ -78,14 +78,17 @@ export default function EventDashboardScreen() {
             <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={styles.tinyAvatar} />
             <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8 }]} />
           </View>
-          <View style={styles.legendItem}>
+          <TouchableOpacity 
+            style={styles.legendItem}
+            onPress={() => router.push('/profile-screen/ticket-stat')}
+          >
             <View style={[styles.dot, { backgroundColor: '#2DB46D' }]} />
-            <Text style={styles.legendText}>0 going</Text>
-          </View>
+            <Text style={styles.legendText}>47 Ongoing</Text>
+          </TouchableOpacity>
           <Text style={styles.legendDot}>•</Text>
           <View style={styles.legendItem}>
             <View style={[styles.dot, { backgroundColor: '#E2B93B' }]} />
-            <Text style={styles.legendText}>41 reserved</Text>
+            <Text style={styles.legendText}>41 canceled</Text>
           </View>
           <Text style={styles.legendDot}>•</Text>
           <View style={styles.legendItem}>
