@@ -29,7 +29,10 @@ export default function PaymentSuccessScreen() {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.primaryBtn}>
+        <TouchableOpacity 
+          style={styles.primaryBtn}
+          onPress={() => router.push('/profile-screen/mooment-wallet')}
+        >
           <Text style={styles.primaryBtnText}>View My Mooment Wallet</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/(tabs)/profile')}>
