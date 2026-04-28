@@ -18,8 +18,8 @@ function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); 
 /* ─── Types ─── */
 type PlanEvent = { id: string; day: number; time: string; title: string; image: string; venue?: string };
 
-/* ─── Time slots for the empty timeline ─── */
-const TIME_SLOTS = ['6:00 PM', '7:00 PM'];
+/* ─── Time slots for the timeline ─── */
+const TIME_SLOTS = ['6:00 PM', '9:00 PM'];
 
 export default function MyPlanScreen() {
   const router = useRouter();
@@ -35,11 +35,18 @@ export default function MyPlanScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [events, setEvents] = useState<PlanEvent[]>(() => {
     if (hasPlan) {
-      return [{
-        id: '1', day: selectedDay, time: params.planTime || '6:00 PM',
-        title: params.planName!, image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-        venue: params.planEvent || undefined,
-      }];
+      return [
+        {
+          id: '1', day: selectedDay, time: params.planTime || '6:00 PM',
+          title: params.planName || 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+          venue: params.planEvent || 'Rooftop Series Vol.4',
+        },
+        {
+          id: '2', day: selectedDay, time: '9:00 PM',
+          title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+          venue: 'Rooftop Series Vol.4',
+        }
+      ];
     }
     return [];
   });
@@ -66,10 +73,6 @@ export default function MyPlanScreen() {
 
   const dayEvents = useMemo(() => events.filter(e => e.day === selectedDay), [events, selectedDay]);
 
-  const addEvent = () => {
-    setCalendarOpen(true);
-  };
-
   const hasAnyEvents = events.length > 0;
 
   return (
@@ -93,109 +96,93 @@ export default function MyPlanScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
-        {/* ═══ NO PLAN: Empty State ═══ */}
-        {!hasAnyEvents && !calendarOpen && (
+        {/* ═══ Calendar Always Visible ═══ */}
+        <View style={{ marginBottom: 24, marginTop: 12 }}>
+          <Text style={s.bigDay}>{fullDayLabel}</Text>
+
+          <View style={s.calNav}>
+            <Text style={s.calNavLabel}>{MONTHS[calMonth]} {calYear}</Text>
+            <View style={s.calNavArrows}>
+              <TouchableOpacity onPress={prevMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-left" size={16} color="#FFF" /></TouchableOpacity>
+              <TouchableOpacity onPress={nextMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-right" size={16} color="#FFF" /></TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={s.calHdrRow}>{DAYS_HDR.map((d, i) => <Text key={i} style={s.calHdr}>{d}</Text>)}</View>
+
+          {calendarRows.map((row, ri) => (
+            <View key={ri} style={s.calWeek}>
+              {row.map((day, ci) => {
+                if (!day) return <View key={ci} style={s.calCell} />;
+                const sel = day === selectedDay;
+                const hl = highlightedDays.has(day);
+                return (
+                  <TouchableOpacity key={ci} style={[s.calCell, sel && s.calCellSel, hl && !sel && s.calCellHl]} onPress={() => setSelectedDay(day)} activeOpacity={0.7}>
+                    <Text style={[s.calDay, sel && s.calDaySel, hl && !sel && s.calDayHl]}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        {/* ═══ Timeline or Empty State ═══ */}
+        {hasAnyEvents ? (
+          <View>
+            <Text style={s.yourPlanLabel}>Your Plan</Text>
+            
+            <View style={s.dayHeaderRow}>
+              <Text style={s.dayHeaderText}>{dayLabel}</Text>
+              <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7}>
+                <Feather name="more-horizontal" size={16} color="#8E8E9B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Vertical Timeline */}
+            <View style={s.timelineContainer}>
+              <View style={s.timelineVerticalLine} />
+              
+              {TIME_SLOTS.map((slot) => {
+                const ev = dayEvents.find(e => e.time === slot);
+                return (
+                  <View key={slot} style={s.timeSlotWrap}>
+                    <Text style={s.timeLabel}>{slot}</Text>
+                    <View style={s.dashedLine} />
+                    
+                    <View style={s.slotContent}>
+                      {ev ? (
+                        <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
+                          <View style={s.capsuleIconWrap}>
+                            <Feather name="coffee" size={14} color="#FFF" />
+                          </View>
+                          <Text style={s.capsuleTitle}>{ev.title}</Text>
+                          {ev.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{ev.venue}</Text>}
+                          <Text style={s.capsuleTime}>{ev.time}</Text>
+                          
+                          <Image source={{ uri: ev.image }} style={s.capsuleImg} />
+                          
+                          <View style={s.capsuleAvatarsRow}>
+                            <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                            <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
+                            <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
+                            <Text style={s.capsuleMoreText}>+41</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : (
           <View style={s.emptyWrap}>
-            <View style={s.emptyIcon}><Feather name="star" size={28} color="#8E8E9B" /></View>
+            <View style={s.emptyIcon}><Feather name="star" size={24} color="#8E8E9B" /></View>
             <Text style={s.emptyTitle}>No Activity yet</Text>
             <Text style={s.emptyDesc}>Make plan with your friends, and family. Search events that are currently going on map</Text>
             <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search' as any)}>
               <Text style={s.discoverText}>Go discover something</Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ═══ HAS PLAN: Timeline View (collapsed calendar) ═══ */}
-        {hasAnyEvents && !calendarOpen && (
-          <View>
-            {/* Day header */}
-            <View style={s.dayHeaderRow}>
-              <Text style={s.dayHeaderText}>{dayLabel}</Text>
-              <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7}>
-                <Feather name="more-horizontal" size={18} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Timeline with events + empty slots */}
-            {TIME_SLOTS.map((slot) => {
-              const ev = dayEvents.find(e => e.time === slot);
-              return (
-                <View key={slot} style={s.timeSlot}>
-                  <Text style={s.timeLabel}>{slot}</Text>
-                  <View style={s.dashedLine} />
-                  <View style={s.slotContent}>
-                    {ev ? (
-                      <TouchableOpacity style={s.eventCard} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
-                        <Image source={{ uri: ev.image }} style={s.eventImg} />
-                        <Text style={s.eventTitle} numberOfLines={2}>{ev.title}</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={s.addEventBtn} activeOpacity={0.7} onPress={() => addEvent()}>
-                        <Feather name="plus" size={18} color="#8E8E9B" />
-                        <Text style={s.addEventText}>Add Event</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* ═══ Calendar Expanded ═══ */}
-        {calendarOpen && (
-          <View>
-            <Text style={s.bigDay}>{fullDayLabel}</Text>
-
-            <View style={s.calNav}>
-              <Text style={s.calNavLabel}>{MONTHS[calMonth]} {calYear}</Text>
-              <View style={s.calNavArrows}>
-                <TouchableOpacity onPress={prevMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-left" size={16} color="#FFF" /></TouchableOpacity>
-                <TouchableOpacity onPress={nextMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-right" size={16} color="#FFF" /></TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={s.calHdrRow}>{DAYS_HDR.map((d, i) => <Text key={i} style={s.calHdr}>{d}</Text>)}</View>
-
-            {calendarRows.map((row, ri) => (
-              <View key={ri} style={s.calWeek}>
-                {row.map((day, ci) => {
-                  if (!day) return <View key={ci} style={s.calCell} />;
-                  const sel = day === selectedDay;
-                  const hl = highlightedDays.has(day);
-                  return (
-                    <TouchableOpacity key={ci} style={[s.calCell, sel && s.calCellSel, hl && !sel && s.calCellHl]} onPress={() => setSelectedDay(day)} activeOpacity={0.7}>
-                      <Text style={[s.calDay, sel && s.calDaySel, hl && !sel && s.calDayHl]}>{day}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-
-            {/* Events for selected day or empty state */}
-            {dayEvents.length > 0 ? (
-              <View style={s.planSection}>
-                <Text style={s.yourPlanLabel}>Your Plan</Text>
-                {dayEvents.map(ev => (
-                  <TouchableOpacity key={ev.id} style={s.eventRow} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
-                    <Text style={s.eventRowTime}>{ev.time}</Text>
-                    <View style={s.eventCard}>
-                      <Image source={{ uri: ev.image }} style={s.eventImg} />
-                      <Text style={s.eventTitle} numberOfLines={2}>{ev.title}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View style={s.emptyWrapCal}>
-                <View style={s.emptyIcon}><Feather name="star" size={28} color="#8E8E9B" /></View>
-                <Text style={s.emptyTitle}>No Activity yet</Text>
-                <Text style={s.emptyDesc}>Make plan with your friends, and family. Search events that are currently going on map</Text>
-                <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search' as any)}>
-                  <Text style={s.discoverText}>Go discover something</Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </View>
         )}
       </ScrollView>
@@ -235,35 +222,47 @@ const s = StyleSheet.create({
   monthText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   scroll: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 40 },
 
-  /* Empty state (no plan) */
-  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, marginTop: -40 },
-  emptyWrapCal: { alignItems: 'center', paddingHorizontal: 32, marginTop: 36 },
-  emptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  /* Empty state */
+  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, marginTop: 32 },
+  emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', marginBottom: 10 },
   emptyDesc: { color: '#8E8E9B', fontSize: 13, lineHeight: 20, textAlign: 'center', marginBottom: 24 },
-  discoverBtn: { borderWidth: 1, borderColor: '#2A2A3A', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  discoverText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
+  discoverBtn: { backgroundColor: '#C2B5CD', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  discoverText: { color: '#0e0d12', fontSize: 14, fontWeight: 'bold' },
 
-  /* Timeline (has plan) */
-  dayHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 4 },
-  dayHeaderText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  /* Timeline */
+  yourPlanLabel: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 16 },
+  dayHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  dayHeaderText: { color: '#8E8E9B', fontSize: 12 },
   dayMenuBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
 
-  timeSlot: { marginBottom: 24 },
-  timeLabel: { color: '#8E8E9B', fontSize: 12, marginBottom: 6 },
-  dashedLine: { height: 1, borderWidth: 1, borderColor: '#2A2A3A', borderStyle: 'dashed', marginBottom: 20 },
-  slotContent: { alignItems: 'center', minHeight: 80, justifyContent: 'center' },
-  addEventBtn: { alignItems: 'center', gap: 6 },
-  addEventText: { color: '#8E8E9B', fontSize: 13 },
+  timelineContainer: { position: 'relative', marginTop: 10, paddingLeft: 10 },
+  timelineVerticalLine: { position: 'absolute', left: 10, top: 16, bottom: 0, width: 1, borderLeftWidth: 1, borderColor: '#2A2A3A', borderStyle: 'dashed' },
+  
+  timeSlotWrap: { marginBottom: 30, position: 'relative' },
+  timeLabel: { color: '#8E8E9B', fontSize: 10, marginBottom: 8, backgroundColor: '#0e0d12', alignSelf: 'flex-start', paddingRight: 8 },
+  dashedLine: { position: 'absolute', top: 6, left: 0, right: 0, height: 1, borderWidth: 1, borderColor: '#2A2A3A', borderStyle: 'dashed', zIndex: -1 },
+  
+  slotContent: { paddingLeft: 20, marginTop: 16, alignItems: 'center', paddingRight: 10 },
 
-  /* Event card (pill) */
-  eventCard: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1A1A2E', borderRadius: 40,
-    paddingVertical: 8, paddingHorizontal: 10, gap: 10,
+  /* Vertical Capsule Card */
+  eventCapsule: { 
+    width: 150, 
+    backgroundColor: '#13131A', 
+    borderWidth: 1, borderColor: '#2A2A3A', 
+    borderRadius: 75,
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
   },
-  eventImg: { width: 44, height: 44, borderRadius: 22 },
-  eventTitle: { color: '#FFF', fontSize: 13, fontWeight: '600', flex: 1, lineHeight: 18 },
+  capsuleIconWrap: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  capsuleTitle: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  capsuleVenue: { color: '#8E8E9B', fontSize: 11, textAlign: 'center', marginBottom: 4 },
+  capsuleTime: { color: '#8E8E9B', fontSize: 11, marginBottom: 12 },
+  capsuleImg: { width: 80, height: 40, borderRadius: 8, marginBottom: 12 },
+  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
+  capsuleAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: '#0e0d12', marginLeft: -8 },
+  capsuleMoreText: { color: '#8E8E9B', fontSize: 10, marginLeft: 4 },
 
   /* Calendar */
   bigDay: { color: '#FFF', fontSize: 24, fontWeight: '700', marginBottom: 20, marginTop: 4 },
@@ -280,12 +279,6 @@ const s = StyleSheet.create({
   calDay: { color: '#CCC', fontSize: 14 },
   calDaySel: { color: '#FFF', fontWeight: '700' },
   calDayHl: { color: '#D4B0EB' },
-
-  /* Plan section under calendar */
-  planSection: { marginTop: 20 },
-  yourPlanLabel: { color: '#8E8E9B', fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
-  eventRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  eventRowTime: { color: '#8E8E9B', fontSize: 11, width: 56 },
 
   /* Popup */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 80 },

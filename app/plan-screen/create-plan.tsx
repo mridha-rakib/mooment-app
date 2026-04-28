@@ -2,8 +2,8 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert, Platform, SafeAreaView, ScrollView, StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View,
+    Alert, Platform, SafeAreaView, ScrollView, StatusBar,
+    StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
 /* ─── Fake Event / Friends Dropdown Data ─── */
@@ -29,7 +29,7 @@ export default function CreatePlanScreen() {
       Alert.alert('Required', 'Please enter a plan name.');
       return;
     }
-    // Navigate to My Plan (daily plan) view with the created plan data
+    // Navigate to  (daily plan) view with the created plan data
     router.replace({
       pathname: '/plan-screen/my-plan' as any,
       params: { planName: name, planDate: date, planTime: time, planEvent: selectedEvent, planFriends: selectedFriends },
