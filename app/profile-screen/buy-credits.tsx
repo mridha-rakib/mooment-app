@@ -37,7 +37,10 @@ export default function BuyCreditsScreen() {
             <Text style={styles.creditsText}>{pkg.credits} Mooment Credits for</Text>
             <View style={styles.bottomRow}>
               <Text style={styles.priceText}>{pkg.price}</Text>
-              <TouchableOpacity style={styles.buyBtn}>
+              <TouchableOpacity 
+                style={styles.buyBtn}
+                onPress={() => router.push('/profile-screen/checkout')}
+              >
                 <Text style={styles.buyBtnText}>Buy</Text>
               </TouchableOpacity>
             </View>
