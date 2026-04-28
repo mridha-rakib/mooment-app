@@ -176,9 +176,9 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
             onPress={() => {
               if (post.postType === 'event') {
-                router.push('/live-screen/live-video');
+                // router.push('/live-screen/live-video'); // Navigation removed
               } else if (post.postType === 'standard') {
-                router.push('/post-screen/view-post');
+                // router.push('/post-screen/view-post'); // Navigation removed as requested
               }
             }}
             style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
@@ -229,7 +229,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                     <TouchableOpacity 
                       style={styles.avatarCluster}
                       activeOpacity={0.8}
-                      onPress={() => router.push('/event-screen/attendees-list')}
+                      onPress={() => { /* router.push('/event-screen/attendees-list'); */ }}
                     >
                       {post.eventDetails.attendeesAvatars?.map((uri, i) => (
                         <Image 
