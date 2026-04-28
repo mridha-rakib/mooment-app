@@ -26,7 +26,6 @@ type Message = {
   eventTitle?: string;
   eventDate?: string;
   eventImage?: string;
-  eventImage?: string;
   locationTitle?: string;
   locationDesc?: string;
   reactions?: Reaction[];
