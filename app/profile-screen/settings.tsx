@@ -102,8 +102,8 @@ export default function SettingsScreen() {
         {/* TERMS & POLICIES Section */}
         <Text style={styles.sectionTitle}>TERMS & POLICIES</Text>
         <View style={styles.sectionGroup}>
-          <SettingItem icon="file-text" label="Terms & Conditions" />
-          <SettingItem icon="shield" label="Privacy & Policy" />
+          <SettingItem icon="file-text" label="Terms & Conditions" onPress={() => router.push('/profile-screen/terms')} />
+          <SettingItem icon="shield" label="Privacy & Policy" onPress={() => router.push('/profile-screen/privacy')} />
           <SettingItem icon="headphones" label="Contact Support" />
         </View>
 
