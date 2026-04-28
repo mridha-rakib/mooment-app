@@ -12,9 +12,7 @@ export default function PaymentSuccessScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.closeBtn}>
-          <BlurView intensity={20} tint="dark" style={styles.closeCircle}>
-            <Feather name="x" size={20} color="#FFFFFF" />
-          </BlurView>
+          <Feather name="x" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -53,7 +51,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
   },
-  closeBtn: {},
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   closeCircle: {
     width: 36,
     height: 36,

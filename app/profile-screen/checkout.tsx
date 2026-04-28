@@ -14,9 +14,7 @@ export default function CheckoutScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <BlurView intensity={20} tint="dark" style={styles.backCircle}>
-            <Feather name="chevron-left" size={24} color="#FFFFFF" />
-          </BlurView>
+          <Feather name="chevron-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
         <View style={{ width: 40 }} />
@@ -162,7 +160,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
   },
-  backBtn: {},
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   backCircle: {
     width: 36,
     height: 36,

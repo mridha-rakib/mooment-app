@@ -23,9 +23,7 @@ export default function FollowersScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <BlurView intensity={20} tint="dark" style={styles.closeCircle}>
-            <Feather name="x" size={18} color="#FFFFFF" />
-          </BlurView>
+          <Feather name="x" size={18} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Followers</Text>
         <View style={{ width: 40 }} />
@@ -68,7 +66,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
   },
-  closeBtn: {},
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   closeCircle: {
     width: 36,
     height: 36,

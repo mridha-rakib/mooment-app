@@ -30,9 +30,7 @@ export default function ProductDetailsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <BlurView intensity={20} tint="dark" style={styles.backCircle}>
-            <Feather name="chevron-left" size={24} color="#FFFFFF" />
-          </BlurView>
+          <Feather name="chevron-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Product Details</Text>
         <TouchableOpacity style={styles.editBtn} onPress={() => setEditModalVisible(true)}>
@@ -110,7 +108,14 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   editBtn: {},
-  backBtn: {},
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 18,
