@@ -13,7 +13,8 @@ import {
   Add01Icon, 
   Archive01Icon, 
   Settings02Icon, 
-  Logout01Icon 
+  Logout01Icon,
+  ShoppingCart01Icon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
@@ -34,15 +35,19 @@ type MenuItemProps = {
   label: string;
   onPress: () => void;
   isDestructive?: boolean;
+  hideSeparator?: boolean;
 };
 
-const MenuItem = ({ icon, label, onPress, isDestructive }: MenuItemProps) => (
-  <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-    <View style={styles.menuItemLeft}>
-      <HugeiconsIcon icon={icon} size={22} color={isDestructive ? '#FF4B4B' : '#FFFFFF'} />
-      <Text style={[styles.menuItemLabel, isDestructive && { color: '#FF4B4B' }]}>{label}</Text>
-    </View>
-  </TouchableOpacity>
+const MenuItem = ({ icon, label, onPress, isDestructive, hideSeparator }: MenuItemProps) => (
+  <>
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.menuItemLeft}>
+        <HugeiconsIcon icon={icon} size={20} color={isDestructive ? '#FF4B4B' : '#FFFFFF'} />
+        <Text style={[styles.menuItemLabel, isDestructive && { color: '#FF4B4B' }]}>{label}</Text>
+      </View>
+    </TouchableOpacity>
+    {!hideSeparator && <View style={styles.itemSeparator} />}
+  </>
 );
 
 const SectionLabel = ({ label }: { label: string }) => (
@@ -94,8 +99,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 router.push('/profile-screen/creator-dashboard');
               }} 
             />
-
-            <View style={styles.separator} />
+            <MenuItem icon={ShoppingCart01Icon} label="My Cart" onPress={() => {}} hideSeparator />
 
             <SectionLabel label="WALLET" />
             <MenuItem 
@@ -123,15 +127,13 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }} 
             />
             <MenuItem icon={Ticket01Icon} label="Ticket Wallet" onPress={() => {}} />
-            <MenuItem icon={ShoppingBag01Icon} label="Product Wallet" onPress={() => {}} />
-
-            <View style={styles.separator} />
+            <MenuItem icon={ShoppingBag01Icon} label="Product Wallet" onPress={() => {}} hideSeparator />
 
             <SectionLabel label="PRODUCT" />
             <MenuItem icon={Add01Icon} label="Add Product" onPress={onAddProductPress} />
-            <MenuItem icon={Archive01Icon} label="My Inventory" onPress={() => {}} />
+            <MenuItem icon={Archive01Icon} label="My Inventory" onPress={() => {}} hideSeparator />
 
-            <View style={styles.separator} />
+            <View style={{ height: 30 }} />
 
             <MenuItem 
               icon={Settings02Icon} 
@@ -140,8 +142,10 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/profile-screen/settings');
               }} 
+              hideSeparator
             />
-            <MenuItem icon={Logout01Icon} label="Logout" onPress={() => {}} isDestructive />
+            <View style={{ height: 10 }} />
+            <MenuItem icon={Logout01Icon} label="Logout" onPress={() => {}} isDestructive hideSeparator />
           </ScrollView>
         </SafeAreaView>
       </View>
@@ -212,12 +216,12 @@ const styles = StyleSheet.create({
   },
   menuItemLabel: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
-  separator: {
+  itemSeparator: {
     height: 1,
     backgroundColor: '#1A1A22',
-    marginTop: 10,
+    marginLeft: 37,
   },
 });

@@ -70,10 +70,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/followers')}>
             <Text style={styles.statValue}>{stats.followers}</Text>
             <Text style={styles.statLabel}>Followers</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{stats.following}</Text>
