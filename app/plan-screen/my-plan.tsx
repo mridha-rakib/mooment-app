@@ -51,6 +51,7 @@ export default function MyPlanScreen() {
     return [];
   });
   const [popupEvent, setPopupEvent] = useState<PlanEvent | null>(null);
+  const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
 
   const highlightedDays = useMemo(() => new Set([4, 5]), []);
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -133,7 +134,7 @@ export default function MyPlanScreen() {
             
             <View style={s.dayHeaderRow}>
               <Text style={s.dayHeaderText}>{dayLabel}</Text>
-              <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7}>
+              <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7} onPress={() => setIsMoreMenuVisible(true)}>
                 <Feather name="more-horizontal" size={16} color="#8E8E9B" />
               </TouchableOpacity>
             </View>
@@ -151,23 +152,65 @@ export default function MyPlanScreen() {
                     
                     <View style={s.slotContent}>
                       {ev ? (
-                        <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
-                          <View style={s.capsuleIconWrap}>
-                            <Feather name="coffee" size={14} color="#FFF" />
-                          </View>
-                          <Text style={s.capsuleTitle}>{ev.title}</Text>
-                          {ev.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{ev.venue}</Text>}
-                          <Text style={s.capsuleTime}>{ev.time}</Text>
-                          
-                          <Image source={{ uri: ev.image }} style={s.capsuleImg} />
-                          
-                          <View style={s.capsuleAvatarsRow}>
-                            <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
-                            <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
-                            <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
-                            <Text style={s.capsuleMoreText}>+41</Text>
-                          </View>
-                        </TouchableOpacity>
+                        <View style={s.capsuleWithWideCardWrap}>
+                          {/* Tall Vertical Capsule */}
+                          <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
+                            <View style={s.capsuleIconWrap}>
+                              <Feather name="coffee" size={14} color="#FFF" />
+                            </View>
+                            <Text style={s.capsuleTitle}>{ev.title}</Text>
+                            {ev.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{ev.venue}</Text>}
+                            <Text style={s.capsuleTime}>{ev.time}</Text>
+                            
+                            <Image source={{ uri: ev.image }} style={s.capsuleImg} />
+                            
+                            <View style={s.capsuleAvatarsRow}>
+                              <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                              <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
+                              <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
+                              <Text style={s.capsuleMoreText}>+41</Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          {/* Wide Horizontal Card connected below (only for 6:00 PM slot) */}
+                          {slot === '6:00 PM' && (
+                            <>
+                              <View style={s.nodeConnector} />
+                              <View style={s.wideCard}>
+                                <View style={s.wideCardTop}>
+                                  <View style={[s.capsuleIconWrap, { width: 44, height: 44, borderRadius: 22, marginBottom: 0, marginRight: 14, backgroundColor: '#1A1A2E', borderWidth: 1, borderColor: '#3A3A4A' }]}>
+                                    <Feather name="coffee" size={18} color="#FFF" />
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={s.capsuleTitle}>{ev.title}</Text>
+                                    <Text style={[s.capsuleVenue, { textAlign: 'left', marginBottom: 8 }]} numberOfLines={1}>
+                                      {ev.venue} at 123, Ave NYC
+                                    </Text>
+                                    <View style={s.capsuleAvatarsRow}>
+                                      <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                                      <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
+                                      <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
+                                      <Text style={s.capsuleMoreText}>+41  •  {ev.time}</Text>
+                                    </View>
+                                  </View>
+                                </View>
+                                <View style={s.wideCardBottom}>
+                                  <View style={{ flexDirection: 'row', gap: 16, paddingLeft: 10 }}>
+                                    <TouchableOpacity><Feather name="share" size={20} color="#8E8E9B" /></TouchableOpacity>
+                                    <TouchableOpacity><Feather name="trash-2" size={20} color="#8E8E9B" /></TouchableOpacity>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                                    <TouchableOpacity style={s.viewBtn}><Text style={s.viewBtnText}>View</Text></TouchableOpacity>
+                                    <TouchableOpacity style={s.addedBtn}>
+                                      <Feather name="check" size={14} color="#0e0d12" style={{ marginRight: 4 }} />
+                                      <Text style={s.addedBtnText}>Added</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              </View>
+                            </>
+                          )}
+                        </View>
                       ) : null}
                     </View>
                   </View>
@@ -209,6 +252,32 @@ export default function MyPlanScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* More Options Menu */}
+      <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
+        <TouchableOpacity style={s.moreOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
+          <View style={s.moreMenuContainer}>
+            <Text style={s.moreMenuHeader}>more</Text>
+            {[
+              { label: 'Create Plan', icon: 'calendar' },
+              { label: 'Edit Plan', icon: 'edit-2' },
+              { label: 'Add Friend', icon: 'user-plus' },
+              { label: 'Tagged Friends', icon: 'users' },
+              { label: 'Share Plan', icon: 'share' },
+              { label: 'Edit Permission', icon: 'edit' },
+              { label: 'Delete', icon: 'trash-2' },
+            ].map((item, idx) => (
+              <View key={item.label}>
+                {idx > 0 && <View style={s.moreMenuSeparator} />}
+                <TouchableOpacity style={s.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+                  <Feather name={item.icon as any} size={16} color="#FFFFFF" style={s.moreMenuIcon} />
+                  <Text style={s.moreMenuText}>{item.label}</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -246,6 +315,7 @@ const s = StyleSheet.create({
   slotContent: { paddingLeft: 20, marginTop: 16, alignItems: 'center', paddingRight: 10 },
 
   /* Vertical Capsule Card */
+  capsuleWithWideCardWrap: { alignItems: 'center', width: '100%' },
   eventCapsule: { 
     width: 150, 
     backgroundColor: '#13131A', 
@@ -262,7 +332,17 @@ const s = StyleSheet.create({
   capsuleImg: { width: 80, height: 40, borderRadius: 8, marginBottom: 12 },
   capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
   capsuleAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: '#0e0d12', marginLeft: -8 },
-  capsuleMoreText: { color: '#8E8E9B', fontSize: 10, marginLeft: 4 },
+  capsuleMoreText: { color: '#8E8E9B', fontSize: 10, marginLeft: 6 },
+
+  /* Node + Wide Card */
+  nodeConnector: { width: 1, height: 32, backgroundColor: '#2A2A3A' },
+  wideCard: { width: '100%', backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', borderRadius: 40, padding: 20 },
+  wideCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  wideCardBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  viewBtn: { backgroundColor: '#1A1A2E', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  viewBtnText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
+  addedBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#C2B5CD', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  addedBtnText: { color: '#0e0d12', fontSize: 13, fontWeight: 'bold' },
 
   /* Calendar */
   bigDay: { color: '#FFF', fontSize: 24, fontWeight: '700', marginBottom: 20, marginTop: 4 },
@@ -291,4 +371,13 @@ const s = StyleSheet.create({
   popupBtnMoreText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
   popupBtnLeave: { flex: 1, height: 40, borderRadius: 10, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
   popupBtnLeaveText: { color: '#0e0d12', fontSize: 14, fontWeight: '700' },
+
+  /* More Menu */
+  moreOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'flex-start', alignItems: 'flex-end' },
+  moreMenuContainer: { width: 180, backgroundColor: '#45454A', borderRadius: 8, marginTop: 150, marginRight: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#55555A', paddingBottom: 4 },
+  moreMenuHeader: { color: '#8E8E9B', fontSize: 13, fontWeight: '600', padding: 12, paddingBottom: 8 },
+  moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16 },
+  moreMenuIcon: { marginRight: 12 },
+  moreMenuText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
+  moreMenuSeparator: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
 });
