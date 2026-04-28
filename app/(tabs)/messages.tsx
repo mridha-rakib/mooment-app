@@ -71,6 +71,22 @@ const CONVERSATIONS: ConversationData[] = [
     id: 'c8', name: 'Giden Xenog', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
     lastMessage: 'Check out this event!', time: '1d', unread: 0, isOnline: false, isGroup: false,
   },
+  {
+    id: 'c9', name: 'Adam Smith', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150',
+    lastMessage: 'Hello there, are you alive?!?', time: '1m ago', unread: 1, isOnline: false, isGroup: true, isMuted: true,
+  },
+  {
+    id: 'c10', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150',
+    lastMessage: 'Nice to meet you too!', time: '1m ago', unread: 0, isOnline: false, isGroup: true,
+  },
+  {
+    id: 'c11', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150',
+    lastMessage: 'Looking forward to our collaboration!', time: '20 min ago', unread: 0, isOnline: false, isGroup: true,
+  },
+  {
+    id: 'c12', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150',
+    lastMessage: 'Thanks for the update!', time: '15 min ago', unread: 0, isOnline: false, isGroup: true,
+  },
 ];
 
 const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
@@ -90,14 +106,14 @@ const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Groups'>('All');
+  const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Blocked'>('All');
   const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
   const [roomTab, setRoomTab] = useState<'Event Rooms' | 'General Rooms'>('Event Rooms');
 
   const filtered = CONVERSATIONS.filter(c => {
     let match = true;
     if (topTab === 'Unread') match = c.unread > 0;
-    if (topTab === 'Groups') match = c.isGroup;
+    if (topTab === 'Blocked') match = c.isGroup;
     
     if (match) {
       if (subTab === 'DMs') return !c.isGroup;
@@ -132,6 +148,66 @@ export default function MessagesScreen() {
       </Text>
     );
   };
+
+  const renderConvoItem = ({ item }: { item: ConversationData }) => (
+    <TouchableOpacity
+      style={styles.convoRow}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+      activeOpacity={0.85}
+    >
+      {renderAvatar(item)}
+      <View style={styles.convoMeta}>
+        <View style={styles.convoTopRow}>
+          <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <View style={styles.convoTimeRow}>
+            {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
+            <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
+          </View>
+        </View>
+        <View style={styles.convoBottomRow}>
+          {renderMessage(item)}
+          {item.unread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderGroupItem = ({ item }: { item: ConversationData }) => (
+    <TouchableOpacity
+      style={styles.groupCard}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+      activeOpacity={0.85}
+    >
+      <Image source={{ uri: item.avatar }} style={styles.groupCardAvatar} />
+      <View style={styles.groupCardMeta}>
+        <View style={styles.groupCardTopRow}>
+          <Text style={styles.groupCardName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          {item.isMuted && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.groupCardDot}> • </Text>
+              <Feather name="bell-off" size={14} color="#8E8E9B" />
+            </View>
+          )}
+          <View style={{ flex: 1 }} />
+          <Text style={styles.groupCardTime}>{item.time}</Text>
+        </View>
+        <View style={styles.groupCardBottomRow}>
+          <Text style={styles.groupCardMsg} numberOfLines={1}>
+            {item.lastMessage}
+          </Text>
+          {item.unread > 0 && <View style={styles.groupCardUnreadDot} />}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
     <TouchableOpacity style={styles.roomCard} activeOpacity={0.85}>
@@ -209,7 +285,7 @@ export default function MessagesScreen() {
       {/* Top Tabs (Only for DMs and Groups) */}
       {subTab !== 'Rooms' && (
         <View style={styles.tabRow}>
-          {(['All', 'Unread', 'Groups'] as const).map(tab => (
+          {(['All', 'Unread', 'Blocked'] as const).map(tab => (
             <TouchableOpacity
               key={tab}
               style={[styles.tab, topTab === tab && styles.tabActive]}
@@ -267,42 +343,15 @@ export default function MessagesScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          ItemSeparatorComponent={() => subTab === 'Groups' ? null : <View style={styles.separator} />}
+          contentContainerStyle={subTab === 'Groups' ? { paddingBottom: 100, paddingTop: 12 } : { paddingBottom: 100 }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="chatbubble-ellipses-outline" size={48} color="#2A2A3A" />
               <Text style={styles.emptyText}>No conversations found</Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.convoRow}
-              onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
-              activeOpacity={0.85}
-            >
-              {renderAvatar(item)}
-              <View style={styles.convoMeta}>
-                <View style={styles.convoTopRow}>
-                  <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <View style={styles.convoTimeRow}>
-                    {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
-                    <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
-                  </View>
-                </View>
-                <View style={styles.convoBottomRow}>
-                  {renderMessage(item)}
-                  {item.unread > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
+          renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}
         />
       )}
     </SafeAreaView>
@@ -385,4 +434,16 @@ const styles = StyleSheet.create({
   roomListenerAvatars: { flexDirection: 'row', marginRight: 6 },
   roomListenerAvatar: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: '#0e0d12' },
   roomListenersText: { color: '#8E8E9B', fontSize: 10 },
+
+  /* Group Card */
+  groupCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 20, marginHorizontal: 16, marginBottom: 12, padding: 16 },
+  groupCardAvatar: { width: 44, height: 44, borderRadius: 22, marginRight: 16, backgroundColor: '#1A1A2E' },
+  groupCardMeta: { flex: 1 },
+  groupCardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  groupCardName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
+  groupCardDot: { color: '#454555', fontSize: 14, marginHorizontal: 2 },
+  groupCardTime: { color: '#8E8E9B', fontSize: 12 },
+  groupCardBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  groupCardMsg: { color: '#8E8E9B', fontSize: 13, flex: 1, marginRight: 8 },
+  groupCardUnreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F2245C' },
 });
