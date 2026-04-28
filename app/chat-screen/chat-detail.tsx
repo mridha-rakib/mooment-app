@@ -26,21 +26,36 @@ type Message = {
   eventTitle?: string;
   eventDate?: string;
   eventImage?: string;
+  eventImage?: string;
+  locationTitle?: string;
+  locationDesc?: string;
   reactions?: Reaction[];
   time: string;
   delivered?: boolean;
   read?: boolean;
+  senderName?: string;
+  senderAvatar?: string;
+  isHost?: boolean;
 };
 
 // ── Mock Data ──────────────────────────────────────────────────────────────
 const MOCK_MESSAGES: Message[] = [
   {
     id: 'm1', fromMe: false, type: 'text',
+    senderName: 'DJ Koko', isHost: true, senderAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+    text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
+    locationTitle: 'Sky Terrace, Floor 7',
+    locationDesc: 'Tap to open in maps',
+    time: '8:30pm',
+  },
+  {
+    id: 'm2', fromMe: false, type: 'text',
+    senderName: 'Jane Cooper', isHost: false, senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
     text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
     time: '8:30pm',
   },
   {
-    id: 'm2', fromMe: true, type: 'text',
+    id: 'm3', fromMe: true, type: 'text',
     text: 'See you all up there!',
     time: '8:30pm', delivered: true,
   },
@@ -50,11 +65,35 @@ const WAVEFORM_HEIGHTS = [8, 14, 20, 12, 28, 16, 24, 10, 18, 22, 14, 26, 8, 20, 
 
 // ── Bubble Components ──────────────────────────────────────────────────────
 function TextBubble({ msg }: { msg: Message }) {
+  const isHostMsg = !msg.fromMe && msg.isHost;
+
   return (
-    <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : styles.bubbleThem]}>
+    <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : (isHostMsg ? styles.bubbleHost : styles.bubbleThem)]}>
+      {/* Sender Name Row */}
+      {!msg.fromMe && msg.senderName && (
+        <View style={styles.bubbleSenderRow}>
+          <Text style={[styles.bubbleSenderName, isHostMsg && { color: '#D4B0EB' }]}>{msg.senderName}</Text>
+          {msg.isHost && <Text style={styles.bubbleHostTag}> Host</Text>}
+        </View>
+      )}
+
       <Text style={[styles.bubbleText, msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
         {msg.text}
       </Text>
+
+      {/* Location Attachment */}
+      {msg.locationTitle && (
+        <TouchableOpacity style={styles.locationBox} activeOpacity={0.8}>
+          <View style={styles.locationIconWrap}>
+            <Feather name="map-pin" size={16} color="#FFFFFF" />
+          </View>
+          <View>
+            <Text style={styles.locationTitle}>{msg.locationTitle}</Text>
+            <Text style={styles.locationDesc}>{msg.locationDesc}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       <View style={[styles.bubbleMeta, !msg.fromMe && { justifyContent: 'flex-start' }]}>
         <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>
           {msg.time}
@@ -228,7 +267,7 @@ export default function ChatDetailScreen() {
                   {/* Avatar for them */}
                   {!item.fromMe ? (
                     showAvatar
-                      ? <Image source={{ uri: avatar }} style={styles.msgAvatar} />
+                      ? <Image source={{ uri: item.senderAvatar || avatar }} style={styles.msgAvatar} />
                       : <View style={{ width: 30, marginRight: 8 }} />
                   ) : null}
 
@@ -376,13 +415,23 @@ const styles = StyleSheet.create({
   /* Text Bubble */
   bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, maxWidth: '85%' },
   bubbleMe: { backgroundColor: '#C2B5CD', borderBottomRightRadius: 4 },
-  bubbleThem: { backgroundColor: '#1A1A2E', borderTopLeftRadius: 4 },
+  bubbleThem: { backgroundColor: '#161622', borderTopLeftRadius: 4, borderWidth: 1, borderColor: '#2A2A3A' },
+  bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 4 },
+  bubbleSenderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  bubbleSenderName: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
+  bubbleHostTag: { color: '#8E8E9B', fontSize: 12, fontWeight: '400' },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: '#0e0d12' },
   bubbleTextThem: { color: '#FFFFFF' },
-  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 4 },
+  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 6 },
   bubbleTime: { color: '#8E8E9B', fontSize: 10 },
   bubbleTimeMe: { color: 'rgba(14, 13, 18, 0.6)' },
+
+  /* Location Box */
+  locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginTop: 12, marginBottom: 4 },
+  locationIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#5D35B0', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  locationTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
+  locationDesc: { color: '#8E8E9B', fontSize: 11 },
 
   /* Image Bubble */
   imageBubble: { borderRadius: 16, overflow: 'hidden', position: 'relative' },
