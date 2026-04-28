@@ -1,0 +1,119 @@
+import { Feather } from "@expo/vector-icons";
+import { BlurView } from 'expo-blur';
+import { useRouter } from "expo-router";
+import React from "react";
+import { Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+export default function PaymentSuccessScreen() {
+  const router = useRouter();
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.closeBtn}>
+          <BlurView intensity={20} tint="dark" style={styles.closeCircle}>
+            <Feather name="x" size={20} color="#FFFFFF" />
+          </BlurView>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.content}>
+        <Image 
+          source={require('@/assets/images/success.png')} 
+          style={styles.successImage} 
+          resizeMode="contain"
+        />
+        <Text style={styles.title}>Payment successful</Text>
+        <Text style={styles.subtitle}>You have successfully bought{'\n'}Mooment Credis</Text>
+      </View>
+
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.primaryBtn}>
+          <Text style={styles.primaryBtnText}>View My Mooment Wallet</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/(tabs)/profile')}>
+          <Text style={styles.secondaryBtnText}>Back to Profile</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#0e0d12',
+  },
+  header: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  closeBtn: {},
+  closeCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#2A2A32',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingBottom: 50,
+  },
+  successImage: {
+    width: 160,
+    height: 160,
+    marginBottom: 30,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: '#8E8E9B',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    gap: 15,
+  },
+  primaryBtn: {
+    backgroundColor: '#B2ABBA', // Light purple
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: {
+    color: '#0e0d12',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  secondaryBtn: {
+    backgroundColor: '#2A2A32', // Dark gray
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+});

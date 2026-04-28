@@ -138,7 +138,10 @@ export default function CheckoutScreen() {
         </TouchableOpacity>
 
         {/* Continue Button */}
-        <TouchableOpacity style={styles.continueBtn}>
+        <TouchableOpacity 
+          style={styles.continueBtn}
+          onPress={() => router.push('/profile-screen/payment-success')}
+        >
           <Text style={styles.continueBtnText}>Continue to payment</Text>
         </TouchableOpacity>
 
