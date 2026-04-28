@@ -75,7 +75,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <SectionLabel label="ESSENTIALS" />
-            <MenuItem icon={UserEdit01Icon} label="Edit Profile" onPress={() => {}} />
+            <MenuItem 
+              icon={UserEdit01Icon} 
+              label="Edit Profile" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/edit-profile');
+              }} 
+            />
             <MenuItem icon={Bookmark02Icon} label="Saved Posts" onPress={() => {}} />
             <MenuItem icon={Calendar03Icon} label="Draft Events" onPress={() => {}} />
             <MenuItem icon={Calendar01Icon} label="My Plan" onPress={() => {}} />
@@ -105,7 +112,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
 
             <View style={styles.separator} />
 
-            <MenuItem icon={Settings02Icon} label="Settings" onPress={() => {}} />
+            <MenuItem 
+              icon={Settings02Icon} 
+              label="Settings" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/settings');
+              }} 
+            />
             <MenuItem icon={Logout01Icon} label="Logout" onPress={() => {}} isDestructive />
           </ScrollView>
         </SafeAreaView>
