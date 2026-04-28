@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  FlatList, Image, TextInput, Platform, StatusBar, Dimensions
-} from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import {
+  Dimensions,
+  FlatList, Image,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -23,13 +30,7 @@ export type ConversationData = {
   isMuted?: boolean;
 };
 
-const ACTIVE_USERS = [
-  { id: 'a1', name: 'Brooklyn', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a2', name: 'Ketty', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a3', name: 'Dj Koko', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a4', name: 'Tuval', avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop' },
-  { id: 'a5', name: 'Mavrick', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop' },
-];
+
 
 const CONVERSATIONS: ConversationData[] = [
   {
@@ -74,14 +75,20 @@ const CONVERSATIONS: ConversationData[] = [
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'All' | 'Unread' | 'Groups'>('All');
+  const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Groups'>('All');
+  const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
 
   const filtered = CONVERSATIONS.filter(c => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
-    if (activeTab === 'Unread') return matchSearch && c.unread > 0;
-    if (activeTab === 'Groups') return matchSearch && c.isGroup;
-    return matchSearch;
+    let match = true;
+    if (topTab === 'Unread') match = c.unread > 0;
+    if (topTab === 'Groups') match = c.isGroup;
+    
+    if (match) {
+      if (subTab === 'DMs') return !c.isGroup;
+      if (subTab === 'Groups') return c.isGroup;
+      return false;
+    }
+    return false;
   });
 
   const renderAvatar = (item: ConversationData) => {
@@ -116,7 +123,7 @@ export default function MessagesScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
+        <Text style={styles.headerTitle}>Chats</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
             <Feather name="edit" size={20} color="#FFFFFF" />
@@ -131,33 +138,34 @@ export default function MessagesScreen() {
         </View>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchWrap}>
-        <Feather name="search" size={16} color="#454555" style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search messages..."
-          placeholderTextColor="#454555"
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')} activeOpacity={0.8}>
-            <Feather name="x" size={16} color="#454555" />
+
+      
+      {/* Segmented Control */}
+      <View style={styles.segmentedControl}>
+        {(['DMs', 'Groups', 'Rooms'] as const).map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.segmentTab, subTab === tab && styles.segmentTabActive]}
+            onPress={() => setSubTab(tab)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.segmentTabText, subTab === tab && styles.segmentTabTextActive]}>
+              {tab}
+            </Text>
           </TouchableOpacity>
-        )}
+        ))}
       </View>
 
-      {/* Tabs */}
+      {/* Top Tabs */}
       <View style={styles.tabRow}>
         {(['All', 'Unread', 'Groups'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
+            style={[styles.tab, topTab === tab && styles.tabActive]}
+            onPress={() => setTopTab(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+            <Text style={[styles.tabText, topTab === tab && styles.tabTextActive]}>{tab}</Text>
             {tab === 'Unread' && (
               <View style={styles.tabBadge}>
                 <Text style={styles.tabBadgeText}>
@@ -169,29 +177,8 @@ export default function MessagesScreen() {
         ))}
       </View>
 
-      {/* Active Now Strip */}
-      {activeTab === 'All' && (
-        <View style={styles.activeSection}>
-          <Text style={styles.activeSectionTitle}>Active Now</Text>
-          <FlatList
-            data={ACTIVE_USERS}
-            horizontal
-            keyExtractor={i => i.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
-            ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.activeUser} activeOpacity={0.8}>
-                <View style={styles.activeAvatarWrap}>
-                  <Image source={{ uri: item.avatar }} style={styles.activeAvatar} />
-                  <View style={styles.activeOnlineDot} />
-                </View>
-                <Text style={styles.activeUserName} numberOfLines={1}>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      )}
+
+
 
       {/* Conversation List */}
       <FlatList
@@ -247,24 +234,21 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
 
-  searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 14, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 14 },
-  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
-
-  tabRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 4 },
-  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginRight: 8, backgroundColor: '#13131A' },
-  tabActive: { backgroundColor: '#D4B0EB' },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 14 },
+  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'transparent', backgroundColor: '#333333' },
+  tabActive: { borderColor: '#FFFFFF' },
   tabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#0e0d12' },
+  tabTextActive: { color: '#FFFFFF' },
   tabBadge: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#F2245C', justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
   tabBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 
-  activeSection: { paddingTop: 8, paddingBottom: 12 },
-  activeSectionTitle: { color: '#8E8E9B', fontSize: 12, fontWeight: '600', paddingHorizontal: 20, marginBottom: 2 },
-  activeUser: { alignItems: 'center', width: 60 },
-  activeAvatarWrap: { position: 'relative', marginBottom: 5 },
-  activeAvatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#D4B0EB' },
-  activeOnlineDot: { position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#0e0d12' },
-  activeUserName: { color: '#8E8E9B', fontSize: 11, textAlign: 'center' },
+  segmentedControl: { flexDirection: 'row', backgroundColor: '#0e0d12', borderRadius: 24, borderWidth: 1, borderColor: '#2A2A3A', marginHorizontal: 16, marginBottom: 14, padding: 4 },
+  segmentTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
+  segmentTabActive: { backgroundColor: '#333333' },
+  segmentTabText: { color: '#8E8E9B', fontSize: 14, fontWeight: '600' },
+  segmentTabTextActive: { color: '#FFFFFF' },
+
+
 
   separator: { height: 1, backgroundColor: '#13131A', marginLeft: 84 },
 
@@ -285,10 +269,10 @@ const styles = StyleSheet.create({
   convoTimeUnread: { color: '#D4B0EB', fontWeight: '600' },
   convoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   lastMsg: { color: '#454555', fontSize: 13, flex: 1, marginRight: 8 },
-  lastMsgUnread: { color: '#8E8E9B', fontWeight: '500' },
+  lastMsgUnread: { color: '#FFFFFF', fontWeight: '500' },
   typingText: { color: '#D4B0EB', fontStyle: 'italic' },
-  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
-  unreadBadgeText: { color: '#0e0d12', fontSize: 11, fontWeight: 'bold' },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#F2245C', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  unreadBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' },
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { color: '#454555', fontSize: 14 },

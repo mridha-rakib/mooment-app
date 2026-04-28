@@ -232,13 +232,7 @@ export default function ChatDetailScreen() {
 
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-            <Feather name="phone" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconBtn, { marginLeft: 8 }]} activeOpacity={0.8}>
-            <Feather name="video" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconBtn, { marginLeft: 8 }]} activeOpacity={0.8}>
-            <Feather name="more-vertical" size={18} color="#FFFFFF" />
+            <Feather name="more-horizontal" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -335,26 +329,18 @@ export default function ChatDetailScreen() {
 
         {/* ── Input Bar ── */}
         <View style={styles.inputBar}>
-          <TouchableOpacity
-            style={[styles.inputAction, showAttach && styles.inputActionActive]}
-            onPress={() => setShowAttach(p => !p)}
-            activeOpacity={0.8}
-          >
-            <Feather name={showAttach ? 'x' : 'plus'} size={22} color={showAttach ? '#D4B0EB' : '#8E8E9B'} />
-          </TouchableOpacity>
-
           <View style={styles.inputWrap}>
             <TextInput
               style={styles.input}
-              placeholder="Message..."
-              placeholderTextColor="#454555"
+              placeholder="Write a message..."
+              placeholderTextColor="#8E8E9B"
               value={inputText}
               onChangeText={setInputText}
               multiline
               maxLength={500}
             />
             <TouchableOpacity style={styles.emojiBtn} activeOpacity={0.8}>
-              <MaterialCommunityIcons name="sticker-emoji" size={22} color="#8E8E9B" />
+              <Feather name="smile" size={20} color="#8E8E9B" />
             </TouchableOpacity>
           </View>
 
@@ -363,8 +349,8 @@ export default function ChatDetailScreen() {
               <Ionicons name="send" size={18} color="#0e0d12" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.inputAction} activeOpacity={0.8}>
-              <Feather name="mic" size={22} color="#8E8E9B" />
+            <TouchableOpacity style={styles.micBtn} activeOpacity={0.8}>
+              <Feather name="mic" size={20} color="#0e0d12" />
             </TouchableOpacity>
           )}
         </View>
@@ -400,15 +386,15 @@ const styles = StyleSheet.create({
   msgAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },
 
   /* Text Bubble */
-  bubble: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, maxWidth: '100%' },
-  bubbleMe: { backgroundColor: '#3B1F5E', borderBottomRightRadius: 4 },
-  bubbleThem: { backgroundColor: '#1A1A2E', borderBottomLeftRadius: 4 },
+  bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 20, maxWidth: '100%' },
+  bubbleMe: { backgroundColor: '#D4B0EB', borderBottomRightRadius: 6 },
+  bubbleThem: { backgroundColor: '#1A1A2E', borderBottomLeftRadius: 6 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
-  bubbleTextMe: { color: '#FFFFFF' },
-  bubbleTextThem: { color: '#D0D0D8' },
+  bubbleTextMe: { color: '#0e0d12' },
+  bubbleTextThem: { color: '#FFFFFF' },
   bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
-  bubbleTime: { color: 'rgba(142,142,155,0.8)', fontSize: 10 },
-  bubbleTimeMe: { color: 'rgba(212,176,235,0.7)' },
+  bubbleTime: { color: '#8E8E9B', fontSize: 10 },
+  bubbleTimeMe: { color: 'rgba(14, 13, 18, 0.6)' },
 
   /* Image Bubble */
   imageBubble: { borderRadius: 16, overflow: 'hidden', position: 'relative' },
@@ -460,11 +446,10 @@ const styles = StyleSheet.create({
   attachLabel: { color: '#8E8E9B', fontSize: 12 },
 
   /* Input Bar */
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#13131A', backgroundColor: '#0e0d12', gap: 8 },
-  inputAction: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center', borderRadius: 19 },
-  inputActionActive: { backgroundColor: 'rgba(212,176,235,0.1)' },
-  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#13131A', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 8, minHeight: 44 },
-  input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginRight: 4 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#13131A', backgroundColor: '#0e0d12', gap: 12 },
+  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minHeight: 48 },
+  input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginRight: 8 },
   emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center' },
+  micBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center' },
+  sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#D4B0EB', justifyContent: 'center', alignItems: 'center' },
 });
