@@ -73,10 +73,26 @@ const CONVERSATIONS: ConversationData[] = [
   },
 ];
 
+const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
+  id: `r${i}`,
+  title: 'Pre-show chat with DJ Nova',
+  hostName: 'DJ Nova',
+  isHost: i === 0 || i === 2, // first item in each row has Host badge
+  hostAvatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
+  listeners: 412,
+  listenerAvatars: [
+    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+  ]
+}));
+
 export default function MessagesScreen() {
   const router = useRouter();
   const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Groups'>('All');
   const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
+  const [roomTab, setRoomTab] = useState<'Event Rooms' | 'General Rooms'>('Event Rooms');
 
   const filtered = CONVERSATIONS.filter(c => {
     let match = true;
@@ -117,6 +133,40 @@ export default function MessagesScreen() {
     );
   };
 
+  const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
+    <TouchableOpacity style={styles.roomCard} activeOpacity={0.85}>
+      <View style={styles.roomCapsule}>
+        <View style={styles.roomAvatarWrap}>
+          <Image source={{ uri: item.hostAvatar }} style={styles.roomAvatar} />
+          <View style={styles.roomOnlineDot} />
+        </View>
+        {item.isHost && (
+          <View style={styles.roomHostBadge}>
+            <Text style={styles.roomHostText}>Host</Text>
+          </View>
+        )}
+        <TouchableOpacity style={styles.roomJoinBtn} activeOpacity={0.8}>
+          <Text style={styles.roomJoinText}>Join</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <Text style={styles.roomTitle} numberOfLines={2}>{item.title}</Text>
+      
+      <Text style={styles.roomSpeakerText}>
+        <Text style={styles.roomSpeakerName}>{item.hostName}</Text> is speaking
+      </Text>
+      
+      <View style={styles.roomListenersRow}>
+        <View style={styles.roomListenerAvatars}>
+          {item.listenerAvatars.map((av, idx) => (
+            <Image key={idx} source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0 }]} />
+          ))}
+        </View>
+        <Text style={styles.roomListenersText}>{item.listeners} listening</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
@@ -156,72 +206,105 @@ export default function MessagesScreen() {
         ))}
       </View>
 
-      {/* Top Tabs */}
-      <View style={styles.tabRow}>
-        {(['All', 'Unread', 'Groups'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, topTab === tab && styles.tabActive]}
-            onPress={() => setTopTab(tab)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, topTab === tab && styles.tabTextActive]}>{tab}</Text>
-            {tab === 'Unread' && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>
-                  {CONVERSATIONS.filter(c => c.unread > 0).length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Top Tabs (Only for DMs and Groups) */}
+      {subTab !== 'Rooms' && (
+        <View style={styles.tabRow}>
+          {(['All', 'Unread', 'Groups'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, topTab === tab && styles.tabActive]}
+              onPress={() => setTopTab(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tabText, topTab === tab && styles.tabTextActive]}>{tab}</Text>
+              {tab === 'Unread' && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {CONVERSATIONS.filter(c => c.unread > 0).length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Room Tabs */}
+      {subTab === 'Rooms' && (
+        <View style={styles.roomTabsRow}>
+          {(['Event Rooms', 'General Rooms'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={styles.roomTab}
+              onPress={() => setRoomTab(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.roomTabText, roomTab === tab && styles.roomTabTextActive]}>{tab}</Text>
+              {roomTab === tab && <View style={styles.roomTabIndicator} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
 
 
 
-      {/* Conversation List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="chatbubble-ellipses-outline" size={48} color="#2A2A3A" />
-            <Text style={styles.emptyText}>No conversations found</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.convoRow}
-            onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
-            activeOpacity={0.85}
-          >
-            {renderAvatar(item)}
-            <View style={styles.convoMeta}>
-              <View style={styles.convoTopRow}>
-                <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={styles.convoTimeRow}>
-                  {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
-                  <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
+      {/* Lists */}
+      {subTab === 'Rooms' ? (
+        <FlatList
+          key="rooms-grid"
+          data={MOCK_ROOMS}
+          keyExtractor={item => item.id}
+          numColumns={2}
+          columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100, paddingTop: 16 }}
+          renderItem={renderRoomItem}
+        />
+      ) : (
+        <FlatList
+          key="conversations-list"
+          data={filtered}
+          keyExtractor={item => item.id}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="chatbubble-ellipses-outline" size={48} color="#2A2A3A" />
+              <Text style={styles.emptyText}>No conversations found</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.convoRow}
+              onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+              activeOpacity={0.85}
+            >
+              {renderAvatar(item)}
+              <View style={styles.convoMeta}>
+                <View style={styles.convoTopRow}>
+                  <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <View style={styles.convoTimeRow}>
+                    {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
+                    <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
+                  </View>
+                </View>
+                <View style={styles.convoBottomRow}>
+                  {renderMessage(item)}
+                  {item.unread > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
+                    </View>
+                  )}
                 </View>
               </View>
-              <View style={styles.convoBottomRow}>
-                {renderMessage(item)}
-                {item.unread > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
-      />
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -247,6 +330,12 @@ const styles = StyleSheet.create({
   segmentTabActive: { backgroundColor: '#333333' },
   segmentTabText: { color: '#8E8E9B', fontSize: 14, fontWeight: '600' },
   segmentTabTextActive: { color: '#FFFFFF' },
+
+  roomTabsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#2A2A3A', marginHorizontal: 16, marginBottom: 8 },
+  roomTab: { flex: 1, paddingVertical: 12, alignItems: 'center', position: 'relative' },
+  roomTabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
+  roomTabTextActive: { color: '#FFFFFF' },
+  roomTabIndicator: { position: 'absolute', bottom: -1, width: '100%', height: 2, backgroundColor: '#D4B0EB' },
 
 
 
@@ -276,4 +365,24 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { color: '#454555', fontSize: 14 },
+
+  /* Rooms Grid */
+  roomCard: { width: (width - 48) / 2, marginBottom: 24, alignItems: 'center' },
+  roomCapsule: { width: 94, height: 146, borderRadius: 47, backgroundColor: '#130B24', borderWidth: 1, borderColor: '#2D1B4E', alignItems: 'center', paddingTop: 16, paddingBottom: 16, marginBottom: 12 },
+  roomAvatarWrap: { position: 'relative', marginBottom: 8 },
+  roomAvatar: { width: 44, height: 44, borderRadius: 22 },
+  roomOnlineDot: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#130B24' },
+  roomHostBadge: { borderColor: '#D4B0EB', borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 8 },
+  roomHostText: { color: '#D4B0EB', fontSize: 10, fontWeight: '600' },
+  roomJoinBtn: { backgroundColor: '#1A1A2E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6, marginTop: 'auto' },
+  roomJoinText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  
+  roomTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
+  roomSpeakerText: { color: '#8E8E9B', fontSize: 11, textAlign: 'center', marginBottom: 8 },
+  roomSpeakerName: { color: '#FFFFFF', fontWeight: 'bold' },
+  
+  roomListenersRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  roomListenerAvatars: { flexDirection: 'row', marginRight: 6 },
+  roomListenerAvatar: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: '#0e0d12' },
+  roomListenersText: { color: '#8E8E9B', fontSize: 10 },
 });
