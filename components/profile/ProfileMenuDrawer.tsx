@@ -98,7 +98,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <View style={styles.separator} />
 
             <SectionLabel label="WALLET" />
-            <MenuItem icon={StripeIcon} label="Add Stripe Account" onPress={() => {}} />
+            <MenuItem 
+              icon={StripeIcon} 
+              label="Add Stripe Account" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/add-stripe');
+              }} 
+            />
             <MenuItem icon={BitcoinIcon} label="Buy Mooment Credits" onPress={() => {}} />
             <MenuItem icon={Wallet01Icon} label="Mooment Wallet" onPress={() => {}} />
             <MenuItem icon={Ticket01Icon} label="Ticket Wallet" onPress={() => {}} />
