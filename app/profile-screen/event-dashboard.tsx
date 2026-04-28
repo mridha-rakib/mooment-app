@@ -80,7 +80,7 @@ export default function EventDashboardScreen() {
           </View>
           <TouchableOpacity 
             style={styles.legendItem}
-            onPress={() => router.push('/profile-screen/ticket-stat')}
+            onPress={() => router.push('/profile-screen/attendee-list')}
           >
             <View style={[styles.dot, { backgroundColor: '#2DB46D' }]} />
             <Text style={styles.legendText}>47 Ongoing</Text>
