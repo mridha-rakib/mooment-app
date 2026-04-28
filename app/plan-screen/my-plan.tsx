@@ -19,7 +19,7 @@ function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); 
 type PlanEvent = { id: string; day: number; time: string; title: string; image: string; venue?: string };
 
 /* ─── Time slots for the timeline ─── */
-const TIME_SLOTS = ['6:00 PM', '7:00 PM'];
+const TIME_SLOTS = ['6:00 PM', '9:00 PM'];
 
 export default function MyPlanScreen() {
   const router = useRouter();
@@ -34,6 +34,24 @@ export default function MyPlanScreen() {
   const [selectedDay, setSelectedDay] = useState(now.getDate());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [events, setEvents] = useState<PlanEvent[]>([]);
+
+  const handleAddEvent = () => {
+    // Populate with dummy events matching the design
+    setEvents([
+      {
+        id: '1', day: selectedDay, time: '6:00 PM',
+        title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+        venue: 'Rooftop Series Vol.4',
+      },
+      {
+        id: '2', day: selectedDay, time: '9:00 PM',
+        title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+        venue: 'Rooftop Series Vol.4',
+      }
+    ]);
+    setIsSelectEventModalVisible(false);
+    setIsNamePlanModalVisible(true); // Open the Name Plan modal after adding
+  };
   const [popupEvent, setPopupEvent] = useState<PlanEvent | null>(null);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const [isEventModalVisible, setIsEventModalVisible] = useState(false);
@@ -88,13 +106,19 @@ export default function MyPlanScreen() {
         {/* ═══ Calendar ═══ */}
         {calendarOpen && (
           <View style={{ marginBottom: 24, marginTop: 12 }}>
-            <Text style={s.bigDay}>{fullDayLabel}</Text>
+            <View style={s.calendarHeaderWrap}>
+              <Text style={s.bigDay}>Mon, Aug 17</Text>
+              <View style={s.calendarLine} />
+            </View>
 
             <View style={s.calNav}>
-              <Text style={s.calNavLabel}>{MONTHS[calMonth]} {calYear}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={s.calNavLabel}>August 2025</Text>
+                <Feather name="chevron-down" size={12} color="#8E8E9B" style={{ marginLeft: 4 }} />
+              </View>
               <View style={s.calNavArrows}>
-                <TouchableOpacity onPress={prevMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-left" size={16} color="#FFF" /></TouchableOpacity>
-                <TouchableOpacity onPress={nextMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-right" size={16} color="#FFF" /></TouchableOpacity>
+                <TouchableOpacity onPress={prevMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-left" size={14} color="#FFF" /></TouchableOpacity>
+                <TouchableOpacity onPress={nextMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-right" size={14} color="#FFF" /></TouchableOpacity>
               </View>
             </View>
 
@@ -141,67 +165,83 @@ export default function MyPlanScreen() {
                     <View style={s.dashedLine} />
                     
                     <View style={s.slotContent}>
-                      {ev ? (
-                        <View style={s.capsuleWithWideCardWrap}>
-                          {/* Tall Vertical Capsule */}
-                          <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
-                            <View style={s.capsuleIconWrap}>
-                              <Feather name="coffee" size={14} color="#FFF" />
-                            </View>
-                            <Text style={s.capsuleTitle}>{ev.title}</Text>
-                            {ev.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{ev.venue}</Text>}
-                            <Text style={s.capsuleTime}>{ev.time}</Text>
-                            
-                            <Image source={{ uri: ev.image }} style={s.capsuleImg} />
-                            
-                            <View style={s.capsuleAvatarsRow}>
-                              <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
-                              <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
-                              <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
-                              <Text style={s.capsuleMoreText}>+41</Text>
-                            </View>
-                          </TouchableOpacity>
-
-                          {/* Wide Horizontal Card connected below (only for 6:00 PM slot) */}
-                          {slot === '6:00 PM' && (
-                            <>
-                              <View style={s.nodeConnector} />
-                              <View style={s.wideCard}>
-                                <View style={s.wideCardTop}>
-                                  <View style={[s.capsuleIconWrap, { width: 44, height: 44, borderRadius: 22, marginBottom: 0, marginRight: 14, backgroundColor: '#1A1A2E', borderWidth: 1, borderColor: '#3A3A4A' }]}>
-                                    <Feather name="coffee" size={18} color="#FFF" />
+                      {ev ? (() => {
+                        const validEv = ev;
+                        return (
+                          <>
+                            {/* Slot 1: Tall Vertical Capsule + Wide Card Connected (6:00 PM) */}
+                            {slot === '6:00 PM' && (
+                              <View style={{ alignItems: 'center', width: '100%' }}>
+                                <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(validEv)}>
+                                  <View style={s.capsuleIconWrap}>
+                                    <Feather name="music" size={14} color="#FFF" />
                                   </View>
-                                  <View style={{ flex: 1 }}>
-                                    <Text style={s.capsuleTitle}>{ev.title}</Text>
-                                    <Text style={[s.capsuleVenue, { textAlign: 'left', marginBottom: 8 }]} numberOfLines={1}>
-                                      {ev.venue} at 123, Ave NYC
-                                    </Text>
-                                    <View style={s.capsuleAvatarsRow}>
-                                      <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
-                                      <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
-                                      <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
-                                      <Text style={s.capsuleMoreText}>+41  •  {ev.time}</Text>
+                                  <Text style={s.capsuleTitle}>{validEv.title}</Text>
+                                  {validEv.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{validEv.venue}</Text>}
+                                  <Text style={s.capsuleTime}>{validEv.time}</Text>
+                                  <Image source={{ uri: validEv.image }} style={s.capsuleImg} />
+                                  <View style={s.capsuleAvatarsRow}>
+                                    <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                                    <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
+                                    <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
+                                    <Text style={s.capsuleMoreText}>+41</Text>
+                                  </View>
+                                </TouchableOpacity>
+
+                                <View style={s.nodeConnector} />
+
+                                <TouchableOpacity style={s.wideCard} activeOpacity={0.9} onPress={() => setIsMoreMenuVisible(true)}>
+                                  <View style={s.wideCardLeft}>
+                                    <View style={s.wideCardIcon}>
+                                      <Feather name="music" size={18} color="#FFF" />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={s.wideCardTitle}>{validEv.title}</Text>
+                                      <Text style={[s.wideCardTime, { marginBottom: 6, fontSize: 10 }]} numberOfLines={1}>
+                                        {validEv.venue} at 123, Ave NYC
+                                      </Text>
+                                      <View style={s.capsuleAvatarsRow}>
+                                        <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0, width: 16, height: 16 }]} />
+                                        <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={[s.capsuleAvatar, { width: 16, height: 16 }]} />
+                                        <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={[s.capsuleAvatar, { width: 16, height: 16 }]} />
+                                        <Text style={[s.capsuleMoreText, { fontSize: 9 }]}>+41  •  {validEv.time}</Text>
+                                      </View>
                                     </View>
                                   </View>
-                                </View>
-                                <View style={s.wideCardBottom}>
-                                  <View style={{ flexDirection: 'row', gap: 16, paddingLeft: 10 }}>
-                                    <TouchableOpacity><Feather name="share" size={20} color="#8E8E9B" /></TouchableOpacity>
-                                    <TouchableOpacity><Feather name="trash-2" size={20} color="#8E8E9B" /></TouchableOpacity>
-                                  </View>
-                                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                                    <TouchableOpacity style={s.viewBtn}><Text style={s.viewBtnText}>View</Text></TouchableOpacity>
-                                    <TouchableOpacity style={s.addedBtn}>
-                                      <Feather name="check" size={14} color="#0e0d12" style={{ marginRight: 4 }} />
-                                      <Text style={s.addedBtnText}>Added</Text>
+                                  <View style={s.wideCardActions}>
+                                    <TouchableOpacity style={s.actionIcon} onPress={() => setIsMoreMenuVisible(true)}><Feather name="share" size={16} color="#8E8E9B" /></TouchableOpacity>
+                                    <TouchableOpacity style={s.actionIcon} onPress={() => setIsMoreMenuVisible(true)}><Feather name="trash-2" size={16} color="#8E8E9B" /></TouchableOpacity>
+                                    <TouchableOpacity style={s.viewActionBtn}><Text style={s.viewActionText}>View</Text></TouchableOpacity>
+                                    <TouchableOpacity style={s.addedActionBtn}>
+                                      <Feather name="check" size={12} color="#0e0d12" />
+                                      <Text style={s.addedActionText}>Added</Text>
                                     </TouchableOpacity>
                                   </View>
-                                </View>
+                                </TouchableOpacity>
                               </View>
-                            </>
-                          )}
-                        </View>
-                      ) : (
+                            )}
+
+                            {/* Slot 2: Standalone Tall Vertical Capsule (9:00 PM) */}
+                            {slot === '9:00 PM' && (
+                              <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(validEv)}>
+                                <View style={s.capsuleIconWrap}>
+                                  <Feather name="music" size={14} color="#FFF" />
+                                </View>
+                                <Text style={s.capsuleTitle}>{validEv.title}</Text>
+                                {validEv.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{validEv.venue}</Text>}
+                                <Text style={s.capsuleTime}>{validEv.time}</Text>
+                                <Image source={{ uri: validEv.image }} style={s.capsuleImg} />
+                                <View style={s.capsuleAvatarsRow}>
+                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
+                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
+                                  <Text style={s.capsuleMoreText}>+41</Text>
+                                </View>
+                              </TouchableOpacity>
+                            )}
+                        </>
+                        );
+                      })() : (
                         <View style={s.capsuleWithWideCardWrap}>
                           <TouchableOpacity style={s.addEventBtn} onPress={() => setIsEventModalVisible(true)}>
                             <Feather name="plus" size={14} color="#FFF" style={{ marginBottom: 4 }} />
@@ -257,11 +297,11 @@ export default function MyPlanScreen() {
             <Text style={s.moreMenuHeader}>more</Text>
             {[
               { label: 'Create Plan', icon: 'calendar', isCreate: true },
-              { label: 'Edit Plan', icon: 'edit-2' },
+              { label: 'Edit Plan', icon: 'edit' },
               { label: 'Add Friend', icon: 'user-plus', route: '/plan-screen/add-friend' },
               { label: 'Tagged Friends', icon: 'users', route: '/plan-screen/tagged-friends' },
               { label: 'Share Plan', icon: 'share', route: '/plan-screen/share-plan' },
-              { label: 'Edit Permission', icon: 'edit', route: '/plan-screen/edit-permission' },
+              { label: 'Edit Permission', icon: 'edit-3', route: '/plan-screen/edit-permission' },
               { label: 'Delete', icon: 'trash-2' },
             ].map((item, idx) => (
               <View key={item.label}>
@@ -287,17 +327,18 @@ export default function MyPlanScreen() {
       <Modal visible={isEventModalVisible} transparent animationType="slide" onRequestClose={() => setIsEventModalVisible(false)}>
         <Pressable style={s.bottomSheetOverlay} onPress={() => setIsEventModalVisible(false)}>
           <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
+            <View style={s.dragHandle} />
             <Text style={s.bottomSheetTitle}>Event</Text>
             
-            <View style={s.searchContainer}>
+            <View style={s.searchContainerPremium}>
               <Feather name="search" size={18} color="#8E8E9B" style={s.searchIcon} />
               <TextInput style={s.searchInput} placeholder="Search event..." placeholderTextColor="#8E8E9B" />
             </View>
 
             <View style={s.emptyEventBox}>
-              <Text style={s.emptyEventText}>Currently you don't have an event, you can browse event</Text>
-              <TouchableOpacity style={s.browseBtn} onPress={() => { setIsEventModalVisible(false); setIsSelectEventModalVisible(true); }}>
-                <Text style={s.browseBtnText}>Browse Event</Text>
+              <Text style={s.emptyEventTextLarge}>Currently you don't have an event, you can browse event</Text>
+              <TouchableOpacity style={s.browseBtnLarge} onPress={() => { setIsEventModalVisible(false); setIsSelectEventModalVisible(true); }}>
+                <Text style={s.browseBtnTextLarge}>Browse Event</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -308,6 +349,7 @@ export default function MyPlanScreen() {
       <Modal visible={isSelectEventModalVisible} transparent animationType="slide" onRequestClose={() => setIsSelectEventModalVisible(false)}>
         <Pressable style={s.bottomSheetOverlay} onPress={() => setIsSelectEventModalVisible(false)}>
           <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
+            <View style={s.dragHandle} />
             <Text style={s.bottomSheetTitle}>Select event to add</Text>
 
             <View style={s.eventList}>
@@ -329,12 +371,12 @@ export default function MyPlanScreen() {
               ))}
             </View>
 
-            <View style={s.bottomSheetBtns}>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setIsSelectEventModalVisible(false)}>
-                <Text style={s.cancelBtnText}>Cancel</Text>
+            <View style={s.bottomSheetActionRow}>
+              <TouchableOpacity style={s.cancelBtnPremium} onPress={() => setIsSelectEventModalVisible(false)}>
+                <Text style={s.cancelBtnTextPremium}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.addModalBtn} onPress={() => setIsSelectEventModalVisible(false)}>
-                <Text style={s.addModalBtnText}>Add</Text>
+              <TouchableOpacity style={s.addBtnPremium} onPress={handleAddEvent}>
+                <Text style={s.addBtnTextPremium}>Add</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -353,12 +395,12 @@ export default function MyPlanScreen() {
               placeholderTextColor="#8E8E9B"
             />
 
-            <View style={s.bottomSheetBtns}>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setIsNamePlanModalVisible(false)}>
-                <Text style={s.cancelBtnText}>Cancel</Text>
+            <View style={s.bottomSheetActionRow}>
+              <TouchableOpacity style={[s.cancelBtnPremium, { borderWidth: 0 }]} onPress={() => setIsNamePlanModalVisible(false)}>
+                <Text style={[s.cancelBtnTextPremium, { fontWeight: '700' }]}>Canel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.addModalBtn} onPress={() => setIsNamePlanModalVisible(false)}>
-                <Text style={s.addModalBtnText}>Done</Text>
+              <TouchableOpacity style={s.addBtnPremium} onPress={() => { setIsNamePlanModalVisible(false); router.push('/plan-screen/add-friend' as any); }}>
+                <Text style={s.addBtnTextPremium}>Done</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -421,31 +463,37 @@ const s = StyleSheet.create({
   capsuleMoreText: { color: '#8E8E9B', fontSize: 10, marginLeft: 6 },
 
   /* Node + Wide Card */
-  circleNode: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', alignItems: 'center', justifyContent: 'center' },
-  nodeConnector: { width: 1, height: 32, backgroundColor: '#2A2A3A', marginLeft: 74 },
-  wideCard: { width: '100%', backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', borderRadius: 40, padding: 20 },
-  wideCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  wideCardBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  viewBtn: { backgroundColor: '#1A1A2E', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  viewBtnText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
-  addedBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#C2B5CD', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  addedBtnText: { color: '#0e0d12', fontSize: 13, fontWeight: 'bold' },
+  circleNode: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', alignItems: 'center', justifyContent: 'center' },
+  nodeConnector: { width: 1, height: 20, backgroundColor: '#2A2A3A' },
+  wideCard: { width: '100%', backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', borderRadius: 50, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  wideCardLeft: { flexDirection: 'row', alignItems: 'center' },
+  wideCardIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A1A2E', borderWidth: 1, borderColor: '#2A2A3A', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  wideCardTitle: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
+  wideCardTime: { color: '#8E8E9B', fontSize: 11 },
+  wideCardActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionIcon: { padding: 4 },
+  viewActionBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  viewActionText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
+  addedActionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#C2B5CD', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 4 },
+  addedActionText: { color: '#0e0d12', fontSize: 12, fontWeight: '700' },
 
   /* Calendar */
-  bigDay: { color: '#FFF', fontSize: 24, fontWeight: '700', marginBottom: 20, marginTop: 4 },
-  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  calNavLabel: { color: '#8E8E9B', fontSize: 13 },
-  calNavArrows: { flexDirection: 'row', gap: 10 },
-  calArrow: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  calHdrRow: { flexDirection: 'row', marginBottom: 6 },
-  calHdr: { flex: 1, textAlign: 'center', color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  calWeek: { flexDirection: 'row', marginBottom: 4 },
-  calCell: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 38, borderRadius: 19 },
-  calCellSel: { backgroundColor: '#16D869' },
-  calCellHl: { backgroundColor: 'rgba(142,84,233,0.25)' },
-  calDay: { color: '#CCC', fontSize: 14 },
+  calendarHeaderWrap: { marginBottom: 20 },
+  bigDay: { color: '#FFF', fontSize: 28, fontWeight: '700', marginBottom: 12, marginTop: 4 },
+  calendarLine: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', width: '100%' },
+  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, marginTop: 4 },
+  calNavLabel: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  calNavArrows: { flexDirection: 'row', gap: 16 },
+  calArrow: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+  calHdrRow: { flexDirection: 'row', marginBottom: 16 },
+  calHdr: { flex: 1, textAlign: 'center', color: '#FFF', fontSize: 12, fontWeight: '600' },
+  calWeek: { flexDirection: 'row', marginBottom: 8 },
+  calCell: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 40 },
+  calCellSel: { backgroundColor: '#45454A', borderRadius: 20, width: 40, height: 40 },
+  calCellHl: { borderRadius: 20, width: 40, height: 40, borderWidth: 1, borderColor: '#8E54E9' },
+  calDay: { color: '#FFF', fontSize: 14 },
   calDaySel: { color: '#FFF', fontWeight: '700' },
-  calDayHl: { color: '#D4B0EB' },
+  calDayHl: { color: '#FFF' },
 
   /* Popup */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 80 },
@@ -460,46 +508,47 @@ const s = StyleSheet.create({
   popupBtnLeaveText: { color: '#0e0d12', fontSize: 14, fontWeight: '700' },
 
   /* More Menu */
-  moreOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'flex-start', alignItems: 'flex-end' },
-  moreMenuContainer: { width: 180, backgroundColor: '#45454A', borderRadius: 8, marginTop: 150, marginRight: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#55555A', paddingBottom: 4 },
-  moreMenuHeader: { color: '#8E8E9B', fontSize: 13, fontWeight: '600', padding: 12, paddingBottom: 8 },
-  moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16 },
-  moreMenuIcon: { marginRight: 12 },
-  moreMenuText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
-  moreMenuSeparator: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+  moreOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-start', alignItems: 'flex-end' },
+  moreMenuContainer: { width: 170, backgroundColor: '#45454A', borderRadius: 12, marginTop: 140, marginRight: 20, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  moreMenuHeader: { display: 'none' },
+  moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
+  moreMenuIcon: { marginRight: 10 },
+  moreMenuText: { color: '#FFFFFF', fontSize: 13, fontWeight: '400' },
+  moreMenuSeparator: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
   
   /* Add Event Button */
   addEventBtn: { alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: '#13131A', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#2A2A3A', minWidth: 80 },
   addEventBtnText: { color: '#FFF', fontSize: 11, fontWeight: '500' },
 
   /* Bottom Sheets */
-  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  bottomSheetContainer: { backgroundColor: '#13131A', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  bottomSheetTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  bottomSheetContainer: { backgroundColor: '#13131A', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
+  dragHandle: { width: 40, height: 4, backgroundColor: 'rgba(252, 252, 252, 1)', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  bottomSheetTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', marginBottom: 24, textAlign: 'center' },
   
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 24, paddingHorizontal: 16, height: 48, marginBottom: 20 },
+  searchContainerPremium: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderRadius: 12, paddingHorizontal: 16, height: 50, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#FFF', fontSize: 14 },
   
-  emptyEventBox: { alignItems: 'center', marginVertical: 20 },
-  emptyEventText: { color: '#8E8E9B', fontSize: 12, textAlign: 'center', marginBottom: 20 },
-  browseBtn: { backgroundColor: '#C2B5CD', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
-  browseBtnText: { color: '#0e0d12', fontSize: 14, fontWeight: 'bold' },
+  emptyEventBox: { alignItems: 'center', marginVertical: 30 },
+  emptyEventTextLarge: { color: '#8E8E9B', fontSize: 14, textAlign: 'center', marginBottom: 30, paddingHorizontal: 20, lineHeight: 20 },
+  browseBtnLarge: { backgroundColor: '#C2B5CD', width: '100%', height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  browseBtnTextLarge: { color: '#0e0d12', fontSize: 16, fontWeight: '700' },
+
+  bottomSheetActionRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
+  cancelBtnPremium: { flex: 1, height: 52, borderRadius: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  cancelBtnTextPremium: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  addBtnPremium: { flex: 1, height: 52, borderRadius: 12, backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center' },
+  addBtnTextPremium: { color: '#0e0d12', fontSize: 16, fontWeight: '700' },
 
   eventList: { marginBottom: 20 },
-  eventRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  eventImage: { width: 48, height: 48, borderRadius: 8, marginRight: 12 },
+  eventRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  eventImage: { width: 44, height: 44, borderRadius: 8, marginRight: 12 },
   eventInfo: { flex: 1 },
-  eventTitle: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  eventTitle: { color: '#FFF', fontSize: 14, fontWeight: '600', marginBottom: 4 },
   eventSub: { color: '#8E8E9B', fontSize: 12 },
-  radioCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: '#8E8E9B', justifyContent: 'center', alignItems: 'center' },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFF' },
-
-  bottomSheetBtns: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 10 },
-  cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  cancelBtnText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
-  addModalBtn: { flex: 1, backgroundColor: '#C2B5CD', alignItems: 'center', paddingVertical: 12, borderRadius: 24 },
-  addModalBtnText: { color: '#0e0d12', fontSize: 14, fontWeight: 'bold' },
+  radioCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#C2B5CD' },
 
   planNameInput: { backgroundColor: '#1A1A2E', borderRadius: 12, paddingHorizontal: 16, height: 48, color: '#FFF', fontSize: 14, marginBottom: 20 },
 });
