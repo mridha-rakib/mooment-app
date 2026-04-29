@@ -2,7 +2,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { Comment02Icon, Share01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 const { width } = Dimensions.get('window');
 
@@ -62,6 +62,8 @@ export type PostData = {
 export default function FeedPost({ post, onCommentPress, onSharePress }: { post: PostData; onCommentPress?: () => void; onSharePress?: () => void }) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+  const moreBtnRef = useRef<View>(null);
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(post.isFollowing);
 
@@ -76,6 +78,16 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
 
   const toggleFollow = () => {
     setIsFollowing(!isFollowing);
+  };
+
+  const handleMorePress = () => {
+    moreBtnRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      setMenuPosition({
+        top: pageY + height + 5, // 5px gap
+        right: Dimensions.get('window').width - (pageX + width),
+      });
+      setShowMoreMenu(true);
+    });
   };
 
   return (
@@ -148,8 +160,9 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             )}
             
             <TouchableOpacity 
+              ref={moreBtnRef}
               style={styles.moreBtn}
-              onPress={() => setShowMoreMenu(true)}
+              onPress={handleMorePress}
             >
               <Feather name="more-horizontal" size={20} color="#8E8E9B" />
             </TouchableOpacity>
@@ -357,7 +370,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
         >
           <TouchableWithoutFeedback onPress={() => setShowMoreMenu(false)}>
             <View style={styles.modalOverlay}>
-              <View style={styles.moreMenuContainer}>
+              <View style={[styles.moreMenuContainer, { position: 'absolute', top: menuPosition.top, right: menuPosition.right }]}>
                 <Text style={styles.moreMenuLabel}>more</Text>
                 <View style={styles.moreMenuBox}>
                   <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
@@ -792,9 +805,6 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.4)",
-    justifyContent: "center",
-    alignItems: "flex-end",
-    paddingRight: 32,
   },
   moreMenuContainer: {
     width: 160,
