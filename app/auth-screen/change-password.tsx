@@ -107,10 +107,8 @@ const styles = StyleSheet.create({
   },
   logoText: {
     color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "bold",
-    fontFamily: "serif",
-    fontStyle: "italic",
+    fontSize: 40,
+    fontFamily: 'OleoScript-Regular',
     marginBottom: 32,
   },
   title: {

@@ -27,12 +27,7 @@ export default function NewPassword() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            {/* <Text style={styles.logoText}>Mooment</Text> */}
-            <Image
-              source={require("../../assets/images/Mooment.png")}
-              style={{ width: 147, height: 120, marginBottom: 40 }}
-              contentFit="contain"
-            />
+            <Text style={styles.logoText}>Mooment</Text>
             <Text style={styles.title}>New Password</Text>
             <Text style={styles.subtitle}>
               Set a new password and continue using this app
@@ -125,10 +120,8 @@ const styles = StyleSheet.create({
   },
   logoText: {
     color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "bold",
-    fontFamily: "serif",
-    fontStyle: "italic",
+    fontSize: 40,
+    fontFamily: 'OleoScript-Regular',
     marginBottom: 48,
   },
   title: {

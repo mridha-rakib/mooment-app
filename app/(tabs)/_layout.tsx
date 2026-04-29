@@ -1,9 +1,8 @@
-import React from "react";
-// Re-implementing with expo-router
-import { Feather, FontAwesome5 } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Tabs as ExpoTabs } from "expo-router";
-import { Svg, Path } from "react-native-svg";
+import React from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { Path, Svg } from "react-native-svg";
 
 export default function TabLayout() {
   return (

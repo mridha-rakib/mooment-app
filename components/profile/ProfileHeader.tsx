@@ -32,7 +32,7 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             <HugeiconsIcon icon={Menu01Icon} size={24} color="#FFFFFF" />
           </TouchableOpacity>
           
-          <Image source={require('@/assets/images/Mooment.png')} style={styles.logoImage} resizeMode="contain" />
+          <Text style={styles.logoText}>Mooment</Text>
           
           <TouchableOpacity style={styles.iconBtn}>
             <HugeiconsIcon icon={Search01Icon} size={24} color="#FFFFFF" />
@@ -107,9 +107,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A22',
   },
-  logoImage: {
-    height: 32,
-    width: 140,
+  logoText: {
+    fontFamily: 'OleoScript-Regular',
+    fontSize: 28,
+    color: '#FFFFFF',
   },
   topRow: {
     flexDirection: 'row',

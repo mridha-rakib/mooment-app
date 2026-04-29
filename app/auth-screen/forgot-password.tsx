@@ -16,12 +16,7 @@ export default function ForgotPassword() {
         <View style={styles.content}>
           <View style={styles.header}>
             {/* Logo placeholder */}
-            {/* <Text style={styles.logoText}>Mooment</Text> */}
-            <Image
-  source={require("../../assets/images/Mooment.png")}
-  style={{ width: 147, height: 32, paddingBottom:60 }}
-  contentFit="contain"
-/>
+            <Text style={styles.logoText}>Mooment</Text>
  
             
             <Text style={styles.title}>Forget Password</Text>
@@ -79,10 +74,8 @@ const styles = StyleSheet.create({
   },
   logoText: {
     color: "#FFFFFF",
-    fontSize: 32,
-    fontWeight: "bold",
-    fontFamily: "serif", // Closest native font to the stylized text
-    fontStyle: "italic",
+    fontSize: 40,
+    fontFamily: 'OleoScript-Regular',
     marginBottom: 48,
   },
   title: {

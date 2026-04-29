@@ -24,7 +24,7 @@ export default function HomeHeader() {
         <Text style={styles.feedText}>{selectedType}</Text>
         <Feather name="chevron-down" size={14} color="#FFFFFF" />
       </TouchableOpacity>
-      <Image source={require('../../assets/images/Mooment.png')} style={styles.logoText} />
+      <Text style={styles.logoText}>Mooment</Text>
       <View style={styles.headerIcons}>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
           <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
@@ -99,12 +99,13 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   logoText: {
-    width: 100,
-    height: 25,
-    resizeMode: 'contain',
+    fontFamily: 'OleoScript-Regular',
+    fontSize: 32,
+    color: '#FFFFFF',
+    lineHeight: 32,
     position: 'absolute',
-    left: width / 2 - 50,
-    top: 25,
+    left: width / 2 - 60,
+    top: 18,
   },
   headerIcons: {
     flexDirection: "row",
