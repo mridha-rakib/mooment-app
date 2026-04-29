@@ -368,7 +368,6 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
           <TouchableWithoutFeedback onPress={() => setShowMoreMenu(false)}>
             <View style={styles.modalOverlay}>
               <View style={[styles.moreMenuContainer, { marginTop: menuTop }]}>
-                <Text style={styles.moreMenuLabel}>more</Text>
                 <View style={styles.moreMenuBox}>
                   <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
                     <Feather name="flag" size={20} color="#FFFFFF" style={styles.menuIcon} />
