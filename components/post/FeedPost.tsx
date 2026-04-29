@@ -1,5 +1,5 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { Share01Icon, Comment02Icon } from '@hugeicons/core-free-icons';
+import { Comment02Icon, Share01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -63,6 +63,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const router = useRouter();
+  const [isFollowing, setIsFollowing] = useState(post.isFollowing);
 
   const handleScroll = (event: any) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
@@ -71,6 +72,10 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
     if (roundIndex !== currentMediaIndex) {
       setCurrentMediaIndex(roundIndex);
     }
+  };
+
+  const toggleFollow = () => {
+    setIsFollowing(!isFollowing);
   };
 
   return (
@@ -123,12 +128,20 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
           </View>
           
           <View style={styles.postHeaderActions}>
-            {post.isFollowing ? (
-              <TouchableOpacity style={styles.followingBtn} activeOpacity={0.8}>
+            {isFollowing ? (
+              <TouchableOpacity 
+                style={styles.followingBtn} 
+                activeOpacity={0.8}
+                onPress={toggleFollow}
+              >
                 <Text style={styles.followingBtnText}>Following</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
+              <TouchableOpacity 
+                style={styles.followBtn} 
+                activeOpacity={0.8}
+                onPress={toggleFollow}
+              >
                 <Feather name="plus" size={12} color="#D4B0EB" />
                 <Text style={styles.followBtnText}>Follow</Text>
               </TouchableOpacity>
