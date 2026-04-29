@@ -308,7 +308,7 @@ export default function HomeFeed() {
           })}
 
           {/* Additional padding at the bottom of feed */}
-          <View style={{ height: 40 }} />
+          <View style={{ height: 100 }} />
         </ScrollView>
       </View>
 
@@ -332,6 +332,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 24 : 0,
+    paddingTop: Platform.OS === 'android' ? 34 : 10,
   },
 });

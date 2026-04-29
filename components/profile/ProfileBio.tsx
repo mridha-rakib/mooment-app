@@ -10,7 +10,7 @@ type ProfileBioProps = {
 export default function ProfileBio({ name, handle, bio }: ProfileBioProps) {
   return (
     <View style={styles.container}>
-      {/* <Text style={styles.name}>{name}</Text> */}
+      <Text style={styles.name}>{name}</Text>
       <Text style={styles.handle}>{handle}</Text>
       <Text style={styles.bioText}>{bio}</Text>
     </View>

@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { Search01Icon, FilterHorizontalIcon } from '@hugeicons/core-free-icons';
+import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -13,7 +13,6 @@ export default function HomeHeader() {
   const [filterVisible, setFilterVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [selectedType, setSelectedType] = useState('Feed');
-  
   return (
     <View style={styles.header}>
       <TouchableOpacity 
@@ -25,9 +24,7 @@ export default function HomeHeader() {
         <Text style={styles.feedText}>{selectedType}</Text>
         <Feather name="chevron-down" size={14} color="#FFFFFF" />
       </TouchableOpacity>
-
       <Image source={require('../../assets/images/Mooment.png')} style={styles.logoText} />
-
       <View style={styles.headerIcons}>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
           <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
@@ -36,7 +33,6 @@ export default function HomeHeader() {
           <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
-
       {/* Feed/Map Dropdown */}
       <Modal
         visible={dropdownVisible}
@@ -54,9 +50,7 @@ export default function HomeHeader() {
                 <View style={styles.greenDot} />
                 <Text style={styles.dropdownText}>Feed</Text>
               </TouchableOpacity>
-              
               <View style={styles.dropdownSeparator} />
-              
               <TouchableOpacity 
                 style={styles.dropdownItem} 
                 onPress={() => { setSelectedType('Map'); setDropdownVisible(false); }}
@@ -68,7 +62,6 @@ export default function HomeHeader() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-
       <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
     </View>
   );
@@ -80,7 +73,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    height: 60,
+    paddingVertical: 15,
     zIndex: 100,
   },
   feedBtn: {
