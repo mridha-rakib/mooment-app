@@ -1,13 +1,14 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { HugeiconsIcon } from '@hugeicons/react-native';
 import { AttachmentIcon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
   Dimensions, FlatList, Image, KeyboardAvoidingView,
+  Modal,
   Platform, SafeAreaView,
   StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View, Modal
+  StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -412,7 +413,7 @@ const styles = StyleSheet.create({
   msgAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },
 
   /* Text Bubble */
-  bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, maxWidth: '85%' },
+  bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, maxWidth: '98%' },
   bubbleMe: { backgroundColor: '#C2B5CD', borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: '#161622', borderTopLeftRadius: 4, borderWidth: 1, borderColor: '#2A2A3A' },
   bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 4 },
@@ -427,7 +428,7 @@ const styles = StyleSheet.create({
   bubbleTimeMe: { color: 'rgba(14, 13, 18, 0.6)' },
 
   /* Location Box */
-  locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginTop: 12, marginBottom: 4 },
+  locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginTop: 12, marginBottom: 4, minWidth: 200 },
   locationIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#5D35B0', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   locationTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
   locationDesc: { color: '#8E8E9B', fontSize: 11 },
