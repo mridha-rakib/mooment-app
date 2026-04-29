@@ -793,7 +793,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.4)",
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "flex-end",
+    paddingRight: 32,
   },
   moreMenuContainer: {
     width: 160,
