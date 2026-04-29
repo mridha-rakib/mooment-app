@@ -181,6 +181,7 @@ export default function ChatDetailScreen() {
   const [showAttach, setShowAttach] = useState(false);
   const [isTyping] = useState(true);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   const name = params.name || 'Eleanor Pena';
@@ -355,31 +356,41 @@ export default function ChatDetailScreen() {
       <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
           <View style={styles.moreMenuContainer}>
-            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
-              <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
-              <Text style={styles.moreMenuText}>Block</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.moreMenuSeparator} />
-            
-            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
-              <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
-              <Text style={styles.moreMenuText}>Create Plan</Text>
-            </TouchableOpacity>
+            <Text style={styles.moreMenuLabel}>more</Text>
+            <View style={styles.moreMenuBox}>
+              <TouchableOpacity 
+                style={styles.moreMenuItem} 
+                activeOpacity={0.8} 
+                onPress={() => {
+                  setIsBlocked(!isBlocked);
+                  setIsMoreMenuVisible(false);
+                }}
+              >
+                <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+                <Text style={styles.moreMenuText}>{isBlocked ? 'Unblock' : 'Block'}</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.moreMenuSeparator} />
+              
+              <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+                <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+                <Text style={styles.moreMenuText}>Create Plan</Text>
+              </TouchableOpacity>
 
-            <View style={styles.moreMenuSeparator} />
+              <View style={styles.moreMenuSeparator} />
 
-            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
-              <Feather name="calendar" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
-              <Text style={styles.moreMenuText}>Share Calendar</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+                <Feather name="calendar" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+                <Text style={styles.moreMenuText}>Share Calendar</Text>
+              </TouchableOpacity>
 
-            <View style={styles.moreMenuSeparator} />
+              <View style={styles.moreMenuSeparator} />
 
-            <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
-              <Feather name="trash-2" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
-              <Text style={styles.moreMenuText}>Delete</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+                <Feather name="trash-2" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+                <Text style={styles.moreMenuText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -491,8 +502,10 @@ const styles = StyleSheet.create({
   sendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
 
   /* Modal */
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'flex-start', alignItems: 'flex-end' },
-  moreMenuContainer: { width: 180, backgroundColor: '#45454A', borderRadius: 8, marginTop: 75, marginRight: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#55555A' },
+  modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-start', alignItems: 'flex-end' },
+  moreMenuContainer: { marginTop: 75, marginRight: 16, alignItems: 'flex-start' },
+  moreMenuLabel: { color: '#6A9BC3', fontSize: 13, marginBottom: 8, marginLeft: 2 },
+  moreMenuBox: { width: 160, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, overflow: 'hidden', backdropFilter: 'blur(10px)' },
   moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   moreMenuIcon: { marginRight: 12 },
   moreMenuText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
