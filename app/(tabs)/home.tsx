@@ -332,6 +332,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 34 : 10,
+    paddingTop: Platform.OS === 'android' ? 45 : 10,
   },
 });

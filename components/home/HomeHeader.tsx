@@ -73,7 +73,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 20,
+    paddingBottom: 15,
     zIndex: 100,
   },
   feedBtn: {
@@ -103,6 +104,7 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
     position: 'absolute',
     left: width / 2 - 50,
+    top: 25,
   },
   headerIcons: {
     flexDirection: "row",
@@ -116,7 +118,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     position: 'absolute',
-    top: 60,
+    top: 80,
     left: 20,
     backgroundColor: '#35353A',
     borderRadius: 12,
