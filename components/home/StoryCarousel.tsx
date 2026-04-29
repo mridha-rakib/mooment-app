@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export type StoryData = {
   id: string;
@@ -25,7 +25,7 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
                 activeOpacity={0.8}
                 onPress={() => router.push('/post-screen/add-story')}
               >
-                <Feather name="plus" size={24} color="#8E8E9B" />
+                <Feather name="plus" size={24} color="#bcbccaff" />
               </TouchableOpacity>
             );
           }
@@ -40,7 +40,7 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
               key={story.id} 
               style={styles.storyItem} 
               activeOpacity={0.8}
-              onPress={() => router.push('/event-screen/event')}
+              onPress={() => router.push('/live-screen/live-video')}
             >
               <View style={[styles.storyRing, ringStyle]}>
                 {story.imageUri && (
