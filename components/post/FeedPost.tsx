@@ -199,9 +199,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
             onPress={() => {
               if (post.postType === 'event') {
-                // router.push('/live-screen/live-video'); // Navigation removed
-              } else if (post.postType === 'standard') {
-                // router.push('/post-screen/view-post'); // Navigation removed as requested
+                router.push('/event-screen/event');
               }
             }}
             style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
