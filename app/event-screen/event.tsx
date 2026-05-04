@@ -1,6 +1,10 @@
+import AboutTab from "@/components/eventTabs/AboutTab";
+import AccessTab from "@/components/eventTabs/AccessTab";
+import ProductTab from "@/components/eventTabs/ProductTab";
+import VibeTab from "@/components/eventTabs/VibeTab";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -13,10 +17,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AboutTab from "@/components/eventTabs/AboutTab";
-import AccessTab from "@/components/eventTabs/AccessTab";
-import VibeTab from "@/components/eventTabs/VibeTab";
-import ProductTab from "@/components/eventTabs/ProductTab";
 
 const { width } = Dimensions.get("window");
 

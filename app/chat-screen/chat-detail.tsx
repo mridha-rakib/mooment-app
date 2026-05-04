@@ -1,6 +1,8 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { AttachmentIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
@@ -217,8 +219,17 @@ export default function ChatDetailScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={20} color="#FFFFFF" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.8}>
+          <LinearGradient
+            colors={["#18181c", "#c1c0c5", "#18181c"]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.headerBtnBorder}
+          >
+            <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+              <Feather name="chevron-left" size={20} color="#FFFFFF" />
+            </BlurView>
+          </LinearGradient>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.headerCenter} activeOpacity={0.8}>
@@ -230,8 +241,17 @@ export default function ChatDetailScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(true)}>
-            <Feather name="more-vertical" size={20} color="#8E8E9B" />
+          <TouchableOpacity style={styles.headerBtn} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(true)}>
+            <LinearGradient
+              colors={["#18181c", "#c1c0c5", "#18181c"]}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.headerBtnBorder}
+            >
+              <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+                <Feather name="more-vertical" size={20} color="#8E8E9B" />
+              </BlurView>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -404,9 +424,11 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
 
   /* Header */
-  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 16, padding: 12, borderRadius: 8 },
-  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 18, marginRight: 12 },
-  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 16, padding: 10, borderRadius: 12 },
+  headerBtn: { width: 40, height: 40, borderRadius: 16 },
+  headerBtnBorder: { flex: 1, padding: 0.5, borderRadius: 16, overflow: 'hidden' },
+  headerBtnBg: { flex: 1, backgroundColor: '#1e1d21', borderRadius: 16, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
   headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
   headerName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
   headerStatus: { color: '#8E8E9B', fontSize: 12 },
