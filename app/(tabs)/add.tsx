@@ -56,7 +56,7 @@ const OPTIONS = [
     icon: Ticket02Icon,
     color: '#631C1C',
     bg: '#DE7777',
-    route: '/post-screen/create-post',
+    route: '/create-event',
   },
   {
     id: 'live',
