@@ -1,9 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import FilterModal from './FilterModal';
 
 const { width } = Dimensions.get('window');
@@ -27,10 +29,28 @@ export default function HomeHeader() {
       <Text style={styles.logoText}>Mooment</Text>
       <View style={styles.headerIcons}>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
-          <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
+          <LinearGradient
+            colors={["#18181c", "#c1c0c5", "#18181c"]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.headerBtnBorder}
+          >
+            <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+              <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
+            </BlurView>
+          </LinearGradient>
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
-          <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
+          <LinearGradient
+            colors={["#18181c", "#c1c0c5", "#18181c"]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.headerBtnBorder}
+          >
+            <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+              <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
+            </BlurView>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
       {/* Feed/Map Dropdown */}
@@ -111,7 +131,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   iconBtn: {
-    marginLeft: 15,
+    marginLeft: 12,
+  },
+  headerBtnBorder: {
+    padding: 0.5,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  headerBtnBg: {
+    width: 40,
+    height: 40,
+    backgroundColor: "#1e1d21",
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: 'hidden',
   },
   dropdownOverlay: {
     flex: 1,
