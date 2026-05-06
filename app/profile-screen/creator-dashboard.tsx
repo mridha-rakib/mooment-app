@@ -5,15 +5,17 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function CreatorDashboardScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
         <Text style={styles.headerTitle}>Creator Dashboard</Text>
         <View style={{ width: 40 }} />
@@ -166,7 +168,7 @@ export default function CreatorDashboardScreen() {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

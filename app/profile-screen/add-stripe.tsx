@@ -3,16 +3,18 @@ import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AddStripeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [stripeId, setStripeId] = useState('');
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
         <Text style={styles.headerTitle}>Add Stripe Account</Text>
         <View style={{ width: 40 }} />
@@ -43,7 +45,7 @@ export default function AddStripeScreen() {
           <Text style={styles.saveBtnText}>Save</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
