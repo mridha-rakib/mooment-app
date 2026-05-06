@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
+import { FilterHorizontalIcon, Search01Icon, Location01Icon, ArrowLeft01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,49 +10,90 @@ import FilterModal from './FilterModal';
 
 const { width } = Dimensions.get('window');
 
-export default function HomeHeader() {
+interface HomeHeaderProps {
+  selectedType: string;
+  setSelectedType: (type: string) => void;
+}
+
+export default function HomeHeader({ selectedType, setSelectedType }: HomeHeaderProps) {
   const router = useRouter();
   const [filterVisible, setFilterVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [selectedType, setSelectedType] = useState('Feed');
+
+  const isMapMode = selectedType === 'Map';
+
   return (
-    <View style={styles.header}>
-      <TouchableOpacity 
-        style={styles.feedBtn} 
-        activeOpacity={0.8}
-        onPress={() => setDropdownVisible(true)}
-      >
-        <View style={styles.greenDot} />
-        <Text style={styles.feedText}>{selectedType}</Text>
-        <Feather name="chevron-down" size={14} color="#FFFFFF" />
-      </TouchableOpacity>
-      <Text style={styles.logoText}>Mooment</Text>
-      <View style={styles.headerIcons}>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
-          <LinearGradient
-            colors={["#18181c", "#c1c0c5", "#18181c"]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.headerBtnBorder}
+    <View style={styles.headerContainer}>
+      <View style={styles.header}>
+        {isMapMode ? (
+          <View style={styles.mapHeaderLeft}>
+            <TouchableOpacity 
+              style={styles.backBtn} 
+              onPress={() => setSelectedType('Feed')}
+              activeOpacity={0.7}
+            >
+              <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.mapTitle}>Map</Text>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.feedBtn} 
+            activeOpacity={0.8}
+            onPress={() => setDropdownVisible(true)}
           >
-            <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-              <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
-            </BlurView>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
-          <LinearGradient
-            colors={["#18181c", "#c1c0c5", "#18181c"]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.headerBtnBorder}
-          >
-            <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-              <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
-            </BlurView>
-          </LinearGradient>
-        </TouchableOpacity>
+            <View style={styles.greenDot} />
+            <Text style={styles.feedText}>{selectedType}</Text>
+            <Feather name="chevron-down" size={14} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+
+        {!isMapMode && <Text style={styles.logoText}>Mooment</Text>}
+
+        <View style={styles.headerIcons}>
+          {!isMapMode ? (
+            <>
+              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
+                <LinearGradient
+                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.headerBtnBorder}
+                >
+                  <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+                    <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
+                  </BlurView>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
+                <LinearGradient
+                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.headerBtnBorder}
+                >
+                  <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
+                    <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
+                  </BlurView>
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={{ width: 40 }} /> // Placeholder to balance map header
+          )}
+        </View>
       </View>
+
+      {/* Location Bar for Map Mode */}
+      {isMapMode && (
+        <View style={styles.locationBarContainer}>
+          <TouchableOpacity style={styles.locationBar} activeOpacity={0.9}>
+            <HugeiconsIcon icon={Location01Icon} size={20} color="#8E8E9B" style={styles.locationIcon} />
+            <Text style={styles.locationText}>Los Angeles, CA</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Feed/Map Dropdown */}
       <Modal
         visible={dropdownVisible}
@@ -67,7 +108,7 @@ export default function HomeHeader() {
                 style={styles.dropdownItem} 
                 onPress={() => { setSelectedType('Feed'); setDropdownVisible(false); }}
               >
-                <View style={styles.greenDot} />
+                <View style={[styles.greenDot, selectedType === 'Feed' ? { opacity: 1 } : { opacity: 0 }]} />
                 <Text style={styles.dropdownText}>Feed</Text>
               </TouchableOpacity>
               <View style={styles.dropdownSeparator} />
@@ -75,7 +116,7 @@ export default function HomeHeader() {
                 style={styles.dropdownItem} 
                 onPress={() => { setSelectedType('Map'); setDropdownVisible(false); }}
               >
-                <View style={styles.greenDot} />
+                <View style={[styles.greenDot, selectedType === 'Map' ? { opacity: 1 } : { opacity: 0 }]} />
                 <Text style={styles.dropdownText}>Map</Text>
               </TouchableOpacity>
             </View>
@@ -88,14 +129,35 @@ export default function HomeHeader() {
 }
 
 const styles = StyleSheet.create({
+  headerContainer: {
+    zIndex: 100,
+    backgroundColor: '#0e0d12',
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 15,
-    zIndex: 100,
+  },
+  mapHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1A1A22',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  mapTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
   },
   feedBtn: {
     flexDirection: "row",
@@ -125,7 +187,7 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     position: 'absolute',
     left: width / 2 - 60,
-    top: 18,
+    top: 10,
   },
   headerIcons: {
     flexDirection: "row",
@@ -146,6 +208,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     overflow: 'hidden',
+  },
+  locationBarContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  locationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A22',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 52,
+  },
+  locationIcon: {
+    marginRight: 12,
+  },
+  locationText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
   },
   dropdownOverlay: {
     flex: 1,

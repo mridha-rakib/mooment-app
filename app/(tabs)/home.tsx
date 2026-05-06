@@ -13,6 +13,7 @@ import LiveChatBanner from "@/components/live/LiveChatBanner";
 import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
 import ShareModal from "@/components/post/ShareModal";
 import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
+import MapContainer from "@/components/home/MapContainer";
 
 const { width } = Dimensions.get("window");
 
@@ -269,6 +270,7 @@ export default function HomeFeed() {
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedType, setSelectedType] = useState('Feed');
   const params = useLocalSearchParams();
 
   useEffect(() => {
@@ -292,36 +294,40 @@ export default function HomeFeed() {
       <View style={styles.container}>
         
         {/* Top Navigation */}
-        <HomeHeader/>
+        <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
 
         {/* Main Feed Content */}
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Dynamic Stories Component */}
-          <StoryCarousel stories={MOCK_STORIES} />
+        {selectedType === 'Feed' ? (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Dynamic Stories Component */}
+            <StoryCarousel stories={MOCK_STORIES} />
 
-          {/* Core Polymorphic Feed Engine */}
-          {MOCK_FEED.map((item) => {
-            if (item.type === 'post') {
-              return <FeedPost key={item.id} post={item.data} onCommentPress={handleCommentPress} onSharePress={handleSharePress} />;
-            }
-            if (item.type === 'live_chat') {
-              return <LiveChatBanner key={item.id} {...item.data} />;
-            }
-            if (item.type === 'featured_products') {
-              return <FeaturedProducts key={item.id} products={item.data} />;
-            }
-            if (item.type === 'highlights') {
-              return <HighlightsCarousel key={item.id} highlights={item.data} />;
-            }
-            if (item.type === 'suggested_users') {
-              return <PeopleToFollow key={item.id} users={item.data} />;
-            }
-            return null;
-          })}
+            {/* Core Polymorphic Feed Engine */}
+            {MOCK_FEED.map((item) => {
+              if (item.type === 'post') {
+                return <FeedPost key={item.id} post={item.data} onCommentPress={handleCommentPress} onSharePress={handleSharePress} />;
+              }
+              if (item.type === 'live_chat') {
+                return <LiveChatBanner key={item.id} {...item.data} />;
+              }
+              if (item.type === 'featured_products') {
+                return <FeaturedProducts key={item.id} products={item.data} />;
+              }
+              if (item.type === 'highlights') {
+                return <HighlightsCarousel key={item.id} highlights={item.data} />;
+              }
+              if (item.type === 'suggested_users') {
+                return <PeopleToFollow key={item.id} users={item.data} />;
+              }
+              return null;
+            })}
 
-          {/* Additional padding at the bottom of feed */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
+            {/* Additional padding at the bottom of feed */}
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        ) : (
+          <MapContainer />
+        )}
       </View>
 
       <CommentsModal 
