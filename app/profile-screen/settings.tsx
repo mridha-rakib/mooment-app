@@ -3,7 +3,8 @@ import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Modal, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type SettingItemProps = {
   icon: string;
@@ -43,6 +44,7 @@ const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPres
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // Settings states
   const [locationEnabled, setLocationEnabled] = useState(false);
@@ -54,9 +56,9 @@ export default function SettingsScreen() {
   const [selectedAccountType, setSelectedAccountType] = useState<'personal' | 'business'>('personal');
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 40 }} />
@@ -174,7 +176,7 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
