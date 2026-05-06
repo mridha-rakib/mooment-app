@@ -356,7 +356,7 @@ export default function HomeFeed() {
               activeOpacity={0.8}
               onPress={() => {
                 setShowSuccessModal(false);
-                router.push('/auth-screen/onboarding-settings');
+                router.push('/profile-screen/edit-profile');
               }}
             >
               <Text style={styles.modalButtonText}>Add My Profile</Text>
