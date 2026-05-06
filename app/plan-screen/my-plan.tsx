@@ -7,10 +7,10 @@ import {
 } from 'react-native';
 
 /* ─── Constants ─── */
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const DAYS_HDR = ['S','M','T','W','T','F','S'];
-const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS_HDR = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
@@ -145,7 +145,7 @@ export default function MyPlanScreen() {
         {hasAnyEvents ? (
           <View>
             {calendarOpen && <Text style={s.yourPlanLabel}>Your Plan</Text>}
-            
+
             <View style={s.dayHeaderRow}>
               <Text style={s.dayHeaderText}>{dayLabel}</Text>
               <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7} onPress={() => setIsMoreMenuVisible(true)}>
@@ -156,14 +156,14 @@ export default function MyPlanScreen() {
             {/* Vertical Timeline */}
             <View style={s.timelineContainer}>
               <View style={s.timelineVerticalLine} />
-              
+
               {TIME_SLOTS.map((slot) => {
                 const ev = dayEvents.find(e => e.time === slot);
                 return (
                   <View key={slot} style={s.timeSlotWrap}>
                     <Text style={s.timeLabel}>{slot}</Text>
                     <View style={s.dashedLine} />
-                    
+
                     <View style={s.slotContent}>
                       {ev ? (() => {
                         const validEv = ev;
@@ -239,7 +239,7 @@ export default function MyPlanScreen() {
                                 </View>
                               </TouchableOpacity>
                             )}
-                        </>
+                          </>
                         );
                       })() : (
                         <View style={s.capsuleWithWideCardWrap}>
@@ -329,7 +329,7 @@ export default function MyPlanScreen() {
           <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
             <View style={s.dragHandle} />
             <Text style={s.bottomSheetTitle}>Event</Text>
-            
+
             <View style={s.searchContainerPremium}>
               <Feather name="search" size={18} color="#8E8E9B" style={s.searchIcon} />
               <TextInput style={s.searchInput} placeholder="Search event..." placeholderTextColor="#8E8E9B" />
@@ -389,7 +389,7 @@ export default function MyPlanScreen() {
           <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
             <Text style={s.bottomSheetTitle}>Name your Plan</Text>
 
-            <TextInput 
+            <TextInput
               style={s.planNameInput}
               placeholder="Plan Name"
               placeholderTextColor="#8E8E9B"
@@ -435,19 +435,19 @@ const s = StyleSheet.create({
 
   timelineContainer: { position: 'relative', marginTop: 10 },
   timelineVerticalLine: { position: 'absolute', left: 24, top: 0, bottom: 0, width: 1, backgroundColor: '#2A2A3A' },
-  
+
   timeSlotWrap: { marginBottom: 60, position: 'relative' },
   timeLabel: { color: '#8E8E9B', fontSize: 10, marginBottom: 6, marginLeft: 32 },
   dashedLine: { height: 1, borderTopWidth: 1, borderColor: '#2A2A3A', borderStyle: 'dashed', marginLeft: 24 },
-  
+
   slotContent: { paddingLeft: 32, marginTop: 40, paddingRight: 10 },
 
   /* Vertical Capsule Card */
   capsuleWithWideCardWrap: { alignItems: 'flex-start', width: '100%' },
-  eventCapsule: { 
-    width: 150, 
-    backgroundColor: '#13131A', 
-    borderWidth: 1, borderColor: '#2A2A3A', 
+  eventCapsule: {
+    width: 150,
+    backgroundColor: '#13131A',
+    borderWidth: 1, borderColor: '#2A2A3A',
     borderRadius: 75,
     alignItems: 'center',
     paddingVertical: 24,
@@ -465,12 +465,12 @@ const s = StyleSheet.create({
   /* Node + Wide Card */
   circleNode: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', alignItems: 'center', justifyContent: 'center' },
   nodeConnector: { width: 1, height: 20, backgroundColor: '#2A2A3A' },
-  wideCard: { width: '100%', backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', borderRadius: 50, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  wideCard: { width: '100%', backgroundColor: '#13131A', borderWidth: 1, borderColor: '#2A2A3A', borderRadius: 50, padding: 12, paddingHorizontal: 16, flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between' },
   wideCardLeft: { flexDirection: 'row', alignItems: 'center' },
   wideCardIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A1A2E', borderWidth: 1, borderColor: '#2A2A3A', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   wideCardTitle: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
   wideCardTime: { color: '#8E8E9B', fontSize: 11 },
-  wideCardActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  wideCardActions: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   actionIcon: { padding: 4 },
   viewActionBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   viewActionText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
@@ -515,7 +515,7 @@ const s = StyleSheet.create({
   moreMenuIcon: { marginRight: 10 },
   moreMenuText: { color: '#FFFFFF', fontSize: 13, fontWeight: '400' },
   moreMenuSeparator: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
-  
+
   /* Add Event Button */
   addEventBtn: { alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: '#13131A', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#2A2A3A', minWidth: 80 },
   addEventBtnText: { color: '#FFF', fontSize: 11, fontWeight: '500' },
@@ -525,11 +525,11 @@ const s = StyleSheet.create({
   bottomSheetContainer: { backgroundColor: '#13131A', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
   dragHandle: { width: 40, height: 4, backgroundColor: 'rgba(252, 252, 252, 1)', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   bottomSheetTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', marginBottom: 24, textAlign: 'center' },
-  
+
   searchContainerPremium: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderRadius: 12, paddingHorizontal: 16, height: 50, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#FFF', fontSize: 14 },
-  
+
   emptyEventBox: { alignItems: 'center', marginVertical: 30 },
   emptyEventTextLarge: { color: '#8E8E9B', fontSize: 14, textAlign: 'center', marginBottom: 30, paddingHorizontal: 20, lineHeight: 20 },
   browseBtnLarge: { backgroundColor: '#C2B5CD', width: '100%', height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
