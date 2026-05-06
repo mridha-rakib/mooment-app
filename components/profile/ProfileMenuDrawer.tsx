@@ -175,7 +175,16 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               hideSeparator
             />
             <View style={{ height: 10 }} />
-            <MenuItem icon={Logout01Icon} label="Logout" onPress={() => {}} isDestructive hideSeparator />
+            <MenuItem 
+              icon={Logout01Icon} 
+              label="Logout" 
+              onPress={() => {
+                onClose();
+                router.replace('/auth-screen/login');
+              }} 
+              isDestructive 
+              hideSeparator 
+            />
           </ScrollView>
         </SafeAreaView>
       </View>
