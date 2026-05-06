@@ -3,7 +3,8 @@ import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const CREDIT_PACKAGES = [
   { id: '1', credits: 25, price: '$26.25' },
@@ -15,11 +16,12 @@ const CREDIT_PACKAGES = [
 
 export default function BuyCreditsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
         <Text style={styles.headerTitle}>Buy Mooment Credits</Text>
         <View style={{ width: 40 }} />
@@ -44,7 +46,7 @@ export default function BuyCreditsScreen() {
           </View>
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
