@@ -1,7 +1,13 @@
-import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { 
+  ArrowLeft01Icon, 
+  Search01Icon, 
+  Delete02Icon 
+} from "@hugeicons/core-free-icons";
 
 const USERS = [
   { id: '1', name: 'Alexia', handle: '@alexia_d', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' },
@@ -12,6 +18,7 @@ const USERS = [
 
 export default function TaggedFriendsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [users, setUsers] = useState(USERS);
 
   const handleRemove = (id: string) => {
@@ -19,21 +26,21 @@ export default function TaggedFriendsScreen() {
   };
 
   return (
-    <SafeAreaView style={s.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <View style={s.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={22} color="#FFF" />
+          <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFF" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Tagged Friends</Text>
-        <View style={{ width: 36 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Search */}
       <View style={s.searchContainer}>
-        <Feather name="search" size={18} color="#8E8E9B" style={s.searchIcon} />
+        <HugeiconsIcon icon={Search01Icon} size={18} color="#8E8E9B" style={s.searchIcon} />
         <TextInput 
           style={s.searchInput}
           placeholder="Search"
@@ -53,26 +60,42 @@ export default function TaggedFriendsScreen() {
             <TouchableOpacity 
               style={s.actionBtn}
               onPress={() => handleRemove(user.id)}
+              activeOpacity={0.7}
             >
               <Text style={s.actionBtnText}>Remove</Text>
             </TouchableOpacity>
           </View>
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 60 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  safe: { flex: 1, backgroundColor: '#000' },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    paddingBottom: 15 
+  },
+  backBtn: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: '#111', 
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '700' },
   
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#13131A',
+    backgroundColor: '#111',
     borderRadius: 24,
     marginHorizontal: 20,
     marginTop: 10,
@@ -80,18 +103,32 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     height: 48,
     borderWidth: 1,
-    borderColor: '#2A2A3A',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#FFF', fontSize: 14 },
 
-  listContent: { paddingHorizontal: 20 },
-  userRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  userRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 20, 
+    paddingBottom: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: 'rgba(255,255,255,0.05)' 
+  },
   avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
   userInfo: { flex: 1 },
-  userName: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  userName: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   userHandle: { color: '#8E8E9B', fontSize: 12 },
 
-  actionBtn: { backgroundColor: '#1A1A2E', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
-  actionBtnText: { color: '#8E8E9B', fontSize: 13, fontWeight: 'bold' },
+  actionBtn: { 
+    backgroundColor: '#111', 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  actionBtnText: { color: '#8E8E9B', fontSize: 13, fontWeight: '700' },
 });

@@ -1,54 +1,51 @@
-import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { 
+  ArrowLeft01Icon, 
+  Search01Icon, 
+  Share01Icon 
+} from "@hugeicons/core-free-icons";
 
 const USERS = [
-  { id: '1', name: 'Alexia', handle: '@alexia_d', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150', status: 'Send' },
-  { id: '2', name: 'KD Mark', handle: '@kd_mark', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150', status: 'Send' },
-  { id: '3', name: 'Jessica', handle: '@jessica', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150', status: 'Send' },
-  { id: '4', name: 'Jacob', handle: '@jacob', image: 'https://images.unsplash.com/photo-1521119989659-a83eee488004?q=80&w=150', status: 'Sent' },
+  { id: '1', name: 'Alexia', handle: '@alexia_d', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150', status: 'Share' },
+  { id: '2', name: 'KD Mark', handle: '@kd_mark', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150', status: 'Share' },
+  { id: '3', name: 'Jessica', handle: '@jessica', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150', status: 'Share' },
+  { id: '4', name: 'Jacob', handle: '@jacob', image: 'https://images.unsplash.com/photo-1521119989659-a83eee488004?q=80&w=150', status: 'Share' },
 ];
 
 export default function SharePlanScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [users, setUsers] = useState(USERS);
 
-  const toggleStatus = (id: string) => {
-    setUsers(users.map(u => {
-      if (u.id === id) {
-        return { ...u, status: u.status === 'Send' ? 'Sent' : 'Send' };
-      }
-      return u;
-    }));
+  const handleShare = (id: string) => {
+    setUsers(users.map(u => u.id === id ? { ...u, status: 'Shared' } : u));
   };
 
   return (
-    <SafeAreaView style={s.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <View style={s.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
-          <Feather name="x" size={20} color="#FFF" />
+          <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFF" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Share Plan</Text>
-        <View style={{ width: 36 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Search */}
-      <View style={s.searchRow}>
-        <View style={s.searchContainer}>
-          <Feather name="search" size={18} color="#8E8E9B" style={s.searchIcon} />
-          <TextInput 
-            style={s.searchInput}
-            placeholder="Search"
-            placeholderTextColor="#8E8E9B"
-          />
-        </View>
-        <TouchableOpacity onPress={() => {}}>
-          <Text style={s.cancelText}>Cancel</Text>
-        </TouchableOpacity>
+      <View style={s.searchContainer}>
+        <HugeiconsIcon icon={Search01Icon} size={18} color="#8E8E9B" style={s.searchIcon} />
+        <TextInput 
+          style={s.searchInput}
+          placeholder="Search"
+          placeholderTextColor="#8E8E9B"
+        />
       </View>
 
       {/* List */}
@@ -57,58 +54,80 @@ export default function SharePlanScreen() {
           <View key={user.id} style={s.userRow}>
             <Image source={{ uri: user.image }} style={s.avatar} />
             <View style={s.userInfo}>
-              <Text style={s.userName}>Dj Koko</Text>
-              <Text style={s.userHandle}>@adhd_d</Text>
+              <Text style={s.userName}>{user.name}</Text>
+              <Text style={s.userHandle}>{user.handle}</Text>
             </View>
             <TouchableOpacity 
-              style={[s.actionBtn, user.status === 'Sent' ? s.actionBtnDark : s.actionBtnLight]}
-              onPress={() => toggleStatus(user.id)}
+              style={[s.actionBtn, user.status === 'Shared' ? s.actionBtnDark : s.actionBtnLight]}
+              onPress={() => handleShare(user.id)}
+              activeOpacity={0.7}
             >
-              <Text style={[s.actionBtnText, user.status === 'Sent' ? s.actionBtnTextDark : s.actionBtnTextLight]}>
-                {user.status === 'Send' ? 'Share' : 'Shared'}
+              <Text style={[s.actionBtnText, user.status === 'Shared' ? s.actionBtnTextDark : s.actionBtnTextLight]}>
+                {user.status}
               </Text>
             </TouchableOpacity>
           </View>
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 60, marginTop: 10 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  safe: { flex: 1, backgroundColor: '#000' },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    paddingBottom: 15 
+  },
+  backBtn: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: '#111', 
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '700' },
   
-  searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20, marginTop: 10 },
   searchContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#13131A',
-    borderRadius: 12,
-    marginRight: 12,
+    backgroundColor: '#111',
+    borderRadius: 24,
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 20,
     paddingHorizontal: 16,
     height: 48,
     borderWidth: 1,
-    borderColor: '#2A2A3A',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#FFF', fontSize: 14 },
-  cancelText: { color: '#8E8E9B', fontSize: 14 },
 
-  listContent: { paddingHorizontal: 20 },
-  userRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  userRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 20, 
+    paddingBottom: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: 'rgba(255,255,255,0.05)' 
+  },
   avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
   userInfo: { flex: 1 },
-  userName: { color: '#FFF', fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  userName: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   userHandle: { color: '#8E8E9B', fontSize: 12 },
 
-  actionBtn: { width: 80, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  actionBtn: { width: 80, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   actionBtnLight: { backgroundColor: '#C2B5CD' },
-  actionBtnDark: { backgroundColor: '#1A1A2E' },
-  actionBtnText: { fontSize: 11, fontWeight: '700' },
+  actionBtnDark: { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  actionBtnText: { fontSize: 13, fontWeight: '700' },
   actionBtnTextLight: { color: '#0e0d12' },
-  actionBtnTextDark: { color: '#FFF' },
+  actionBtnTextDark: { color: '#8E8E9B' },
 });
