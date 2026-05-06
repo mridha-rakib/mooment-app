@@ -1,5 +1,7 @@
-import React from "react";
-import { Dimensions, Platform, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Dimensions, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
 
 // Components
 import HomeHeader from "@/components/home/HomeHeader";
@@ -266,6 +268,16 @@ const MOCK_FEED: FeedItem[] = [
 export default function HomeFeed() {
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const params = useLocalSearchParams();
+
+  useEffect(() => {
+    if (params.showSuccess === "true") {
+      setShowSuccessModal(true);
+      // Optional: clear the param so it doesn't show again on reload
+      router.setParams({ showSuccess: undefined });
+    }
+  }, [params.showSuccess]);
 
   const handleCommentPress = () => {
     setCommentModalVisible(true);
@@ -321,6 +333,37 @@ export default function HomeFeed() {
         visible={shareModalVisible} 
         onClose={() => setShareModalVisible(false)} 
       />
+
+      {/* Post-Signup Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.starContainer}>
+              <Feather name="star" size={60} color="#FFFFFF" />
+            </View>
+            
+            <Text style={styles.modalTitle}>One Last step</Text>
+            <Text style={styles.modalSubtitle}>
+              We just need a few quick details to personalized your experience and get your account fully ready to go
+            </Text>
+
+            <TouchableOpacity 
+              style={styles.modalButton}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.push('/auth-screen/onboarding-settings');
+              }}
+            >
+              <Text style={styles.modalButtonText}>Add My Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -333,5 +376,51 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? 45 : 10,
+  },
+  /* Success Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    backgroundColor: "#13131A",
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+  },
+  starContainer: {
+    marginBottom: 32,
+    marginTop: 8,
+  },
+  modalTitle: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  modalSubtitle: {
+    color: "#8E8E9B",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 40,
+    paddingHorizontal: 10,
+  },
+  modalButton: {
+    backgroundColor: "#B59EBE",
+    width: "100%",
+    height: 56,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#17121B",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

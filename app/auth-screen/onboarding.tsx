@@ -28,7 +28,7 @@ export default function Onboarding() {
                 <TouchableOpacity 
                   style={styles.button} 
                   activeOpacity={0.8}
-                  onPress={() => router.push('/auth-screen/onboarding-settings')}
+                  onPress={() => router.push('/auth-screen/login')}
                 >
                   <Text style={styles.buttonText}>Get Started</Text>
                 </TouchableOpacity>

@@ -122,7 +122,7 @@ export default function SignUp() {
           <TouchableOpacity 
             style={styles.signupButton} 
             activeOpacity={0.8}
-            onPress={() => setShowSuccessModal(true)}
+            onPress={() => router.push('/auth-screen/verify-email')}
           >
             <Text style={styles.signupButtonText}>Sign Up</Text>
           </TouchableOpacity>

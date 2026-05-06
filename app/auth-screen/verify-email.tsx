@@ -92,7 +92,7 @@ export default function VerifyEmail() {
           <TouchableOpacity 
             style={styles.continueButton} 
             activeOpacity={0.8}
-            onPress={() => router.push('/auth-screen/set-password-info')}
+            onPress={() => router.push('/auth-screen/success-verified')}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
