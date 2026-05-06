@@ -1,21 +1,21 @@
 import { Feather, FontAwesome5 } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import BackButton from "@/components/ui/BackButton";
 
 export default function CheckoutScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'card' | 'apple'>('stripe');
   const [agreed, setAgreed] = useState(true);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <BackButton />
         <Text style={styles.headerTitle}>Checkout</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -144,7 +144,7 @@ export default function CheckoutScreen() {
         </TouchableOpacity>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
