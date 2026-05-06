@@ -75,9 +75,9 @@ const TicketWalletScreen = () => {
   ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
         <Text style={styles.headerTitle}>Ticket Wallet</Text>
         <View style={{ width: 40 }} />
