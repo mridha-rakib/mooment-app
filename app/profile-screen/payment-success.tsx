@@ -1,19 +1,21 @@
-import { Feather } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import BackButton from "@/components/ui/BackButton";
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.closeBtn}>
-          <Feather name="x" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <BackButton 
+          iconName="x" 
+          onPress={() => router.push('/(tabs)/profile')} 
+        />
       </View>
 
       <View style={styles.content}>
@@ -37,7 +39,7 @@ export default function PaymentSuccessScreen() {
           <Text style={styles.secondaryBtnText}>Back to Profile</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
