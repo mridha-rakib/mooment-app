@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
 import { Calendar01Icon, ShoppingBag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
@@ -13,9 +14,7 @@ export default function CreatorDashboardScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Creator Dashboard</Text>
         <View style={{ width: 40 }} />
       </View>

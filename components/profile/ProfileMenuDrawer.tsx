@@ -89,7 +89,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }} 
             />
             <MenuItem icon={Bookmark02Icon} label="Saved Posts" onPress={() => {}} />
-            <MenuItem icon={Calendar03Icon} label="Draft Events" onPress={() => {}} />
+            <MenuItem 
+              icon={Calendar03Icon} 
+              label="Draft Events" 
+              onPress={() => {
+                onClose();
+                router.push('/event-screen/event');
+              }} 
+            />
             <MenuItem icon={Calendar01Icon} label="My Plan" onPress={() => {}} />
             <MenuItem 
               icon={Analytics01Icon} 

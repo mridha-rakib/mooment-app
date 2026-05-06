@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -53,9 +54,7 @@ const CartScreen = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color={COLORS.text} />
-        </TouchableOpacity>
+        <BackButton color={COLORS.text} />
         <Text style={styles.headerTitle}>My Cart</Text>
         <View style={{ width: 40 }} />
       </View>

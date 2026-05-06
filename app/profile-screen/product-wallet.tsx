@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -71,9 +72,7 @@ const ProductWalletScreen = () => {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color={COLORS.text} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Product Wallet</Text>
         <View style={{ width: 40 }} />
       </View>

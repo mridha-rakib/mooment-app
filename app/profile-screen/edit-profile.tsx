@@ -1,16 +1,16 @@
 import { Feather } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
-import { useRouter, useLocalSearchParams } from "expo-router";
+import BackButton from "@/components/ui/BackButton";
+import { Image } from "expo-image";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Image } from "expo-image";
 
 const CustomInput = ({ icon, placeholder, value, rightIcon, multiline, style }: any) => (
   <View style={[styles.inputContainer, multiline && styles.inputContainerMultiline, style]}>
     {icon && <Feather name={icon} size={16} color="#8E8E9B" style={styles.inputIcon} />}
-    <TextInput 
-      style={[styles.input, multiline && styles.inputMultiline]} 
+    <TextInput
+      style={[styles.input, multiline && styles.inputMultiline]}
       placeholder={placeholder}
       placeholderTextColor="#8E8E9B"
       value={value}
@@ -24,7 +24,7 @@ const CustomInput = ({ icon, placeholder, value, rightIcon, multiline, style }: 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { type } = useLocalSearchParams<{ type?: 'personal' | 'business' }>();
-  
+
   // Using state to easily switch during dev, defaults to personal
   const [profileType, setProfileType] = useState<'personal' | 'business'>(type || 'personal');
   const [hasImage, setHasImage] = useState(true);
@@ -36,11 +36,9 @@ export default function EditProfileScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.toggleBtn}
           onPress={() => setProfileType(isBusiness ? 'personal' : 'business')}
         >
@@ -48,12 +46,12 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          
+
           {/* Image Section */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>IMAGE</Text>
@@ -67,9 +65,9 @@ export default function EditProfileScreen() {
           <View style={styles.avatarWrapper}>
             <View style={styles.avatarContainer}>
               {hasImage ? (
-                <Image 
-                  source={{ uri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200' }} 
-                  style={styles.avatar} 
+                <Image
+                  source={{ uri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200' }}
+                  style={styles.avatar}
                   contentFit="cover"
                 />
               ) : (
@@ -78,7 +76,7 @@ export default function EditProfileScreen() {
                 </View>
               )}
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.cameraBadge}
               onPress={() => setHasImage(true)}
             >
@@ -88,28 +86,28 @@ export default function EditProfileScreen() {
 
           {/* Form Fields */}
           <View style={styles.formGroup}>
-            <CustomInput 
-              icon="user" 
-              placeholder={isBusiness ? "Business name" : "Fullname"} 
+            <CustomInput
+              icon="user"
+              placeholder={isBusiness ? "Business name" : "Fullname"}
             />
-            <CustomInput 
-              icon="at-sign" 
-              placeholder="username" 
+            <CustomInput
+              icon="at-sign"
+              placeholder="username"
             />
-            <CustomInput 
-              icon="mail" 
-              placeholder="name@nocturnal.com" 
+            <CustomInput
+              icon="mail"
+              placeholder="name@nocturnal.com"
             />
-            
+
             {isBusiness ? (
-              <CustomInput 
-                icon="map-pin" 
-                placeholder="Address" 
+              <CustomInput
+                icon="map-pin"
+                placeholder="Address"
               />
             ) : (
-              <CustomInput 
+              <CustomInput
                 icon="target" // approximate icon for gender
-                placeholder="Gender" 
+                placeholder="Gender"
                 rightIcon="chevron-down"
               />
             )}
@@ -130,9 +128,9 @@ export default function EditProfileScreen() {
               <Text style={styles.docDesc}>
                 To confirm your business is legitimate, we require an official registration document (PDF). Our team will review this in the background while you use your account.
               </Text>
-              
+
               {!hasDocument ? (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.uploadBtn}
                   onPress={() => setHasDocument(true)}
                 >
@@ -151,7 +149,7 @@ export default function EditProfileScreen() {
                   <View style={styles.docActions}>
                     <TouchableOpacity style={styles.docActionBtn}><Feather name="download" size={16} color="#8E8E9B" /></TouchableOpacity>
                     <TouchableOpacity style={styles.docActionBtn}><Feather name="eye" size={16} color="#8E8E9B" /></TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.docActionBtn}
                       onPress={() => setHasDocument(false)}
                     >
@@ -166,8 +164,8 @@ export default function EditProfileScreen() {
           {/* Bio */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>BIO</Text>
-            <CustomInput 
-              placeholder={isBusiness ? "Detail about business" : "Detail about yourselft"} 
+            <CustomInput
+              placeholder={isBusiness ? "Detail about business" : "Detail about yourselft"}
               multiline={true}
               style={{ height: 100 }}
             />

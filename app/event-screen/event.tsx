@@ -2,6 +2,7 @@ import AboutTab from "@/components/eventTabs/AboutTab";
 import AccessTab from "@/components/eventTabs/AccessTab";
 import ProductTab from "@/components/eventTabs/ProductTab";
 import VibeTab from "@/components/eventTabs/VibeTab";
+import BackButton from "@/components/ui/BackButton";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
@@ -39,38 +40,12 @@ const EventScreen = () => {
 
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
-      <TouchableOpacity
-        onPress={() => router.back()}
-        style={styles.headerBtn}
-        activeOpacity={0.8}
-      >
-        <LinearGradient
-          colors={["#18181c", "#c1c0c5", "#18181c"]}
-          start={{ x: 1, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.headerBtnBorder}
-        >
-          <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-            <Feather name="chevron-left" size={24} color={COLORS.text} />
-          </BlurView>
-        </LinearGradient>
-      </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.headerBtn} 
-        activeOpacity={0.8}
-        onPress={() => router.push("/event-screen/wallet")}
-      > 
-        <LinearGradient
-          colors={["#18181c", "#c1c0c5", "#18181c"]}
-          start={{ x: 1, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.headerBtnBorder}
-        >
-          <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-            <Feather name="more-horizontal" size={24} color={COLORS.text} />
-          </BlurView>
-        </LinearGradient>
-      </TouchableOpacity>
+      <BackButton color={COLORS.text} />
+      <BackButton 
+        iconName="more-horizontal" 
+        onPress={() => router.push("/event-screen/wallet")} 
+        color={COLORS.text}
+      />
     </View>
   );
 
@@ -242,8 +217,8 @@ const EventScreen = () => {
           <Text style={styles.priceLabel}>From</Text>
           <Text style={styles.priceValue}>£45</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.buyBtn} 
+        <TouchableOpacity
+          style={styles.buyBtn}
           activeOpacity={0.8}
           onPress={() => router.push("/event-screen/checkout")}
         >
@@ -275,7 +250,7 @@ const styles = StyleSheet.create({
   headerBtn: {
     width: 44,
     height: 44,
-    borderRadius:100,
+    borderRadius: 100,
   },
   headerBtnBorder: {
     flex: 1,
@@ -285,8 +260,8 @@ const styles = StyleSheet.create({
   headerBtnBg: {
     flex: 1,
     backgroundColor: "#1e1d21",
-    borderRadius:100,
-    justifyContent: "center",          
+    borderRadius: 100,
+    justifyContent: "center",
     alignItems: "center",
   },
   imageContainer: {

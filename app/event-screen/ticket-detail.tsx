@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -58,9 +59,7 @@ const TicketDetailScreen = () => {
           
           {/* Header Controls */}
           <View style={[styles.headerTop, { paddingTop: insets.top + 10 }]}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-              <Feather name="chevron-left" size={24} color={COLORS.text} />
-            </TouchableOpacity>
+            <BackButton color={COLORS.text} />
             <Text style={styles.headerTitle}>Ticket Detail</Text>
             <View style={{ width: 40 }} />
           </View>

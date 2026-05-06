@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
@@ -19,9 +20,7 @@ export default function BuyCreditsScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Buy Mooment Credits</Text>
         <View style={{ width: 40 }} />
       </View>
