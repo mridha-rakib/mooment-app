@@ -21,6 +21,15 @@ export default function TicketDetailsScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  const handleConfirm = () => {
+    setShowConfetti(true);
+    // Navigate back after the animation
+    setTimeout(() => {
+      router.back();
+    }, 2500);
+  };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -62,6 +71,12 @@ export default function TicketDetailsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      
+      {/* Success Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
       
       {/* Header */}
       <View style={styles.header}>
@@ -183,7 +198,7 @@ export default function TicketDetailsScreen() {
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.confirmButton}
-          onPress={() => router.back()}
+          onPress={handleConfirm}
         >
           <Text style={styles.confirmButtonText}>Confirm</Text>
         </TouchableOpacity>
