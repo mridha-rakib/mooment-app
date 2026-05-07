@@ -2,19 +2,45 @@ import { ChevronLeft } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import LottieView from 'lottie-react-native';
+import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 
 export default function SuccessVerified() {
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowConfetti(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
+      
       <View style={styles.container}>
         <View style={styles.content}>
           
-          <Image 
-            source={require("../../assets/images/success.png")} 
-            style={{ width: 147, height: 170, marginBottom: 40 }} 
-          />
+          <View style={styles.graphicContainer}>
+            <Image 
+              source={require("../../assets/images/success.png")} 
+              style={{ width: 147, height: 170 }} 
+            />
+            <View style={styles.animationOverlay}>
+              <LottieView
+                source={{ uri: 'https://lottie.host/7608e08d-8067-466d-8e43-85e6561e1b19/8CAs5A4F0m.json' }}
+                autoPlay
+                loop={false}
+                style={styles.lottie}
+              />
+            </View>
+          </View>
 
           <View style={styles.textContainer}>
             <Text style={styles.title}>Successfully Verified</Text>
@@ -59,6 +85,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingBottom: 40,
+  },
+  graphicContainer: {
+    width: 200,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  animationOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lottie: {
+    width: 180,
+    height: 180,
   },
   textContainer: {
     alignItems: "center",
