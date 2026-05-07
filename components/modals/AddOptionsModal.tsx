@@ -1,4 +1,3 @@
-import { OleoScript_400Regular, useFonts } from '@expo-google-fonts/oleo-script';
 import {
   AudioWave01Icon,
   Calendar01Icon,
@@ -75,9 +74,6 @@ const OPTIONS = [
 
 export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
   const router = useRouter();
-  const [fontsLoaded] = useFonts({ OleoScript_400Regular });
-
-  if (!fontsLoaded) return null;
 
   const handleOption = (route: string) => {
     onClose();
@@ -135,6 +131,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
+    backgroundColor: '#000000CC',
   },
   sheet: {
     backgroundColor: '#13131A',
