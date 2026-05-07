@@ -1,19 +1,19 @@
-import React, { useEffect, useState } from "react";
-import { Dimensions, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { Dimensions, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 // Components
-import HomeHeader from "@/components/home/HomeHeader";
-import CommentsModal from "@/components/post/CommentsModal";
 import FeaturedProducts, { ProductData } from "@/components/home/FeaturedProducts";
-import FeedPost, { PostData } from "@/components/post/FeedPost";
 import HighlightsCarousel, { HighlightData } from "@/components/home/HighlightsCarousel";
-import LiveChatBanner from "@/components/live/LiveChatBanner";
-import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
-import ShareModal from "@/components/post/ShareModal";
-import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
+import HomeHeader from "@/components/home/HomeHeader";
 import MapContainer from "@/components/home/MapContainer";
+import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
+import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
+import LiveChatBanner from "@/components/live/LiveChatBanner";
+import CommentsModal from "@/components/post/CommentsModal";
+import FeedPost, { PostData } from "@/components/post/FeedPost";
+import ShareModal from "@/components/post/ShareModal";
 
 const { width } = Dimensions.get("window");
 
@@ -32,7 +32,7 @@ const MOCK_SUGGESTED_USERS: SuggestedUser[] = [
   { id: '3', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
   { id: '4', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
   { id: '5', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop' },
-   { id: '6', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
+  { id: '6', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
   { id: '7', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
   { id: '8', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop' },
 ];
@@ -113,9 +113,9 @@ const MOCK_POSTS: PostData[] = [
     authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
     timeAgo: '2 min ago',
     mediaUris: [
-      'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop', 
-      'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop', 
-      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'  
+      'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'
     ],
     productDetails: {
       title: 'Medusa Skin Whitening Cream',
@@ -136,7 +136,7 @@ const MOCK_POSTS: PostData[] = [
     authorAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
     timeAgo: '3 min ago',
     mediaUris: [
-      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop' 
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
     ],
     eventDetails: {
       isLive: true,
@@ -169,7 +169,7 @@ const MOCK_POSTS: PostData[] = [
     mediaUris: [
       'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
       'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop' 
+      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'
     ],
     likesCount: 95,
     commentsCount: 28,
@@ -222,7 +222,7 @@ const MOCK_POSTS: PostData[] = [
 ];
 
 // Feed Engine - Polymorphic Architecture
-type FeedItem = 
+type FeedItem =
   | { type: 'post'; id: string; data: PostData }
   | { type: 'live_chat'; id: string; data: any }
   | { type: 'featured_products'; id: string; data: ProductData[] }
@@ -232,13 +232,13 @@ type FeedItem =
 const MOCK_FEED: FeedItem[] = [
   // --- PART 1: The "Previous" Combined Designs ---
   { type: 'post', id: 'f_text', data: MOCK_POSTS[1] }, // Text Post
-   { type: 'post', id: 's6_1', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+  { type: 'post', id: 's6_1', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
   { type: 'post', id: 'f_audio', data: MOCK_POSTS[0] }, // Audio Post
- 
-  { 
-    type: 'live_chat', 
-    id: 'f_live', 
-    data: { 
+
+  {
+    type: 'live_chat',
+    id: 'f_live',
+    data: {
       contextBold: 'Dickenson, Johnson',
       contextNormal: 'are on the live room',
       title: 'Pre-show chat with DJ Nova',
@@ -259,10 +259,10 @@ const MOCK_FEED: FeedItem[] = [
   { type: 'post', id: 's2', data: MOCK_POSTS[3] }, // Product Post (Medusa Cream)
   { type: 'post', id: 's3', data: MOCK_POSTS[4] }, // Event Post (Rooftop Session)
   { type: 'post', id: 's4', data: MOCK_POSTS[5] }, // Standard Post (LuminaGlow)
-   { type: 'post', id: 's6_2', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
-    { type: 'post', id: 's6_3', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+  { type: 'post', id: 's6_2', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
+  { type: 'post', id: 's6_3', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
   { type: 'post', id: 's5', data: MOCK_POSTS[6] }, // Product Post 2
-   { type: 'suggested_users', id: 'f_sug', data: MOCK_SUGGESTED_USERS }, // Horizontal Users
+  { type: 'suggested_users', id: 'f_sug', data: MOCK_SUGGESTED_USERS }, // Horizontal Users
   { type: 'post', id: 's6_4', data: MOCK_POSTS[7] }, // Standard Laser Room Post (with Expand icon!)
 ];
 
@@ -292,7 +292,7 @@ export default function HomeFeed() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        
+
         {/* Top Navigation */}
         <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
 
@@ -330,14 +330,14 @@ export default function HomeFeed() {
         )}
       </View>
 
-      <CommentsModal 
-        visible={commentModalVisible} 
-        onClose={() => setCommentModalVisible(false)} 
+      <CommentsModal
+        visible={commentModalVisible}
+        onClose={() => setCommentModalVisible(false)}
       />
 
-      <ShareModal 
-        visible={shareModalVisible} 
-        onClose={() => setShareModalVisible(false)} 
+      <ShareModal
+        visible={shareModalVisible}
+        onClose={() => setShareModalVisible(false)}
       />
 
       {/* Post-Signup Success Modal */}
@@ -351,13 +351,13 @@ export default function HomeFeed() {
             <View style={styles.starContainer}>
               <Feather name="star" size={60} color="#FFFFFF" />
             </View>
-            
+
             <Text style={styles.modalTitle}>One Last step</Text>
             <Text style={styles.modalSubtitle}>
               We just need a few quick details to personalized your experience and get your account fully ready to go
             </Text>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalButton}
               activeOpacity={0.8}
               onPress={() => {

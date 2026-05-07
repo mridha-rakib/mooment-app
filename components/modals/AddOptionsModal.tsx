@@ -1,0 +1,201 @@
+import { OleoScript_400Regular, useFonts } from '@expo-google-fonts/oleo-script';
+import {
+  AudioWave01Icon,
+  Calendar01Icon,
+  ChevronRight,
+  PencilEdit01Icon,
+  QrCodeIcon,
+  Ticket02Icon
+} from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import {
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { BlurView } from 'expo-blur';
+
+interface AddOptionsModalProps {
+  visible: boolean;
+  onClose: () => void;
+}
+
+const OPTIONS = [
+  {
+    id: 'moment',
+    label: 'Mooment',
+    description: 'Share one to your followers in just about on event you\'re attending',
+    icon: PencilEdit01Icon,
+    color: '#54268F',
+    bg: '#AFA9EC',
+    route: '/post-screen/create-post',
+  },
+  {
+    id: 'story',
+    label: 'Create Plan',
+    description: 'Show your upcoming activity',
+    icon: Calendar01Icon,
+    color: '#173414',
+    bg: '#5DCAA5',
+    route: '/plan-screen/create-plan',
+  },
+  {
+    id: 'event',
+    label: 'Create Event',
+    description: 'Post a real-world experience',
+    icon: Ticket02Icon,
+    color: '#631C1C',
+    bg: '#DE7777',
+    route: '/create-event',
+  },
+  {
+    id: 'live',
+    label: 'Live Room',
+    description: 'Go live audio live room',
+    icon: AudioWave01Icon,
+    color: '#5D3925',
+    bg: '#EF9F27',
+    route: '/live-screen/live-room-setup',
+  },
+  {
+    id: 'scan',
+    label: 'Scan QR',
+    description: 'Scan to open on product links',
+    icon: QrCodeIcon,
+    color: '#0C447C',
+    bg: '#85B7EB',
+    route: '/event-screen/scan-qr',
+  },
+];
+
+export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
+  const router = useRouter();
+  const [fontsLoaded] = useFonts({ OleoScript_400Regular });
+
+  if (!fontsLoaded) return null;
+
+  const handleOption = (route: string) => {
+    onClose();
+    router.push(route as any);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.overlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+        
+        <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+          <View style={styles.handle} />
+          <Text style={styles.sheetTitle}>Select to proceed</Text>
+
+          <View style={styles.optionsList}>
+            {OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.id}
+                style={styles.optionRow}
+                onPress={() => handleOption(opt.route)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
+                  <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />
+                </View>
+
+                <View style={styles.optionText}>
+                  <Text style={styles.optionLabel}>{opt.label}</Text>
+                  <Text style={styles.optionDesc} numberOfLines={2}>{opt.description}</Text>
+                </View>
+
+                <HugeiconsIcon icon={ChevronRight} size={18} color="#B3B3B3" />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#13131A',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  handle: {
+    width: 60,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  optionsList: {
+    gap: 12,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 20,
+    backgroundColor: '#1A1A22',
+  },
+  optionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  optionText: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  optionLabel: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+    marginBottom: 3,
+  },
+  optionDesc: {
+    color: '#8E8E9B',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+});
