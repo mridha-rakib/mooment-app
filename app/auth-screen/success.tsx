@@ -1,11 +1,29 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 
 export default function Success() {
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => {
+    // Show confetti after a short delay when the screen appears
+    const timer = setTimeout(() => {
+      setShowConfetti(true);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Confetti Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
+      
       <View style={styles.container}>
         <View style={styles.content}>
           <View style={styles.graphicContainer}>

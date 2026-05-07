@@ -105,14 +105,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? 32 : 0,
+    paddingTop: Platform.OS === 'android' ? 56 : 24,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 18,
   },
   backButton: {
     width: 36,
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     textAlign: 'center',
-    marginLeft: 16,
+    marginLeft: 20,
   },
   saveDraft: {
     color: '#AFA9EC',
@@ -228,8 +228,8 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     backgroundColor: '#A29CB5',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    borderRadius: 14,
     alignItems: 'center',
   },
   nextButtonText: {

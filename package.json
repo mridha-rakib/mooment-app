@@ -36,6 +36,7 @@
     "expo-system-ui": "~55.0.15",
     "expo-web-browser": "~55.0.14",
     "hugeicons-react-native": "^0.0.2",
+    "lottie-react-native": "~7.3.4",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.4",

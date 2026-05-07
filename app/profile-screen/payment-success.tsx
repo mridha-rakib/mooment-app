@@ -1,15 +1,30 @@
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackButton from "@/components/ui/BackButton";
+import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowConfetti(true);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <View style={styles.safe}>
+      {/* Confetti Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
+      
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton 

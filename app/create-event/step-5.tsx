@@ -11,13 +11,31 @@ import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
+
 export default function CreateEventStep5() {
   const router = useRouter();
   const [privacy, setPrivacy] = useState('public'); // 'public' or 'private'
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  const handlePublish = () => {
+    setShowConfetti(true);
+    // Simulate a delay before navigating back or to success screen
+    setTimeout(() => {
+      console.log('Event Published!');
+      // router.replace('/(tabs)/home'); 
+    }, 3000);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      
+      {/* Confetti Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
       
       {/* Header */}
       <View style={styles.header}>
@@ -102,7 +120,7 @@ export default function CreateEventStep5() {
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.publishButton}
-          onPress={() => console.log('Publish Event')}
+          onPress={handlePublish}
         >
           <Text style={styles.publishButtonText}>Publish Event</Text>
         </TouchableOpacity>
@@ -115,13 +133,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
+    paddingTop: Platform.OS === 'android' ? 56 : 24,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 18,
   },
   backButton: {
     width: 36,
@@ -137,7 +156,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     textAlign: 'center',
-    marginLeft: 16,
+    marginLeft: 20,
   },
   saveDraft: {
     color: '#AFA9EC',
@@ -259,8 +278,8 @@ const styles = StyleSheet.create({
   publishButton: {
     flex: 2,
     backgroundColor: '#A29CB5',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    borderRadius: 14,
     alignItems: 'center',
   },
   publishButtonText: {

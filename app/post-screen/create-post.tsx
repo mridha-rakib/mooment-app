@@ -15,6 +15,8 @@ import {
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
+import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
+
 const { width, height } = Dimensions.get('window');
 
 const MOCK_EVENT = 'Roofstope Series Vol1.';
@@ -169,6 +171,7 @@ export default function CreateMomentScreen() {
   const [selectedEvent, setSelectedEvent] = useState<string>(MOCK_EVENT);
   const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
   const [audience, setAudience] = useState('Public');
+  const [showConfetti, setShowConfetti] = useState(false);
 
   // Modal states
   const [showGallery, setShowGallery] = useState(false);
@@ -181,18 +184,33 @@ export default function CreateMomentScreen() {
     setSelectedImage(uri);
   };
 
+  const handleDone = () => {
+    setShowConfetti(true);
+    // Simulate post creation delay
+    setTimeout(() => {
+      router.back();
+    }, 2500);
+  };
+
   const taggedLabel = taggedPeople.join(', ');
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+      
+      {/* Confetti Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
+
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn} activeOpacity={0.8}>
           <Feather name="x" size={18} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Mooment</Text>
-        <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.doneBtn} onPress={handleDone} activeOpacity={0.8}>
           <Text style={styles.doneBtnText}>Done</Text>
         </TouchableOpacity>
       </View>
@@ -362,12 +380,11 @@ export default function CreateMomentScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
-
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, marginLeft: 12 },
-  doneBtn: { backgroundColor: '#B2ABBA', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 12 },
+  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 56 : 24 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18 },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 18, marginLeft: 20 },
+  doneBtn: { backgroundColor: '#B2ABBA', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 14 },
   doneBtnText: { color: '#0e0d12', fontWeight: '700', fontSize: 14 },
 
   checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
@@ -398,8 +415,8 @@ const styles = StyleSheet.create({
   stitchInput: { color: '#FFFFFF', fontSize: 15, paddingHorizontal: 16, lineHeight: 22, minHeight: 180 },
   eventCaptionInput: { color: '#FFFFFF', fontSize: 14, paddingHorizontal: 16, lineHeight: 22, minHeight: 220 },
 
-  toolbar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#13131A', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#0e0d12' },
-  toolbarItem: { flex: 1, alignItems: 'center', gap: 5 },
-  toolbarIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(104, 104, 104, 0.1)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  toolbar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#13131A', paddingVertical: 18, paddingHorizontal: 24, backgroundColor: '#0e0d12' },
+  toolbarItem: { flex: 1, alignItems: 'center', gap: 6 },
+  toolbarIconBox: { width: 54, height: 54, borderRadius: 16, backgroundColor: 'rgba(104, 104, 104, 0.1)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   toolbarLabel: { color: '#8E8E9B', fontSize: 11 },
 });

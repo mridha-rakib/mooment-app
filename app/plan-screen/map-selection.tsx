@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   SafeAreaView,
@@ -10,17 +10,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 
 export default function MapSelectionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const handleConfirm = () => {
-    // Navigate to My Plan screen with all data
-    router.replace({
-      pathname: '/plan-screen/my-plan' as any,
-      params: { ...params },
-    });
+    setShowConfetti(true);
+    // Navigate to My Plan screen after a delay to show confetti
+    setTimeout(() => {
+      router.replace({
+        pathname: '/plan-screen/my-plan' as any,
+        params: { ...params },
+      });
+    }, 2500);
   };
 
   const handleBack = () => {
@@ -31,6 +36,13 @@ export default function MapSelectionScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
+      {/* Confetti / Success Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+        source={{ uri: 'https://lottie.host/4db68bbd-31f6-4cd8-84eb-189571e2dccc/5u2xmKkpCI.lottie' }}
+      />
+
       {/* Background Map Image */}
       <Image 
         source={require('../../assets/images/dark-map.png')} 

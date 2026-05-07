@@ -1,6 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
 
 const COLORS = {
   background: "#0e0d12",
@@ -23,6 +24,14 @@ const COLORS = {
 const PaymentSuccessScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowConfetti(true);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
 
   const details = [
     { label: "Ticket No", value: "MOM-2024-8575" },
@@ -36,6 +45,12 @@ const PaymentSuccessScreen = () => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Confetti Animation */}
+      <ConfettiOverlay 
+        visible={showConfetti} 
+        onFinish={() => setShowConfetti(false)} 
+      />
+      
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
