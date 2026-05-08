@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -39,8 +38,8 @@ export default function FollowersScreen() {
               <Text style={styles.userName}>{user.name}</Text>
               <Text style={styles.userHandle}>{user.handle}</Text>
             </View>
-            <TouchableOpacity 
-              style={[styles.followBtn, user.isFollowing && styles.followingBtn]} 
+            <TouchableOpacity
+              style={[styles.followBtn, user.isFollowing && styles.followingBtn]}
               onPress={() => toggleFollow(user.id)}
             >
               <Text style={[styles.followBtnText, user.isFollowing && styles.followingBtnText]}>
@@ -64,7 +63,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 70,
+    paddingBottom: 15,
   },
   closeBtn: {
     width: 40,
