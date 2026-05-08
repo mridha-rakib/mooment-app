@@ -151,7 +151,6 @@ export default function FeedPost({
               </View>
             </View>
           </View>
-
           <View style={styles.postHeaderActions}>
             {isFollowing ? (
               <TouchableOpacity
@@ -171,7 +170,6 @@ export default function FeedPost({
                 <Text style={styles.followBtnText}>Follow</Text>
               </TouchableOpacity>
             )}
-
             <TouchableOpacity
               ref={moreBtnRef}
               style={styles.moreBtn}
@@ -299,8 +297,8 @@ export default function FeedPost({
                       <Text style={styles.viewMapText}>View Map</Text>
                     </TouchableOpacity>
                     {post.eventDetails.priceLabel && (
-                      <TouchableOpacity 
-                        style={styles.priceBtn} 
+                      <TouchableOpacity
+                        style={styles.priceBtn}
                         activeOpacity={0.8}
                         onPress={() => router.push('/profile-screen/ticket-wallet' as any)}
                       >
@@ -352,7 +350,11 @@ export default function FeedPost({
               <Text style={styles.productFooterTitle}>{post.productDetails.title}</Text>
               <Text style={styles.productFooterPrice}>{post.productDetails.price}</Text>
             </View>
-            <TouchableOpacity style={styles.productViewBtn} activeOpacity={0.8}>
+            <TouchableOpacity 
+              style={styles.productViewBtn} 
+              activeOpacity={0.8}
+              onPress={() => router.push('/product-screen/product-details')}
+            >
               <Text style={styles.productViewBtnText}>{post.productDetails.buttonText}</Text>
             </TouchableOpacity>
           </View>

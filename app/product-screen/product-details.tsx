@@ -21,7 +21,7 @@ export default function ProductDetails() {
   const [quantity, setQuantity] = useState(1);
 
   const PRODUCT_IMAGES = [
-    'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
+    "file:///C:/Users/Mehedi/.gemini/antigravity/brain/caf6247a-ef81-4570-83bb-f08a61a3aed0/medusa_product_shot_1778266204959.png",
     'https://images.unsplash.com/photo-1612817288484-6f916006741a?q=80&w=1000&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=1000&auto=format&fit=crop',
   ];

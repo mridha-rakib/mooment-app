@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export type ProductData = {
   id: string;
@@ -22,25 +22,25 @@ export default function FeaturedProducts({ products, onSeeAll }: FeaturedProduct
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Featured Products</Text>
-        <TouchableOpacity 
-          onPress={onSeeAll || (() => router.push('/product-screen/all-products'))} 
+        <TouchableOpacity
+          onPress={onSeeAll || (() => router.push('/product-screen/all-products'))}
           activeOpacity={0.8}
         >
           <Text style={styles.seeAllText}>See all</Text>
         </TouchableOpacity>
       </View>
-      
-      <ScrollView 
-        horizontal 
+
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={true} // Switched to true to ensure visibility
         nestedScrollEnabled={true}            // Helps with Android nested gesture handling
-        keyboardShouldPersistTaps="handled" 
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
       >
         {products.map((product) => (
-          <TouchableOpacity 
-            key={product.id} 
-            style={styles.productCard} 
+          <TouchableOpacity
+            key={product.id}
+            style={styles.productCard}
             activeOpacity={0.8}
             onPress={() => router.push('/product-screen/product-details')}
           >
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     height: 110,
     borderRadius: 12,
     marginBottom: 10,
-    backgroundColor: '#13131A', 
+    backgroundColor: '#13131A',
   },
   productTitle: {
     color: '#FFFFFF',
