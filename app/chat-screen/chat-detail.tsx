@@ -421,10 +421,10 @@ export default function ChatDetailScreen() {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 50 : 20 },
 
   /* Header */
-  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 16, padding: 10, borderRadius: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 40, padding: 10, borderRadius: 12 },
   headerBtn: { width: 40, height: 40, borderRadius: 16 },
   headerBtnBorder: { flex: 1, padding: 0.5, borderRadius: 16, overflow: 'hidden' },
   headerBtnBg: { flex: 1, backgroundColor: '#1e1d21', borderRadius: 16, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
   attachLabel: { color: '#8E8E9B', fontSize: 12 },
 
   /* Input Bar */
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0e0d12', gap: 12 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40, backgroundColor: '#0e0d12', gap: 12 },
   inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minHeight: 48, borderWidth: 1, borderColor: '#2A2A3A' },
   input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginLeft: 12, marginRight: 12 },
   emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
