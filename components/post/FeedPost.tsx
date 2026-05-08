@@ -4,6 +4,8 @@ import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import ReportModal from '../modals/ReportModal';
+import ReportDetailsModal from '../modals/ReportDetailsModal';
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
@@ -62,6 +64,8 @@ export type PostData = {
 export default function FeedPost({ post, onCommentPress, onSharePress }: { post: PostData; onCommentPress?: () => void; onSharePress?: () => void }) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(post.isFollowing);
   const moreBtnRef = useRef<View>(null);
@@ -367,7 +371,14 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             <View style={styles.modalOverlay}>
               <View style={[styles.moreMenuContainer, { marginTop: menuTop }]}>
                 <View style={styles.moreMenuBox}>
-                  <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
+                  <TouchableOpacity 
+                    style={styles.moreMenuItem} 
+                    activeOpacity={0.7} 
+                    onPress={() => {
+                      setShowMoreMenu(false);
+                      setShowReportModal(true);
+                    }}
+                  >
                     <Feather name="flag" size={20} color="#FFFFFF" style={styles.menuIcon} />
                     <Text style={styles.menuText}>Report</Text>
                   </TouchableOpacity>
@@ -390,6 +401,26 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             </View>
           </TouchableWithoutFeedback>
         </Modal>
+
+        <ReportModal 
+          visible={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          onReport={(reason) => {
+            console.log('Reported for:', reason);
+            setShowReportModal(false);
+            // Small delay to ensure the first modal closes before opening the second
+            setTimeout(() => setShowReportDetailsModal(true), 300);
+          }}
+        />
+
+        <ReportDetailsModal
+          visible={showReportDetailsModal}
+          onClose={() => setShowReportDetailsModal(false)}
+          onDone={(details) => {
+            console.log('Report details:', details);
+            // Final submission logic here
+          }}
+        />
       </View>
     </View>
   );
