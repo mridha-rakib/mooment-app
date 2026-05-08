@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type ProfileActionsProps = {
@@ -11,6 +11,7 @@ type ProfileActionsProps = {
 
 export default function ProfileActions({ isOwnProfile = true, onlyButtons = false }: ProfileActionsProps) {
   const router = useRouter();
+  const [isFollowing, setIsFollowing] = useState(false);
   
   if (isOwnProfile) return null;
 
@@ -26,8 +27,19 @@ export default function ProfileActions({ isOwnProfile = true, onlyButtons = fals
         </BlurView>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
-        <Text style={styles.followBtnText}>Follow</Text>
+      <TouchableOpacity 
+        style={[styles.followBtn, isFollowing && styles.followingBtn]} 
+        activeOpacity={0.8}
+        onPress={() => setIsFollowing(!isFollowing)}
+      >
+        <View style={styles.followBtnContent}>
+          {isFollowing && (
+            <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+          )}
+          <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+            {isFollowing ? 'Following' : 'Follow'}
+          </Text>
+        </View>
       </TouchableOpacity>
     </>
   );
@@ -70,9 +82,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  followingBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  followBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   followBtnText: {
     color: '#13131A',
     fontWeight: '700',
     fontSize: 14,
+  },
+  followingBtnText: {
+    color: '#FFFFFF',
   },
 });
