@@ -97,16 +97,16 @@ const VibeTab = () => {
                 <Image source={{ uri: room.hostAvatar }} style={styles.roomAvatar} />
                 <View style={styles.onlineIndicator} />
               </View>
-              
+
               {room.isHost && (
                 <View style={styles.hostBadge}>
                   <Text style={styles.hostBadgeText}>Host</Text>
                 </View>
               )}
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.joinBtn}
-                onPress={() => router.push('/event-screen/event-details')}
+              // onPress={() => router.push('/event-screen/event-details')}
               >
                 <Text style={styles.joinBtnText}>Join</Text>
               </TouchableOpacity>
@@ -117,7 +117,7 @@ const VibeTab = () => {
               <Text style={styles.speakingText}>
                 <Text style={styles.hostNameHighlight}>{room.host}</Text> is speaking
               </Text>
-              
+
               <View style={styles.listenerRow}>
                 <View style={styles.avatarCluster}>
                   <Image
@@ -170,7 +170,7 @@ const VibeTab = () => {
               <Text style={styles.postUserName}>{item.user}</Text>
               <Text style={styles.postTime}>{item.time}</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
                 styles.followBtn,
                 item.isFollowing && styles.followBtnActive
@@ -189,7 +189,7 @@ const VibeTab = () => {
           </View>
 
           <Text style={styles.postText}>{item.text}</Text>
-          
+
           {item.image && (
             <Image source={{ uri: item.image }} style={styles.postImage} />
           )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export type ProductData = {
   id: string;
@@ -16,6 +17,7 @@ type FeaturedProductsProps = {
 };
 
 export default function FeaturedProducts({ products, onSeeAll }: FeaturedProductsProps) {
+  const router = useRouter();
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -33,7 +35,12 @@ export default function FeaturedProducts({ products, onSeeAll }: FeaturedProduct
         contentContainerStyle={styles.scrollContent}
       >
         {products.map((product) => (
-          <TouchableOpacity key={product.id} style={styles.productCard} activeOpacity={0.8}>
+          <TouchableOpacity 
+            key={product.id} 
+            style={styles.productCard} 
+            activeOpacity={0.8}
+            onPress={() => router.push('/product-screen/product-details')}
+          >
             <Image source={{ uri: product.imageUri }} style={styles.productImage} />
             <Text style={styles.productTitle} numberOfLines={1}>{product.title}</Text>
             <Text style={styles.productBrand} numberOfLines={1}>{product.brand}</Text>

@@ -31,7 +31,6 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
           <View style={styles.detailsContainer}>
             <Text style={styles.title}>{title}</Text>
             <View style={styles.infoRow}>
-              {/* Avatar Cluster */}
               <View style={styles.avatarCluster}>
                 {avatars.map((uri, i) => (
                   <Image
@@ -48,7 +47,6 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
               <Text style={styles.listeningText}>{listeningCount} listening</Text>
             </View>
           </View>
-          {/* Join Button */}
           <TouchableOpacity style={styles.joinBtn} activeOpacity={0.8}>
             <Text style={styles.joinBtnText}>Join</Text>
           </TouchableOpacity>

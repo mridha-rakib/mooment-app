@@ -1,6 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { HugeiconsIcon } from '@hugeicons/react-native';
 import { PencilEdit02Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -116,7 +116,7 @@ export default function MessagesScreen() {
     let match = true;
     if (topTab === 'Unread') match = c.unread > 0;
     if (topTab === 'Blocked') match = c.isGroup;
-    
+
     if (match) {
       if (subTab === 'DMs') return !c.isGroup;
       if (subTab === 'Groups') return c.isGroup;
@@ -227,13 +227,13 @@ export default function MessagesScreen() {
           <Text style={styles.roomJoinText}>Join</Text>
         </TouchableOpacity>
       </View>
-      
+
       <Text style={styles.roomTitle} numberOfLines={2}>{item.title}</Text>
-      
+
       <Text style={styles.roomSpeakerText}>
         <Text style={styles.roomSpeakerName}>{item.hostName}</Text> is speaking
       </Text>
-      
+
       <View style={styles.roomListenersRow}>
         <View style={styles.roomListenerAvatars}>
           {item.listenerAvatars.map((av, idx) => (
@@ -253,8 +253,8 @@ export default function MessagesScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Chats</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={styles.iconBtn} 
+          <TouchableOpacity
+            style={styles.iconBtn}
             activeOpacity={0.8}
             onPress={() => router.push('/chat-screen/create-group')}
           >
@@ -264,7 +264,7 @@ export default function MessagesScreen() {
       </View>
 
 
-      
+
       {/* Segmented Control */}
       <View style={styles.segmentedControl}>
         {(['DMs', 'Groups', 'Rooms'] as const).map(tab => (
@@ -424,11 +424,11 @@ const styles = StyleSheet.create({
   roomHostText: { color: '#D4B0EB', fontSize: 10, fontWeight: '600' },
   roomJoinBtn: { backgroundColor: '#1A1A2E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6, marginTop: 'auto' },
   roomJoinText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
-  
+
   roomTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
   roomSpeakerText: { color: '#8E8E9B', fontSize: 11, textAlign: 'center', marginBottom: 8 },
   roomSpeakerName: { color: '#FFFFFF', fontWeight: 'bold' },
-  
+
   roomListenersRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   roomListenerAvatars: { flexDirection: 'row', marginRight: 6 },
   roomListenerAvatar: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: '#0e0d12' },

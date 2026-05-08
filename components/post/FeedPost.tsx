@@ -4,9 +4,9 @@ import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
-import ReportModal from '../modals/ReportModal';
-import ReportDetailsModal from '../modals/ReportDetailsModal';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
+import ReportDetailsModal from '../modals/ReportDetailsModal';
+import ReportModal from '../modals/ReportModal';
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
@@ -47,7 +47,7 @@ export type PostData = {
   authorAvatar: string;
   isFollowing?: boolean;
   timeAgo: string;
-  caption?: string; 
+  caption?: string;
   mediaUris?: string[];
   ticketsCount?: number;
   likedBy?: string;
@@ -97,7 +97,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
     <View style={styles.postWrapper}>
       {/* Header Context Labels */}
       {post.headerLabel && (
-        <TouchableOpacity 
+        <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => {
             if (post.headerLabel?.toLowerCase().includes('follow')) {
@@ -114,7 +114,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
           {post.likedBy}
         </Text>
       )}
-      
+
       <View style={styles.postCard}>
         {/* Post Header */}
         <View style={styles.postHeader}>
@@ -129,7 +129,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                   </Text>
                 ))}
               </Text>
-              
+
               <View style={styles.timeRow}>
                 <Text style={styles.postTime}>{post.timeAgo}</Text>
                 {post.isPublic && (
@@ -141,19 +141,19 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
               </View>
             </View>
           </View>
-          
+
           <View style={styles.postHeaderActions}>
             {isFollowing ? (
-              <TouchableOpacity 
-                style={styles.followingBtn} 
+              <TouchableOpacity
+                style={styles.followingBtn}
                 activeOpacity={0.8}
                 onPress={toggleFollow}
               >
                 <Text style={styles.followingBtnText}>Following</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity 
-                style={styles.followBtn} 
+              <TouchableOpacity
+                style={styles.followBtn}
                 activeOpacity={0.8}
                 onPress={toggleFollow}
               >
@@ -161,8 +161,8 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                 <Text style={styles.followBtnText}>Follow</Text>
               </TouchableOpacity>
             )}
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               ref={moreBtnRef}
               style={styles.moreBtn}
               onPress={handleMorePress}
@@ -181,27 +181,27 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
         {post.postType === 'audio' && post.audioDetails && (
           <View style={styles.audioContainer}>
             <View style={styles.waveformRow}>
-               {WAVEFORM_HEIGHTS.map((h, i) => (
-                 <View 
-                   key={i} 
-                   style={[
-                     styles.waveBar, 
-                     { height: h, backgroundColor: i < 15 ? '#8E54E9' : '#454555' }
-                   ]} 
-                 />
-               ))}
+              {WAVEFORM_HEIGHTS.map((h, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.waveBar,
+                    { height: h, backgroundColor: i < 15 ? '#8E54E9' : '#454555' }
+                  ]}
+                />
+              ))}
             </View>
             <View style={styles.audioControlsRow}>
-               <TouchableOpacity style={styles.playBtn} activeOpacity={0.8}>
-                  <Ionicons name="play" size={16} color="#000000" style={{marginLeft: 2}} />
-               </TouchableOpacity>
-               <Text style={styles.audioTimeText}>{post.audioDetails.currentTime} / {post.audioDetails.duration}</Text>
+              <TouchableOpacity style={styles.playBtn} activeOpacity={0.8}>
+                <Ionicons name="play" size={16} color="#000000" style={{ marginLeft: 2 }} />
+              </TouchableOpacity>
+              <Text style={styles.audioTimeText}>{post.audioDetails.currentTime} / {post.audioDetails.duration}</Text>
             </View>
           </View>
         )}
 
         {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && post.mediaUris && post.mediaUris.length > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
             onPress={() => {
               if (post.postType === 'event') {
@@ -210,18 +210,18 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             }}
             style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
           >
-            <ScrollView 
-              horizontal 
-              pagingEnabled 
+            <ScrollView
+              horizontal
+              pagingEnabled
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={handleScroll}
               scrollEventThrottle={16}
             >
               {post.mediaUris.map((uri, index) => (
-                <Image 
+                <Image
                   key={index}
-                  source={{ uri }} 
-                  style={styles.postImage} 
+                  source={{ uri }}
+                  style={styles.postImage}
                 />
               ))}
             </ScrollView>
@@ -246,27 +246,27 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                       </View>
                     ))}
                   </View>
-                  
+
                   <Text style={styles.eventTitle}>{post.eventDetails.title}</Text>
                   <Text style={styles.eventSubtitle}>
                     {post.eventDetails.datetime} • {post.eventDetails.distance}
                   </Text>
-                  
+
                   <View style={styles.eventAttendeesRow}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.avatarCluster}
                       activeOpacity={0.8}
                       onPress={() => { /* router.push('/event-screen/attendees-list'); */ }}
                     >
                       {post.eventDetails.attendeesAvatars?.map((uri, i) => (
-                        <Image 
-                          key={i} 
-                          source={{ uri }} 
+                        <Image
+                          key={i}
+                          source={{ uri }}
                           style={[
-                            styles.avatarSmall, 
+                            styles.avatarSmall,
                             { zIndex: (post.eventDetails?.attendeesAvatars?.length || 0) - i },
                             i > 0 && { marginLeft: -8 }
-                          ]} 
+                          ]}
                         />
                       ))}
                     </TouchableOpacity>
@@ -281,7 +281,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                     {post.eventDetails.priceLabel && (
                       <TouchableOpacity style={styles.priceBtn} activeOpacity={0.8}>
                         <Text style={styles.priceBtnText}>{post.eventDetails.priceLabel}</Text>
-                        <Feather name="chevron-right" size={14} color="#000000" style={{marginTop: 1}}/>
+                        <Feather name="chevron-right" size={14} color="#000000" style={{ marginTop: 1 }} />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -299,8 +299,8 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                 )}
 
                 {post.isExpandable && (
-                  <TouchableOpacity 
-                    style={styles.expandBtn} 
+                  <TouchableOpacity
+                    style={styles.expandBtn}
                     activeOpacity={0.8}
                     onPress={() => setShowFullScreenMedia(true)}
                   >
@@ -324,13 +324,13 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
         {/* Product Post Footer */}
         {post.postType === 'product' && post.productDetails && (
           <View style={styles.productFooterContainer}>
-             <View style={styles.productFooterTextCol}>
-                <Text style={styles.productFooterTitle}>{post.productDetails.title}</Text>
-                <Text style={styles.productFooterPrice}>{post.productDetails.price}</Text>
-             </View>
-             <TouchableOpacity style={styles.productViewBtn} activeOpacity={0.8}>
-                <Text style={styles.productViewBtnText}>{post.productDetails.buttonText}</Text>
-             </TouchableOpacity>
+            <View style={styles.productFooterTextCol}>
+              <Text style={styles.productFooterTitle}>{post.productDetails.title}</Text>
+              <Text style={styles.productFooterPrice}>{post.productDetails.price}</Text>
+            </View>
+            <TouchableOpacity style={styles.productViewBtn} activeOpacity={0.8}>
+              <Text style={styles.productViewBtnText}>{post.productDetails.buttonText}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -358,11 +358,11 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
               )}
             </View>
 
-            {post.postType === 'event' && (
+            {/* {post.postType === 'event' && (
               <TouchableOpacity style={styles.statBtn} activeOpacity={0.8}>
                 <Text style={styles.statBtnText}>View Stat</Text>
               </TouchableOpacity>
-            )}
+            )} */}
           </View>
         )}
 
@@ -377,9 +377,9 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             <View style={styles.modalOverlay}>
               <View style={[styles.moreMenuContainer, { marginTop: menuTop }]}>
                 <View style={styles.moreMenuBox}>
-                  <TouchableOpacity 
-                    style={styles.moreMenuItem} 
-                    activeOpacity={0.7} 
+                  <TouchableOpacity
+                    style={styles.moreMenuItem}
+                    activeOpacity={0.7}
                     onPress={() => {
                       setShowMoreMenu(false);
                       setShowReportModal(true);
@@ -388,16 +388,16 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                     <Feather name="flag" size={20} color="#FFFFFF" style={styles.menuIcon} />
                     <Text style={styles.menuText}>Report</Text>
                   </TouchableOpacity>
-                  
+
                   <View style={styles.menuSeparator} />
-                  
+
                   <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
                     <Feather name="slash" size={20} color="#FFFFFF" style={styles.menuIcon} />
                     <Text style={styles.menuText}>Block</Text>
                   </TouchableOpacity>
-                  
+
                   <View style={styles.menuSeparator} />
-                  
+
                   <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
                     <Feather name="bookmark" size={20} color="#FFFFFF" style={styles.menuIcon} />
                     <Text style={styles.menuText}>Save</Text>
@@ -408,7 +408,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
           </TouchableWithoutFeedback>
         </Modal>
 
-        <ReportModal 
+        <ReportModal
           visible={showReportModal}
           onClose={() => setShowReportModal(false)}
           onReport={(reason) => {
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
     color: "#8E8E9B",
   },
   postCard: {
-    backgroundColor: "#13131A", 
+    backgroundColor: "#13131A",
     borderRadius: 16,
     marginHorizontal: 16,
     padding: 16,
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#D4B0EB", 
+    borderColor: "#D4B0EB",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   postCaption: {
-    color: "#D0D0D8", 
+    color: "#D0D0D8",
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 16,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   postImage: {
-    width: width - 64, 
+    width: width - 64,
     height: "100%",
   },
   /* Audio Post Styles */
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "rgba(14, 13, 18, 0.7)", 
+    backgroundColor: "rgba(14, 13, 18, 0.7)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     right: 0,
-    backgroundColor: "#F2245C", 
+    backgroundColor: "#F2245C",
     width: 16,
     height: 16,
     borderRadius: 8,
