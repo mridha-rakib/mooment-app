@@ -291,10 +291,8 @@ export default function HomeFeed() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-
         {/* Top Navigation */}
         <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
-
         {/* Main Feed Content */}
         {selectedType === 'Feed' ? (
           <ScrollView showsVerticalScrollIndicator={false}>

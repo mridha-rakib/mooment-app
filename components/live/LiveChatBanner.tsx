@@ -21,7 +21,6 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
-        onPress={() => router.push('/live-screen/live-video')}
       >
         <View style={styles.content}>
           {/* Live Badge */}

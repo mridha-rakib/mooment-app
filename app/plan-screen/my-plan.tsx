@@ -2,17 +2,17 @@ import { Feather } from '@expo/vector-icons';
 import {
   Add01Icon,
   ArrowLeft01Icon,
+  Calendar03Icon,
   CheckmarkCircle02Icon,
   Delete02Icon,
   MoreHorizontalIcon,
+  PencilEdit01Icon,
+  Search01Icon,
+  Settings02Icon,
   Share01Icon,
   SpoonAndForkIcon,
-  Calendar03Icon,
-  PencilEdit01Icon,
   UserAdd01Icon,
-  UserGroupIcon,
-  Settings02Icon,
-  Search01Icon
+  UserGroupIcon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -254,7 +254,7 @@ export default function MyPlanScreen() {
                         );
                       })() : (
                         <View style={s.addEventContainer}>
-                          <TouchableOpacity style={s.addEventBtn} onPress={() => setIsEventModalVisible(true)}>
+                          <TouchableOpacity style={s.addEventBtn} onPress={() => setIsSelectEventModalVisible(true)}>
                             <HugeiconsIcon icon={Add01Icon} size={14} color="#FFF" style={{ marginBottom: 4 }} />
                             <Text style={s.addEventBtnText}>Add Event</Text>
                           </TouchableOpacity>
