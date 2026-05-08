@@ -285,13 +285,6 @@ export default function ChatDetailScreen() {
                 )}
 
                 <View style={[styles.msgRow, item.fromMe ? styles.msgRowMe : styles.msgRowThem, !isSameGroup && { marginTop: 12 }]}>
-                  {/* Avatar for them */}
-                  {!item.fromMe ? (
-                    showAvatar
-                      ? <Image source={{ uri: item.senderAvatar || avatar }} style={styles.msgAvatar} />
-                      : <View style={{ width: 30, marginRight: 8 }} />
-                  ) : null}
-
                   <View style={{ maxWidth: width * 0.72 }}>
                     {renderBubble(item)}
 
@@ -314,7 +307,6 @@ export default function ChatDetailScreen() {
           ListFooterComponent={
             isTyping ? (
               <View style={styles.typingRow}>
-                <Image source={{ uri: avatar }} style={styles.msgAvatar} />
                 <View style={styles.typingBubble}>
                   <View style={styles.typingDot} />
                   <View style={[styles.typingDot, { opacity: 0.6 }]} />
