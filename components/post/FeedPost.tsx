@@ -6,6 +6,7 @@ import React, { useRef, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import ReportModal from '../modals/ReportModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
+import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
@@ -66,6 +67,7 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
+  const [showFullScreenMedia, setShowFullScreenMedia] = useState(false);
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(post.isFollowing);
   const moreBtnRef = useRef<View>(null);
@@ -297,7 +299,11 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
                 )}
 
                 {post.isExpandable && (
-                  <TouchableOpacity style={styles.expandBtn} activeOpacity={0.8}>
+                  <TouchableOpacity 
+                    style={styles.expandBtn} 
+                    activeOpacity={0.8}
+                    onPress={() => setShowFullScreenMedia(true)}
+                  >
                     <Feather name="maximize-2" size={14} color="#D0D0D8" />
                   </TouchableOpacity>
                 )}
@@ -420,6 +426,13 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
             console.log('Report details:', details);
             // Final submission logic here
           }}
+        />
+
+        <FullScreenMediaModal
+          visible={showFullScreenMedia}
+          onClose={() => setShowFullScreenMedia(false)}
+          mediaUris={post.mediaUris || []}
+          initialIndex={currentMediaIndex}
         />
       </View>
     </View>
