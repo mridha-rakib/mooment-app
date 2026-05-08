@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
 
+import { useRouter } from 'expo-router';
+
 export type SuggestedUser = {
   id: string;
   name: string;
@@ -12,11 +14,16 @@ type PeopleToFollowProps = {
 };
 
 export default function PeopleToFollow({ users }: PeopleToFollowProps) {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>People to follow</Text>
-        <TouchableOpacity>
+        <TouchableOpacity 
+          activeOpacity={0.7}
+          onPress={() => router.push('/discover-screen/people-to-follow')}
+        >
           <Text style={styles.seeAllText}>See all</Text>
         </TouchableOpacity>
       </View>

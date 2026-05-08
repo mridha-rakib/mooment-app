@@ -1,7 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Image, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+
+const CheckIcon = () => (
+  <Svg width="13" height="11" viewBox="0 0 13 11" fill="none" style={{ marginRight: 6 }}>
+    <Path 
+      d="M0.625 6.87518C0.625 6.87518 1.875 6.87518 3.54167 9.79185C3.54167 9.79185 8.174 2.15296 12.2917 0.625183" 
+      stroke="white" 
+      strokeWidth="1.25" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
 
 const INITIAL_USERS = [
   { id: '1', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop', isFollowing: false },
@@ -20,7 +33,7 @@ export default function PeopleToFollowScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
@@ -40,12 +53,13 @@ export default function PeopleToFollowScreen() {
                   <Text style={styles.name}>{user.name}</Text>
                   <Text style={styles.handle}>{user.handle}</Text>
                 </View>
-                
-                <TouchableOpacity 
-                  style={[styles.followBtn, user.isFollowing && styles.followingBtn]} 
+
+                <TouchableOpacity
+                  style={[styles.followBtn, user.isFollowing && styles.followingBtn]}
                   activeOpacity={0.8}
                   onPress={() => toggleFollow(user.id)}
                 >
+                  {user.isFollowing && <CheckIcon />}
                   <Text style={[styles.followBtnText, user.isFollowing && styles.followingBtnText]}>
                     {user.isFollowing ? 'Following' : 'Follow'}
                   </Text>
@@ -68,7 +82,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
+    paddingTop: Platform.OS === 'android' ? 70 : 20,
   },
   header: {
     flexDirection: 'row',
@@ -121,11 +135,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   followBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#D0D0D8',
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 10,
   },
   followingBtn: {
     backgroundColor: 'rgba(255,255,255,0.1)',
