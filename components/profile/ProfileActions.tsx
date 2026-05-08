@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
+import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -9,11 +10,17 @@ type ProfileActionsProps = {
 };
 
 export default function ProfileActions({ isOwnProfile = true, onlyButtons = false }: ProfileActionsProps) {
+  const router = useRouter();
+  
   if (isOwnProfile) return null;
 
   const buttons = (
     <>
-      <TouchableOpacity style={styles.chatBtn} activeOpacity={0.8}>
+      <TouchableOpacity 
+        style={styles.chatBtn} 
+        activeOpacity={0.8}
+        onPress={() => router.push('/chat-screen/chat-detail')}
+      >
         <BlurView intensity={20} tint="dark" style={styles.chatBtnGlass}>
           <MaterialCommunityIcons name="chat-processing-outline" size={20} color="#FFFFFF" />
         </BlurView>
