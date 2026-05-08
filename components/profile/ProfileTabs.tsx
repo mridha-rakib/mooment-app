@@ -8,29 +8,34 @@ export type ProfileTabType = 'feed' | 'events' | 'shop';
 type ProfileTabsProps = {
   activeTab: ProfileTabType;
   onTabChange: (tab: ProfileTabType) => void;
+  isOwnProfile?: boolean;
 };
 
-export default function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
+export default function ProfileTabs({ activeTab, onTabChange, isOwnProfile = true }: ProfileTabsProps) {
   return (
     <View style={styles.container}>
       <TouchableOpacity 
         style={[styles.tab, activeTab === 'feed' && styles.activeTab]} 
         onPress={() => onTabChange('feed')}
       >
-        <HugeiconsIcon icon={Home01Icon} size={20} color={activeTab === 'feed' ? '#FFFFFF' : '#8E8E9B'} />
+        <HugeiconsIcon icon={Home01Icon} size={22} color={activeTab === 'feed' ? '#FFFFFF' : '#8E8E9B'} />
       </TouchableOpacity>
+      
       <TouchableOpacity 
         style={[styles.tab, activeTab === 'events' && styles.activeTab]} 
         onPress={() => onTabChange('events')}
       >
-        <HugeiconsIcon icon={Calendar03Icon} size={20} color={activeTab === 'events' ? '#FFFFFF' : '#8E8E9B'} />
+        <HugeiconsIcon icon={Calendar03Icon} size={22} color={activeTab === 'events' ? '#FFFFFF' : '#8E8E9B'} />
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={[styles.tab, activeTab === 'shop' && styles.activeTab]} 
-        onPress={() => onTabChange('shop')}
-      >
-        <HugeiconsIcon icon={ShoppingBag01Icon} size={20} color={activeTab === 'shop' ? '#FFFFFF' : '#8E8E9B'} />
-      </TouchableOpacity>
+
+      {isOwnProfile && (
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'shop' && styles.activeTab]} 
+          onPress={() => onTabChange('shop')}
+        >
+          <HugeiconsIcon icon={ShoppingBag01Icon} size={22} color={activeTab === 'shop' ? '#FFFFFF' : '#8E8E9B'} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

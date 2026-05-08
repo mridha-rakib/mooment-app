@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     borderRadius: 43,
     padding: 3,
     borderWidth: 2,
-    borderColor: '#FF7D54',
+    borderColor: '#D4B0EB',
   },
   avatar: {
     width: '100%',

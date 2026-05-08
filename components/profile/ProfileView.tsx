@@ -42,10 +42,16 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
           isOwnProfile={isOwnProfile} 
           onMenuPress={() => setMenuVisible(true)}
         />
-        <ProfileBio name={user.name} handle={user.handle} bio={user.bio} />
-        <ProfileActions isOwnProfile={isOwnProfile} />
+        <ProfileBio 
+          name={user.name} 
+          handle={user.handle} 
+          bio={user.bio} 
+          isOwnProfile={isOwnProfile}
+          actions={<ProfileActions isOwnProfile={isOwnProfile} onlyButtons={true} />}
+        />
+        {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
         
-        <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} isOwnProfile={isOwnProfile} />
         <ProfileContent 
           activeTab={activeTab} 
           posts={posts} 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useRouter } from 'expo-router';
 
@@ -20,16 +20,16 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>People to follow</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.push('/discover-screen/people-to-follow')}
         >
           <Text style={styles.seeAllText}>See all</Text>
         </TouchableOpacity>
       </View>
-      
-      <ScrollView 
-        horizontal 
+
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         nestedScrollEnabled={true}
         keyboardShouldPersistTaps="handled"
@@ -37,10 +37,36 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
       >
         {users.map((user) => (
           <View key={user.id} style={styles.userCard}>
-            <Image source={{ uri: user.avatarUri }} style={styles.avatar} />
-            <Text style={styles.userName} numberOfLines={2}>
-              {user.name.split(' ').join('\n')}
-            </Text>
+            <TouchableOpacity 
+              activeOpacity={0.9} 
+              onPress={() => router.push({
+                pathname: '/profile-screen/user-profile',
+                params: { 
+                  userId: user.id,
+                  name: user.name,
+                  avatar: user.avatarUri
+                }
+              } as any)}
+              style={styles.avatarContainer}
+            >
+              <Image source={{ uri: user.avatarUri }} style={styles.avatar} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => router.push({
+                pathname: '/profile-screen/user-profile',
+                params: { 
+                  userId: user.id,
+                  name: user.name,
+                  avatar: user.avatarUri
+                }
+              } as any)}
+            >
+              <Text style={styles.userName} numberOfLines={2}>
+                {user.name.split(' ').join('\n')}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
               <Text style={styles.followBtnText}>Follow</Text>
             </TouchableOpacity>
@@ -76,15 +102,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   userCard: {
+    width: 100,
     alignItems: 'center',
-    width: 64, // Keep it narrow to force text wrap
-    marginRight: 20,
+    marginRight: 16,
+  },
+  avatarContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    marginBottom: 8,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 10,
+    width: '100%',
+    height: '100%',
+    borderRadius: 35,
+    backgroundColor: '#13131A',
   },
   userName: {
     color: '#FFFFFF',
@@ -96,7 +128,7 @@ const styles = StyleSheet.create({
   },
   followBtn: {
     borderWidth: 1,
-    borderColor: '#D4B0EB', 
+    borderColor: '#D4B0EB',
     backgroundColor: 'rgba(212, 176, 235, 0.05)',
     paddingHorizontal: 12,
     paddingVertical: 5,
