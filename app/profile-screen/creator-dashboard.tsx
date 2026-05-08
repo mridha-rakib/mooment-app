@@ -1,8 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import BackButton from "@/components/ui/BackButton";
+import { Feather } from "@expo/vector-icons";
 import { Calendar01Icon, ShoppingBag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -22,7 +21,7 @@ export default function CreatorDashboardScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
         {/* Action Buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.actionBtn}>
@@ -96,21 +95,21 @@ export default function CreatorDashboardScreen() {
         {/* All Events List */}
         <View style={styles.eventsSection}>
           <Text style={styles.eventsTitle}>All Events</Text>
-          
+
           {[1, 2, 3].map((item, index) => (
-            <TouchableOpacity 
-              key={index} 
+            <TouchableOpacity
+              key={index}
               style={styles.eventCard}
               onPress={() => router.push('/profile-screen/event-dashboard')}
             >
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200' }} 
-                style={styles.eventImage} 
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200' }}
+                style={styles.eventImage}
               />
               <View style={styles.eventInfo}>
                 <Text style={styles.eventTitle}>Rooftop Session Vol.4</Text>
                 <Text style={styles.eventDetails}>Sat, Sep 9  •  9:00  •  <Feather name="lock" size={10} /></Text>
-                
+
                 <View style={styles.eventBottom}>
                   <View style={styles.avatarsRow}>
                     <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={styles.tinyAvatar} />
@@ -144,7 +143,7 @@ export default function CreatorDashboardScreen() {
               <Text style={styles.axisLabel}>$250</Text>
               <Text style={styles.axisLabel}>$0</Text>
             </View>
-            
+
             {/* Bars */}
             <View style={styles.barsContainer}>
               <View style={styles.gridLines}>

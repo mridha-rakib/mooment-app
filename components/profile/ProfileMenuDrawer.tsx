@@ -161,7 +161,15 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
 
             <SectionLabel label="PRODUCT" />
             <MenuItem icon={Add01Icon} label="Add Product" onPress={onAddProductPress} />
-            <MenuItem icon={Archive01Icon} label="My Inventory" onPress={() => {}} hideSeparator />
+            <MenuItem 
+              icon={Archive01Icon} 
+              label="My Inventory" 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/inventory');
+              }} 
+              hideSeparator 
+            />
 
             <View style={{ height: 30 }} />
 
