@@ -14,8 +14,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Dimensions,
   Image, Modal, Platform,
   Pressable, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
@@ -36,6 +38,7 @@ type PlanEvent = { id: string; day: number; time: string; title: string; image: 
 
 /* ─── Time slots for the timeline ─── */
 const TIME_SLOTS = ['6:00 PM', '9:00 PM'];
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function MyPlanScreen() {
   const router = useRouter();
@@ -80,7 +83,6 @@ export default function MyPlanScreen() {
     ]);
     setIsCreatePlanModalVisible(false); // Close the modal when done
   };
-  const [popupEvent, setPopupEvent] = useState<PlanEvent | null>(null);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const [isCreatePlanModalVisible, setIsCreatePlanModalVisible] = useState(false);
   const [isSelectEventModalVisible, setIsSelectEventModalVisible] = useState(false);
@@ -92,6 +94,7 @@ export default function MyPlanScreen() {
   const [planLocation, setPlanLocation] = useState('123, Main Street NYC');
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [centeredEventId, setCenteredEventId] = useState<string | null>(null);
 
   const highlightedDays = useMemo(() => new Set([4, 5]), []);
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -182,101 +185,22 @@ export default function MyPlanScreen() {
           {TIME_SLOTS.map((slot) => {
             const ev = dayEvents.find(e => e.time === slot);
             return (
-              <View key={slot} style={s.timeSlotWrap}>
-                <Text style={s.timeLabel}>{slot}</Text>
-                <View style={s.dashedLine} />
-                <View style={s.slotContent}>
-                  {ev ? (
-                    <View style={{ width: '100%', alignItems: 'center' }}>
-                      {slot === '6:00 PM' ? (
-                        /* 6:00 PM Slot: Capsule Card */
-                        <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
-                          <View style={s.capsuleIconWrap}>
-                            <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
-                          </View>
-                          <Text style={s.capsuleTitle}>{ev.title}</Text>
-                          <Text style={s.capsuleVenue}>{ev.venue}</Text>
-                          <Text style={s.capsuleTime}>{ev.time}</Text>
-                          <Image source={{ uri: ev.image }} style={s.capsuleImg} />
-                          <View style={s.capsuleAvatarsRow}>
-                            <View style={s.avatarGroup}>
-                              <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
-                              <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={s.capsuleAvatar} />
-                              <Image source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100' }} style={s.capsuleAvatar} />
-                            </View>
-                            <Text style={s.capsuleMoreText}>+41</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ) : (
-                        /* 9:00 PM Slot: Node + Wide Card */
-                        <>
-                          <View style={s.nodeCircle}>
-                            <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
-                          </View>
-                          <View style={s.nodeConnector} />
-                          
-                          <TouchableOpacity style={s.wideCard} activeOpacity={0.9}>
-                            <View style={s.wideCardTop}>
-                              <View style={s.wideCardIconWrap}>
-                                <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={s.wideCardTitle}>{ev.title}</Text>
-                                <Text style={s.wideCardTime}>{ev.time}</Text>
-                              </View>
-                            </View>
-                            <View style={s.wideCardFooter}>
-                              <View style={s.footerIcons}>
-                                <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Share01Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
-                                <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Delete02Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
-                              </View>
-                              <View style={s.footerActions}>
-                                <TouchableOpacity style={s.viewBtnSmall}><Text style={s.viewBtnTextSmall}>View</Text></TouchableOpacity>
-                                <View style={s.addedPillSmall}>
-                                  <HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} color="#0e0d12" />
-                                  <Text style={s.addedTextSmall}>Added</Text>
-                                </View>
-                              </View>
-                            </View>
-                          </TouchableOpacity>
-                        </>
-                      )}
-                    </View>
-                  ) : (
-                    <View style={{ alignItems: 'center', width: '100%', paddingVertical: 20 }}>
-                      <TouchableOpacity style={s.emptySlotBtn} activeOpacity={0.8} onPress={() => setIsCreatePlanModalVisible(true)}>
-                        <Feather name="plus" size={14} color="#8E8E9B" />
-                        <Text style={s.emptySlotBtnText}>Add Event</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </View>
+              <TimelineSlot
+                key={slot}
+                slot={slot}
+                ev={ev}
+                isCentered={centeredEventId === ev?.id}
+                onToggleCenter={() => setCenteredEventId(centeredEventId === ev?.id ? null : (ev?.id || null))}
+                onAddPress={() => setIsCreatePlanModalVisible(true)}
+              />
             );
           })}
         </View>
+
       </ScrollView>
-      <Modal visible={!!popupEvent} transparent animationType="fade" onRequestClose={() => setPopupEvent(null)}>
-        <Pressable style={s.modalOverlay} onPress={() => setPopupEvent(null)}>
-          <View style={s.popup}>
-            {popupEvent && (
-              <>
-                <Text style={s.popupTitle}>{popupEvent.title}</Text>
-                {popupEvent.venue && <Text style={s.popupVenue}>{popupEvent.venue}</Text>}
-                <Text style={s.popupTime}>{popupEvent.time}</Text>
-                <View style={s.popupBtns}>
-                  <TouchableOpacity style={s.popupBtnMore} activeOpacity={0.8} onPress={() => { setPopupEvent(null); router.push('/event-screen/event-details' as any); }}>
-                    <Text style={s.popupBtnMoreText}>More</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.popupBtnLeave} activeOpacity={0.8} onPress={() => setPopupEvent(null)}>
-                    <Text style={s.popupBtnLeaveText}>Leave</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </Pressable>
-      </Modal>
+
+
+
       {/* More Options Menu */}
       <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
         <TouchableOpacity style={s.moreOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
@@ -394,6 +318,10 @@ export default function MyPlanScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+
+
+
       {/* Map Selection Modal */}
       <Modal visible={isMapModalVisible} transparent animationType="slide" onRequestClose={() => setIsMapModalVisible(false)}>
         <View style={s.mapContainer}>
@@ -440,6 +368,8 @@ export default function MyPlanScreen() {
       </Modal>
 
       {/* Event Selection Modal */}
+
+      {/* Event Selection Modal */}
       <EventPickerModal
         visible={isSelectEventModalVisible}
         onClose={() => setIsSelectEventModalVisible(false)}
@@ -448,6 +378,141 @@ export default function MyPlanScreen() {
           setIsSelectEventModalVisible(false);
         }}
       />
+    </View>
+  );
+}
+
+/* ─── Sub-Component for individual slot animation ─── */
+function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress }: {
+  slot: string, ev: any, isCentered: boolean, onToggleCenter: () => void, onAddPress: () => void
+}) {
+  const router = useRouter();
+  const alignAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(alignAnim, {
+      toValue: isCentered ? 1 : 0,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 40
+    }).start();
+  }, [isCentered]);
+
+  const capsuleTranslateX = alignAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, (SCREEN_WIDTH - 200) / 2 - 50]
+  });
+
+  return (
+    <View style={s.timeSlotWrap}>
+      <Text style={s.timeLabel}>{slot}</Text>
+      <View style={s.dashedLine} />
+      <View style={s.slotContent}>
+        {ev ? (
+          <View style={{ width: '100%', alignItems: isCentered ? 'center' : 'flex-start' }}>
+            {slot === '6:00 PM' ? (
+              /* 6:00 PM Slot: Capsule Card */
+              <View style={{ width: '100%', alignItems: isCentered ? 'center' : 'flex-start' }}>
+                <Animated.View style={{ transform: [{ translateX: capsuleTranslateX }] }}>
+                  <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={onToggleCenter}>
+                    <View style={s.capsuleIconWrap}>
+                      <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
+                    </View>
+                    <Text style={s.capsuleTitle}>{ev.title}</Text>
+                    <Text style={s.capsuleVenue}>{ev.venue}</Text>
+                    <Text style={s.capsuleTime}>{ev.time}</Text>
+                    <Image source={{ uri: ev.image }} style={s.capsuleImg} />
+
+                    <View style={s.capsuleAvatarsRow}>
+                      <View style={s.avatarGroup}>
+                        <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                        <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={s.capsuleAvatar} />
+                        <Image source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100' }} style={s.capsuleAvatar} />
+                      </View>
+                      <Text style={s.capsuleMoreText}>+41</Text>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+
+                {/* Connector and Wide Card */}
+                {isCentered && (
+                  <View style={{ alignItems: 'center', width: '100%' }}>
+                    <View style={s.nodeConnector} />
+                    <TouchableOpacity style={s.wideCard} activeOpacity={0.9} onPress={onToggleCenter}>
+                      <View style={s.wideCardTop}>
+                        <View style={s.wideCardIconWrap}>
+                          <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.wideCardTitle}>{ev.title}</Text>
+                          <Text style={s.wideCardVenue}>{ev.venue} at 123, Ave NYC</Text>
+                        </View>
+                      </View>
+                      <View style={s.wideCardMiddle}>
+                        <View style={s.avatarGroup}>
+                          <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                          <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={s.capsuleAvatar} />
+                        </View>
+                        <Text style={s.wideCardMoreText}>+41  •  6:00 PM</Text>
+                      </View>
+                      <View style={s.wideCardFooter}>
+                        <View style={s.footerIcons}>
+                          <TouchableOpacity 
+                            style={s.footerIcon} 
+                            onPress={() => router.push('/plan-screen/share-plan' as any)}
+                          >
+                            <HugeiconsIcon icon={Share01Icon} size={18} color="#8E8E9B" />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Delete02Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
+                        </View>
+                        <View style={s.footerActions}>
+                          <TouchableOpacity style={s.viewBtnSmall}><Text style={s.viewBtnTextSmall}>View</Text></TouchableOpacity>
+                          <TouchableOpacity 
+                            style={s.addedPillSmall}
+                            activeOpacity={0.8}
+                            onPress={() => router.push('/plan-screen/add-friend' as any)}
+                          >
+                            <HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} color="#0e0d12" />
+                            <Text style={s.addedTextSmall}>Added</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : (
+              /* Other Slots: Simple Capsule with animation */
+              <Animated.View style={{ transform: [{ translateX: capsuleTranslateX }] }}>
+                <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={onToggleCenter}>
+                  <View style={s.capsuleIconWrap}>
+                    <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
+                  </View>
+                  <Text style={s.capsuleTitle}>{ev.title}</Text>
+                  <Text style={s.capsuleVenue}>{ev.venue}</Text>
+                  <Text style={s.capsuleTime}>{ev.time}</Text>
+                  <Image source={{ uri: ev.image }} style={s.capsuleImg} />
+
+                  <View style={s.capsuleAvatarsRow}>
+                    <View style={s.avatarGroup}>
+                      <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                      <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={s.capsuleAvatar} />
+                    </View>
+                    <Text style={s.capsuleMoreText}>+41</Text>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
+        ) : (
+          <View style={{ width: '100%', paddingVertical: 20, paddingLeft: 40 }}>
+            <TouchableOpacity style={s.emptySlotBtn} activeOpacity={0.8} onPress={onAddPress}>
+              <Feather name="plus" size={18} color="#8E8E9B" />
+              <Text style={s.emptySlotBtnText}>Add Event</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -503,6 +568,10 @@ const s = StyleSheet.create({
   discoverBtn: { backgroundColor: '#C2B5CD', borderRadius: 14, paddingHorizontal: 28, paddingVertical: 14 },
   discoverText: { color: '#0e0d12', fontSize: 15, fontWeight: 'bold' },
 
+  /* Centered View Modal Styles */
+  centeredViewContainer: { flex: 1, backgroundColor: '#0e0d12' },
+
+
   /* Empty Slot Styles */
   emptySlotBtn: {
     width: 90,
@@ -528,36 +597,35 @@ const s = StyleSheet.create({
 
   slotContent: { paddingLeft: 32, marginTop: 10, paddingRight: 20 },
 
-  /* Capsule Card */
   eventCapsule: {
-    width: 200,
+    width: 170,
     backgroundColor: '#0e0d12',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 100,
+    borderRadius: 85,
     alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 16,
   },
   capsuleIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#111',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16
+    marginBottom: 20
   },
-  capsuleTitle: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  capsuleVenue: { color: '#8E8E9B', fontSize: 12, textAlign: 'center', marginBottom: 2 },
-  capsuleTime: { color: '#8E8E9B', fontSize: 12, marginBottom: 16 },
-  capsuleImg: { width: 110, height: 48, borderRadius: 12, marginBottom: 16 },
+  capsuleTitle: { color: '#FFF', fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  capsuleVenue: { color: '#8E8E9B', fontSize: 11, textAlign: 'center', marginBottom: 4 },
+  capsuleTime: { color: '#8E8E9B', fontSize: 11, marginBottom: 20 },
+  capsuleImg: { width: 90, height: 40, borderRadius: 10, marginBottom: 16 },
   capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
   avatarGroup: { flexDirection: 'row', alignItems: 'center' },
-  capsuleAvatar: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: '#0e0d12', marginLeft: -8 },
-  capsuleMoreText: { color: '#8E8E9B', fontSize: 12, marginLeft: 8 },
+  capsuleAvatar: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#0e0d12', marginLeft: -8 },
+  capsuleMoreText: { color: '#8E8E9B', fontSize: 11, marginLeft: 6 },
 
   /* Node + Wide Card */
   nodeCircle: {
@@ -571,16 +639,17 @@ const s = StyleSheet.create({
     alignItems: 'center',
     zIndex: 2,
   },
-  nodeConnector: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.1)' },
+  nodeConnector: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.15)' },
   wideCard: {
-    width: '100%',
+    width: SCREEN_WIDTH * 0.85,
     backgroundColor: '#0e0d12',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
     borderRadius: 60,
     padding: 24,
+    marginTop: -10,
   },
-  wideCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  wideCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   wideCardIconWrap: {
     width: 44,
     height: 44,
@@ -592,8 +661,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16
   },
-  wideCardTitle: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 2 },
-  wideCardTime: { color: '#8E8E9B', fontSize: 13 },
+  wideCardTitle: { color: '#FFF', fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  wideCardVenue: { color: '#8E8E9B', fontSize: 12 },
+  wideCardMiddle: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingLeft: 60, marginBottom: 16 },
+  wideCardMoreText: { color: '#8E8E9B', fontSize: 12, marginLeft: 8 },
 
   wideCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   footerIcons: { flexDirection: 'row', gap: 16 },
