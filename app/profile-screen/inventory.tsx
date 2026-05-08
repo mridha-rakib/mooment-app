@@ -32,7 +32,7 @@ const MOCK_INVENTORY: InventoryItem[] = [
   }
 ];
 
-import BackButton from "@/components/ui/BackButton";
+
 
 export default function InventoryScreen() {
   const router = useRouter();

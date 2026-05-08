@@ -74,7 +74,7 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
     setSelectedId(id);
     onSelect(title);  // immediately update parent
     onClose();        // close modal
-    router.push({ pathname: '/event-screen/event-details', params: { id, title } });
+    // router.push({ pathname: '/event-screen/event-details', params: { id, title } });
   };
 
   return (

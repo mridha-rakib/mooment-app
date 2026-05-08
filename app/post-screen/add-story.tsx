@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import BackButton from '@/components/ui/BackButton';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function AddStoryScreen() {
@@ -37,9 +38,7 @@ export default function AddStoryScreen() {
           
           {/* Header Navigation & Progress */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-              <Feather name="chevron-left" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            <BackButton />
 
             <View style={styles.progressContainer}>
               <Text style={styles.progressText}>0</Text>
@@ -122,7 +121,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
+    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',

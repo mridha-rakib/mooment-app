@@ -1,20 +1,20 @@
 import AudiencePickerModal from '@/components/post/AudiencePickerModal';
 import EventPickerModal from '@/components/post/EventPickerModal';
 import PeopleTagModal from '@/components/post/PeopleTagModal';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { AddTeamIcon, Image01Icon, MusicNote04Icon, Video02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
+import { BlurView } from 'expo-blur';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   Alert, Dimensions, Image, Modal, Platform,
   SafeAreaView, ScrollView, StatusBar, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
+import BackButton from '@/components/ui/BackButton';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 
 const { width, height } = Dimensions.get('window');
@@ -147,6 +147,262 @@ function CameraSheet({
   );
 }
 
+// ── Room Setup Modal ──────────────────────────────────────────────────────
+function RoomSetupModal({
+  visible,
+  onClose,
+  onContinue,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onContinue: (name: string, speakers: boolean) => void;
+}) {
+  const [name, setName] = useState('');
+  const [speakers, setSpeakers] = useState(true);
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent>
+      <View style={rmStyles.overlay}>
+        <BlurView intensity={30} tint="dark" style={rmStyles.blur}>
+          <View style={rmStyles.container}>
+            <Text style={rmStyles.title}>Name your Room</Text>
+
+            <View style={rmStyles.inputWrapper}>
+              <TextInput
+                style={rmStyles.input}
+                placeholder="Room name"
+                placeholderTextColor="#8E8E9B"
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={rmStyles.checkboxRow}
+              onPress={() => setSpeakers(!speakers)}
+              activeOpacity={0.8}
+            >
+              <View style={rmStyles.checkboxInfo}>
+                <Text style={rmStyles.checkboxTitle}>Allow all participants to speak</Text>
+                <Text style={rmStyles.checkboxSub}>You can always change this in the Live Room</Text>
+              </View>
+              <View style={[rmStyles.checkbox, speakers && rmStyles.checkboxActive]}>
+                {speakers && <Feather name="check" size={12} color="#111111" />}
+              </View>
+            </TouchableOpacity>
+
+            <View style={rmStyles.footer}>
+              <TouchableOpacity style={rmStyles.cancelBtn} onPress={onClose}>
+                <Text style={rmStyles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={rmStyles.continueBtn} 
+                onPress={() => onContinue(name, speakers)}
+              >
+                <Text style={rmStyles.continueBtnText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </BlurView>
+      </View>
+    </Modal>
+  );
+}
+
+// ── QR Scanner Modal ─────────────────────────────────────────────────────
+function QRScannerModal({
+  visible,
+  onClose,
+  onScan,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onScan: (event: string) => void;
+}) {
+  const [tab, setTab] = useState<'scan' | 'type'>('scan');
+  const [qrCode, setQrCode] = useState('');
+  const [permission, requestPermission] = useCameraPermissions();
+
+  if (!permission) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+      <SafeAreaView style={qsStyles.root}>
+        <StatusBar barStyle="light-content" />
+
+        {/* Header */}
+        <View style={qsStyles.header}>
+          <TouchableOpacity onPress={onClose} style={qsStyles.backBtn}>
+            <Feather name="chevron-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={qsStyles.tabRow}>
+            <TouchableOpacity
+              style={[qsStyles.tab, tab === 'scan' && qsStyles.tabActive]}
+              onPress={() => setTab('scan')}
+            >
+              <Text style={[qsStyles.tabText, tab === 'scan' && qsStyles.tabTextActive]}>Scan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[qsStyles.tab, tab === 'type' && qsStyles.tabActive]}
+              onPress={() => setTab('type')}
+            >
+              <Text style={[qsStyles.tabText, tab === 'type' && qsStyles.tabTextActive]}>Type QR Code</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {tab === 'scan' ? (
+          <View style={qsStyles.scanBody}>
+            {permission.granted ? (
+              <CameraView
+                style={StyleSheet.absoluteFillObject}
+                facing="back"
+                barcodeScannerSettings={{
+                  barcodeTypes: ['qr'],
+                }}
+                onBarcodeScanned={({ data }) => {
+                  if (data) onScan(data);
+                }}
+              />
+            ) : (
+              <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }]}>
+                <TouchableOpacity onPress={requestPermission} style={camStyles.permissionBtn}>
+                  <Text style={camStyles.permissionBtnText}>Allow Camera Access</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Scanner Overlay */}
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+              {/* This creates a "hole" in the overlay */}
+              <View style={{ flex: 1 }} />
+              <View style={{ flexDirection: 'row' }}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
+                <View style={qsStyles.scannerBox}>
+                  <View style={[qsStyles.corner, qsStyles.topLeft]} />
+                  <View style={[qsStyles.corner, qsStyles.topRight]} />
+                  <View style={[qsStyles.corner, qsStyles.bottomLeft]} />
+                  <View style={[qsStyles.corner, qsStyles.bottomRight]} />
+                </View>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
+              </View>
+              <View style={{ flex: 1.5, alignItems: 'center' }}>
+                <TouchableOpacity
+                  style={qsStyles.captureBtn}
+                  onPress={() => onScan('Rooftop Session Vol. 4')}
+                />
+                <Text style={{ color: '#FFFFFF', marginTop: 20, fontSize: 14 }}>Align QR code within the frame</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={qsStyles.typeBody}>
+            <Text style={qsStyles.scanTitle}>Scan QR CODE</Text>
+            <TextInput
+              style={qsStyles.typeInput}
+              placeholder="Type QR Code"
+              placeholderTextColor="#454555"
+              value={qrCode}
+              onChangeText={setQrCode}
+            />
+            <View style={{ flex: 1 }} />
+            <View style={qsStyles.typeFooter}>
+              <TouchableOpacity style={qsStyles.typeCancel} onPress={onClose}>
+                <Text style={qsStyles.typeCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={qsStyles.typeContinue}
+                onPress={() => onScan('Rooftop Session Vol. 4')}
+              >
+                <Text style={qsStyles.typeContinueText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ── QR Details Modal ──────────────────────────────────────────────────────
+function QRDetailsModal({
+  visible,
+  onClose,
+  onContinue,
+  eventTitle,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onContinue: () => void;
+  eventTitle: string;
+}) {
+  React.useEffect(() => {
+    if (visible) {
+      const timer = setTimeout(() => {
+        onContinue();
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent>
+      <View style={qdStyles.overlay}>
+        <View style={qdStyles.container}>
+          <View style={qdStyles.header}>
+            <TouchableOpacity onPress={onClose} style={qdStyles.backBtn}>
+              <Feather name="chevron-left" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={qdStyles.headerTitle}>QR Code</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <View style={qdStyles.productCard}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=200' }}
+              style={qdStyles.productImg}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={qdStyles.productTitle}>Medusa Skin Whitening Cream</Text>
+              <Text style={qdStyles.productMeta}>@df_koko • QTY: 1</Text>
+              <Text style={qdStyles.productPrice}>£28</Text>
+            </View>
+          </View>
+
+          <View style={qdStyles.venueCard}>
+            <View style={qdStyles.venueHeader}>
+              <Feather name="map-pin" size={18} color="#FFFFFF" />
+              <Text style={qdStyles.venueTitle}>New York City</Text>
+            </View>
+            <View style={qdStyles.venueDetails}>
+              <Text style={qdStyles.venueLabel}>Venue: <Text style={qdStyles.venueValue}>The Rooftop Lounge</Text></Text>
+              <Text style={qdStyles.venueLabel}>Address: <Text style={qdStyles.venueValue}>123 Main Street, New York, NY 1001</Text></Text>
+              <Text style={qdStyles.venueLabel}>Time: <Text style={qdStyles.venueValue}>Tonight • 9pm</Text></Text>
+            </View>
+          </View>
+
+          <View style={qdStyles.orderRow}>
+            <Text style={qdStyles.orderText}>Order No: <Text style={qdStyles.orderId}>MOM-2026-8741</Text></Text>
+            <Feather name="check-circle" size={18} color="#FFFFFF" />
+          </View>
+
+          <View style={qdStyles.qrContainer}>
+            <Image
+              source={{ uri: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=MOM-2026-8741' }}
+              style={qdStyles.qrImage}
+            />
+          </View>
+
+          <View style={qdStyles.statusBanner}>
+            <Feather name="check" size={16} color="#16D869" />
+            <Text style={qdStyles.statusMsg}>Your Product has been handover to you in the venue. Thank you for buying from us.</Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const camStyles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
@@ -179,17 +435,22 @@ export default function CreateMomentScreen() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [showAudienceModal, setShowAudienceModal] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   const handleImageSelect = (uri: string) => {
     setSelectedImage(uri);
   };
 
   const handleDone = () => {
-    setShowConfetti(true);
-    // Simulate post creation delay
-    setTimeout(() => {
-      router.back();
-    }, 2500);
+    if (mode === 'event') {
+      setShowQRScanner(true);
+    } else {
+      setShowConfetti(true);
+      // Simulate post creation delay
+      setTimeout(() => {
+        router.back();
+      }, 2500);
+    }
   };
 
   const taggedLabel = taggedPeople.join(', ');
@@ -197,18 +458,16 @@ export default function CreateMomentScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
-      
+
       {/* Confetti Animation */}
-      <ConfettiOverlay 
-        visible={showConfetti} 
-        onFinish={() => setShowConfetti(false)} 
+      <ConfettiOverlay
+        visible={showConfetti}
+        onFinish={() => setShowConfetti(false)}
       />
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn} activeOpacity={0.8}>
-          <Feather name="x" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Create Mooment</Text>
         <TouchableOpacity style={styles.doneBtn} onPress={handleDone} activeOpacity={0.8}>
           <Text style={styles.doneBtnText}>Done</Text>
@@ -251,8 +510,8 @@ export default function CreateMomentScreen() {
           <View style={styles.authorInfo}>
             <Text style={styles.authorNameFull} numberOfLines={2}>
               <Text style={styles.authorBold}>Tuval Mor</Text>
-              {/* Tagged people only in Feed mode */}
-              {mode === 'feed' && taggedPeople.length > 0 && (
+              {/* Tagged people visible in both modes */}
+              {taggedPeople.length > 0 && (
                 <>
                   <Text style={styles.authorMuted}> with </Text>
                   <Text style={styles.authorBold}>{taggedLabel}</Text>
@@ -312,9 +571,9 @@ export default function CreateMomentScreen() {
         {/* Image / Gallery */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
           <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage && mode === 'feed' ? '#D4B0EB' : '#B3B3B3'} />
+            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage ? '#D4B0EB' : '#B3B3B3'} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, selectedImage && mode === 'feed' && { color: '#D4B0EB' }]}>Image</Text>
+          <Text style={[styles.toolbarLabel, selectedImage && { color: '#D4B0EB' }]}>Image</Text>
         </TouchableOpacity>
 
         {/* Camera */}
@@ -360,7 +619,10 @@ export default function CreateMomentScreen() {
       <EventPickerModal
         visible={showEventModal}
         onClose={() => setShowEventModal(false)}
-        onSelect={ev => { setSelectedEvent(ev); setShowEventModal(false); }}
+        onSelect={ev => {
+          setSelectedEvent(ev);
+          setShowEventModal(false);
+        }}
       />
       <PeopleTagModal
         visible={showPeopleModal}
@@ -373,6 +635,19 @@ export default function CreateMomentScreen() {
         onClose={() => setShowAudienceModal(false)}
         onSelect={aud => { setAudience(aud); setShowAudienceModal(false); }}
         current={audience}
+      />
+
+      <QRScannerModal
+        visible={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onScan={ev => {
+          setSelectedEvent(ev);
+          setShowQRScanner(false);
+          router.push({
+            pathname: '/event-screen/event-details',
+            params: { title: ev || selectedEvent }
+          });
+        }}
       />
     </SafeAreaView>
   );
@@ -419,4 +694,85 @@ const styles = StyleSheet.create({
   toolbarItem: { flex: 1, alignItems: 'center', gap: 6 },
   toolbarIconBox: { width: 54, height: 54, borderRadius: 16, backgroundColor: 'rgba(104, 104, 104, 0.1)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   toolbarLabel: { color: '#8E8E9B', fontSize: 11 },
+});
+
+const rmStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)' },
+  blur: { width: '85%', borderRadius: 28, overflow: 'hidden' },
+  container: { padding: 24, backgroundColor: '#13131A' },
+  title: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 24 },
+  inputWrapper: { backgroundColor: '#1A1A22', borderRadius: 14, paddingHorizontal: 16, height: 56, justifyContent: 'center', marginBottom: 20 },
+  input: { color: '#FFFFFF', fontSize: 15 },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1A1A22', padding: 16, borderRadius: 14, marginBottom: 30 },
+  checkboxInfo: { flex: 1, marginRight: 10 },
+  checkboxTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  checkboxSub: { color: '#8E8E9B', fontSize: 11 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#454555', justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  footer: { flexDirection: 'row', gap: 12 },
+  cancelBtn: { flex: 1, height: 54, justifyContent: 'center', alignItems: 'center' },
+  cancelBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  continueBtn: { flex: 1.5, height: 54, backgroundColor: '#B2ABBA', borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  continueBtnText: { color: '#0e0d12', fontSize: 16, fontWeight: 'bold' },
+});
+
+const qsStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0e0d12' },
+  header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  tabRow: { flexDirection: 'row', backgroundColor: '#13131A', borderRadius: 25, padding: 5, marginHorizontal: 20 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
+  tabActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
+  tabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
+  tabTextActive: { color: '#FFFFFF' },
+  scanBody: { flex: 1, position: 'relative' },
+  scanTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 40, textAlign: 'center' },
+  scannerBox: { width: width * 0.7, height: width * 0.7, position: 'relative', backgroundColor: 'transparent' },
+  corner: { position: 'absolute', width: 40, height: 40, borderColor: '#3090F1', borderWidth: 2 },
+  topLeft: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 12 },
+  topRight: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 12 },
+  bottomLeft: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 12 },
+  bottomRight: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 12 },
+  captureBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FFFFFF', marginTop: 80 },
+  typeBody: { flex: 1, paddingHorizontal: 24, paddingTop: 30 },
+  typeInput: { backgroundColor: '#1A1A22', borderRadius: 16, paddingHorizontal: 20, height: 58, color: '#FFFFFF', fontSize: 15, marginTop: 20 },
+  typeFooter: { flexDirection: 'row', paddingBottom: 40, gap: 16, paddingHorizontal: 4 },
+  typeCancel: { flex: 1, height: 54, borderRadius: 16, backgroundColor: '#1A1A22', justifyContent: 'center', alignItems: 'center' },
+  typeCancelText: { color: '#FFFFFF', fontWeight: 'bold' },
+  typeContinue: { flex: 1.5, height: 54, borderRadius: 16, backgroundColor: '#B2ABBA', justifyContent: 'center', alignItems: 'center' },
+  typeContinueText: { color: '#0e0d12', fontWeight: 'bold' },
+});
+
+const qdStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: '#0e0d12' },
+  container: { flex: 1, paddingHorizontal: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingBottom: 20 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+
+  productCard: { backgroundColor: '#13131A', borderRadius: 20, padding: 12, flexDirection: 'row', gap: 14, marginBottom: 16 },
+  productImg: { width: 70, height: 70, borderRadius: 14 },
+  productTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
+  productMeta: { color: '#8E8E9B', fontSize: 12, marginBottom: 6 },
+  productPrice: { color: '#D4B0EB', fontSize: 18, fontWeight: 'bold' },
+
+  venueCard: { backgroundColor: '#13131A', borderRadius: 20, padding: 18, marginBottom: 24 },
+  venueHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  venueTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  venueDetails: { gap: 6 },
+  venueLabel: { color: '#8E8E9B', fontSize: 13 },
+  venueValue: { color: '#FFFFFF' },
+
+  orderRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 24 },
+  orderText: { color: '#8E8E9B', fontSize: 13 },
+  orderId: { color: '#FFFFFF', fontWeight: 'bold' },
+
+  qrContainer: { alignItems: 'center', marginBottom: 24 },
+  qrImage: { width: 260, height: 260, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 10 },
+
+  statusBanner: { flexDirection: 'row', gap: 12, backgroundColor: 'rgba(22,216,105,0.06)', padding: 18, borderRadius: 16, marginBottom: 24, alignItems: 'center' },
+  statusMsg: { flex: 1, color: '#8E8E9B', fontSize: 12, lineHeight: 18 },
+
+  mainBtn: { backgroundColor: '#B2ABBA', height: 56, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginTop: 'auto', marginBottom: 40 },
+  mainBtnText: { color: '#0e0d12', fontSize: 16, fontWeight: 'bold' },
 });
