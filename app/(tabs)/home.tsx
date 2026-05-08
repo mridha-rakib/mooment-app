@@ -45,10 +45,10 @@ const MOCK_HIGHLIGHTS: HighlightData[] = [
 ];
 
 const MOCK_PRODUCTS: ProductData[] = [
-  { id: '1', title: 'T-Shirt', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=200&auto=format&fit=crop' },
-  { id: '2', title: 'Overalls', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?q=80&w=200&auto=format&fit=crop' },
-  { id: '3', title: 'T-Shirt', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=200&auto=format&fit=crop' },
-  { id: '4', title: 'Dress', brand: 'DJ Loko', price: '£55', imageUri: 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?q=80&w=200&auto=format&fit=crop' },
+  { id: '1', title: 'Brighten Serum', brand: 'DJ Loko', price: '£28', imageUri: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?q=80&w=400&auto=format&fit=crop' },
+  { id: '2', title: 'Overalls', brand: 'DJ Loko', price: '£45', imageUri: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?q=80&w=400&auto=format&fit=crop' },
+  { id: '3', title: 'Glow Cream', brand: 'DJ Loko', price: '£32', imageUri: 'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=400&auto=format&fit=crop' },
+  { id: '4', title: 'Dress', brand: 'DJ Loko', price: '£55', imageUri: 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?q=80&w=400&auto=format&fit=crop' },
 ];
 
 // Posts perfectly matching all user screenshots combined!

@@ -20,6 +20,12 @@ export default function ProductDetails() {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
 
+  const PRODUCT_IMAGES = [
+    'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1612817288484-6f916006741a?q=80&w=1000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=1000&auto=format&fit=crop',
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -33,7 +39,10 @@ export default function ProductDetails() {
         <Text style={styles.headerTitle}>Product Details</Text>
         
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity 
+            style={styles.iconBtn}
+            onPress={() => router.push('/event-screen/product/cart' as any)}
+          >
             <View style={styles.cartContainer}>
               <Feather name="shopping-cart" size={20} color="#FFFFFF" />
               <View style={styles.cartBadge}>
@@ -48,15 +57,24 @@ export default function ProductDetails() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Main Product Image */}
+        {/* Main Product Image Gallery */}
         <View style={styles.imageContainer}>
-          <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop' }} 
-            style={styles.mainImage} 
-            resizeMode="cover"
-          />
+          <ScrollView 
+            horizontal 
+            pagingEnabled 
+            showsHorizontalScrollIndicator={false}
+          >
+            {PRODUCT_IMAGES.map((uri, i) => (
+              <Image 
+                key={i}
+                source={{ uri }} 
+                style={styles.mainImage} 
+                resizeMode="cover"
+              />
+            ))}
+          </ScrollView>
           <View style={styles.imageCounter}>
-            <Text style={styles.imageCounterText}>1/3</Text>
+            <Text style={styles.imageCounterText}>1/{PRODUCT_IMAGES.length}</Text>
           </View>
         </View>
 
@@ -120,7 +138,11 @@ export default function ProductDetails() {
           <Text style={styles.originalPrice}>£32</Text>
         </View>
         
-        <TouchableOpacity style={styles.addToCartBtn} activeOpacity={0.8}>
+        <TouchableOpacity 
+          style={styles.addToCartBtn} 
+          activeOpacity={0.8}
+          onPress={() => router.push('/event-screen/product/cart' as any)}
+        >
           <Feather name="plus" size={18} color="#13131A" style={{marginRight: 6}} />
           <Text style={styles.addToCartText}>Add to Cart</Text>
         </TouchableOpacity>
