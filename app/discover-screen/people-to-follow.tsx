@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import BackButton from '@/components/ui/BackButton';
 import Svg, { Path } from 'react-native-svg';
 
 const CheckIcon = () => (
@@ -36,9 +37,7 @@ export default function PeopleToFollowScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-            <Feather name="chevron-left" size={20} color="#8E8E9B" />
-          </TouchableOpacity>
+          <BackButton />
           <Text style={styles.headerTitle}>People to Follow</Text>
           <View style={styles.placeholder} />
         </View>
@@ -82,7 +81,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 70 : 20,
+    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',

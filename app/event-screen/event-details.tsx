@@ -6,6 +6,7 @@ import {
   ScrollView, StatusBar, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
+import BackButton from '@/components/ui/BackButton';
 
 const { width } = Dimensions.get('window');
 
@@ -185,9 +186,7 @@ export default function EventDetailsScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton size={22} />
         <Text style={styles.headerTitle} numberOfLines={1}>Pre-show with {hostName}</Text>
         <TouchableOpacity style={styles.menuBtn} activeOpacity={0.8}>
           <Feather name="more-horizontal" size={20} color="#FFFFFF" />
@@ -322,7 +321,7 @@ export default function EventDetailsScreen() {
 
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
   headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, textAlign: 'center' },

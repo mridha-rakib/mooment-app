@@ -18,6 +18,7 @@ export type UserProfileData = {
   avatar: string;
   bio: string;
   stats: ProfileStats;
+  isFollowing?: boolean;
 };
 
 type ProfileViewProps = {
@@ -47,7 +48,7 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
           handle={user.handle} 
           bio={user.bio} 
           isOwnProfile={isOwnProfile}
-          actions={<ProfileActions isOwnProfile={isOwnProfile} onlyButtons={true} />}
+          actions={<ProfileActions isOwnProfile={isOwnProfile} onlyButtons={true} initialIsFollowing={user.isFollowing} />}
         />
         {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
         

@@ -11,6 +11,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import BackButton from '@/components/ui/BackButton';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -103,9 +104,7 @@ export default function AllProducts() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Featured Products</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -125,7 +124,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',

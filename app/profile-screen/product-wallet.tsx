@@ -71,7 +71,7 @@ const ProductWalletScreen = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>Product Wallet</Text>
         <View style={{ width: 40 }} />
@@ -172,7 +172,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 60,
+    paddingBottom: 12,
   },
   backBtn: {
     width: 40,

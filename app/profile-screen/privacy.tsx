@@ -13,7 +13,7 @@ export default function PrivacyScreen() {
   return (
     <View style={styles.safe}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>Privacy & Policy</Text>
         <View style={{ width: 40 }} />
@@ -32,7 +32,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 60,
+    paddingBottom: 15,
   },
   backBtn: {
     width: 40,

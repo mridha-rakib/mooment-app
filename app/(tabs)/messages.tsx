@@ -358,7 +358,7 @@ export default function MessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold' },

@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import BackButton from "@/components/ui/BackButton";
 
 const REVIEW_DATA = [
   {
@@ -38,9 +39,7 @@ export default function ReviewsScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Reviews</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -80,7 +79,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 60,
+    paddingBottom: 15,
   },
   backBtn: {
     width: 40,

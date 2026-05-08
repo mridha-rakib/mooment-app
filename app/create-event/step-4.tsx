@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DeleteModal from '../../components/ui/DeleteModal';
+import BackButton from '@/components/ui/BackButton';
 
 export default function CreateEventStep4() {
   const router = useRouter();
@@ -22,9 +23,7 @@ export default function CreateEventStep4() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={20} color="#FFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Create Event</Text>
         <TouchableOpacity>
           <Text style={styles.saveDraft}>Save Draft</Text>
@@ -105,7 +104,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? 56 : 24,
+    paddingTop: 45,
   },
   header: {
     flexDirection: 'row',

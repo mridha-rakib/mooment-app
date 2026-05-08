@@ -58,6 +58,8 @@ const STAT_DATA: ProductStatItem[] = [
   },
 ];
 
+import BackButton from "@/components/ui/BackButton";
+
 export default function ProductStatScreen() {
   const router = useRouter();
 
@@ -115,9 +117,7 @@ export default function ProductStatScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Product Stat</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -144,7 +144,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 60,
+    paddingBottom: 15,
     marginBottom: 10,
   },
   backBtn: {

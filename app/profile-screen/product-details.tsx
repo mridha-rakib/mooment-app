@@ -9,6 +9,8 @@ import AddProductModal from "@/components/profile/AddProductModal";
 
 const { width } = Dimensions.get('window');
 
+import BackButton from "@/components/ui/BackButton";
+
 export default function ProductDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -29,9 +31,7 @@ export default function ProductDetailsScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Product Details</Text>
         <TouchableOpacity style={styles.editBtn} onPress={() => setEditModalVisible(true)}>
           <View style={styles.editCircle}>

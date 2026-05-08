@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+import BackButton from "@/components/ui/BackButton";
 
 export default function EventDashboardScreen() {
   const router = useRouter();
@@ -13,15 +14,13 @@ export default function EventDashboardScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Rooftop Session Vol.4</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
         {/* Earnings Top */}
         <View style={styles.topRow}>
           <View>
@@ -44,7 +43,7 @@ export default function EventDashboardScreen() {
             <Text style={styles.label}>Product Earnings</Text>
             <Text style={styles.mediumBalance}>$ 550.00</Text>
           </View>
-          
+
           <View style={styles.gridItem}>
             <Text style={styles.smallLabel}>Ticket Earnings from{'\n'}Mooment Credit</Text>
             <View style={styles.valueRow}>
@@ -76,7 +75,7 @@ export default function EventDashboardScreen() {
             <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={styles.tinyAvatar} />
             <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8 }]} />
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.legendItem}
             onPress={() => router.push('/profile-screen/attendee-list')}
           >
@@ -95,7 +94,7 @@ export default function EventDashboardScreen() {
           </View>
           <Text style={styles.legendDot}>•</Text>
           <View style={styles.legendItem}>
-            <Feather name="lock" size={10} color="#8E8E9B" style={{marginRight: 4}} />
+            <Feather name="lock" size={10} color="#8E8E9B" style={{ marginRight: 4 }} />
             <Text style={styles.legendText}>No show</Text>
           </View>
         </View>
@@ -125,7 +124,7 @@ export default function EventDashboardScreen() {
         {/* Ticket Sales */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Ticket Sales</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.seeAllBtn}
             onPress={() => router.push('/profile-screen/ticket-stat')}
           >
@@ -240,7 +239,7 @@ export default function EventDashboardScreen() {
         {/* Products Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>All Product</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.seeAllBtn}
             onPress={() => router.push('/profile-screen/product-stat')}
           >
@@ -283,7 +282,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 60,
+    paddingBottom: 15,
   },
   backBtn: {
     width: 40,

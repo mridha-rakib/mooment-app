@@ -13,10 +13,10 @@ interface BackButtonProps {
   style?: any;
 }
 
-const BackButton: React.FC<BackButtonProps> = ({ 
-  onPress, 
-  iconName = "chevron-left", 
-  size = 24, 
+const BackButton: React.FC<BackButtonProps> = ({
+  onPress,
+  iconName = "chevron-left",
+  size = 24,
   color = "#FFFFFF",
   style
 }) => {

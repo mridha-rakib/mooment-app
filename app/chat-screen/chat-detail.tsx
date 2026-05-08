@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { AttachmentIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
+import BackButton from '@/components/ui/BackButton';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -219,18 +220,7 @@ export default function ChatDetailScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.8}>
-          <LinearGradient
-            colors={["#18181c", "#c1c0c5", "#18181c"]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.headerBtnBorder}
-          >
-            <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-              <Feather name="chevron-left" size={20} color="#FFFFFF" />
-            </BlurView>
-          </LinearGradient>
-        </TouchableOpacity>
+        <BackButton size={20} />
 
         <TouchableOpacity style={styles.headerCenter} activeOpacity={0.8}>
           <Image source={{ uri: avatar }} style={styles.headerAvatar} />
@@ -413,7 +403,7 @@ export default function ChatDetailScreen() {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 50 : 20 },
+  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
 
   /* Header */
   header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 40, padding: 10, borderRadius: 12 },

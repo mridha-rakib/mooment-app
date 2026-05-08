@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 45 : 10,
+    paddingTop: 60,
   },
   /* Success Modal Styles */
   modalOverlay: {

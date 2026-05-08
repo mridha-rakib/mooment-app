@@ -7,11 +7,12 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 type ProfileActionsProps = {
   isOwnProfile?: boolean;
   onlyButtons?: boolean;
+  initialIsFollowing?: boolean;
 };
 
-export default function ProfileActions({ isOwnProfile = true, onlyButtons = false }: ProfileActionsProps) {
+export default function ProfileActions({ isOwnProfile = true, onlyButtons = false, initialIsFollowing = false }: ProfileActionsProps) {
   const router = useRouter();
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   
   if (isOwnProfile) return null;
 

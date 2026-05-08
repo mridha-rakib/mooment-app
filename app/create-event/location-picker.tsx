@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '@/components/ui/BackButton';
 
 export default function LocationPickerScreen() {
   const router = useRouter();
@@ -21,9 +22,7 @@ export default function LocationPickerScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={20} color="#FFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Map</Text>
         <View style={{ width: 40 }} /> {/* Spacer to balance header */}
       </View>
@@ -75,7 +74,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? 56 : 24,
+    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',

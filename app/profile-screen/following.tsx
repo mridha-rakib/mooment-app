@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import BackButton from "@/components/ui/BackButton";
 
 const MOCK_FOLLOWING = [
   { id: '1', name: 'Jacob West', handle: '@jacob_west', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', isFollowing: true },
@@ -21,9 +22,7 @@ export default function FollowingScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <Feather name="x" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton iconName="x" size={18} />
         <Text style={styles.headerTitle}>Following</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -63,7 +62,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 70,
+    paddingTop: 60,
     paddingBottom: 15,
   },
   closeBtn: {

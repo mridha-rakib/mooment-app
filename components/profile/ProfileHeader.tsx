@@ -8,6 +8,7 @@ import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 
 import MoreMenuModal from "../post/MoreMenuModal";
+import BackButton from "../ui/BackButton";
 
 export type ProfileStats = {
   posts: number;
@@ -43,11 +44,7 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
         </View>
       ) : (
         <View style={styles.topRow}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
-            <BlurView intensity={20} tint="dark" style={styles.glassCircle}>
-              <Feather name="chevron-left" size={20} color="#FFFFFF" />
-            </BlurView>
-          </TouchableOpacity>
+          <BackButton size={20} />
           
           <TouchableOpacity 
             style={styles.moreBtn} 
@@ -104,7 +101,7 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingTop: 70,
+    paddingTop: 60,
   },
   brandedHeader: {
     flexDirection: 'row',

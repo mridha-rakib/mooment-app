@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import BackButton from '@/components/ui/BackButton';
 
 export default function CreateEventScreen() {
   const router = useRouter();
@@ -43,9 +44,7 @@ export default function CreateEventScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={20} color="#FFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Create Event</Text>
         <TouchableOpacity>
           <Text style={styles.saveDraft}>Save Draft</Text>
@@ -141,7 +140,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? 56 : 24,
+    paddingTop: 70,
   },
   header: {
     flexDirection: 'row',

@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import BackButton from "@/components/ui/BackButton";
 
 type InventoryItem = {
   id: string;
@@ -30,6 +31,8 @@ const MOCK_INVENTORY: InventoryItem[] = [
     isOutOfStock: true,
   }
 ];
+
+import BackButton from "@/components/ui/BackButton";
 
 export default function InventoryScreen() {
   const router = useRouter();
@@ -68,9 +71,7 @@ export default function InventoryScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>My Inventory</Text>
         <View style={{ width: 40 }} />
       </View>

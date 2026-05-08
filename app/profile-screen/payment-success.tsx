@@ -26,7 +26,7 @@ export default function PaymentSuccessScreen() {
       />
       
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={styles.header}>
         <BackButton 
           iconName="x" 
           onPress={() => router.push('/(tabs)/profile')} 
@@ -66,7 +66,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 60,
+    paddingBottom: 15,
   },
   closeBtn: {
     width: 40,

@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import BackButton from '@/components/ui/BackButton';
 
 const { width } = Dimensions.get('window');
 
@@ -32,9 +33,7 @@ export default function ProductDetails() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
-          <Feather name="chevron-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Product Details</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -145,7 +144,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',

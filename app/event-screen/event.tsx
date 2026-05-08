@@ -4,7 +4,6 @@ import ProductTab from "@/components/eventTabs/ProductTab";
 import VibeTab from "@/components/eventTabs/VibeTab";
 import BackButton from "@/components/ui/BackButton";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -41,9 +40,9 @@ const EventScreen = () => {
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={COLORS.text} />
-      <BackButton 
-        iconName="more-horizontal" 
-        onPress={() => router.push("/event-screen/wallet")} 
+      <BackButton
+        iconName="more-horizontal"
+        onPress={() => router.push("/event-screen/wallet")}
         color={COLORS.text}
       />
     </View>
@@ -80,7 +79,7 @@ const EventScreen = () => {
               <View
                 style={[styles.tag, { backgroundColor: COLORS.accentPurple }]}
               >
-                <Text style={styles.tagText}>Music Party</Text>
+                <Text style={styles.tagText}>Music Part </Text>
               </View>
               <View
                 style={[styles.tag, { backgroundColor: COLORS.accentOrange }]}

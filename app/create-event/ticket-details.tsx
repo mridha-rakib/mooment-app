@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BackButton from '@/components/ui/BackButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 
@@ -80,9 +81,7 @@ export default function TicketDetailsScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color="#FFF" />
-        </TouchableOpacity>
+        <BackButton iconName="x" size={24} />
         <Text style={styles.headerTitle}>Set Ticket Details</Text>
         <View style={{ width: 40 }} /> {/* Spacer */}
       </View>
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: Platform.OS === 'android' ? 56 : 24,
+    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',
