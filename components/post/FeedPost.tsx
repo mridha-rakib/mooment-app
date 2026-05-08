@@ -62,14 +62,14 @@ export type PostData = {
   isExpandable?: boolean;
 };
 
-export default function FeedPost({ 
-  post, 
-  onCommentPress, 
+export default function FeedPost({
+  post,
+  onCommentPress,
   onSharePress,
-  onViewMapPress 
-}: { 
-  post: PostData; 
-  onCommentPress?: () => void; 
+  onViewMapPress
+}: {
+  post: PostData;
+  onCommentPress?: () => void;
   onSharePress?: () => void;
   onViewMapPress?: () => void;
 }) {
@@ -285,8 +285,8 @@ export default function FeedPost({
 
                   {/* Buttons on Right */}
                   <View style={styles.eventActionsCol}>
-                    <TouchableOpacity 
-                      style={styles.viewMapBtn} 
+                    <TouchableOpacity
+                      style={styles.viewMapBtn}
                       activeOpacity={0.8}
                       onPress={() => {
                         if (onViewMapPress) {
@@ -299,7 +299,11 @@ export default function FeedPost({
                       <Text style={styles.viewMapText}>View Map</Text>
                     </TouchableOpacity>
                     {post.eventDetails.priceLabel && (
-                      <TouchableOpacity style={styles.priceBtn} activeOpacity={0.8}>
+                      <TouchableOpacity 
+                        style={styles.priceBtn} 
+                        activeOpacity={0.8}
+                        onPress={() => router.push('/profile-screen/ticket-wallet' as any)}
+                      >
                         <Text style={styles.priceBtnText}>{post.eventDetails.priceLabel}</Text>
                         <Feather name="chevron-right" size={14} color="#000000" style={{ marginTop: 1 }} />
                       </TouchableOpacity>
