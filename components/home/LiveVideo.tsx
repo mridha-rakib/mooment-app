@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, SafeAreaView, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Dimensions, Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
@@ -18,7 +18,10 @@ export default function LiveVideo() {
     <View style={styles.container}>
       {/* Background Media */}
       <Image 
-        source={{ uri: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop' }} 
+        source={{ uri: activeTab === 'Discover' 
+          ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
+          : 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop' 
+        }} 
         style={styles.backgroundImage} 
       />
 
@@ -30,18 +33,18 @@ export default function LiveVideo() {
       <SafeAreaView style={styles.safeArea}>
         {/* Top Navigation Bar */}
         <View style={styles.topNav}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(tabs)/home')}>
             <Feather name="chevron-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.tabsContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'Discover' && styles.activeTabBtn]}
               onPress={() => setActiveTab('Discover')}
             >
               <Text style={[styles.tabText, activeTab === 'Discover' && styles.activeTabText]}>Discover</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'Friends' && styles.activeTabBtn]}
               onPress={() => setActiveTab('Friends')}
             >
@@ -56,68 +59,77 @@ export default function LiveVideo() {
 
         {/* Center Play Button */}
         <View style={styles.centerContainer}>
-          <TouchableOpacity style={styles.playBtn} activeOpacity={0.8}>
-             <Ionicons name="play" size={32} color="#FFFFFF" style={{ marginLeft: 4 }} />
+          <TouchableOpacity
+            style={styles.playBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="play" size={32} color="#FFFFFF" style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
 
+        {/* Full screen tap to toggle */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+        />
+
         {/* Right Action Column */}
         <View style={styles.rightActionsCol}>
-           <TouchableOpacity style={styles.actionBtn}>
-              <Ionicons name="heart" size={32} color="#F2245C" />
-              <Text style={styles.actionText}>25</Text>
-           </TouchableOpacity>
-           <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentModalVisible(true)}>
-              <Feather name="message-circle" size={30} color="#FFFFFF" />
-              <Text style={styles.actionText}>25</Text>
-           </TouchableOpacity>
-           <TouchableOpacity style={styles.actionBtn} onPress={() => setShareModalVisible(true)}>
-              <Feather name="share" size={28} color="#FFFFFF" />
-              <Text style={styles.actionText}>25</Text>
-           </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn}>
+            <Ionicons name="heart" size={32} color="#F2245C" />
+            <Text style={styles.actionText}>25</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentModalVisible(true)}>
+            <Feather name="message-circle" size={30} color="#FFFFFF" />
+            <Text style={styles.actionText}>25</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setShareModalVisible(true)}>
+            <Feather name="share" size={28} color="#FFFFFF" />
+            <Text style={styles.actionText}>25</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Bottom Info Section */}
         <View style={styles.bottomInfoContainer}>
-           <View style={styles.authorRow}>
-             <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' }} 
-                style={styles.authorAvatar} 
-             />
-             <View style={styles.authorTextCol}>
-                <View style={styles.nameRow}>
-                   <Text style={styles.authorName}>Jane Cooper</Text>
-                   <TouchableOpacity style={styles.followingBtn}>
-                      <Text style={styles.followingText}>Following</Text>
-                   </TouchableOpacity>
-                </View>
-                <Text style={styles.timeText}>2 min ago</Text>
-             </View>
-           </View>
-           
-           <Text style={styles.captionText}>
-             Explore the vibrant cit... <Text style={styles.seeMoreText}>see more</Text>
-           </Text>
+          <View style={styles.authorRow}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' }}
+              style={styles.authorAvatar}
+            />
+            <View style={styles.authorTextCol}>
+              <View style={styles.nameRow}>
+                <Text style={styles.authorName}>Jane Cooper</Text>
+                <TouchableOpacity style={styles.followingBtn}>
+                  <Text style={styles.followingText}>Following</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.timeText}>2 min ago</Text>
+            </View>
+          </View>
 
-           {/* Progress Bar */}
-           <View style={styles.progressRow}>
-             <View style={styles.progressBarTrack}>
-                <View style={styles.progressBarFill} />
-             </View>
-             <Text style={styles.progressText}>15s</Text>
-           </View>
+          <Text style={styles.captionText}>
+            Explore the vibrant cit... <Text style={styles.seeMoreText}>see more</Text>
+          </Text>
+
+          {/* Progress Bar */}
+          <View style={styles.progressRow}>
+            <View style={styles.progressBarTrack}>
+              <View style={styles.progressBarFill} />
+            </View>
+            <Text style={styles.progressText}>15s</Text>
+          </View>
         </View>
 
       </SafeAreaView>
 
-      <CommentsModal 
-        visible={commentModalVisible} 
-        onClose={() => setCommentModalVisible(false)} 
+      <CommentsModal
+        visible={commentModalVisible}
+        onClose={() => setCommentModalVisible(false)}
       />
 
-      <ShareModal 
-        visible={shareModalVisible} 
-        onClose={() => setShareModalVisible(false)} 
+      <ShareModal
+        visible={shareModalVisible}
+        onClose={() => setShareModalVisible(false)}
       />
     </View>
   );
@@ -293,7 +305,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   progressBarFill: {
-    width: '60%', 
+    width: '60%',
     height: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 1.5,

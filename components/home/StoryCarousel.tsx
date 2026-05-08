@@ -19,9 +19,9 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
         {stories.map((story) => {
           if (story.type === 'add') {
             return (
-              <TouchableOpacity 
-                key={story.id} 
-                style={styles.addStoryBtn} 
+              <TouchableOpacity
+                key={story.id}
+                style={styles.addStoryBtn}
                 activeOpacity={0.8}
                 onPress={() => router.push('/post-screen/add-story')}
               >
@@ -30,15 +30,15 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
             );
           }
 
-          const ringStyle = 
-            story.type === 'live' ? styles.storyRingLive : 
-            story.type === 'standard' ? styles.storyRingStandard : 
-            styles.storyRingMuted;
+          const ringStyle =
+            story.type === 'live' ? styles.storyRingLive :
+              story.type === 'standard' ? styles.storyRingStandard :
+                styles.storyRingMuted;
 
           return (
-            <TouchableOpacity 
-              key={story.id} 
-              style={styles.storyItem} 
+            <TouchableOpacity
+              key={story.id}
+              style={styles.storyItem}
               activeOpacity={0.8}
               onPress={() => router.push('/live-screen/live-video')}
             >
@@ -46,14 +46,14 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
                 {story.imageUri && (
                   <Image source={{ uri: story.imageUri }} style={styles.storyImage} />
                 )}
-                
+
                 {story.type === 'live' && (
                   <View style={styles.liveBadge}>
                     <View style={styles.liveDot} />
                     <Text style={styles.liveText}>Live</Text>
                   </View>
                 )}
-                
+
                 {story.type === 'standard' && story.title && (
                   <View style={styles.storyOverlayTextContainer}>
                     <Text style={styles.storyOverlayText} numberOfLines={2}>{story.title}</Text>
@@ -95,10 +95,10 @@ const styles = StyleSheet.create({
     borderRadius: 37,
     justifyContent: "center",
     alignItems: "center",
-    padding: 2, 
+    padding: 2,
   },
   storyRingLive: {
-    backgroundColor: "#F2245C", 
+    backgroundColor: "#F2245C",
   },
   storyRingStandard: {
     backgroundColor: "#42B0D5",
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 35,
     borderWidth: 2,
-    borderColor: "#0e0d12", 
+    borderColor: "#0e0d12",
   },
   liveBadge: {
     position: "absolute",

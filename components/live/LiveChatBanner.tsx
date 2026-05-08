@@ -1,7 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-
+import React from 'react';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 export type LiveChatBannerProps = {
   contextBold?: string;
   contextNormal?: string;
@@ -9,10 +8,8 @@ export type LiveChatBannerProps = {
   listeningCount: number;
   avatars: string[];
 };
-
 export default function LiveChatBanner({ contextBold, contextNormal, title, listeningCount, avatars }: LiveChatBannerProps) {
   const router = useRouter();
-
   return (
     <View style={styles.wrapper}>
       {(contextBold || contextNormal) && (
@@ -21,46 +18,40 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
           {contextNormal && <Text style={styles.contextNormal}> {contextNormal}</Text>}
         </Text>
       )}
-      
-      <TouchableOpacity 
-        style={styles.card} 
+      <TouchableOpacity
+        style={styles.card}
         activeOpacity={0.9}
         onPress={() => router.push('/live-screen/live-video')}
       >
         <View style={styles.content}>
-          
           {/* Live Badge */}
           <View style={styles.liveBadge}>
             <Text style={styles.liveText}>Live</Text>
           </View>
-          
           <View style={styles.detailsContainer}>
             <Text style={styles.title}>{title}</Text>
-            
             <View style={styles.infoRow}>
               {/* Avatar Cluster */}
               <View style={styles.avatarCluster}>
                 {avatars.map((uri, i) => (
-                  <Image 
-                    key={i} 
-                    source={{ uri }} 
+                  <Image
+                    key={i}
+                    source={{ uri }}
                     style={[
-                      styles.avatar, 
+                      styles.avatar,
                       { zIndex: avatars.length - i },
-                      i > 0 && { marginLeft: -8 } // Overlapping effect
-                    ]} 
+                      i > 0 && { marginLeft: -8 }
+                    ]}
                   />
                 ))}
               </View>
               <Text style={styles.listeningText}>{listeningCount} listening</Text>
             </View>
           </View>
-
           {/* Join Button */}
           <TouchableOpacity style={styles.joinBtn} activeOpacity={0.8}>
             <Text style={styles.joinBtnText}>Join</Text>
           </TouchableOpacity>
-
         </View>
       </TouchableOpacity>
     </View>
@@ -86,9 +77,9 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: "#13131A", 
+    backgroundColor: "#13131A",
     borderWidth: 1,
-    borderColor: "rgba(142, 84, 233, 0.4)", 
+    borderColor: "rgba(142, 84, 233, 0.4)",
   },
   content: {
     flexDirection: "row",
@@ -96,7 +87,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   liveBadge: {
-    backgroundColor: "#F2545B", // Red-pink badge color from screenshot
+    backgroundColor: "#F2545B",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
