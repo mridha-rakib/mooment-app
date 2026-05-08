@@ -104,7 +104,6 @@ export default function MyPlanScreen() {
   return (
     <View style={s.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
@@ -113,22 +112,18 @@ export default function MyPlanScreen() {
         <Text style={s.headerTitle}>My Plan</Text>
         <View style={{ width: 40 }} />
       </View>
-
       {/* Month toggle */}
       <TouchableOpacity style={s.monthRow} activeOpacity={0.7} onPress={() => setCalendarOpen(!calendarOpen)}>
         <Text style={s.monthText}>{MONTHS[calMonth]}</Text>
         <Feather name={calendarOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#FFF" />
       </TouchableOpacity>
-
       <View style={s.dayHeaderRow}>
         <Text style={s.dayHeaderText}>{fullDayLabel}</Text>
         <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7} onPress={() => setIsMoreMenuVisible(true)}>
           <HugeiconsIcon icon={MoreHorizontalIcon} size={20} color="#8E8E9B" />
         </TouchableOpacity>
       </View>
-
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-
         {/* ═══ Calendar ═══ */}
         {calendarOpen && (
           <View style={{ marginBottom: 24, marginTop: 12 }}>
@@ -136,7 +131,6 @@ export default function MyPlanScreen() {
               <Text style={s.bigDay}>{fullDayLabel}</Text>
               <View style={s.calendarLine} />
             </View>
-
             <View style={s.calNav}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={s.calNavLabel}>{MONTHS[calMonth]} {calYear}</Text>
@@ -147,9 +141,7 @@ export default function MyPlanScreen() {
                 <TouchableOpacity onPress={nextMonth} style={s.calArrow} activeOpacity={0.7}><Feather name="chevron-right" size={14} color="#FFF" /></TouchableOpacity>
               </View>
             </View>
-
             <View style={s.calHdrRow}>{DAYS_HDR.map((d, i) => <Text key={i} style={s.calHdr}>{d}</Text>)}</View>
-
             {calendarRows.map((row, ri) => (
               <View key={ri} style={s.calWeek}>
                 {row.map((day, ci) => {
@@ -166,16 +158,13 @@ export default function MyPlanScreen() {
             ))}
           </View>
         )}
-
         {/* ═══ Timeline or Empty State ═══ */}
         {hasAnyEvents ? (
           <View>
             {calendarOpen && <Text style={s.yourPlanLabel}>Your Plan</Text>}
-
             {/* Vertical Timeline */}
             <View style={s.timelineContainer}>
               <View style={s.timelineVerticalLine} />
-
               {TIME_SLOTS.map((slot) => {
                 const ev = dayEvents.find(e => e.time === slot);
                 return (
@@ -207,7 +196,6 @@ export default function MyPlanScreen() {
                                 <Text style={s.capsuleMoreText}>+41</Text>
                               </View>
                             </TouchableOpacity>
-
                             {/* Slot 1: Connect to Wide Card (Only for 6:00 PM as per screenshot) */}
                             {slot === '6:00 PM' && (
                               <>
@@ -254,7 +242,7 @@ export default function MyPlanScreen() {
                         );
                       })() : (
                         <View style={s.addEventContainer}>
-                          <TouchableOpacity style={s.addEventBtn} onPress={() => setIsSelectEventModalVisible(true)}>
+                          <TouchableOpacity style={s.addEventBtn} onPress={() => setIsEventModalVisible(true)}>
                             <HugeiconsIcon icon={Add01Icon} size={14} color="#FFF" style={{ marginBottom: 4 }} />
                             <Text style={s.addEventBtnText}>Add Event</Text>
                           </TouchableOpacity>
@@ -277,7 +265,6 @@ export default function MyPlanScreen() {
           </View>
         )}
       </ScrollView>
-
       {/* Event Detail Popup */}
       <Modal visible={!!popupEvent} transparent animationType="fade" onRequestClose={() => setPopupEvent(null)}>
         <Pressable style={s.modalOverlay} onPress={() => setPopupEvent(null)}>
@@ -300,7 +287,6 @@ export default function MyPlanScreen() {
           </View>
         </Pressable>
       </Modal>
-
       {/* More Options Menu */}
       <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
         <TouchableOpacity style={s.moreOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>

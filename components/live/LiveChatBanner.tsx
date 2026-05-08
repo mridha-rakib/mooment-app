@@ -21,6 +21,7 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
+        onPress={() => router.push('/live-screen/live-room' as any)}
       >
         <View style={styles.content}>
           {/* Live Badge */}
@@ -46,7 +47,11 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
               <Text style={styles.listeningText}>{listeningCount} listening</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.joinBtn} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.joinBtn} 
+            activeOpacity={0.8}
+            onPress={() => router.push('/live-screen/live-room' as any)}
+          >
             <Text style={styles.joinBtnText}>Join</Text>
           </TouchableOpacity>
         </View>
