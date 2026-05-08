@@ -62,16 +62,20 @@ export type PostData = {
   isExpandable?: boolean;
 };
 
+import MoreMenuModal from "./MoreMenuModal";
+
 export default function FeedPost({
   post,
   onCommentPress,
   onSharePress,
-  onViewMapPress
+  onViewMapPress,
+  isOwnPost = false
 }: {
   post: PostData;
   onCommentPress?: () => void;
   onSharePress?: () => void;
   onViewMapPress?: () => void;
+  isOwnPost?: boolean;
 }) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -383,56 +387,18 @@ export default function FeedPost({
                 </TouchableOpacity>
               )}
             </View>
-
-            {/* {post.postType === 'event' && (
-              <TouchableOpacity style={styles.statBtn} activeOpacity={0.8}>
-                <Text style={styles.statBtnText}>View Stat</Text>
-              </TouchableOpacity>
-            )} */}
           </View>
         )}
 
-        {/* More Actions Menu Popup */}
-        <Modal
+        <MoreMenuModal
           visible={showMoreMenu}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowMoreMenu(false)}
-        >
-          <TouchableWithoutFeedback onPress={() => setShowMoreMenu(false)}>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.moreMenuContainer, { marginTop: menuTop }]}>
-                <View style={styles.moreMenuBox}>
-                  <TouchableOpacity
-                    style={styles.moreMenuItem}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      setShowMoreMenu(false);
-                      setShowReportModal(true);
-                    }}
-                  >
-                    <Feather name="flag" size={20} color="#FFFFFF" style={styles.menuIcon} />
-                    <Text style={styles.menuText}>Report</Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.menuSeparator} />
-
-                  <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
-                    <Feather name="slash" size={20} color="#FFFFFF" style={styles.menuIcon} />
-                    <Text style={styles.menuText}>Block</Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.menuSeparator} />
-
-                  <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.7} onPress={() => setShowMoreMenu(false)}>
-                    <Feather name="bookmark" size={20} color="#FFFFFF" style={styles.menuIcon} />
-                    <Text style={styles.menuText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
+          onClose={() => setShowMoreMenu(false)}
+          showDelete={isOwnPost}
+          onReport={!isOwnPost ? () => setShowReportModal(true) : undefined}
+          onSave={!isOwnPost ? () => console.log('Saved post') : undefined}
+          onDelete={() => console.log('Delete post')}
+          top={menuTop}
+        />
 
         <ReportModal
           visible={showReportModal}
@@ -872,43 +838,5 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     alignItems: "flex-end",
     paddingRight: 32,
-  },
-  moreMenuContainer: {
-    width: 160,
-  },
-  moreMenuLabel: {
-    color: "#8E8E9B",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  moreMenuBox: {
-    backgroundColor: "#2B2B36",
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  moreMenuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  menuIcon: {
-    marginRight: 14,
-  },
-  menuText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  menuSeparator: {
-    height: 1,
-    backgroundColor: "#3A3A4A",
   },
 });

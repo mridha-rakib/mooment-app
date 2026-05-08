@@ -57,6 +57,7 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
           posts={posts} 
           onCommentPress={() => setCommentsVisible(true)}
           onSharePress={() => setShareVisible(true)}
+          isOwnProfile={isOwnProfile}
         />
         
         <View style={{ height: 100 }} />

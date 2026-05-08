@@ -7,6 +7,8 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 
+import MoreMenuModal from "../post/MoreMenuModal";
+
 export type ProfileStats = {
   posts: number;
   reviews: number;
@@ -23,6 +25,7 @@ type ProfileHeaderProps = {
 
 export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
   const router = useRouter();
+  const [showMore, setShowMore] = React.useState(false);
 
   return (
     <View style={styles.container}>
@@ -46,13 +49,26 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             </BlurView>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.moreBtn} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.moreBtn} 
+            activeOpacity={0.8}
+            onPress={() => setShowMore(true)}
+          >
             <BlurView intensity={20} tint="dark" style={styles.glassCircle}>
               <Feather name="more-horizontal" size={20} color="#FFFFFF" />
             </BlurView>
           </TouchableOpacity>
         </View>
       )}
+
+      <MoreMenuModal 
+        visible={showMore} 
+        onClose={() => setShowMore(false)}
+        showDelete={false} 
+        onReport={() => console.log('Report profile')}
+        onSave={() => console.log('Save profile')}
+        top={110} // Positioned under the header button
+      />
 
       <View style={styles.infoRow}>
         <View style={styles.avatarBorder}>

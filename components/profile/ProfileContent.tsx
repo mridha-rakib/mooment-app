@@ -10,9 +10,16 @@ type ProfileContentProps = {
   posts: PostData[];
   onCommentPress: () => void;
   onSharePress: () => void;
+  isOwnProfile?: boolean;
 };
 
-export default function ProfileContent({ activeTab, posts, onCommentPress, onSharePress }: ProfileContentProps) {
+export default function ProfileContent({ 
+  activeTab, 
+  posts, 
+  onCommentPress, 
+  onSharePress,
+  isOwnProfile = true 
+}: ProfileContentProps) {
   return (
     <View style={styles.container}>
       {activeTab === 'feed' && (
@@ -22,6 +29,7 @@ export default function ProfileContent({ activeTab, posts, onCommentPress, onSha
             post={post} 
             onCommentPress={onCommentPress} 
             onSharePress={onSharePress} 
+            isOwnPost={isOwnProfile}
           />
         ))
       )}
