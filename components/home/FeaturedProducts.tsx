@@ -22,7 +22,10 @@ export default function FeaturedProducts({ products, onSeeAll }: FeaturedProduct
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Featured Products</Text>
-        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.8}>
+        <TouchableOpacity 
+          onPress={onSeeAll || (() => router.push('/product-screen/all-products'))} 
+          activeOpacity={0.8}
+        >
           <Text style={styles.seeAllText}>See all</Text>
         </TouchableOpacity>
       </View>
