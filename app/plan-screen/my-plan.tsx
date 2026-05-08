@@ -1,13 +1,11 @@
+import EventPickerModal from '@/components/post/EventPickerModal';
 import { Feather } from '@expo/vector-icons';
 import {
-  Add01Icon,
-  ArrowLeft01Icon,
   Calendar03Icon,
   CheckmarkCircle02Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
-  Search01Icon,
   Settings02Icon,
   Share01Icon,
   SpoonAndForkIcon,
@@ -16,10 +14,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
-  Image, Modal,
-  Pressable, ScrollView,
+  Image, Modal, Platform,
+  Pressable, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -54,29 +52,46 @@ export default function MyPlanScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [events, setEvents] = useState<PlanEvent[]>([]);
 
+  useEffect(() => {
+    if (hasPlan && events.length === 0) {
+      setEvents([
+        {
+          id: '1', day: selectedDay, time: '6:00 PM',
+          title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+          venue: 'Rooftop Series Vol.4',
+        },
+        {
+          id: '2', day: selectedDay, time: '9:00 PM',
+          title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+          venue: 'Rooftop Series Vol.4',
+        }
+      ]);
+    }
+  }, [hasPlan, selectedDay]);
+
   const handleAddEvent = () => {
-    // Populate with dummy events matching the design
     setEvents([
+      ...events,
       {
-        id: '1', day: selectedDay, time: '6:00 PM',
-        title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-        venue: 'Rooftop Series Vol.4',
-      },
-      {
-        id: '2', day: selectedDay, time: '9:00 PM',
-        title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-        venue: 'Rooftop Series Vol.4',
+        id: Math.random().toString(), day: selectedDay, time: '6:00 PM',
+        title: planName || 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+        venue: planLocation || 'Rooftop Series Vol.4',
       }
     ]);
-    setIsSelectEventModalVisible(false);
-    setIsNamePlanModalVisible(true); // Open the Name Plan modal after adding
+    setIsCreatePlanModalVisible(false); // Close the modal when done
   };
   const [popupEvent, setPopupEvent] = useState<PlanEvent | null>(null);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
-  const [isEventModalVisible, setIsEventModalVisible] = useState(false);
+  const [isCreatePlanModalVisible, setIsCreatePlanModalVisible] = useState(false);
   const [isSelectEventModalVisible, setIsSelectEventModalVisible] = useState(false);
-  const [isNamePlanModalVisible, setIsNamePlanModalVisible] = useState(false);
+
+  const [planName, setPlanName] = useState('');
+  const [planDate, setPlanDate] = useState('Sep 9, 2026');
+  const [planTime, setPlanTime] = useState('10:00 AM');
   const [selectedEventRadio, setSelectedEventRadio] = useState<string | null>(null);
+  const [planLocation, setPlanLocation] = useState('123, Main Street NYC');
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
 
   const highlightedDays = useMemo(() => new Set([4, 5]), []);
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -99,31 +114,33 @@ export default function MyPlanScreen() {
 
   const dayEvents = useMemo(() => events.filter(e => e.day === selectedDay), [events, selectedDay]);
 
-  const hasAnyEvents = true; // Force true to always show timeline
+  const hasAnyEvents = events.length > 0;
 
   return (
     <View style={s.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
-          <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFF" />
+          <Feather name="chevron-left" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>My Plan</Text>
         <View style={{ width: 40 }} />
       </View>
-      {/* Month toggle */}
-      <TouchableOpacity style={s.monthRow} activeOpacity={0.7} onPress={() => setCalendarOpen(!calendarOpen)}>
-        <Text style={s.monthText}>{MONTHS[calMonth]}</Text>
-        <Feather name={calendarOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#FFF" />
-      </TouchableOpacity>
-      <View style={s.dayHeaderRow}>
-        <Text style={s.dayHeaderText}>{fullDayLabel}</Text>
-        <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7} onPress={() => setIsMoreMenuVisible(true)}>
-          <HugeiconsIcon icon={MoreHorizontalIcon} size={20} color="#8E8E9B" />
-        </TouchableOpacity>
-      </View>
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+        {/* Month toggle */}
+        <TouchableOpacity style={s.monthRow} activeOpacity={0.7} onPress={() => setCalendarOpen(!calendarOpen)}>
+          <Text style={s.monthText}>{MONTHS[calMonth]}</Text>
+          <Feather name={calendarOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#FFF" style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
+
+        <View style={s.dayHeaderRow}>
+          <Text style={s.dayHeaderText}>{fullDayLabel}</Text>
+          <TouchableOpacity style={s.dayMenuBtn} activeOpacity={0.7} onPress={() => setIsMoreMenuVisible(true)}>
+            <HugeiconsIcon icon={MoreHorizontalIcon} size={20} color="#8E8E9B" />
+          </TouchableOpacity>
+        </View>
+
         {/* ═══ Calendar ═══ */}
         {calendarOpen && (
           <View style={{ marginBottom: 24, marginTop: 12 }}>
@@ -158,114 +175,87 @@ export default function MyPlanScreen() {
             ))}
           </View>
         )}
-        {/* ═══ Timeline or Empty State ═══ */}
-        {hasAnyEvents ? (
-          <View>
-            {calendarOpen && <Text style={s.yourPlanLabel}>Your Plan</Text>}
-            {/* Vertical Timeline */}
-            <View style={s.timelineContainer}>
-              <View style={s.timelineVerticalLine} />
-              {TIME_SLOTS.map((slot) => {
-                const ev = dayEvents.find(e => e.time === slot);
-                return (
-                  <View key={slot} style={s.timeSlotWrap}>
-                    <Text style={s.timeLabel}>{slot}</Text>
-                    <View style={s.dashedLine} />
 
-                    <View style={s.slotContent}>
-                      {ev ? (() => {
-                        const validEv = ev;
-                        return (
-                          <View style={{ width: '100%', alignItems: 'center' }}>
-                            {/* Slot: Vertical Capsule */}
-                            <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(validEv)}>
-                              <View style={s.capsuleIconWrap}>
+        {/* ═══ Timeline ═══ */}
+        <View style={s.timelineContainer}>
+          <View style={s.timelineVerticalLine} />
+          {TIME_SLOTS.map((slot) => {
+            const ev = dayEvents.find(e => e.time === slot);
+            return (
+              <View key={slot} style={s.timeSlotWrap}>
+                <Text style={s.timeLabel}>{slot}</Text>
+                <View style={s.dashedLine} />
+                <View style={s.slotContent}>
+                  {ev ? (
+                    <View style={{ width: '100%', alignItems: 'center' }}>
+                      {slot === '6:00 PM' ? (
+                        /* 6:00 PM Slot: Capsule Card */
+                        <TouchableOpacity style={s.eventCapsule} activeOpacity={0.8} onPress={() => setPopupEvent(ev)}>
+                          <View style={s.capsuleIconWrap}>
+                            <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
+                          </View>
+                          <Text style={s.capsuleTitle}>{ev.title}</Text>
+                          <Text style={s.capsuleVenue}>{ev.venue}</Text>
+                          <Text style={s.capsuleTime}>{ev.time}</Text>
+                          <Image source={{ uri: ev.image }} style={s.capsuleImg} />
+                          <View style={s.capsuleAvatarsRow}>
+                            <View style={s.avatarGroup}>
+                              <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
+                              <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={s.capsuleAvatar} />
+                              <Image source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100' }} style={s.capsuleAvatar} />
+                            </View>
+                            <Text style={s.capsuleMoreText}>+41</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        /* 9:00 PM Slot: Node + Wide Card */
+                        <>
+                          <View style={s.nodeCircle}>
+                            <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
+                          </View>
+                          <View style={s.nodeConnector} />
+                          
+                          <TouchableOpacity style={s.wideCard} activeOpacity={0.9}>
+                            <View style={s.wideCardTop}>
+                              <View style={s.wideCardIconWrap}>
                                 <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color="#FFF" />
                               </View>
-                              <Text style={s.capsuleTitle}>{validEv.title}</Text>
-                              {validEv.venue && <Text style={s.capsuleVenue} numberOfLines={1}>{validEv.venue}</Text>}
-                              <Text style={s.capsuleTime}>{validEv.time}</Text>
-                              <Image source={{ uri: validEv.image }} style={s.capsuleImg} />
-                              <View style={s.capsuleAvatarsRow}>
-                                <View style={s.avatarGroup}>
-                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0 }]} />
-                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={s.capsuleAvatar} />
-                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={s.capsuleAvatar} />
-                                  <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={s.capsuleAvatar} />
-                                </View>
-                                <Text style={s.capsuleMoreText}>+41</Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.wideCardTitle}>{ev.title}</Text>
+                                <Text style={s.wideCardTime}>{ev.time}</Text>
                               </View>
-                            </TouchableOpacity>
-                            {/* Slot 1: Connect to Wide Card (Only for 6:00 PM as per screenshot) */}
-                            {slot === '6:00 PM' && (
-                              <>
-                                <View style={s.nodeConnector} />
-                                <TouchableOpacity style={s.wideCard} activeOpacity={0.9} onPress={() => setIsMoreMenuVisible(true)}>
-                                  <View style={s.wideCardMainRow}>
-                                    <View style={s.wideCardIcon}>
-                                      <HugeiconsIcon icon={SpoonAndForkIcon} size={20} color="#FFF" />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                      <Text style={s.wideCardTitle}>{validEv.title}</Text>
-                                      <Text style={s.wideCardSub} numberOfLines={1}>
-                                        {validEv.venue} at 123, Ave NYC
-                                      </Text>
-                                      <View style={s.wideCardAvatarsRow}>
-                                        <View style={s.avatarGroupSmall}>
-                                          <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { marginLeft: 0, width: 14, height: 14 }]} />
-                                          <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150' }} style={[s.capsuleAvatar, { width: 14, height: 14 }]} />
-                                          <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150' }} style={[s.capsuleAvatar, { width: 14, height: 14 }]} />
-                                          <Image source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150' }} style={[s.capsuleAvatar, { width: 14, height: 14 }]} />
-                                        </View>
-                                        <Text style={s.wideCardMeta}>+41  • {validEv.time}</Text>
-                                      </View>
-                                    </View>
-                                  </View>
-
-                                  <View style={s.wideCardFooter}>
-                                    <View style={s.footerLeft}>
-                                      <TouchableOpacity style={s.footerIconBtn}><HugeiconsIcon icon={Share01Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
-                                      <TouchableOpacity style={s.footerIconBtn}><HugeiconsIcon icon={Delete02Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
-                                    </View>
-                                    <View style={s.footerRight}>
-                                      <TouchableOpacity style={s.viewBtn}><Text style={s.viewBtnText}>View</Text></TouchableOpacity>
-                                      <TouchableOpacity style={s.addedPill} activeOpacity={0.7} onPress={() => router.push('/plan-screen/add-friend' as any)}>
-                                        <HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} color="#0e0d12" />
-                                        <Text style={s.addedText}>Added</Text>
-                                      </TouchableOpacity>
-                                    </View>
-                                  </View>
-                                </TouchableOpacity>
-                              </>
-                            )}
-                          </View>
-                        );
-                      })() : (
-                        <View style={s.addEventContainer}>
-                          <TouchableOpacity style={s.addEventBtn} onPress={() => setIsEventModalVisible(true)}>
-                            <HugeiconsIcon icon={Add01Icon} size={14} color="#FFF" style={{ marginBottom: 4 }} />
-                            <Text style={s.addEventBtnText}>Add Event</Text>
+                            </View>
+                            <View style={s.wideCardFooter}>
+                              <View style={s.footerIcons}>
+                                <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Share01Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
+                                <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Delete02Icon} size={18} color="#8E8E9B" /></TouchableOpacity>
+                              </View>
+                              <View style={s.footerActions}>
+                                <TouchableOpacity style={s.viewBtnSmall}><Text style={s.viewBtnTextSmall}>View</Text></TouchableOpacity>
+                                <View style={s.addedPillSmall}>
+                                  <HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} color="#0e0d12" />
+                                  <Text style={s.addedTextSmall}>Added</Text>
+                                </View>
+                              </View>
+                            </View>
                           </TouchableOpacity>
-                        </View>
+                        </>
                       )}
                     </View>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        ) : (
-          <View style={s.emptyWrap}>
-            <View style={s.emptyIcon}><HugeiconsIcon icon={Calendar03Icon} size={24} color="#8E8E9B" /></View>
-            <Text style={s.emptyTitle}>No Activity yet</Text>
-            <Text style={s.emptyDesc}>Make plan with your friends, and family. Search events that are currently going on map</Text>
-            <TouchableOpacity style={s.discoverBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search' as any)}>
-              <Text style={s.discoverText}>Go discover something</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+                  ) : (
+                    <View style={{ alignItems: 'center', width: '100%', paddingVertical: 20 }}>
+                      <TouchableOpacity style={s.emptySlotBtn} activeOpacity={0.8} onPress={() => setIsCreatePlanModalVisible(true)}>
+                        <Feather name="plus" size={14} color="#8E8E9B" />
+                        <Text style={s.emptySlotBtnText}>Add Event</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
       </ScrollView>
-      {/* Event Detail Popup */}
       <Modal visible={!!popupEvent} transparent animationType="fade" onRequestClose={() => setPopupEvent(null)}>
         <Pressable style={s.modalOverlay} onPress={() => setPopupEvent(null)}>
           <View style={s.popup}>
@@ -306,7 +296,7 @@ export default function MyPlanScreen() {
                 <TouchableOpacity style={s.moreMenuItem} activeOpacity={0.8} onPress={() => {
                   setIsMoreMenuVisible(false);
                   if (item.isCreate) {
-                    setIsNamePlanModalVisible(true);
+                    setIsCreatePlanModalVisible(true);
                   } else if (item.route) {
                     router.push(item.route as any);
                   }
@@ -320,96 +310,144 @@ export default function MyPlanScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Add Event Modal 1: Browse */}
-      <Modal visible={isEventModalVisible} transparent animationType="slide" onRequestClose={() => setIsEventModalVisible(false)}>
-        <Pressable style={s.bottomSheetOverlay} onPress={() => setIsEventModalVisible(false)}>
+      {/* Unified Create Plan Modal */}
+      <Modal visible={isCreatePlanModalVisible} transparent animationType="slide" onRequestClose={() => setIsCreatePlanModalVisible(false)}>
+        <Pressable style={s.bottomSheetOverlay} onPress={() => setIsCreatePlanModalVisible(false)}>
           <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
-            <View style={s.dragHandle} />
-            <Text style={s.bottomSheetTitle}>Event</Text>
-
-            <View style={s.searchContainerPremium}>
-              <HugeiconsIcon icon={Search01Icon} size={18} color="#8E8E9B" style={s.searchIcon} />
-              <TextInput style={s.searchInput} placeholder="Search event..." placeholderTextColor="#8E8E9B" />
-            </View>
-
-            <View style={s.emptyEventBox}>
-              <Text style={s.emptyEventTextLarge}>Currently you don't have an event, you can browse event</Text>
-              <TouchableOpacity style={s.browseBtnLarge} onPress={() => { setIsEventModalVisible(false); setIsSelectEventModalVisible(true); }}>
-                <Text style={s.browseBtnTextLarge}>Browse Event</Text>
+            <View style={s.modalHeader}>
+              <TouchableOpacity onPress={() => setIsCreatePlanModalVisible(false)} style={s.closeBtnCircle}>
+                <Feather name="x" size={18} color="#FFF" />
               </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* Add Event Modal 2: Select */}
-      <Modal visible={isSelectEventModalVisible} transparent animationType="slide" onRequestClose={() => setIsSelectEventModalVisible(false)}>
-        <Pressable style={s.bottomSheetOverlay} onPress={() => setIsSelectEventModalVisible(false)}>
-          <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
-            <View style={s.dragHandle} />
-            <Text style={s.bottomSheetTitle}>Select event to add</Text>
-
-            <View style={s.searchContainerPremium}>
-              <HugeiconsIcon icon={Search01Icon} size={18} color="#8E8E9B" style={s.searchIcon} />
-              <TextInput style={s.searchInput} placeholder="Search event..." placeholderTextColor="#8E8E9B" />
+              <Text style={s.modalTitle}>Create Plan</Text>
+              <View style={{ width: 36 }} />
             </View>
 
-            <View style={s.eventList}>
-              {[
-                { id: 'e1', title: 'DJ Party Music', time: '18:00', price: '$45.00', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150' },
-                { id: 'e2', title: 'Rooftop Session Vol.4', time: '20:00', price: '$45.00', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop' },
-                { id: 'e3', title: 'Rooftop Session Vol.4', time: '21:00', price: '$45.00', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150' },
-              ].map(item => (
-                <TouchableOpacity key={item.id} style={s.eventRow} onPress={() => setSelectedEventRadio(item.id)}>
-                  <Image source={{ uri: item.image }} style={s.eventImage} />
-                  <View style={s.eventInfo}>
-                    <Text style={s.eventTitle}>{item.title}</Text>
-                    <Text style={s.eventSub}>{item.time}  •  {item.price}</Text>
-                  </View>
-                  <View style={[s.radioCircle, selectedEventRadio === item.id && s.radioCircleSelected]}>
-                    {selectedEventRadio === item.id && <View style={s.radioInner} />}
-                  </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              <View style={s.inputGroup}>
+                <Text style={s.inputLabel}>PLAN NAME</Text>
+                <TextInput
+                  style={s.premiumInput}
+                  placeholder="Name"
+                  placeholderTextColor="#8E8E9B"
+                  value={planName}
+                  onChangeText={setPlanName}
+                />
+              </View>
+
+              <View style={s.rowGroup}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.inputLabel}>DATE</Text>
+                  <TouchableOpacity style={s.iconInput}>
+                    <Feather name="calendar" size={18} color="#8E8E9B" style={{ marginRight: 10 }} />
+                    <Text style={s.iconInputText}>{planDate}</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={s.inputLabel}>TIME</Text>
+                  <TouchableOpacity style={s.iconInput}>
+                    <Feather name="clock" size={18} color="#8E8E9B" style={{ marginRight: 10 }} />
+                    <Text style={s.iconInputText}>{planTime}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={s.inputGroup}>
+                <Text style={s.inputLabel}>EVENT</Text>
+                <TouchableOpacity style={s.iconInput} onPress={() => setIsSelectEventModalVisible(true)}>
+                  <Text style={[s.iconInputText, !selectedEventRadio && { color: '#8E8E9B' }]}>
+                    {selectedEventRadio ? 'Rooftop Session Vol.4' : 'Select Event'}
+                  </Text>
+                  <Feather name="chevron-down" size={18} color="#8E8E9B" />
                 </TouchableOpacity>
-              ))}
-            </View>
+              </View>
 
-            <View style={s.bottomSheetActionRow}>
-              <TouchableOpacity style={s.cancelBtnPremium} onPress={() => setIsSelectEventModalVisible(false)}>
-                <Text style={s.cancelBtnTextPremium}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.addBtnPremium} onPress={handleAddEvent}>
-                <Text style={s.addBtnTextPremium}>Add</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={s.inputGroup}>
+                <Text style={s.inputLabel}>LOCATION</Text>
+                <TouchableOpacity style={s.iconInput} onPress={() => setIsMapModalVisible(true)}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Feather name="map-pin" size={18} color="#8E8E9B" style={{ marginRight: 10 }} />
+                    <Text style={s.iconInputText}>{planLocation}</Text>
+                  </View>
+                  <Feather name="chevron-down" size={18} color="#8E8E9B" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={s.inputGroup}>
+                <Text style={s.inputLabel}>ADD FRIENDS</Text>
+                <TouchableOpacity style={s.iconInput} onPress={() => router.push('/plan-screen/add-friend' as any)}>
+                  <Text style={[s.iconInputText, selectedFriends.length === 0 && { color: '#8E8E9B' }]}>
+                    {selectedFriends.length > 0 ? `${selectedFriends.length} Friends Selected` : 'Select Friends'}
+                  </Text>
+                  <Feather name="chevron-down" size={18} color="#8E8E9B" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[s.bottomSheetActionRow, { marginTop: 40 }]}>
+                <TouchableOpacity style={s.cancelBtnPremium} onPress={() => setIsCreatePlanModalVisible(false)}>
+                  <Text style={s.cancelBtnTextPremium}>Canel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.addBtnPremium} onPress={() => { setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
+                  <Text style={s.addBtnTextPremium}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
-
-      {/* Create Plan Modal: Name Plan */}
-      <Modal visible={isNamePlanModalVisible} transparent animationType="slide" onRequestClose={() => setIsNamePlanModalVisible(false)}>
-        <Pressable style={s.bottomSheetOverlay} onPress={() => setIsNamePlanModalVisible(false)}>
-          <Pressable style={s.bottomSheetContainer} onPress={(e) => e.stopPropagation()}>
-            <View style={s.dragHandle} />
-            <Text style={s.bottomSheetTitle}>Name your Plan</Text>
-
-            <TextInput
-              style={s.planNameInput}
-              placeholder="Plan Name"
-              placeholderTextColor="#8E8E9B"
-              autoFocus
-            />
-
-            <View style={s.bottomSheetActionRow}>
-              <TouchableOpacity style={[s.cancelBtnPremium, { borderWidth: 0 }]} onPress={() => setIsNamePlanModalVisible(false)}>
-                <Text style={[s.cancelBtnTextPremium, { fontWeight: '700' }]}>Cancel</Text>
+      {/* Map Selection Modal */}
+      <Modal visible={isMapModalVisible} transparent animationType="slide" onRequestClose={() => setIsMapModalVisible(false)}>
+        <View style={s.mapContainer}>
+          <Image
+            source={require('../../assets/images/dark-map.png')}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={[s.modalHeader, { paddingHorizontal: 20, marginTop: Platform.OS === 'android' ? 20 : 0 }]}>
+              <TouchableOpacity onPress={() => setIsMapModalVisible(false)} style={s.closeBtnCircle}>
+                <Feather name="chevron-left" size={24} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity style={s.addBtnPremium} onPress={() => { setIsNamePlanModalVisible(false); router.push('/plan-screen/add-friend' as any); }}>
-                <Text style={s.addBtnTextPremium}>Done</Text>
+              <Text style={s.modalTitle}>Map</Text>
+              <View style={{ width: 36 }} />
+            </View>
+
+            <View style={s.mapSearchWrapper}>
+              <View style={s.mapSearchBar}>
+                <Feather name="map-pin" size={18} color="#8E8E9B" style={{ marginRight: 12 }} />
+                <Text style={s.mapSearchText}>{planLocation}</Text>
+              </View>
+            </View>
+
+            <View style={s.pinContainer}>
+              <View style={s.pinWrapper}>
+                <View style={s.pinCircle}>
+                  <View style={s.pinDot} />
+                </View>
+                <View style={s.pinLine} />
+              </View>
+            </View>
+
+            <View style={s.mapFooter}>
+              <TouchableOpacity style={s.cancelBtnPremium} onPress={() => setIsMapModalVisible(false)}>
+                <Text style={s.cancelBtnTextPremium}>Canel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.addBtnPremium} onPress={() => { setIsMapModalVisible(false); setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
+                <Text style={s.addBtnTextPremium}>Confirm</Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
-        </Pressable>
+          </SafeAreaView>
+        </View>
       </Modal>
+
+      {/* Event Selection Modal */}
+      <EventPickerModal
+        visible={isSelectEventModalVisible}
+        onClose={() => setIsSelectEventModalVisible(false)}
+        onSelect={(title) => {
+          setSelectedEventRadio(title);
+          setIsSelectEventModalVisible(false);
+        }}
+      />
     </View>
   );
 }
@@ -435,22 +473,21 @@ const s = StyleSheet.create({
   },
   headerTitle: { color: '#FFF', fontWeight: '700', fontSize: 17 },
 
-  monthRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 6, marginBottom: 12 },
-  monthText: { color: '#FFF', fontSize: 20, fontWeight: '700' },
+  monthRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 8, marginTop: 10 },
+  monthText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
 
   dayHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginBottom: 20,
-    marginTop: 10
+    marginBottom: 24,
   },
-  dayHeaderText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  dayHeaderText: { color: '#8E8E9B', fontSize: 15, fontWeight: '600' },
   dayMenuBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: '#111',
     justifyContent: 'center',
     alignItems: 'center'
@@ -466,93 +503,114 @@ const s = StyleSheet.create({
   discoverBtn: { backgroundColor: '#C2B5CD', borderRadius: 14, paddingHorizontal: 28, paddingVertical: 14 },
   discoverText: { color: '#0e0d12', fontSize: 15, fontWeight: 'bold' },
 
+  /* Empty Slot Styles */
+  emptySlotBtn: {
+    width: 90,
+    height: 44,
+    backgroundColor: '#111',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  emptySlotBtnText: { color: '#8E8E9B', fontSize: 11, fontWeight: '600', marginTop: 2 },
+
   /* Timeline */
   yourPlanLabel: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 16, paddingHorizontal: 20 },
 
-  timelineContainer: { position: 'relative', marginTop: 10 },
+  timelineContainer: { position: 'relative', marginTop: 0 },
   timelineVerticalLine: { position: 'absolute', left: 24, top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
 
-  timeSlotWrap: { marginBottom: 40, position: 'relative' },
-  timeLabel: { color: '#8E8E9B', fontSize: 12, marginBottom: 8, marginLeft: 32, fontWeight: '500' },
-  dashedLine: { height: 1, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderStyle: 'dashed', marginLeft: 24, marginRight: 20 },
+  timeSlotWrap: { marginBottom: 32, position: 'relative' },
+  timeLabel: { color: '#454555', fontSize: 12, marginBottom: 12, marginLeft: 32, fontWeight: '600' },
+  dashedLine: { height: 1, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderStyle: 'dashed', marginLeft: 24, marginRight: 20, position: 'absolute', top: 6, left: 0, right: 0 },
 
-  slotContent: { paddingLeft: 32, marginTop: 24, paddingRight: 20 },
+  slotContent: { paddingLeft: 32, marginTop: 10, paddingRight: 20 },
 
-  /* Vertical Capsule Card */
+  /* Capsule Card */
   eventCapsule: {
     width: 200,
-    backgroundColor: '#000',
+    backgroundColor: '#0e0d12',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.15)',
     borderRadius: 100,
     alignItems: 'center',
     paddingVertical: 24,
     paddingHorizontal: 20,
   },
   capsuleIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14
-  },
-  capsuleTitle: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  capsuleVenue: { color: '#8E8E9B', fontSize: 12, textAlign: 'center', marginBottom: 4 },
-  capsuleTime: { color: '#8E8E9B', fontSize: 12, marginBottom: 14 },
-  capsuleImg: { width: 100, height: 44, borderRadius: 10, marginBottom: 14 },
-  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarGroup: { flexDirection: 'row', alignItems: 'center' },
-  capsuleAvatar: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#000', marginLeft: -8 },
-  capsuleMoreText: { color: '#8E8E9B', fontSize: 11, marginLeft: 8 },
-
-  /* Node + Wide Card */
-  nodeConnector: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 4 },
-  wideCard: {
-    width: '100%',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 60,
-    padding: 20,
-    marginTop: 10
-  },
-  wideCardMainRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  wideCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#000',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14
+    marginBottom: 16
   },
-  wideCardTitle: { color: '#FFF', fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  wideCardSub: { color: '#8E8E9B', fontSize: 11, marginBottom: 8 },
-  wideCardAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarGroupSmall: { flexDirection: 'row', alignItems: 'center' },
-  wideCardMeta: { color: '#8E8E9B', fontSize: 10, marginLeft: 8 },
+  capsuleTitle: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  capsuleVenue: { color: '#8E8E9B', fontSize: 12, textAlign: 'center', marginBottom: 2 },
+  capsuleTime: { color: '#8E8E9B', fontSize: 12, marginBottom: 16 },
+  capsuleImg: { width: 110, height: 48, borderRadius: 12, marginBottom: 16 },
+  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
+  avatarGroup: { flexDirection: 'row', alignItems: 'center' },
+  capsuleAvatar: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: '#0e0d12', marginLeft: -8 },
+  capsuleMoreText: { color: '#8E8E9B', fontSize: 12, marginLeft: 8 },
 
-  wideCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  footerLeft: { flexDirection: 'row', gap: 12, marginLeft: 40 },
-  footerIconBtn: { padding: 4 },
-  footerRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  viewBtn: { paddingHorizontal: 14, paddingVertical: 8 },
-  viewBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
-  addedPill: {
+  /* Node + Wide Card */
+  nodeCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#0e0d12',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  nodeConnector: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.1)' },
+  wideCard: {
+    width: '100%',
+    backgroundColor: '#0e0d12',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 60,
+    padding: 24,
+  },
+  wideCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  wideCardIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16
+  },
+  wideCardTitle: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  wideCardTime: { color: '#8E8E9B', fontSize: 13 },
+
+  wideCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  footerIcons: { flexDirection: 'row', gap: 16 },
+  footerIcon: { padding: 4 },
+  footerActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  viewBtnSmall: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#111', borderRadius: 10 },
+  viewBtnTextSmall: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  addedPillSmall: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#C2B5CD',
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
     gap: 6
   },
-  addedText: { color: '#0e0d12', fontSize: 12, fontWeight: '700' },
+  addedTextSmall: { color: '#0e0d12', fontSize: 13, fontWeight: '700' },
 
   /* Calendar Header Styles */
   calendarHeaderWrap: { marginBottom: 20, paddingHorizontal: 20 },
@@ -627,4 +685,26 @@ const s = StyleSheet.create({
   radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#C2B5CD' },
 
   planNameInput: { backgroundColor: '#000', borderRadius: 14, paddingHorizontal: 18, height: 54, color: '#FFF', fontSize: 15, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+  closeBtnCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  modalTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  inputGroup: { marginBottom: 20 },
+  inputLabel: { color: '#8E8E9B', fontSize: 12, fontWeight: '600', marginBottom: 10 },
+  premiumInput: { backgroundColor: '#1A1A1A', borderRadius: 14, height: 56, paddingHorizontal: 16, color: '#FFF', fontSize: 15 },
+  rowGroup: { flexDirection: 'row', marginBottom: 20 },
+  iconInput: { backgroundColor: '#1A1A1A', borderRadius: 14, height: 56, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  iconInputText: { color: '#FFF', fontSize: 15 },
+
+  /* Map Modal Styles */
+  mapContainer: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 70 : 0 },
+  mapSearchWrapper: { paddingHorizontal: 20, marginTop: 20 },
+  mapSearchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(26, 26, 46, 0.9)', borderRadius: 12, paddingHorizontal: 16, height: 56, borderWidth: 1, borderColor: '#2A2A3A' },
+  mapSearchText: { color: '#FFF', fontSize: 15 },
+  pinContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  pinWrapper: { alignItems: 'center', marginBottom: 40 },
+  pinCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(194, 181, 205, 0.8)', justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: 'rgba(255, 255, 255, 0.4)' },
+  pinDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF' },
+  pinLine: { width: 2, height: 24, backgroundColor: '#FFF' },
+  mapFooter: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 30, gap: 15 },
 });
