@@ -1,16 +1,172 @@
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { StyleSheet, View, Image, Dimensions } from 'react-native';
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
+// Custom Marker Component
+const MapMarker = ({ 
+  top, 
+  left, 
+  right, 
+  image, 
+  label, 
+  glowColor = '#D4B0EB',
+  isCluster = false,
+  isGMarker = false,
+  clusterCount = 0
+}: {
+  top?: number;
+  left?: number;
+  right?: number;
+  image?: string;
+  label?: string;
+  glowColor?: string;
+  isCluster?: boolean;
+  isGMarker?: boolean;
+  clusterCount?: number;
+}) => {
+  return (
+    <View style={[styles.markerContainer, { top, left, right }]}>
+      <View style={styles.markerContent}>
+        {isCluster ? (
+          <View style={styles.clusterMarker}>
+            <Text style={styles.clusterText}>{clusterCount}</Text>
+          </View>
+        ) : isGMarker ? (
+          <View style={styles.gMarker}>
+            <Text style={styles.gMarkerText}>G</Text>
+          </View>
+        ) : (
+          <>
+            <View style={[styles.imageWrapper, { shadowColor: glowColor }]}>
+              <Image source={{ uri: image }} style={styles.markerImage} />
+              <LinearGradient
+                colors={['transparent', glowColor]}
+                style={styles.markerBorder}
+              />
+            </View>
+            {label && (
+              <View style={styles.labelContainer}>
+                <Text style={styles.labelText}>{label}</Text>
+              </View>
+            )}
+          </>
+        )}
+      </View>
+    </View>
+  );
+};
+
 export default function MapContainer() {
+  const MAP_BG = require('../../assets/images/Basemap image.png');
+
   return (
     <View style={styles.container}>
+      {/* Map Background */}
       <Image 
-        source={require('../../assets/images/map_bg.png')} 
+        source={MAP_BG} 
         style={styles.mapImage}
         resizeMode="cover"
       />
+
+      {/* Markers */}
+      <MapMarker 
+        top={height * 0.12} 
+        left={width * 0.15} 
+        image="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+        label="Rooftop\nSession\nVol4."
+      />
+
+      <MapMarker 
+        top={height * 0.18} 
+        right={width * 0.25} 
+        image="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+        label="Rooftop\nSession\nVol4."
+      />
+
+      <MapMarker 
+        top={height * 0.15} 
+        right={width * 0.05} 
+        isGMarker
+      />
+
+      <MapMarker 
+        top={height * 0.28} 
+        right={width * 0.15} 
+        isCluster
+        clusterCount={4}
+      />
+
+      {/* Current Location Blue Dot */}
+      <View style={[styles.markerContainer, { top: height * 0.4, left: width * 0.45 }]}>
+        <View style={styles.currentLocationOuter}>
+          <View style={styles.currentLocationInner} />
+        </View>
+      </View>
+
+      <MapMarker 
+        top={height * 0.38} 
+        left={width * 0.08} 
+        image="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+        label="Rooftop\nSession\nVol4."
+        glowColor="#FFFFFF"
+      />
+
+      <MapMarker 
+        top={height * 0.42} 
+        right={width * 0.1} 
+        image="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+        label="Rooftop\nSession\nVol4."
+        glowColor="#FFFFFF"
+      />
+
+      <MapMarker 
+        top={height * 0.58} 
+        left={width * 0.08} 
+        image="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+        label="Rooftop\nSession\nVol4."
+      />
+
+      <MapMarker 
+        top={height * 0.68} 
+        left={width * 0.42} 
+        image="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+        label="Rooftop\nSession\nVol4."
+      />
+
+      {/* Bottom Controls */}
+      <View style={styles.controlsContainer}>
+        {/* Left Side: Zoom */}
+        <View style={styles.leftControls}>
+          <TouchableOpacity style={styles.glassBtn}>
+            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
+              <Feather name="plus" size={24} color="#FFFFFF" />
+            </BlurView>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.glassBtn}>
+            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
+              <Feather name="minus" size={24} color="#FFFFFF" />
+            </BlurView>
+          </TouchableOpacity>
+        </View>
+
+        {/* Right Side: Layers and Location */}
+        <View style={styles.rightControls}>
+          <TouchableOpacity style={styles.glassBtn}>
+            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
+              <MaterialCommunityIcons name="satellite-variant" size={24} color="#FFFFFF" />
+            </BlurView>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.glassBtn}>
+            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
+              <MaterialCommunityIcons name="crosshairs-gps" size={24} color="#FFFFFF" />
+            </BlurView>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 }
@@ -22,6 +178,138 @@ const styles = StyleSheet.create({
   },
   mapImage: {
     width: width,
-    height: height * 0.7, // Adjust based on layout
+    height: height,
+    position: 'absolute',
+  },
+  markerContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  imageWrapper: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#000',
+    padding: 2,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 10,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  markerImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
+  },
+  markerBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 27,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    opacity: 0.5,
+  },
+  labelContainer: {
+    marginLeft: 8,
+    maxWidth: 100,
+  },
+  labelText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+  },
+  clusterMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(142, 142, 155, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  clusterText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  gMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#8E54E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8E54E9',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+  },
+  gMarkerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  currentLocationOuter: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+  },
+  currentLocationInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#3B82F6',
+  },
+  controlsContainer: {
+    position: 'absolute',
+    bottom: 40,
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  leftControls: {
+    gap: 12,
+  },
+  rightControls: {
+    gap: 12,
+  },
+  glassBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  glassBtnInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

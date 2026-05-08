@@ -62,7 +62,17 @@ export type PostData = {
   isExpandable?: boolean;
 };
 
-export default function FeedPost({ post, onCommentPress, onSharePress }: { post: PostData; onCommentPress?: () => void; onSharePress?: () => void }) {
+export default function FeedPost({ 
+  post, 
+  onCommentPress, 
+  onSharePress,
+  onViewMapPress 
+}: { 
+  post: PostData; 
+  onCommentPress?: () => void; 
+  onSharePress?: () => void;
+  onViewMapPress?: () => void;
+}) {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -275,7 +285,17 @@ export default function FeedPost({ post, onCommentPress, onSharePress }: { post:
 
                   {/* Buttons on Right */}
                   <View style={styles.eventActionsCol}>
-                    <TouchableOpacity style={styles.viewMapBtn} activeOpacity={0.8}>
+                    <TouchableOpacity 
+                      style={styles.viewMapBtn} 
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        if (onViewMapPress) {
+                          onViewMapPress();
+                        } else {
+                          router.push('/(tabs)/home?view=map' as any);
+                        }
+                      }}
+                    >
                       <Text style={styles.viewMapText}>View Map</Text>
                     </TouchableOpacity>
                     {post.eventDetails.priceLabel && (

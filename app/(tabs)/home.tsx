@@ -278,7 +278,12 @@ export default function HomeFeed() {
       // Optional: clear the param so it doesn't show again on reload
       router.setParams({ showSuccess: undefined });
     }
-  }, [params.showSuccess]);
+    
+    if (params.view === 'map') {
+      setSelectedType('Map');
+      router.setParams({ view: undefined });
+    }
+  }, [params.showSuccess, params.view]);
 
   const handleCommentPress = () => {
     setCommentModalVisible(true);
@@ -302,7 +307,15 @@ export default function HomeFeed() {
             {/* Core Polymorphic Feed Engine */}
             {MOCK_FEED.map((item) => {
               if (item.type === 'post') {
-                return <FeedPost key={item.id} post={item.data} onCommentPress={handleCommentPress} onSharePress={handleSharePress} />;
+                return (
+                  <FeedPost 
+                    key={item.id} 
+                    post={item.data} 
+                    onCommentPress={handleCommentPress} 
+                    onSharePress={handleSharePress}
+                    onViewMapPress={() => setSelectedType('Map')}
+                  />
+                );
               }
               if (item.type === 'live_chat') {
                 return <LiveChatBanner key={item.id} {...item.data} />;

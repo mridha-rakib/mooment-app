@@ -1,18 +1,18 @@
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
   Dimensions,
+  Image,
   Platform,
+  SafeAreaView,
+  ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -29,17 +29,15 @@ export default function ProductDetails() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
           <Feather name="chevron-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        
         <Text style={styles.headerTitle}>Product Details</Text>
-        
         <View style={styles.headerActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.iconBtn}
             onPress={() => router.push('/event-screen/product/cart' as any)}
           >
@@ -55,20 +53,19 @@ export default function ProductDetails() {
           </TouchableOpacity>
         </View>
       </View>
-
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Main Product Image Gallery */}
         <View style={styles.imageContainer}>
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
+          <ScrollView
+            horizontal
+            pagingEnabled
             showsHorizontalScrollIndicator={false}
           >
             {PRODUCT_IMAGES.map((uri, i) => (
-              <Image 
+              <Image
                 key={i}
-                source={{ uri }} 
-                style={styles.mainImage} 
+                source={{ uri }}
+                style={styles.mainImage}
                 resizeMode="cover"
               />
             ))}
@@ -77,7 +74,6 @@ export default function ProductDetails() {
             <Text style={styles.imageCounterText}>1/{PRODUCT_IMAGES.length}</Text>
           </View>
         </View>
-
         {/* Product Info */}
         <View style={styles.infoContent}>
           <View style={styles.badgeRow}>
@@ -89,18 +85,15 @@ export default function ProductDetails() {
               <Text style={styles.statusText}>Available</Text>
             </View>
           </View>
-
           <Text style={styles.productTitle}>Medusa Skin Whitening Cream</Text>
-          
           <Text style={styles.productDescription}>
             Premium skin brightening cream with Arbutin, Niacinamide & Hyaluronic Acid. For all skin types. Present QR code at event to collect.
           </Text>
-
           {/* Author Card */}
           <TouchableOpacity style={styles.authorCard} activeOpacity={0.9}>
-            <Image 
-              source={{ uri: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop' }} 
-              style={styles.authorAvatar} 
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop' }}
+              style={styles.authorAvatar}
             />
             <View style={styles.authorTextCol}>
               <Text style={styles.authorName}>Dj Koko</Text>
@@ -108,20 +101,19 @@ export default function ProductDetails() {
             </View>
             <Feather name="chevron-right" size={20} color="#8E8E9B" />
           </TouchableOpacity>
-
           {/* Quantity Selector */}
           <View style={styles.quantityRow}>
             <Text style={styles.quantityLabel}>Quantity</Text>
             <View style={styles.quantityControls}>
-              <TouchableOpacity 
-                style={styles.qtyBtn} 
+              <TouchableOpacity
+                style={styles.qtyBtn}
                 onPress={() => setQuantity(Math.max(1, quantity - 1))}
               >
                 <Feather name="minus" size={18} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.qtyValue}>{quantity}</Text>
-              <TouchableOpacity 
-                style={styles.qtyBtn} 
+              <TouchableOpacity
+                style={styles.qtyBtn}
                 onPress={() => setQuantity(quantity + 1)}
               >
                 <Feather name="plus" size={18} color="#FFFFFF" />
@@ -130,20 +122,18 @@ export default function ProductDetails() {
           </View>
         </View>
       </ScrollView>
-
       {/* Footer / Add to Cart */}
       <View style={styles.footer}>
         <View style={styles.priceContainer}>
           <Text style={styles.currentPrice}>£28</Text>
           <Text style={styles.originalPrice}>£32</Text>
         </View>
-        
-        <TouchableOpacity 
-          style={styles.addToCartBtn} 
+        <TouchableOpacity
+          style={styles.addToCartBtn}
           activeOpacity={0.8}
           onPress={() => router.push('/event-screen/product/cart' as any)}
         >
-          <Feather name="plus" size={18} color="#13131A" style={{marginRight: 6}} />
+          <Feather name="plus" size={18} color="#13131A" style={{ marginRight: 6 }} />
           <Text style={styles.addToCartText}>Add to Cart</Text>
         </TouchableOpacity>
       </View>
