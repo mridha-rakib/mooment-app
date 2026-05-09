@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Platform, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/hooks/useTheme';
 
 const FILTERS = ['All', 'Trending', 'People', 'Events', 'Products'];
 
@@ -25,6 +26,7 @@ const MOCK_PRODUCTS = [
 
 export default function SearchScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
 
@@ -46,7 +48,7 @@ export default function SearchScreen() {
     if (query !== '' && !hasResults) {
       return (
         <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateText}>No Result Found</Text>
+          <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>No Result Found</Text>
         </View>
       );
     }
@@ -57,13 +59,13 @@ export default function SearchScreen() {
         {/* People Section */}
         {(activeFilter === 'All' || activeFilter === 'People') && filteredPeople.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>People you know</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>People you know</Text>
             {filteredPeople.map((person) => (
             <View key={person.id} style={styles.listItem}>
               <Image source={{ uri: person.avatar }} style={styles.personAvatar} />
               <View style={styles.listTextContainer}>
-                <Text style={styles.listTitle}>{person.name}</Text>
-                <Text style={styles.listSubtitle}>{person.handle}</Text>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{person.name}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{person.handle}</Text>
               </View>
             </View>
           ))}
@@ -73,13 +75,13 @@ export default function SearchScreen() {
         {/* Events Section */}
         {(activeFilter === 'All' || activeFilter === 'Events' || activeFilter === 'Trending') && filteredEvents.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Events</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Events</Text>
           {filteredEvents.map((event) => (
             <View key={event.id} style={styles.listItem}>
-              <Image source={{ uri: event.image }} style={styles.squareImage} />
+              <Image source={{ uri: event.image }} style={[styles.squareImage, { borderColor: colors.border }]} />
               <View style={styles.listTextContainer}>
-                <Text style={styles.listTitle}>{event.title}</Text>
-                <Text style={styles.listSubtitle}>{event.subtitle}</Text>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{event.title}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{event.subtitle}</Text>
               </View>
             </View>
           ))}
@@ -89,13 +91,13 @@ export default function SearchScreen() {
         {/* Products Section */}
         {(activeFilter === 'All' || activeFilter === 'Products' || activeFilter === 'Trending') && filteredProducts.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Products</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Products</Text>
           {filteredProducts.map((product) => (
             <View key={product.id} style={styles.listItem}>
-              <Image source={{ uri: product.image }} style={styles.squareImage} />
+              <Image source={{ uri: product.image }} style={[styles.squareImage, { borderColor: colors.border }]} />
               <View style={styles.listTextContainer}>
-                <Text style={styles.listTitle}>{product.title}</Text>
-                <Text style={styles.listSubtitle}>{product.subtitle}</Text>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{product.title}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{product.subtitle}</Text>
               </View>
             </View>
           ))}
@@ -108,17 +110,17 @@ export default function SearchScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
         
         {/* Search Header Bar */}
         <View style={styles.headerRow}>
-          <View style={styles.searchBar}>
-            <Feather name="search" size={18} color="#8E8E9B" style={styles.searchIcon} />
+          <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Feather name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search"
-              placeholderTextColor="#8E8E9B"
+              placeholderTextColor={colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
@@ -126,12 +128,11 @@ export default function SearchScreen() {
             />
           </View>
           <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn}>
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
 
         {/* Filter Chips */}
-        {/* Hide filter chips when there are no results and a query is entered */}
         {!(query !== '' && !hasResults) && (
           <View style={styles.filtersWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersContainer}>
@@ -140,11 +141,19 @@ export default function SearchScreen() {
                 return (
                   <TouchableOpacity
                     key={filter}
-                    style={[styles.filterChip, isActive && styles.activeFilterChip]}
+                    style={[
+                      styles.filterChip, 
+                      { borderColor: colors.textSecondary },
+                      isActive && [styles.activeFilterChip, { backgroundColor: colors.text, borderColor: colors.text }]
+                    ]}
                     onPress={() => setActiveFilter(filter)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.filterChipText, isActive && styles.activeFilterChipText]}>
+                    <Text style={[
+                      styles.filterChipText, 
+                      { color: colors.textSecondary },
+                      isActive && [styles.activeFilterChipText, { color: colors.background }]
+                    ]}>
                       {filter}
                     </Text>
                   </TouchableOpacity>
@@ -165,7 +174,6 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0e0d12', // Match the main app background
   },
   container: {
     flex: 1,
@@ -181,26 +189,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C24',
     borderRadius: 20,
     paddingHorizontal: 16,
     height: 40,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 15,
   },
   cancelBtn: {
     marginLeft: 16,
   },
   cancelText: {
-    color: '#8E8E9B',
     fontSize: 14,
   },
   filtersWrapper: {
@@ -216,21 +220,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#8E8E9B',
     justifyContent: 'center',
     alignItems: 'center',
   },
   activeFilterChip: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
   },
   filterChipText: {
-    color: '#D0D0D8',
     fontSize: 13,
     fontWeight: '600',
   },
   activeFilterChipText: {
-    color: '#000000',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -239,7 +238,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    color: '#D0D0D8',
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 16,
@@ -261,20 +259,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   listTextContainer: {
     flex: 1,
     justifyContent: 'center',
   },
   listTitle: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   listSubtitle: {
-    color: '#8E8E9B',
     fontSize: 12,
   },
   emptyStateContainer: {
@@ -283,7 +278,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   emptyStateText: {
-    color: '#8E8E9B',
     fontSize: 14,
   },
 });

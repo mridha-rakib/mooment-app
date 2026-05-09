@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { COLORS, commonStyles } from "./constants";
+import { useTheme } from "@/hooks/useTheme";
 
 interface OrderItem {
   name: string;
@@ -17,41 +17,43 @@ interface OrderSummaryProps {
 }
 
 const OrderSummary = ({ items, subtotal, reward, fee, tax, total }: OrderSummaryProps) => {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.container}>
-      <Text style={commonStyles.sectionTitle}>Order</Text>
-      <View style={styles.card}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>Order</Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         {items.map((item, index) => (
           <View key={index} style={styles.row}>
-            <Text style={styles.itemLabel}>{item.name}</Text>
-            <Text style={styles.itemValue}>{item.price}</Text>
+            <Text style={[styles.itemLabel, { color: colors.text }]}>{item.name}</Text>
+            <Text style={[styles.itemValue, { color: colors.text }]}>{item.price}</Text>
           </View>
         ))}
         
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         <View style={styles.row}>
-          <Text style={styles.label}>Subtotal</Text>
-          <Text style={styles.value}>{subtotal}</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Subtotal</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{subtotal}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Reward (-)</Text>
-          <Text style={styles.value}>{reward}</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Reward (-)</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{reward}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Platform fee</Text>
-          <Text style={styles.value}>{fee}</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Platform fee</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{fee}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Tax 5%</Text>
-          <Text style={styles.value}>{tax}</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Tax 5%</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{tax}</Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         <View style={styles.row}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>{total}</Text>
+          <Text style={[styles.totalLabel, { color: colors.text }]}>Total</Text>
+          <Text style={[styles.totalValue, { color: colors.text }]}>{total}</Text>
         </View>
       </View>
     </View>
@@ -64,8 +66,12 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 20,
   },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
   card: {
-    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
   },
@@ -76,36 +82,29 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   itemLabel: {
-    color: COLORS.text,
     fontSize: 14,
   },
   itemValue: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
   },
   divider: {
     height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     marginVertical: 4,
     marginBottom: 16,
   },
   label: {
-    color: COLORS.textMuted,
     fontSize: 14,
   },
   value: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
   },
   totalLabel: {
-    color: COLORS.text,
     fontSize: 15,
     fontWeight: "bold",
   },
   totalValue: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
   },

@@ -7,6 +7,8 @@ import {
   TextInput, TouchableOpacity, View,
 } from 'react-native';
 import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
+
 
 const { width } = Dimensions.get('window');
 
@@ -99,7 +101,9 @@ function PulsingDot() {
 /* ═══════════════════ MAIN ═══════════════════ */
 export default function EventDetailsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const params = useLocalSearchParams<{ id?: string; title?: string }>();
+
   const scrollRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'permission'>('chat');
   const [allowAll, setAllowAll] = useState(true);
@@ -181,17 +185,18 @@ export default function EventDetailsScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <BackButton size={22} />
-        <Text style={styles.headerTitle} numberOfLines={1}>Pre-show with {hostName}</Text>
-        <TouchableOpacity style={styles.menuBtn} activeOpacity={0.8}>
-          <Feather name="more-horizontal" size={20} color="#FFFFFF" />
+        <BackButton size={22} color={colors.text} />
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>Pre-show with {hostName}</Text>
+        <TouchableOpacity style={[styles.menuBtn, { backgroundColor: colors.card }]} activeOpacity={0.8}>
+          <Feather name="more-horizontal" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
+
 
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* ── Status Row ── */}
@@ -201,45 +206,48 @@ export default function EventDetailsScreen() {
             <Text style={styles.liveText}>Live</Text>
           </View>
           <View style={styles.listenersRow}>
-            <Feather name="headphones" size={13} color="#8E8E9B" />
-            <Text style={styles.listenersText}>{listenerCount} listening</Text>
+            <Feather name="headphones" size={13} color={colors.textSecondary} />
+            <Text style={[styles.listenersText, { color: colors.textSecondary }]}>{listenerCount} listening</Text>
           </View>
-          <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.8} onPress={handleLeave}>
-            <Text style={styles.leaveText}>Leave</Text>
+          <TouchableOpacity style={[styles.leaveBtn, { borderColor: colors.danger }]} activeOpacity={0.8} onPress={handleLeave}>
+            <Text style={[styles.leaveText, { color: colors.danger }]}>Leave</Text>
           </TouchableOpacity>
         </View>
+
 
         {/* ── Speaker Avatar ── */}
         <View style={styles.speakerSection}>
           <View style={styles.avatarGlow}>
-            <View style={styles.avatarRingOuter}>
-              <View style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking]}>
+            <View style={[styles.avatarRingOuter, { backgroundColor: isDark ? 'rgba(155,89,182,0.15)' : 'rgba(155,89,182,0.05)' }]}>
+              <View style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking, { borderColor: colors.border }]}>
                 <Image source={{ uri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop' }} style={styles.speakerAvatar} />
               </View>
             </View>
             {isSpeaking && (
-              <View style={styles.speakingBadge}>
-                <View style={styles.speakingDot} />
-                <Text style={styles.speakingText}>Speaking</Text>
+              <View style={[styles.speakingBadge, { backgroundColor: colors.success }]}>
+                <View style={[styles.speakingDot, { backgroundColor: colors.background }]} />
+                <Text style={[styles.speakingText, { color: colors.background }]}>Speaking</Text>
               </View>
             )}
           </View>
           <View style={styles.hostNameRow}>
-            <Text style={styles.hostName}>{hostName}</Text>
-            <View style={styles.hostBadge}><Text style={styles.hostBadgeText}>Host</Text></View>
+            <Text style={[styles.hostName, { color: colors.text }]}>{hostName}</Text>
+            <View style={[styles.hostBadge, { backgroundColor: colors.card }]}><Text style={[styles.hostBadgeText, { color: colors.textSecondary }]}>Host</Text></View>
           </View>
           {isSpeaking && <AudioBars />}
         </View>
 
+
         {/* ── Tabs ── */}
-        <View style={styles.tabRow}>
-          <TouchableOpacity style={[styles.tabItem, activeTab === 'chat' && styles.tabItemActive]} onPress={() => setActiveTab('chat')} activeOpacity={0.8}>
-            <Text style={[styles.tabLabel, activeTab === 'chat' && styles.tabLabelActive]}>Live Chat</Text>
+        <View style={[styles.tabRow, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity style={[styles.tabItem, activeTab === 'chat' && { borderBottomColor: colors.text }]} onPress={() => setActiveTab('chat')} activeOpacity={0.8}>
+            <Text style={[styles.tabLabel, { color: activeTab === 'chat' ? colors.text : colors.textSecondary }]}>Live Chat</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabItem, activeTab === 'permission' && styles.tabItemActive]} onPress={() => setActiveTab('permission')} activeOpacity={0.8}>
-            <Text style={[styles.tabLabel, activeTab === 'permission' && styles.tabLabelActive]}>Permission</Text>
+          <TouchableOpacity style={[styles.tabItem, activeTab === 'permission' && { borderBottomColor: colors.text }]} onPress={() => setActiveTab('permission')} activeOpacity={0.8}>
+            <Text style={[styles.tabLabel, { color: activeTab === 'permission' ? colors.text : colors.textSecondary }]}>Permission</Text>
           </TouchableOpacity>
         </View>
+
 
         {/* ── Tab Content ── */}
         {activeTab === 'chat' ? (
@@ -249,83 +257,86 @@ export default function EventDetailsScreen() {
                 <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
                 <View style={styles.chatContent}>
                   <View style={styles.chatMeta}>
-                    <Text style={styles.chatName}>{msg.name}</Text>
-                    {msg.role && (<><Text style={styles.chatDot}> • </Text><Text style={styles.chatRole}>{msg.role}</Text></>)}
-                    <Text style={styles.chatDot}> • </Text>
-                    <Text style={styles.chatTime}>{msg.time}</Text>
+                    <Text style={[styles.chatName, { color: colors.text }]}>{msg.name}</Text>
+                    {msg.role && (<><Text style={[styles.chatDot, { color: colors.textSecondary }]}> • </Text><Text style={[styles.chatRole, { color: colors.textSecondary }]}>{msg.role}</Text></>)}
+                    <Text style={[styles.chatDot, { color: colors.textSecondary }]}> • </Text>
+                    <Text style={[styles.chatTime, { color: colors.textSecondary }]}>{msg.time}</Text>
                   </View>
-                  <Text style={styles.chatText}>{msg.text}</Text>
+                  <Text style={[styles.chatText, { color: colors.text }]}>{msg.text}</Text>
                 </View>
                 <TouchableOpacity style={styles.chatMore} activeOpacity={0.6} onPress={() => deleteMessage(msg.id)}>
-                  <Feather name="more-horizontal" size={16} color="#555" />
+                  <Feather name="more-horizontal" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             ))}
+
           </View>
         ) : (
           <View style={styles.permissionContainer}>
             <TouchableOpacity style={styles.allowAllRow} activeOpacity={0.7} onPress={handleAllowAll}>
               <View style={styles.allowAllTextCol}>
-                <Text style={styles.allowAllTitle}>Allow all participants to speak</Text>
-                <Text style={styles.allowAllSub}>You can manually mute individual person as you want</Text>
+                <Text style={[styles.allowAllTitle, { color: colors.text }]}>Allow all participants to speak</Text>
+                <Text style={[styles.allowAllSub, { color: colors.textSecondary }]}>You can manually mute individual person as you want</Text>
               </View>
-              <View style={[styles.checkbox, allowAll && styles.checkboxActive]}>
-                {allowAll && <Feather name="check" size={14} color="#FFFFFF" />}
+              <View style={[styles.checkbox, { borderColor: colors.border }, allowAll && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                {allowAll && <Feather name="check" size={14} color={colors.background} />}
               </View>
             </TouchableOpacity>
+
 
             {participants.map((p) => (
               <View key={p.id} style={styles.participantRow}>
                 <Image source={{ uri: p.avatar }} style={styles.participantAvatar} />
-                <Text style={styles.participantName}>{p.name}</Text>
+                <Text style={[styles.participantName, { color: colors.text }]}>{p.name}</Text>
                 <View style={styles.participantActions}>
-                  <TouchableOpacity style={[styles.pActionBtn, p.micMuted && styles.pActionBtnRed]} activeOpacity={0.7} onPress={() => toggleMic(p.id)}>
-                    <Feather name={p.micMuted ? 'mic-off' : 'mic'} size={16} color={p.micMuted ? '#FFF' : '#AAA'} />
+                  <TouchableOpacity style={[styles.pActionBtn, { backgroundColor: colors.card }, p.micMuted && { backgroundColor: colors.danger }]} activeOpacity={0.7} onPress={() => toggleMic(p.id)}>
+                    <Feather name={p.micMuted ? 'mic-off' : 'mic'} size={16} color={p.micMuted ? colors.background : colors.textSecondary} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.pActionBtn, p.hidden && styles.pActionBtnRed]} activeOpacity={0.7} onPress={() => toggleHidden(p.id)}>
-                    <Feather name={p.hidden ? 'eye-off' : 'eye'} size={16} color={p.hidden ? '#FFF' : '#AAA'} />
+                  <TouchableOpacity style={[styles.pActionBtn, { backgroundColor: colors.card }, p.hidden && { backgroundColor: colors.danger }]} activeOpacity={0.7} onPress={() => toggleHidden(p.id)}>
+                    <Feather name={p.hidden ? 'eye-off' : 'eye'} size={16} color={p.hidden ? colors.background : colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               </View>
             ))}
+
           </View>
         )}
       </ScrollView>
 
       {/* ── Bottom Bar ── */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-          <Feather name="bell" size={20} color="#FFFFFF" />
+      <View style={[styles.bottomBar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+        <TouchableOpacity style={[styles.bellBtn, { backgroundColor: colors.card }]} activeOpacity={0.7}>
+          <Feather name="bell" size={20} color={colors.text} />
         </TouchableOpacity>
-        <View style={styles.commentInputWrap}>
+        <View style={[styles.commentInputWrap, { backgroundColor: colors.card }]}>
           <TouchableOpacity activeOpacity={0.7} style={styles.emojiBtn}>
-            <Feather name="smile" size={18} color="#8E8E9B" />
+            <Feather name="smile" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
           <TextInput
-            style={styles.commentInput}
+            style={[styles.commentInput, { color: colors.text }]}
             placeholder="Add Comment"
-            placeholderTextColor="#555"
+            placeholderTextColor={colors.textSecondary}
             value={comment}
             onChangeText={setComment}
             onSubmitEditing={handleSend}
             returnKeyType="send"
           />
         </View>
-        <TouchableOpacity style={styles.sendBtn} activeOpacity={0.7} onPress={handleSend}>
-          <Feather name="send" size={18} color="#FFFFFF" />
+        <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.7} onPress={handleSend}>
+          <Feather name="send" size={18} color={colors.background} />
         </TouchableOpacity>
       </View>
+
     </SafeAreaView>
   );
 }
 
 /* ═══════════════════ STYLES ═══════════════════ */
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
+  safe: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, textAlign: 'center' },
-  menuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { flex: 1, fontWeight: '700', fontSize: 17, textAlign: 'center' },
+  menuBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 20 },
 
   /* Status */
@@ -334,33 +345,31 @@ const styles = StyleSheet.create({
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#16D869' },
   liveText: { color: '#16D869', fontSize: 13, fontWeight: '700' },
   listenersRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
-  listenersText: { color: '#8E8E9B', fontSize: 13 },
-  leaveBtn: { borderWidth: 1, borderColor: '#FF3B3B', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 },
-  leaveText: { color: '#FF3B3B', fontSize: 13, fontWeight: '600' },
+  listenersText: { fontSize: 13 },
+  leaveBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  leaveText: { fontSize: 13, fontWeight: '600' },
 
   /* Speaker */
   speakerSection: { alignItems: 'center', marginBottom: 24 },
   avatarGlow: { alignItems: 'center', marginBottom: 12 },
-  avatarRingOuter: { width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(155,89,182,0.15)', justifyContent: 'center', alignItems: 'center' },
-  avatarRingInner: { width: 104, height: 104, borderRadius: 52, borderWidth: 3, borderColor: '#444', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  avatarRingOuter: { width: 120, height: 120, borderRadius: 60, justifyContent: 'center', alignItems: 'center' },
+  avatarRingInner: { width: 104, height: 104, borderRadius: 52, borderWidth: 3, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarRingSpeaking: { borderColor: '#9B59B6' },
   speakerAvatar: { width: 96, height: 96, borderRadius: 48 },
-  speakingBadge: { position: 'absolute', bottom: -4, flexDirection: 'row', alignItems: 'center', backgroundColor: '#16D869', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
-  speakingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' },
-  speakingText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  speakingBadge: { position: 'absolute', bottom: -4, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  speakingDot: { width: 6, height: 6, borderRadius: 3 },
+  speakingText: { fontSize: 11, fontWeight: '700' },
   hostNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  hostName: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
-  hostBadge: { backgroundColor: '#1A1A2E', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
-  hostBadgeText: { color: '#8E8E9B', fontSize: 11, fontWeight: '600' },
+  hostName: { fontSize: 17, fontWeight: '700' },
+  hostBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
+  hostBadgeText: { fontSize: 11, fontWeight: '600' },
   audioBarsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 24 },
   audioBar: { width: 3, borderRadius: 1.5 },
 
   /* Tabs */
-  tabRow: { flexDirection: 'row', marginHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#1A1A2E', marginBottom: 8 },
-  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabItemActive: { borderBottomColor: '#FFFFFF' },
-  tabLabel: { color: '#555', fontSize: 14, fontWeight: '600' },
-  tabLabelActive: { color: '#FFFFFF' },
+  tabRow: { flexDirection: 'row', marginHorizontal: 16, borderBottomWidth: 1, marginBottom: 8 },
+  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2 },
+  tabLabel: { fontSize: 14, fontWeight: '600' },
 
   /* Chat */
   chatContainer: { paddingHorizontal: 16, paddingTop: 8 },
@@ -368,33 +377,32 @@ const styles = StyleSheet.create({
   chatAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   chatContent: { flex: 1 },
   chatMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' },
-  chatName: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-  chatDot: { color: '#555', fontSize: 12 },
-  chatRole: { color: '#8E8E9B', fontSize: 12 },
-  chatTime: { color: '#555', fontSize: 12 },
-  chatText: { color: '#CCCCCC', fontSize: 13, lineHeight: 19 },
+  chatName: { fontSize: 13, fontWeight: '700' },
+  chatDot: { fontSize: 12 },
+  chatRole: { fontSize: 12 },
+  chatTime: { fontSize: 12 },
+  chatText: { fontSize: 13, lineHeight: 19 },
   chatMore: { paddingLeft: 8, paddingTop: 4 },
 
   /* Permission */
   permissionContainer: { paddingHorizontal: 16, paddingTop: 12 },
   allowAllRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   allowAllTextCol: { flex: 1 },
-  allowAllTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 3 },
-  allowAllSub: { color: '#555', fontSize: 12, lineHeight: 17 },
-  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, borderColor: '#555', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
-  checkboxActive: { backgroundColor: '#4A90D9', borderColor: '#4A90D9' },
+  allowAllTitle: { fontSize: 14, fontWeight: '600', marginBottom: 3 },
+  allowAllSub: { fontSize: 12, lineHeight: 17 },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
   participantRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   participantAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
-  participantName: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', flex: 1 },
+  participantName: { fontSize: 14, fontWeight: '600', flex: 1 },
   participantActions: { flexDirection: 'row', gap: 10 },
-  pActionBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  pActionBtnRed: { backgroundColor: '#E53935' },
+  pActionBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
 
   /* Bottom Bar */
-  bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#1A1A2E', gap: 10 },
-  bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  commentInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 24, paddingHorizontal: 14, height: 42 },
+  bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, gap: 10 },
+  bellBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  commentInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingHorizontal: 14, height: 42 },
   emojiBtn: { marginRight: 8 },
-  commentInput: { flex: 1, color: '#FFFFFF', fontSize: 14, padding: 0 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+  commentInput: { flex: 1, fontSize: 14, padding: 0 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 });
+

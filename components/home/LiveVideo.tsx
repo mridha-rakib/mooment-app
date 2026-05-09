@@ -1,38 +1,75 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Dimensions, Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
 
 const { width, height } = Dimensions.get('window');
 
+const VIDEOS = {
+  Discover: require('../../assets/videos/live_bg.mp4'),
+  Friends: require('../../assets/videos/live_bg.mp4'),
+};
+
 export default function LiveVideo() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'Discover' | 'Friends'>('Discover');
   const [commentModalVisible, setCommentModalVisible] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+
+  const player = useVideoPlayer(VIDEOS[activeTab], (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
+
+  // Ensure playback starts/resumes on tab change
+  useEffect(() => {
+    player.play();
+    setIsPlaying(true);
+  }, [activeTab, player]);
+
+  const togglePlay = () => {
+    if (isPlaying) {
+      player.pause();
+    } else {
+      player.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" translucent />
       {/* Background Media */}
-      <Image 
-        source={{ uri: activeTab === 'Discover' 
-          ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop'
-          : 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop' 
-        }} 
-        style={styles.backgroundImage} 
+      <VideoView
+        style={styles.backgroundImage}
+        player={player}
+        allowsFullscreen={false}
+        showsControls={false}
+        nativeControls={false}
+        contentFit="cover"
       />
 
-      {/* Top Gradient Overlay */}
-      <View style={styles.topOverlay} />
-      {/* Bottom Gradient Overlay */}
-      <View style={styles.bottomOverlay} />
 
-      <SafeAreaView style={styles.safeArea}>
+      {/* Full screen tap to toggle */}
+      <TouchableOpacity
+        style={StyleSheet.absoluteFill}
+        activeOpacity={1}
+        onPress={togglePlay}
+      />
+
+
+      <View style={styles.safeArea} pointerEvents="box-none">
         {/* Top Navigation Bar */}
-        <View style={styles.topNav}>
+        <View style={[styles.topNav, { paddingTop: insets.top + 10 }]}>
           <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(tabs)/home')}>
             <Feather name="chevron-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -57,21 +94,15 @@ export default function LiveVideo() {
           </TouchableOpacity>
         </View>
 
-        {/* Center Play Button */}
-        <View style={styles.centerContainer}>
-          <TouchableOpacity
-            style={styles.playBtn}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="play" size={32} color="#FFFFFF" style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Full screen tap to toggle */}
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-        />
+        {/* Center Play Button (only shown when paused) */}
+        {!isPlaying && (
+          <View style={styles.centerContainer} pointerEvents="none">
+            <View style={styles.playBtn}>
+              <Ionicons name="play" size={32} color="#FFFFFF" style={{ marginLeft: 4 }} />
+            </View>
+          </View>
+        )}
 
         {/* Right Action Column */}
         <View style={styles.rightActionsCol}>
@@ -120,9 +151,10 @@ export default function LiveVideo() {
           </View>
         </View>
 
-      </SafeAreaView>
+      </View>
 
       <CommentsModal
+
         visible={commentModalVisible}
         onClose={() => setCommentModalVisible(false)}
       />
@@ -144,36 +176,18 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
-    opacity: 0.9,
-  },
-  topOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 150,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  bottomOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 250,
-    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   safeArea: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'android' ? 40 : 0,
   },
   topNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 10,
   },
+
   iconBtn: {
     width: 40,
     height: 40,

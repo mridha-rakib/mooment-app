@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,20 +11,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
-
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#B3A7C2",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentGreen: "#16D869",
-  border: "rgba(255, 255, 255, 0.05)",
-};
+import { useTheme } from "@/hooks/useTheme";
 
 const PaymentSuccessScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
   const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
@@ -44,7 +37,8 @@ const PaymentSuccessScreen = () => {
   ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Confetti Animation */}
       <ConfettiOverlay 
         visible={showConfetti} 
@@ -54,10 +48,10 @@ const PaymentSuccessScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
-          style={styles.closeBtn} 
+          style={[styles.closeBtn, { backgroundColor: colors.card }]} 
           onPress={() => router.push("/event-screen/event")}
         >
-          <Feather name="x" size={20} color={COLORS.text} />
+          <Feather name="x" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -67,32 +61,33 @@ const PaymentSuccessScreen = () => {
       >
         {/* Success Animation Placeholder */}
         <View style={styles.successIconWrapper}>
-          <View style={styles.pulseOuter}>
-            <View style={styles.pulseInner}>
-              <Ionicons name="checkmark-sharp" size={40} color={COLORS.accentGreen} />
+          <View style={[styles.pulseOuter, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" }]}>
+            <View style={[styles.pulseInner, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.15)" : "rgba(22, 216, 105, 0.1)", borderColor: "rgba(22, 216, 105, 0.3)" }]}>
+              <Ionicons name="checkmark-sharp" size={40} color={colors.success} />
             </View>
           </View>
         </View>
 
-        <Text style={styles.title}>Payment successful</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, { color: colors.text }]}>Payment successful</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Your ticket is confirmed.{"\n"}Have a great time at the event.
         </Text>
 
         {/* Details Card */}
-        <View style={styles.detailsCard}>
+        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {details.map((item, index) => (
             <View key={index}>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{item.label}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{item.label}</Text>
                 <Text style={[
                   styles.detailValue,
-                  item.isPrice && { color: COLORS.accentGreen }
+                  { color: colors.text },
+                  item.isPrice && { color: colors.success }
                 ]}>
                   {item.value}
                 </Text>
               </View>
-              {index < details.length - 1 && <View style={styles.divider} />}
+              {index < details.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
             </View>
           ))}
         </View>
@@ -103,17 +98,17 @@ const PaymentSuccessScreen = () => {
       {/* Footer Buttons */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity 
-          style={styles.primaryBtn}
+          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
           onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "event" } })}
         >
-          <Text style={styles.primaryBtnText}>View my ticket</Text>
+          <Text style={[styles.primaryBtnText, { color: colors.background }]}>View my ticket</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={styles.secondaryBtn}
+          style={[styles.secondaryBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => router.push("/event-screen/event")}
         >
-          <Text style={styles.secondaryBtnText}>Back to event</Text>
+          <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Back to event</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -125,7 +120,6 @@ export default PaymentSuccessScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -135,7 +129,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -151,7 +144,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "rgba(22, 216, 105, 0.1)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -159,20 +151,16 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: "rgba(22, 216, 105, 0.15)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(22, 216, 105, 0.3)",
   },
   title: {
-    color: COLORS.text,
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 12,
   },
   subtitle: {
-    color: COLORS.textMuted,
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
@@ -180,11 +168,9 @@ const styles = StyleSheet.create({
   },
   detailsCard: {
     width: "100%",
-    backgroundColor: COLORS.card,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   detailRow: {
     flexDirection: "row",
@@ -193,43 +179,35 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   detailLabel: {
-    color: COLORS.textMuted,
     fontSize: 14,
   },
   detailValue: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "600",
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.border,
   },
   footer: {
     paddingHorizontal: 20,
     gap: 12,
   },
   primaryBtn: {
-    backgroundColor: COLORS.primary,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: "center",
   },
   primaryBtnText: {
-    color: "#000",
     fontSize: 16,
     fontWeight: "bold",
   },
   secondaryBtn: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   secondaryBtnText: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
   },

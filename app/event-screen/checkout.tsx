@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ScrollView,
+  StatusBar,
   StyleSheet,
   View,
 } from "react-native";
@@ -15,11 +16,12 @@ import {
   SecurityBanner,
   TermsAgreement,
   CheckoutFooter,
-  COLORS,
 } from "@/components/event/checkout";
+import { useTheme } from "@/hooks/useTheme";
 
 const EventCheckoutScreen = () => {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [paymentType, setPaymentType] = useState("Online");
   const [payWith, setPayWith] = useState("Credits");
   const [agreed, setAgreed] = useState(false);
@@ -30,7 +32,8 @@ const EventCheckoutScreen = () => {
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <CheckoutHeader title="Checkout" />
 
       <ScrollView
@@ -91,7 +94,6 @@ export default EventCheckoutScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   scrollContent: {
     padding: 16,

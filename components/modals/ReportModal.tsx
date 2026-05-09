@@ -8,7 +8,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { useTheme } from '@/hooks/useTheme';
 
 interface ReportModalProps {
   visible: boolean;
@@ -31,6 +31,7 @@ const REASONS = [
 
 export default function ReportModal({ visible, onClose, onReport }: ReportModalProps) {
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const { colors, isDark } = useTheme();
 
   const handleContinue = () => {
     if (selectedReason) {
@@ -46,17 +47,17 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)' }]}>
         <TouchableOpacity 
           style={styles.dismissArea} 
           activeOpacity={1} 
           onPress={onClose} 
         />
         
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
+        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+          <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
           
-          <Text style={styles.title}>Why are you reporting this?</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Why are you reporting this?</Text>
           
           <ScrollView showsVerticalScrollIndicator={false} style={styles.reasonsList}>
             {REASONS.map((reason) => (
@@ -68,7 +69,8 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
               >
                 <Text style={[
                   styles.reasonText,
-                  selectedReason === reason && styles.selectedReasonText
+                  { color: colors.textSecondary },
+                  selectedReason === reason && [styles.selectedReasonText, { color: colors.text }]
                 ]}>
                   {reason}
                 </Text>
@@ -78,18 +80,19 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
 
           <View style={styles.footer}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
+              <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={[
                 styles.continueBtn, 
+                { backgroundColor: colors.primary },
                 !selectedReason && styles.continueBtnDisabled
               ]} 
               onPress={handleContinue}
               disabled={!selectedReason}
             >
-              <Text style={styles.continueBtnText}>Continue</Text>
+              <Text style={[styles.continueBtnText, { color: colors.background }]}>Continue</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -101,14 +104,12 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   dismissArea: {
     flex: 1,
   },
   sheet: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 12,
@@ -120,12 +121,10 @@ const styles = StyleSheet.create({
     width: 60,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignSelf: 'center',
     marginBottom: 24,
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
@@ -138,12 +137,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   reasonText: {
-    color: '#8E8E9B',
     fontSize: 15,
     fontWeight: '500',
   },
   selectedReasonText: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
   footer: {
@@ -159,14 +156,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelBtnText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
   continueBtn: {
     flex: 2,
     height: 54,
-    backgroundColor: '#B59EBE',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -175,7 +170,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   continueBtnText: {
-    color: '#13131A',
     fontSize: 16,
     fontWeight: '700',
   },

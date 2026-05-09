@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { COLORS } from "./constants";
+import { useTheme } from "@/hooks/useTheme";
 
 interface CheckoutFooterProps {
   onPress: () => void;
@@ -10,15 +10,16 @@ interface CheckoutFooterProps {
 
 const CheckoutFooter = ({ onPress, buttonText = "Continue to payment" }: CheckoutFooterProps) => {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
       <TouchableOpacity 
-        style={styles.button}
+        style={[styles.button, { backgroundColor: colors.primary }]}
         onPress={onPress}
         activeOpacity={0.9}
       >
-        <Text style={styles.text}>{buttonText}</Text>
+        <Text style={[styles.text, { color: colors.background }]}>{buttonText}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -30,16 +31,13 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    backgroundColor: COLORS.background,
   },
   button: {
-    backgroundColor: "#B3A7C2", // Light grayish purple as seen in image
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: "center",
   },
   text: {
-    color: "#1c1b20",
     fontSize: 16,
     fontWeight: "bold",
   },

@@ -11,6 +11,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 interface ReportDetailsModalProps {
   visible: boolean;
@@ -20,6 +21,7 @@ interface ReportDetailsModalProps {
 
 export default function ReportDetailsModal({ visible, onClose, onDone }: ReportDetailsModalProps) {
   const [details, setDetails] = useState('');
+  const { colors, isDark } = useTheme();
 
   const handleDone = () => {
     onDone(details);
@@ -35,7 +37,7 @@ export default function ReportDetailsModal({ visible, onClose, onDone }: ReportD
       onRequestClose={onClose}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
+        <View style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)' }]}>
           <TouchableOpacity 
             style={styles.dismissArea} 
             activeOpacity={1} 
@@ -46,16 +48,16 @@ export default function ReportDetailsModal({ visible, onClose, onDone }: ReportD
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.sheetContainer}
           >
-            <View style={styles.sheet}>
-              <View style={styles.handle} />
+            <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+              <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
               
-              <Text style={styles.title}>Write down your report</Text>
+              <Text style={[styles.title, { color: colors.text }]}>Write down your report</Text>
               
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: colors.text }]}
                   placeholder="Describe the issue (250 character limit)"
-                  placeholderTextColor="#4E4E56"
+                  placeholderTextColor={colors.textSecondary}
                   multiline
                   maxLength={250}
                   value={details}
@@ -66,18 +68,19 @@ export default function ReportDetailsModal({ visible, onClose, onDone }: ReportD
 
               <View style={styles.footer}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                  <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
                   style={[
                     styles.doneBtn, 
+                    { backgroundColor: colors.primary },
                     !details.trim() && styles.doneBtnDisabled
                   ]} 
                   onPress={handleDone}
                   disabled={!details.trim()}
                 >
-                  <Text style={styles.doneBtnText}>Done</Text>
+                  <Text style={[styles.doneBtnText, { color: colors.background }]}>Done</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -91,7 +94,6 @@ export default function ReportDetailsModal({ visible, onClose, onDone }: ReportD
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   dismissArea: {
@@ -101,7 +103,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   sheet: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 12,
@@ -112,28 +113,23 @@ const styles = StyleSheet.create({
     width: 60,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignSelf: 'center',
     marginBottom: 24,
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 24,
   },
   inputContainer: {
-    backgroundColor: '#1C1C24',
     borderRadius: 16,
     height: 200,
     padding: 16,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   input: {
-    color: '#FFFFFF',
     fontSize: 15,
     textAlignVertical: 'top',
     height: '100%',
@@ -151,14 +147,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelBtnText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
   doneBtn: {
     flex: 1.5,
     height: 54,
-    backgroundColor: '#B59EBE',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
@@ -167,7 +161,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   doneBtnText: {
-    color: '#13131A',
     fontSize: 16,
     fontWeight: '700',
   },

@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { COLORS, commonStyles } from "./constants";
+import { useTheme } from "@/hooks/useTheme";
 
 interface PaymentTypeSelectorProps {
   paymentType: string;
@@ -8,6 +8,8 @@ interface PaymentTypeSelectorProps {
 }
 
 const PaymentTypeSelector = ({ paymentType, onTypeChange }: PaymentTypeSelectorProps) => {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.container}>
       <TouchableOpacity 
@@ -15,20 +17,20 @@ const PaymentTypeSelector = ({ paymentType, onTypeChange }: PaymentTypeSelectorP
         onPress={() => onTypeChange("Online")}
         activeOpacity={0.8}
       >
-        <View style={[commonStyles.radio, paymentType === "Online" && commonStyles.radioActive]}>
-          {paymentType === "Online" && <View style={commonStyles.radioInner} />}
+        <View style={[styles.radio, { borderColor: colors.textSecondary }, paymentType === "Online" && { borderColor: colors.primary }]}>
+          {paymentType === "Online" && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
         </View>
-        <Text style={styles.text}>Online Pay</Text>
+        <Text style={[styles.text, { color: colors.text }]}>Online Pay</Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={styles.item}
         onPress={() => onTypeChange("Door")}
         activeOpacity={0.8}
       >
-        <View style={[commonStyles.radio, paymentType === "Door" && commonStyles.radioActive]}>
-          {paymentType === "Door" && <View style={commonStyles.radioInner} />}
+        <View style={[styles.radio, { borderColor: colors.textSecondary }, paymentType === "Door" && { borderColor: colors.primary }]}>
+          {paymentType === "Door" && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
         </View>
-        <Text style={styles.text}>Pay at Door</Text>
+        <Text style={[styles.text, { color: colors.text }]}>Pay at Door</Text>
       </TouchableOpacity>
     </View>
   );
@@ -48,8 +50,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   text: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "500",
   },

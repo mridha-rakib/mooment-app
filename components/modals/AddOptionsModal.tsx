@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useTheme } from '@/hooks/useTheme';
 
 interface AddOptionsModalProps {
   visible: boolean;
@@ -64,6 +65,7 @@ const OPTIONS = [
   {
     id: 'scan',
     label: 'Scan QR',
+
     description: 'Scan to open on product links',
     icon: QrCodeIcon,
     color: '#0C447C',
@@ -74,6 +76,7 @@ const OPTIONS = [
 
 export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
 
   const handleOption = (route: string) => {
     onClose();
@@ -88,21 +91,21 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
       onRequestClose={onClose}
     >
       <TouchableOpacity 
-        style={styles.overlay} 
+        style={[styles.overlay, { backgroundColor: isDark ? '#000000CC' : 'rgba(0,0,0,0.4)' }]} 
         activeOpacity={1} 
         onPress={onClose}
       >
-        <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
         
-        <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-          <View style={styles.handle} />
-          <Text style={styles.sheetTitle}>Select to proceed</Text>
+        <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
 
           <View style={styles.optionsList}>
             {OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.id}
-                style={styles.optionRow}
+                style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
                 onPress={() => handleOption(opt.route)}
                 activeOpacity={0.75}
               >
@@ -111,11 +114,11 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
                 </View>
 
                 <View style={styles.optionText}>
-                  <Text style={styles.optionLabel}>{opt.label}</Text>
-                  <Text style={styles.optionDesc} numberOfLines={2}>{opt.description}</Text>
+                  <Text style={[styles.optionLabel, { color: colors.text }]}>{opt.label}</Text>
+                  <Text style={[styles.optionDesc, { color: colors.textSecondary }]} numberOfLines={2}>{opt.description}</Text>
                 </View>
 
-                <HugeiconsIcon icon={ChevronRight} size={18} color="#B3B3B3" />
+                <HugeiconsIcon icon={ChevronRight} size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
@@ -131,28 +134,23 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: '#000000CC',
   },
   sheet: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === 'ios' ? 20 : 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
   },
   handle: {
     width: 60,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     alignSelf: 'center',
     marginBottom: 20,
   },
   sheetTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.2,
@@ -168,9 +166,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 20,
-    backgroundColor: '#1A1A22',
   },
   optionIcon: {
     width: 44,
@@ -185,13 +181,11 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   optionLabel: {
-    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
     marginBottom: 3,
   },
   optionDesc: {
-    color: '#8E8E9B',
     fontSize: 12,
     lineHeight: 17,
   },

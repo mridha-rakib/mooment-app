@@ -12,6 +12,8 @@ export const Colors = {
     tabBarInactive: '#8E8E9B',
     primary: '#6B4E71',
     danger: '#FF3B30',
+    success: '#16D869',
+    warning: '#F97316',
   },
   dark: {
     background: '#0e0d12',
@@ -26,5 +28,7 @@ export const Colors = {
     tabBarInactive: '#454555',
     primary: '#C2B5CD',
     danger: '#FF3B30',
+    success: '#16D869',
+    warning: '#F97316',
   }
 };

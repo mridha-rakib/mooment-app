@@ -11,25 +11,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#D4B0EB",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentGreen: "#16D869",
-  gold: "#EAB308",
-  danger: "#FF3B30",
-  dangerBg: "rgba(255, 59, 48, 0.1)",
-  border: "rgba(255, 255, 255, 0.05)",
-};
+import { useTheme } from "@/hooks/useTheme";
 
 const TicketDetailScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
 
   const details = [
     { label: "Ticket No", value: "MOM-2024-8575" },
@@ -42,7 +32,8 @@ const TicketDetailScreen = () => {
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
@@ -53,31 +44,31 @@ const TicketDetailScreen = () => {
           style={styles.heroImage}
         >
           <LinearGradient
-            colors={["transparent", "rgba(14, 13, 18, 0.8)", "#0e0d12"]}
+            colors={["transparent", isDark ? "rgba(14, 13, 18, 0.8)" : "rgba(255, 255, 255, 0.8)", colors.background]}
             style={styles.heroOverlay}
           />
           
           {/* Header Controls */}
           <View style={[styles.headerTop, { paddingTop: insets.top + 10 }]}>
-            <BackButton color={COLORS.text} />
-            <Text style={styles.headerTitle}>Ticket Detail</Text>
+            <BackButton color={colors.text} />
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Detail</Text>
             <View style={{ width: 40 }} />
           </View>
 
           {/* Hero Content */}
           <View style={styles.heroContent}>
-            <View style={styles.categoryTag}>
-              <Text style={styles.categoryText}>Music Party</Text>
+            <View style={[styles.categoryTag, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)", borderColor: colors.border }]}>
+              <Text style={[styles.categoryText, { color: colors.text }]}>Music Party</Text>
             </View>
             
             <View style={styles.hostRow}>
               <Image 
                 source={{ uri: "https://i.pravatar.cc/150?u=djkoko" }} 
-                style={styles.hostAvatar} 
+                style={[styles.hostAvatar, { borderColor: colors.border }]} 
               />
               <View>
-                <Text style={styles.hostName}>Dj Koko</Text>
-                <Text style={styles.hostHandle}>@sdfd_d</Text>
+                <Text style={[styles.hostName, { color: colors.text }]}>Dj Koko</Text>
+                <Text style={[styles.hostHandle, { color: colors.textSecondary }]}>@sdfd_d</Text>
               </View>
             </View>
 
@@ -86,8 +77,8 @@ const TicketDetailScreen = () => {
                 source={{ uri: "https://i.pravatar.cc/150?u=talha" }} 
                 style={styles.sharedAvatar} 
               />
-              <Text style={styles.sharedText}>
-                Shared by <Text style={styles.sharedName}>Talha Rahman</Text>
+              <Text style={[styles.sharedText, { color: colors.textSecondary }]}>
+                Shared by <Text style={[styles.sharedName, { color: colors.text }]}>Talha Rahman</Text>
               </Text>
             </View>
           </View>
@@ -95,14 +86,14 @@ const TicketDetailScreen = () => {
 
         {/* Info Card */}
         <View style={styles.content}>
-          <View style={styles.infoCard}>
+          <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeader}>
               <View>
-                <Text style={styles.eventTitle}>Rooftop Session Vol.4</Text>
-                <Text style={styles.eventLocation}>New York</Text>
+                <Text style={[styles.eventTitle, { color: colors.text }]}>Rooftop Session Vol.4</Text>
+                <Text style={[styles.eventLocation, { color: colors.textSecondary }]}>New York</Text>
               </View>
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>Active</Text>
+              <View style={[styles.statusBadge, { backgroundColor: colors.success + '1A' }]}>
+                <Text style={[styles.statusText, { color: colors.success }]}>Active</Text>
               </View>
             </View>
 
@@ -110,17 +101,19 @@ const TicketDetailScreen = () => {
               {details.map((item, index) => (
                 <View key={index}>
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{item.label}</Text>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{item.label}</Text>
                     <Text 
                       style={[
                         styles.detailValue,
-                        item.isPending && { color: COLORS.gold }
+                        { color: colors.text },
+                        item.isPending && { color: colors.warning }
+
                       ]}
                     >
                       {item.value}
                     </Text>
                   </View>
-                  {index < details.length - 1 && <View style={styles.divider} />}
+                  {index < details.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
                 </View>
               ))}
             </View>
@@ -129,19 +122,19 @@ const TicketDetailScreen = () => {
       </ScrollView>
 
       {/* Sticky Footer */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.background + 'F2' }]}>
         <TouchableOpacity 
-          style={styles.primaryBtn}
+          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
           onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "event" } })}
         >
-          <Text style={styles.primaryBtnText}>Show QR</Text>
+          <Text style={[styles.primaryBtnText, { color: colors.background }]}>Show QR</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.secondaryBtn}
+          style={[styles.secondaryBtn, { backgroundColor: colors.danger + '1A', borderColor: colors.danger + '1A' }]}
           onPress={() => {}}
         >
-          <Text style={styles.secondaryBtnText}>Cancel ticket</Text>
+          <Text style={[styles.secondaryBtnText, { color: colors.danger }]}>Cancel ticket</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -153,7 +146,6 @@ export default TicketDetailScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   heroImage: {
     width: "100%",
@@ -168,16 +160,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   headerTitle: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "bold",
   },
@@ -189,16 +172,13 @@ const styles = StyleSheet.create({
   },
   categoryTag: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   categoryText: {
-    color: COLORS.text,
     fontSize: 12,
     fontWeight: "500",
   },
@@ -213,15 +193,12 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   hostName: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
   },
   hostHandle: {
-    color: COLORS.textMuted,
     fontSize: 12,
   },
   sharedByRow: {
@@ -235,11 +212,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   sharedText: {
-    color: COLORS.textMuted,
     fontSize: 12,
   },
   sharedName: {
-    color: COLORS.text,
     fontWeight: "600",
   },
   content: {
@@ -247,11 +222,9 @@ const styles = StyleSheet.create({
     marginTop: -20,
   },
   infoCard: {
-    backgroundColor: COLORS.card,
     borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   cardHeader: {
     flexDirection: "row",
@@ -260,23 +233,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   eventTitle: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "bold",
   },
   eventLocation: {
-    color: COLORS.textMuted,
     fontSize: 14,
     marginTop: 2,
   },
   statusBadge: {
-    backgroundColor: "rgba(22, 216, 105, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   statusText: {
-    color: COLORS.accentGreen,
     fontSize: 12,
     fontWeight: "bold",
   },
@@ -290,17 +259,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   detailLabel: {
-    color: COLORS.textMuted,
     fontSize: 14,
   },
   detailValue: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.border,
     marginVertical: 4,
   },
   footer: {
@@ -309,32 +275,26 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    backgroundColor: "rgba(14, 13, 18, 0.95)",
     gap: 12,
   },
   primaryBtn: {
-    backgroundColor: COLORS.primary,
     height: 56,
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
   primaryBtnText: {
-    color: "#000000",
     fontSize: 16,
     fontWeight: "bold",
   },
   secondaryBtn: {
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
     height: 56,
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 59, 48, 0.1)",
   },
   secondaryBtnText: {
-    color: COLORS.danger,
     fontSize: 16,
     fontWeight: "bold",
   },

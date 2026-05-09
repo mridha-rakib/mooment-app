@@ -309,8 +309,9 @@ export default function MyPlanScreen() {
 
               <View style={[s.bottomSheetActionRow, { marginTop: 40 }]}>
                 <TouchableOpacity style={[s.cancelBtnPremium, { borderColor: colors.border }]} onPress={() => setIsCreatePlanModalVisible(false)}>
-                  <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Canel</Text>
+                  <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Cancel</Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: colors.primary }]} onPress={() => { setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
                   <Text style={[s.addBtnTextPremium, { color: colors.background }]}>Done</Text>
                 </TouchableOpacity>
@@ -355,8 +356,9 @@ export default function MyPlanScreen() {
 
             <View style={s.mapFooter}>
               <TouchableOpacity style={[s.cancelBtnPremium, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => setIsMapModalVisible(false)}>
-                <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Canel</Text>
+                <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
+
               <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: colors.primary }]} onPress={() => { setIsMapModalVisible(false); setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
                 <Text style={[s.addBtnTextPremium, { color: colors.background }]}>Confirm</Text>
               </TouchableOpacity>
@@ -482,7 +484,8 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                     {/* New field below the wide card as requested */}
                     <TouchableOpacity 
                       style={[s.browseEventsRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                      onPress={() => router.push('/(tabs)/discover')}
+                      onPress={() => router.push('/(tabs)/explore')}
+
                     >
                       <View style={[s.browseIconWrap, { backgroundColor: colors.background }]}>
                         <HugeiconsIcon icon={Calendar03Icon} size={16} color={colors.primary} />
@@ -519,7 +522,8 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                 {isCentered && (
                   <TouchableOpacity 
                     style={[s.browseEventsRow, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12, width: SCREEN_WIDTH * 0.85 }]}
-                    onPress={() => router.push('/(tabs)/discover')}
+                    onPress={() => router.push('/(tabs)/explore')}
+
                   >
                     <View style={[s.browseIconWrap, { backgroundColor: colors.background }]}>
                       <HugeiconsIcon icon={Calendar03Icon} size={16} color={colors.primary} />

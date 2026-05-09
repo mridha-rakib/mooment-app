@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { COLORS, commonStyles } from "./constants";
+import { useTheme } from "@/hooks/useTheme";
 
 interface PaymentMethodsProps {
   payWith: string;
@@ -9,58 +9,60 @@ interface PaymentMethodsProps {
 }
 
 const PaymentMethods = ({ payWith, onMethodChange }: PaymentMethodsProps) => {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.container}>
-      <Text style={commonStyles.sectionTitle}>Pay with</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>Pay with</Text>
       <View style={styles.list}>
         <TouchableOpacity 
-          style={[styles.card, payWith === "Credits" && styles.cardActive]}
+          style={[styles.card, { backgroundColor: colors.card, borderColor: payWith === "Credits" ? colors.primary + '33' : 'transparent' }]}
           onPress={() => onMethodChange("Credits")}
           activeOpacity={0.8}
         >
-          <View style={[commonStyles.radio, payWith === "Credits" && commonStyles.radioActive]}>
-            {payWith === "Credits" && <View style={commonStyles.radioInner} />}
+          <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Credits" && { borderColor: colors.primary }]}>
+            {payWith === "Credits" && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
           </View>
-          <View style={styles.iconBg}>
-            <Ionicons name="wallet-outline" size={20} color={COLORS.text} />
+          <View style={[styles.iconBg, { backgroundColor: colors.background }]}>
+            <Ionicons name="wallet-outline" size={20} color={colors.text} />
           </View>
           <View style={styles.info}>
-            <Text style={styles.name}>Mooment Credits</Text>
-            <Text style={styles.sub}>Balance: $120.00</Text>
+            <Text style={[styles.name, { color: colors.text }]}>Mooment Credits</Text>
+            <Text style={[styles.sub, { color: colors.textSecondary }]}>Balance: $120.00</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.card, payWith === "Card" && styles.cardActive]}
+          style={[styles.card, { backgroundColor: colors.card, borderColor: payWith === "Card" ? colors.primary + '33' : 'transparent' }]}
           onPress={() => onMethodChange("Card")}
           activeOpacity={0.8}
         >
-          <View style={[commonStyles.radio, payWith === "Card" && commonStyles.radioActive]}>
-            {payWith === "Card" && <View style={commonStyles.radioInner} />}
+          <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Card" && { borderColor: colors.primary }]}>
+            {payWith === "Card" && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
           </View>
-          <View style={styles.iconBg}>
-            <Ionicons name="card-outline" size={20} color={COLORS.text} />
+          <View style={[styles.iconBg, { backgroundColor: colors.background }]}>
+            <Ionicons name="card-outline" size={20} color={colors.text} />
           </View>
           <View style={styles.info}>
-            <Text style={styles.name}>Credit Card</Text>
-            <Text style={styles.sub}>Stripe Secure payment</Text>
+            <Text style={[styles.name, { color: colors.text }]}>Credit Card</Text>
+            <Text style={[styles.sub, { color: colors.textSecondary }]}>Stripe Secure payment</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.card, payWith === "Apple" && styles.cardActive]}
+          style={[styles.card, { backgroundColor: colors.card, borderColor: payWith === "Apple" ? colors.primary + '33' : 'transparent' }]}
           onPress={() => onMethodChange("Apple")}
           activeOpacity={0.8}
         >
-          <View style={[commonStyles.radio, payWith === "Apple" && commonStyles.radioActive]}>
-            {payWith === "Apple" && <View style={commonStyles.radioInner} />}
+          <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Apple" && { borderColor: colors.primary }]}>
+            {payWith === "Apple" && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
           </View>
-          <View style={styles.iconBg}>
-            <Ionicons name="logo-apple" size={20} color={COLORS.text} />
+          <View style={[styles.iconBg, { backgroundColor: colors.background }]}>
+            <Ionicons name="logo-apple" size={20} color={colors.text} />
           </View>
           <View style={styles.info}>
-            <Text style={styles.name}>Apple Pay</Text>
-            <Text style={styles.sub}>Touch ID or Face ID</Text>
+            <Text style={[styles.name, { color: colors.text }]}>Apple Pay</Text>
+            <Text style={[styles.sub, { color: colors.textSecondary }]}>Touch ID or Face ID</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -74,27 +76,39 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 20,
   },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
   list: {
     gap: 12,
   },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.card,
     padding: 16,
     borderRadius: 16,
     gap: 16,
     borderWidth: 1,
-    borderColor: "transparent",
   },
-  cardActive: {
-    borderColor: "rgba(142, 84, 233, 0.2)",
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   iconBg: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -102,13 +116,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
     marginBottom: 2,
   },
   sub: {
-    color: COLORS.textMuted,
     fontSize: 12,
   },
 });

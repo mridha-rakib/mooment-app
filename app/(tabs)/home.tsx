@@ -1,8 +1,8 @@
+import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Dimensions, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useTheme } from "@/hooks/useTheme";
+import { Dimensions, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 // Components
 import FeaturedProducts, { ProductData } from "@/components/home/FeaturedProducts";
@@ -280,7 +280,7 @@ export default function HomeFeed() {
       // Optional: clear the param so it doesn't show again on reload
       router.setParams({ showSuccess: undefined });
     }
-    
+
     if (params.view === 'map') {
       setSelectedType('Map');
       router.setParams({ view: undefined });
@@ -310,10 +310,10 @@ export default function HomeFeed() {
             {MOCK_FEED.map((item) => {
               if (item.type === 'post') {
                 return (
-                  <FeedPost 
-                    key={item.id} 
-                    post={item.data} 
-                    onCommentPress={handleCommentPress} 
+                  <FeedPost
+                    key={item.id}
+                    post={item.data}
+                    onCommentPress={handleCommentPress}
                     onSharePress={handleSharePress}
                     onViewMapPress={() => setSelectedType('Map')}
                   />
