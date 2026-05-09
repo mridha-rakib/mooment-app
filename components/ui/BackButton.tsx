@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, TouchableOpacity } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 interface BackButtonProps {
   onPress?: () => void;
@@ -17,10 +18,11 @@ const BackButton: React.FC<BackButtonProps> = ({
   onPress,
   iconName = "chevron-left",
   size = 24,
-  color = "#FFFFFF",
+  color,
   style
 }) => {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
 
   const handlePress = () => {
     if (onPress) {
@@ -30,6 +32,8 @@ const BackButton: React.FC<BackButtonProps> = ({
     }
   };
 
+  const iconColor = color || colors.text;
+
   return (
     <TouchableOpacity
       onPress={handlePress}
@@ -37,13 +41,13 @@ const BackButton: React.FC<BackButtonProps> = ({
       activeOpacity={0.8}
     >
       <LinearGradient
-        colors={["#18181c", "#c1c0c5", "#18181c"]}
+        colors={[colors.border, colors.textSecondary, colors.border]}
         start={{ x: 1, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.headerBtnBorder}
       >
-        <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-          <Feather name={iconName} size={size} color={color} />
+        <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: colors.card }]}>
+          <Feather name={iconName} size={size} color={iconColor} />
         </BlurView>
       </LinearGradient>
     </TouchableOpacity>
@@ -65,7 +69,6 @@ const styles = StyleSheet.create({
   },
   headerBtnBg: {
     flex: 1,
-    backgroundColor: "#1e1d21",
     borderRadius: 100,
     justifyContent: "center",
     alignItems: "center",

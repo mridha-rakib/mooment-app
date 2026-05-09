@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 
@@ -107,6 +108,7 @@ const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
 }));
 
 export default function MessagesScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Blocked'>('All');
   const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
@@ -129,15 +131,15 @@ export default function MessagesScreen() {
     if (item.isGroup && item.groupAvatars) {
       return (
         <View style={styles.groupAvatarWrap}>
-          <Image source={{ uri: item.groupAvatars[0] }} style={styles.groupAv1} />
-          <Image source={{ uri: item.groupAvatars[1] }} style={styles.groupAv2} />
+          <Image source={{ uri: item.groupAvatars[0] }} style={[styles.groupAv1, { borderColor: colors.background }]} />
+          <Image source={{ uri: item.groupAvatars[1] }} style={[styles.groupAv2, { borderColor: colors.background }]} />
         </View>
       );
     }
     return (
       <View style={styles.avatarWrap}>
         <Image source={{ uri: item.avatar }} style={styles.avatar} />
-        {item.isOnline && <View style={styles.onlineDot} />}
+        {item.isOnline && <View style={[styles.onlineDot, { borderColor: colors.background }]} />}
       </View>
     );
   };
@@ -160,12 +162,12 @@ export default function MessagesScreen() {
       {renderAvatar(item)}
       <View style={styles.convoMeta}>
         <View style={styles.convoTopRow}>
-          <Text style={[styles.convoName, item.unread > 0 && styles.convoNameUnread]} numberOfLines={1}>
+          <Text style={[styles.convoName, { color: colors.textSecondary }, item.unread > 0 && { color: colors.text, fontWeight: 'bold' }]} numberOfLines={1}>
             {item.name}
           </Text>
           <View style={styles.convoTimeRow}>
-            {item.isMuted && <Feather name="bell-off" size={12} color="#454555" style={{ marginRight: 4 }} />}
-            <Text style={[styles.convoTime, item.unread > 0 && styles.convoTimeUnread]}>{item.time}</Text>
+            {item.isMuted && <Feather name="bell-off" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />}
+            <Text style={[styles.convoTime, { color: colors.textSecondary }, item.unread > 0 && { color: colors.primary, fontWeight: '600' }]}>{item.time}</Text>
           </View>
         </View>
         <View style={styles.convoBottomRow}>
@@ -182,27 +184,27 @@ export default function MessagesScreen() {
 
   const renderGroupItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
-      style={styles.groupCard}
+      style={[styles.groupCard, { backgroundColor: colors.card }]}
       onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
       activeOpacity={0.85}
     >
       <Image source={{ uri: item.avatar }} style={styles.groupCardAvatar} />
       <View style={styles.groupCardMeta}>
         <View style={styles.groupCardTopRow}>
-          <Text style={styles.groupCardName} numberOfLines={1}>
+          <Text style={[styles.groupCardName, { color: colors.text }]} numberOfLines={1}>
             {item.name}
           </Text>
           {item.isMuted && (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.groupCardDot}> • </Text>
-              <Feather name="bell-off" size={14} color="#8E8E9B" />
+              <Text style={[styles.groupCardDot, { color: colors.textSecondary }]}> • </Text>
+              <Feather name="bell-off" size={14} color={colors.textSecondary} />
             </View>
           )}
           <View style={{ flex: 1 }} />
-          <Text style={styles.groupCardTime}>{item.time}</Text>
+          <Text style={[styles.groupCardTime, { color: colors.textSecondary }]}>{item.time}</Text>
         </View>
         <View style={styles.groupCardBottomRow}>
-          <Text style={styles.groupCardMsg} numberOfLines={1}>
+          <Text style={[styles.groupCardMsg, { color: colors.textSecondary }]} numberOfLines={1}>
             {item.lastMessage}
           </Text>
           {item.unread > 0 && <View style={styles.groupCardUnreadDot} />}
@@ -213,52 +215,52 @@ export default function MessagesScreen() {
 
   const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
     <TouchableOpacity style={styles.roomCard} activeOpacity={0.85}>
-      <View style={styles.roomCapsule}>
+      <View style={[styles.roomCapsule, { backgroundColor: isDark ? '#130B24' : colors.card, borderColor: isDark ? '#2D1B4E' : colors.border }]}>
         <View style={styles.roomAvatarWrap}>
           <Image source={{ uri: item.hostAvatar }} style={styles.roomAvatar} />
           <View style={styles.roomOnlineDot} />
         </View>
         {item.isHost && (
-          <View style={styles.roomHostBadge}>
-            <Text style={styles.roomHostText}>Host</Text>
+          <View style={[styles.roomHostBadge, { borderColor: colors.primary }]}>
+            <Text style={[styles.roomHostText, { color: colors.primary }]}>Host</Text>
           </View>
         )}
-        <TouchableOpacity style={styles.roomJoinBtn} activeOpacity={0.8}>
-          <Text style={styles.roomJoinText}>Join</Text>
+        <TouchableOpacity style={[styles.roomJoinBtn, { backgroundColor: colors.background }]} activeOpacity={0.8}>
+          <Text style={[styles.roomJoinText, { color: colors.text }]}>Join</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.roomTitle} numberOfLines={2}>{item.title}</Text>
+      <Text style={[styles.roomTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
 
-      <Text style={styles.roomSpeakerText}>
-        <Text style={styles.roomSpeakerName}>{item.hostName}</Text> is speaking
+      <Text style={[styles.roomSpeakerText, { color: colors.textSecondary }]}>
+        <Text style={[styles.roomSpeakerName, { color: colors.text }]}>{item.hostName}</Text> is speaking
       </Text>
 
       <View style={styles.roomListenersRow}>
         <View style={styles.roomListenerAvatars}>
           {item.listenerAvatars.map((av, idx) => (
-            <Image key={idx} source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0 }]} />
+            <Image key={idx} source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0, borderColor: colors.background }]} />
           ))}
         </View>
-        <Text style={styles.roomListenersText}>{item.listeners} listening</Text>
+        <Text style={[styles.roomListenersText, { color: colors.textSecondary }]}>{item.listeners} listening</Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chats</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Chats</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={[styles.iconBtn, { backgroundColor: colors.card }]}
             activeOpacity={0.8}
             onPress={() => router.push('/chat-screen/create-group')}
           >
-            <HugeiconsIcon icon={PencilEdit02Icon} size={20} color="#FFFFFF" />
+            <HugeiconsIcon icon={PencilEdit02Icon} size={20} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -266,15 +268,15 @@ export default function MessagesScreen() {
 
 
       {/* Segmented Control */}
-      <View style={styles.segmentedControl}>
+      <View style={[styles.segmentedControl, { backgroundColor: colors.background, borderColor: colors.border }]}>
         {(['DMs', 'Groups', 'Rooms'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
-            style={[styles.segmentTab, subTab === tab && styles.segmentTabActive]}
+            style={[styles.segmentTab, subTab === tab && [styles.segmentTabActive, { backgroundColor: colors.card }]]}
             onPress={() => setSubTab(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.segmentTabText, subTab === tab && styles.segmentTabTextActive]}>
+            <Text style={[styles.segmentTabText, { color: colors.textSecondary }, subTab === tab && { color: colors.text }]}>
               {tab}
             </Text>
           </TouchableOpacity>
@@ -287,11 +289,11 @@ export default function MessagesScreen() {
           {(['All', 'Unread', 'Blocked'] as const).map(tab => (
             <TouchableOpacity
               key={tab}
-              style={[styles.tab, topTab === tab && styles.tabActive]}
+              style={[styles.tab, { backgroundColor: colors.card }, topTab === tab && { borderColor: colors.text }]}
               onPress={() => setTopTab(tab)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.tabText, topTab === tab && styles.tabTextActive]}>{tab}</Text>
+              <Text style={[styles.tabText, { color: colors.textSecondary }, topTab === tab && { color: colors.text }]}>{tab}</Text>
               {tab === 'Unread' && (
                 <View style={styles.tabBadge}>
                   <Text style={styles.tabBadgeText}>
@@ -342,12 +344,12 @@ export default function MessagesScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => subTab === 'Groups' ? null : <View style={styles.separator} />}
+          ItemSeparatorComponent={() => subTab === 'Groups' ? null : <View style={[styles.separator, { backgroundColor: colors.border }]} />}
           contentContainerStyle={subTab === 'Groups' ? { paddingBottom: 100, paddingTop: 12 } : { paddingBottom: 100 }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="chatbubble-ellipses-outline" size={48} color="#2A2A3A" />
-              <Text style={styles.emptyText}>No conversations found</Text>
+              <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No conversations found</Text>
             </View>
           }
           renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}

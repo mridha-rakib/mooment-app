@@ -4,22 +4,24 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '@/components/ui/BackButton';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function AddStoryScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
   if (!permission) {
-    return <View style={styles.container} />;
+    return <View style={[styles.container, { backgroundColor: colors.background }]} />;
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>We need your permission to show the camera</Text>
-        <TouchableOpacity onPress={requestPermission} style={styles.permissionBtn}>
-          <Text style={styles.permissionBtnText}>Grant Permission</Text>
+      <View style={[styles.permissionContainer, { backgroundColor: colors.background }]}>
+        <Text style={[styles.permissionText, { color: colors.text }]}>We need your permission to show the camera</Text>
+        <TouchableOpacity onPress={requestPermission} style={[styles.permissionBtn, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.permissionBtnText, { color: colors.background }]}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
@@ -43,7 +45,7 @@ export default function AddStoryScreen() {
             <View style={styles.progressContainer}>
               <Text style={styles.progressText}>0</Text>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: isRecording ? '40%' : '0%' }]} />
+                <View style={[styles.progressBarFill, { backgroundColor: colors.primary, width: isRecording ? '40%' : '0%' }]} />
               </View>
               <Text style={styles.progressText}>15s</Text>
             </View>
@@ -85,25 +87,21 @@ const styles = StyleSheet.create({
   },
   permissionContainer: {
     flex: 1,
-    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   permissionText: {
-    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 20,
     fontSize: 16,
   },
   permissionBtn: {
-    backgroundColor: '#D4B0EB',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
   permissionBtnText: {
-    color: '#0e0d12',
     fontWeight: 'bold',
   },
   cameraBackground: {
@@ -121,7 +119,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'android' ? 40 : 60,
   },
   header: {
     flexDirection: 'row',
@@ -157,7 +155,6 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#16D869', // Green progress indicating recording
     borderRadius: 2,
   },
   rightActionsCol: {

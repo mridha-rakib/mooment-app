@@ -12,58 +12,61 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function LocationPickerScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Map</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Map</Text>
         <View style={{ width: 40 }} /> {/* Spacer to balance header */}
       </View>
 
       {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
-          <Ionicons name="location-outline" size={20} color="#8E8E9B" style={{ marginRight: 10 }} />
-          <Text style={styles.searchText}>Los Angeles, CA</Text>
+      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.searchBox, { backgroundColor: colors.card }]}>
+          <Ionicons name="location-outline" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
+          <Text style={[styles.searchText, { color: colors.text }]}>Los Angeles, CA</Text>
         </View>
       </View>
 
       {/* Map Content (Simulated) */}
-      <View style={styles.mapContainer}>
+      <View style={[styles.mapContainer, { backgroundColor: colors.background }]}>
         <Image 
-          source={require('../../assets/images/dark-map.png')} 
+          source={isDark ? require('../../assets/images/dark-map.png') : require('../../assets/images/map_bg.png')} 
           style={styles.mapPlaceholder}
+          resizeMode="cover"
         />
         
         {/* Pin Marker */}
         <View style={styles.markerContainer}>
-          <View style={styles.markerCircle}>
-            <View style={styles.markerDot} />
+          <View style={[styles.markerCircle, { borderColor: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0,0,0,0.2)' }]}>
+            <View style={[styles.markerDot, { backgroundColor: colors.primary }]} />
           </View>
-          <View style={styles.markerStem} />
+          <View style={[styles.markerStem, { backgroundColor: colors.primary }]} />
         </View>
       </View>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.background }]}>
         <TouchableOpacity 
-          style={styles.cancelButton}
+          style={[styles.cancelButton, { backgroundColor: colors.card }]}
           onPress={() => router.back()}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={styles.confirmButton}
+          style={[styles.confirmButton, { backgroundColor: colors.primary }]}
           onPress={() => router.back()}
         >
-          <Text style={styles.confirmButtonText}>Confirm</Text>
+          <Text style={[styles.confirmButtonText, { color: colors.background }]}>Confirm</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -73,8 +76,7 @@ export default function LocationPickerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
-    paddingTop: 60,
+    paddingTop: 10,
   },
   header: {
     flexDirection: 'row',
@@ -83,27 +85,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1A1A22',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
   searchContainer: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#0e0d12',
     zIndex: 10,
   },
   searchBox: {
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -111,7 +102,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   searchText: {
-    color: '#FFF',
     fontSize: 15,
   },
   mapContainer: {
@@ -119,7 +109,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: '#121212',
   },
   mapPlaceholder: {
     ...StyleSheet.absoluteFillObject,
@@ -137,18 +126,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   markerDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FFF',
   },
   markerStem: {
     width: 2,
     height: 16,
-    backgroundColor: '#FFF',
     marginTop: -1,
   },
   footer: {
@@ -156,30 +142,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     paddingTop: 16,
-    backgroundColor: '#0e0d12',
     gap: 16,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#1A1A22',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: '#A29CB5',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   confirmButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Image, Dimensions, StatusBar } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/hooks/useTheme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -16,18 +17,20 @@ const MOCK_POST = {
 };
 
 export default function ViewPostScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [isLiked, setIsLiked] = useState(true); // Red heart in mockup
   const [isFollowing, setIsFollowing] = useState(false);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <SafeAreaView style={styles.safeArea}>
         
         {/* Header Navigation */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-            <Feather name="chevron-left" size={20} color="#FFFFFF" />
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)' }]} activeOpacity={0.8}>
+            <Feather name="chevron-left" size={20} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -43,50 +46,50 @@ export default function ViewPostScreen() {
             activeOpacity={0.8}
             onPress={() => setIsLiked(!isLiked)}
           >
-            <Ionicons name="heart" size={28} color={isLiked ? "#F2245C" : "#FFFFFF"} />
+            <Ionicons name="heart" size={28} color={isLiked ? "#F2245C" : colors.text} />
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-            <Feather name="message-circle" size={26} color="#FFFFFF" />
-            <Text style={styles.actionText}>{MOCK_POST.comments}</Text>
+            <Feather name="message-circle" size={26} color={colors.text} />
+            <Text style={[styles.actionText, { color: colors.text }]}>{MOCK_POST.comments}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-            <Feather name="share" size={26} color="#FFFFFF" />
-            <Text style={styles.actionText}>{MOCK_POST.likes}</Text>
+            <Feather name="share" size={26} color={colors.text} />
+            <Text style={[styles.actionText, { color: colors.text }]}>{MOCK_POST.likes}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Bottom Info Overlay */}
         <View style={styles.bottomOverlay}>
           <View style={styles.authorRow}>
-            <Image source={{ uri: MOCK_POST.authorAvatar }} style={styles.avatar} />
+            <Image source={{ uri: MOCK_POST.authorAvatar }} style={[styles.avatar, { borderColor: colors.border }]} />
             <View style={styles.authorTextCol}>
-              <Text style={styles.authorName}>{MOCK_POST.authorName}</Text>
-              <Text style={styles.timeAgo}>{MOCK_POST.timeAgo}</Text>
+              <Text style={[styles.authorName, { color: colors.text }]}>{MOCK_POST.authorName}</Text>
+              <Text style={[styles.timeAgo, { color: colors.textSecondary }]}>{MOCK_POST.timeAgo}</Text>
             </View>
             <TouchableOpacity 
-              style={[styles.followBtn, isFollowing && styles.followingBtn]} 
+              style={[styles.followBtn, { borderColor: colors.primary }, isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: 'transparent' }]]} 
               activeOpacity={0.8}
               onPress={() => setIsFollowing(!isFollowing)}
             >
-              <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+              <Text style={[styles.followBtnText, { color: colors.primary }, isFollowing && { color: colors.text }]}>
                 {isFollowing ? 'Following' : '+ Follow'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreBtn}>
-              <Feather name="more-horizontal" size={20} color="#FFFFFF" />
+              <Feather name="more-horizontal" size={20} color={colors.text} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.caption}>{MOCK_POST.caption}</Text>
+          <Text style={[styles.caption, { color: colors.text }]}>{MOCK_POST.caption}</Text>
 
           {/* Progress Bar Mock */}
           <View style={styles.progressRow}>
-            <View style={styles.progressBarTrack}>
-              <View style={[styles.progressBarFill, { width: '40%' }]} />
+            <View style={[styles.progressBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
+              <View style={[styles.progressBarFill, { backgroundColor: colors.primary, width: '40%' }]} />
             </View>
-            <Text style={styles.progressText}>0:41/1:21:12</Text>
+            <Text style={[styles.progressText, { color: colors.textSecondary }]}>0:41/1:21:12</Text>
           </View>
         </View>
 
@@ -98,7 +101,6 @@ export default function ViewPostScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
   },
   safeArea: {
     flex: 1,
@@ -114,7 +116,6 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 18,
   },
   mediaContainer: {
@@ -137,7 +138,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   actionText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
     marginTop: 4,
@@ -159,45 +159,34 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginRight: 10,
     borderWidth: 1,
-    borderColor: '#FFFFFF',
   },
   authorTextCol: {
     flex: 1,
   },
   authorName: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
   },
   timeAgo: {
-    color: '#8E8E9B',
     fontSize: 11,
   },
   followBtn: {
     borderWidth: 1,
-    borderColor: '#D4B0EB',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
     marginRight: 12,
   },
   followingBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderColor: 'transparent',
   },
   followBtnText: {
-    color: '#D4B0EB',
     fontSize: 11,
     fontWeight: 'bold',
-  },
-  followingBtnText: {
-    color: '#FFFFFF',
   },
   moreBtn: {
     padding: 4,
   },
   caption: {
-    color: '#FFFFFF',
     fontSize: 14,
     marginBottom: 16,
   },
@@ -208,17 +197,14 @@ const styles = StyleSheet.create({
   progressBarTrack: {
     flex: 1,
     height: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)',
     borderRadius: 1,
     marginRight: 10,
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
     borderRadius: 1,
   },
   progressText: {
-    color: '#8E8E9B',
     fontSize: 10,
     fontVariant: ['tabular-nums'],
   },

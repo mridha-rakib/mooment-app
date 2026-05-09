@@ -8,6 +8,7 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/hooks/useTheme';
 
 interface DeleteModalProps {
   visible: boolean;
@@ -22,6 +23,8 @@ export default function DeleteModal({
   onConfirm,
   title = "Are you sure you want to delete?",
 }: DeleteModalProps) {
+  const { colors } = useTheme();
+
   return (
     <Modal
       visible={visible}
@@ -34,31 +37,31 @@ export default function DeleteModal({
       </TouchableWithoutFeedback>
       
       <View style={styles.container}>
-        <View style={styles.modalCard}>
+        <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* Alert Icon */}
-          <View style={styles.iconContainer}>
-            <Ionicons name="alert-outline" size={32} color="#FFF" />
+          <View style={[styles.iconContainer, { backgroundColor: colors.danger }]}>
+            <Ionicons name="alert-outline" size={32} color={colors.background} />
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
 
           {/* Buttons */}
           <View style={styles.buttonRow}>
             <TouchableOpacity 
-              style={styles.noButton} 
+              style={[styles.noButton, { backgroundColor: colors.background, borderColor: colors.border }]} 
               onPress={onClose}
               activeOpacity={0.7}
             >
-              <Text style={styles.noButtonText}>No</Text>
+              <Text style={[styles.noButtonText, { color: colors.text }]}>No</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.yesButton} 
+              style={[styles.yesButton, { backgroundColor: colors.background, borderColor: colors.border }]} 
               onPress={onConfirm}
               activeOpacity={0.7}
             >
-              <Text style={styles.yesButtonText}>Yes</Text>
+              <Text style={[styles.yesButtonText, { color: colors.danger }]}>Yes</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -84,26 +87,24 @@ const styles = StyleSheet.create({
     right: 0,
   },
   modalCard: {
-    backgroundColor: '#1C1C1E',
     borderRadius: 24,
     padding: 24,
     width: '100%',
     alignItems: 'center',
+    borderWidth: 1,
   },
   iconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#C21515', // Red background from image
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
   },
   title: {
-    color: '#FFF',
     fontSize: 24,
     fontWeight: '600',
-    textAlign: 'left', // Aligned left in image
+    textAlign: 'left',
     width: '100%',
     lineHeight: 32,
     marginBottom: 32,
@@ -115,28 +116,26 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   noButton: {
-    backgroundColor: '#2C2C2E',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
     minWidth: 80,
     alignItems: 'center',
+    borderWidth: 1,
   },
   noButtonText: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
   yesButton: {
-    backgroundColor: '#2C2C2E',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
     minWidth: 80,
     alignItems: 'center',
+    borderWidth: 1,
   },
   yesButtonText: {
-    color: '#C21515', // Red text for Yes
     fontSize: 16,
     fontWeight: '600',
   },

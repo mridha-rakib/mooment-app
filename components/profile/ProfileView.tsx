@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView, ScrollView, StyleSheet, View, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 import CommentsModal from "../post/CommentsModal";
 import { PostData } from "../post/FeedPost";
 import ShareModal from "../post/ShareModal";
@@ -28,6 +29,7 @@ type ProfileViewProps = {
 };
 
 export default function ProfileView({ user, posts, isOwnProfile = true }: ProfileViewProps) {
+  const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
@@ -35,7 +37,8 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
   const [addProductVisible, setAddProductVisible] = useState(false);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView showsVerticalScrollIndicator={false}>
         <ProfileHeader 
           avatar={user.avatar} 
@@ -89,6 +92,5 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
 });

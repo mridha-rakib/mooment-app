@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 type ProfileActionsProps = {
   isOwnProfile?: boolean;
@@ -11,6 +12,7 @@ type ProfileActionsProps = {
 };
 
 export default function ProfileActions({ isOwnProfile = true, onlyButtons = false, initialIsFollowing = false }: ProfileActionsProps) {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   
@@ -19,25 +21,33 @@ export default function ProfileActions({ isOwnProfile = true, onlyButtons = fals
   const buttons = (
     <>
       <TouchableOpacity 
-        style={styles.chatBtn} 
+        style={[styles.chatBtn, { backgroundColor: colors.card, borderColor: colors.border }]} 
         activeOpacity={0.8}
         onPress={() => router.push('/chat-screen/chat-detail')}
       >
-        <BlurView intensity={20} tint="dark" style={styles.chatBtnGlass}>
-          <MaterialCommunityIcons name="chat-processing-outline" size={20} color="#FFFFFF" />
+        <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.chatBtnGlass}>
+          <MaterialCommunityIcons name="chat-processing-outline" size={20} color={colors.text} />
         </BlurView>
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[styles.followBtn, isFollowing && styles.followingBtn]} 
+        style={[
+          styles.followBtn, 
+          { backgroundColor: colors.primary },
+          isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }]
+        ]} 
         activeOpacity={0.8}
         onPress={() => setIsFollowing(!isFollowing)}
       >
         <View style={styles.followBtnContent}>
           {isFollowing && (
-            <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <MaterialCommunityIcons name="check" size={16} color={colors.text} style={{ marginRight: 6 }} />
           )}
-          <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+          <Text style={[
+            styles.followBtnText, 
+            { color: colors.background },
+            isFollowing && [styles.followingBtnText, { color: colors.text }]
+          ]}>
             {isFollowing ? 'Following' : 'Follow'}
           </Text>
         </View>
@@ -66,9 +76,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   chatBtnGlass: {
     flex: 1,
@@ -78,26 +86,20 @@ const styles = StyleSheet.create({
   followBtn: {
     paddingHorizontal: 24,
     height: 44,
-    backgroundColor: '#D0D0D8',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   followingBtn: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
   },
   followBtnContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   followBtnText: {
-    color: '#13131A',
     fontWeight: '700',
     fontSize: 14,
   },
-  followingBtnText: {
-    color: '#FFFFFF',
-  },
+  followingBtnText: {},
 });

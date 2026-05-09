@@ -3,6 +3,8 @@ import { Stack } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
+import { Provider } from 'react-redux';
+import { store } from '../redux/store';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,9 +24,9 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <StatusBar style="light" />
+    <Provider store={store}>
+      <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }} />
-    </>
+    </Provider>
   );
 }

@@ -12,65 +12,67 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DeleteModal from '../../components/ui/DeleteModal';
 import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function CreateEventStep4() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [isDeleteModalVisible, setIsDeleteModalVisible] = React.useState(false);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Create Event</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
         <TouchableOpacity>
-          <Text style={styles.saveDraft}>Save Draft</Text>
+          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
-        <Text style={styles.stepText}>Step 4</Text>
-        <Text style={styles.stepText}>4 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 4</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>4 out of 6</Text>
       </View>
 
       {/* Form Content */}
       <View style={styles.formContainer}>
         {/* Create Ticket Button */}
         <TouchableOpacity 
-          style={styles.createTicketButton}
+          style={[styles.createTicketButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-event/ticket-details')}
         >
-          <Ionicons name="add" size={20} color="#0e0d12" style={{ marginRight: 8 }} />
-          <Text style={styles.createTicketText}>Create Ticket</Text>
+          <Ionicons name="add" size={20} color={colors.background} style={{ marginRight: 8 }} />
+          <Text style={[styles.createTicketText, { color: colors.background }]}>Create Ticket</Text>
         </TouchableOpacity>
 
         {/* Ticket Card */}
-        <View style={styles.ticketCard}>
+        <View style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.ticketHeader}>
             <View style={styles.ticketTitleContainer}>
-              <Text style={styles.ticketTitle}>General Ticket</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>42 left</Text>
+              <Text style={[styles.ticketTitle, { color: colors.text }]}>General Ticket</Text>
+              <View style={[styles.badge, { backgroundColor: isDark ? '#3F3F46' : '#E5E5EA' }]}>
+                <Text style={[styles.badgeText, { color: colors.textSecondary }]}>42 left</Text>
               </View>
             </View>
             <TouchableOpacity>
-              <Feather name="edit-3" size={18} color="#8E8E9B" />
+              <Feather name="edit-3" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.ticketDescription}>Entry from 9pm. Standing only.</Text>
-          <Text style={styles.ticketExpiry}>Expires in • Sat, Sep 9 • 4:00 PM</Text>
+          <Text style={[styles.ticketDescription, { color: colors.textSecondary }]}>Entry from 9pm. Standing only.</Text>
+          <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]}>Expires in • Sat, Sep 9 • 4:00 PM</Text>
 
           <View style={styles.ticketFooter}>
             <View>
-              <Text style={styles.ticketPrice}>£45</Text>
-              <Text style={styles.perTicket}>per ticket</Text>
+              <Text style={[styles.ticketPrice, { color: colors.text }]}>£45</Text>
+              <Text style={[styles.perTicket, { color: colors.textSecondary }]}>per ticket</Text>
             </View>
             <TouchableOpacity onPress={() => setIsDeleteModalVisible(true)}>
-              <Ionicons name="trash-outline" size={18} color="#8E8E9B" />
+              <Ionicons name="trash-outline" size={18} color={colors.danger} />
             </TouchableOpacity>
           </View>
         </View>
@@ -82,10 +84,10 @@ export default function CreateEventStep4() {
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={styles.nextButton}
+          style={[styles.nextButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-event/step-5')}
         >
-          <Text style={styles.nextButtonText}>Next</Text>
+          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
         </TouchableOpacity>
       </View>
       <DeleteModal
@@ -103,8 +105,7 @@ export default function CreateEventStep4() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
-    paddingTop: 45,
+    paddingTop: 10,
   },
   header: {
     flexDirection: 'row',
@@ -113,16 +114,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A1A22',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
@@ -130,7 +122,6 @@ const styles = StyleSheet.create({
     marginLeft: 20,
   },
   saveDraft: {
-    color: '#AFA9EC',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -142,14 +133,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   stepText: {
-    color: '#8E8E9B',
     fontSize: 13,
   },
   formContainer: {
     paddingHorizontal: 16,
   },
   createTicketButton: {
-    backgroundColor: '#A29CB5',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -158,16 +147,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   createTicketText: {
-    color: '#0e0d12',
     fontSize: 15,
     fontWeight: '600',
   },
   ticketCard: {
-    backgroundColor: '#13131A',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#2A2A32',
   },
   ticketHeader: {
     flexDirection: 'row',
@@ -181,28 +167,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ticketTitle: {
-    color: '#FFF',
     fontSize: 17,
     fontWeight: '700',
   },
   badge: {
-    backgroundColor: '#3F3F46',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
   },
   badgeText: {
-    color: '#D1D1D6',
     fontSize: 11,
     fontWeight: '500',
   },
   ticketDescription: {
-    color: '#8E8E9B',
     fontSize: 13,
     marginBottom: 4,
   },
   ticketExpiry: {
-    color: '#8E8E9B',
     fontSize: 12,
     marginBottom: 16,
   },
@@ -212,12 +193,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   ticketPrice: {
-    color: '#FFF',
     fontSize: 22,
     fontWeight: '700',
   },
   perTicket: {
-    color: '#8E8E9B',
     fontSize: 11,
   },
   footer: {
@@ -226,13 +205,11 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   nextButton: {
-    backgroundColor: '#A29CB5',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   nextButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },

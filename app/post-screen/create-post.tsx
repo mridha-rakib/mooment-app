@@ -16,6 +16,7 @@ import {
 
 import BackButton from '@/components/ui/BackButton';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
+import { useTheme } from '@/hooks/useTheme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -46,17 +47,18 @@ function GalleryPickerSheet({
   onClose: () => void;
   onSelect: (uri: string) => void;
 }) {
+  const { colors, isDark } = useTheme();
   const ITEM = (width - 6) / 3;
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
       <View style={gStyles.overlay}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={gStyles.sheet}>
-          <View style={gStyles.handle} />
+        <View style={[gStyles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border, borderTopWidth: isDark ? 0 : 1 }]}>
+          <View style={[gStyles.handle, { backgroundColor: colors.border }]} />
           <View style={gStyles.sheetHeader}>
-            <Text style={gStyles.sheetTitle}>Choose from Gallery</Text>
+            <Text style={[gStyles.sheetTitle, { color: colors.text }]}>Choose from Gallery</Text>
             <TouchableOpacity onPress={onClose} activeOpacity={0.8}>
-              <Feather name="x" size={20} color="#8E8E9B" />
+              <Feather name="x" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <View style={gStyles.grid}>
@@ -80,10 +82,10 @@ function GalleryPickerSheet({
 
 const gStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  sheet: { backgroundColor: '#13131A', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#2A2A3A', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  sheetTitle: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
+  sheetTitle: { fontWeight: 'bold', fontSize: 16 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, paddingHorizontal: 3 },
 });
 
@@ -97,6 +99,7 @@ function CameraSheet({
   onClose: () => void;
   onCapture: (uri: string) => void;
 }) {
+  const { colors, isDark } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -104,7 +107,7 @@ function CameraSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <View style={camStyles.root}>
+      <View style={[camStyles.root, { backgroundColor: '#000' }]}>
         <StatusBar barStyle="light-content" />
         {permission.granted ? (
           <CameraView ref={cameraRef} style={camStyles.camera} facing="back">
@@ -131,14 +134,14 @@ function CameraSheet({
             </View>
           </CameraView>
         ) : (
-          <View style={camStyles.permissionView}>
-            <Feather name="camera-off" size={48} color="#454555" />
-            <Text style={camStyles.permissionText}>Camera access needed</Text>
-            <TouchableOpacity style={camStyles.permissionBtn} onPress={requestPermission} activeOpacity={0.8}>
-              <Text style={camStyles.permissionBtnText}>Allow Camera</Text>
+          <View style={[camStyles.permissionView, { backgroundColor: colors.background }]}>
+            <Feather name="camera-off" size={48} color={colors.textSecondary} />
+            <Text style={[camStyles.permissionText, { color: colors.textSecondary }]}>Camera access needed</Text>
+            <TouchableOpacity style={[camStyles.permissionBtn, { backgroundColor: colors.primary }]} onPress={requestPermission} activeOpacity={0.8}>
+              <Text style={[camStyles.permissionBtnText, { color: colors.background }]}>Allow Camera</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} style={{ marginTop: 12 }}>
-              <Text style={{ color: '#8E8E9B', fontSize: 14 }}>Cancel</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -157,49 +160,50 @@ function RoomSetupModal({
   onClose: () => void;
   onContinue: (name: string, speakers: boolean) => void;
 }) {
+  const { colors, isDark } = useTheme();
   const [name, setName] = useState('');
   const [speakers, setSpeakers] = useState(true);
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
       <View style={rmStyles.overlay}>
-        <BlurView intensity={30} tint="dark" style={rmStyles.blur}>
-          <View style={rmStyles.container}>
-            <Text style={rmStyles.title}>Name your Room</Text>
+        <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={rmStyles.blur}>
+          <View style={[rmStyles.container, { backgroundColor: colors.background }]}>
+            <Text style={[rmStyles.title, { color: colors.text }]}>Name your Room</Text>
 
-            <View style={rmStyles.inputWrapper}>
+            <View style={[rmStyles.inputWrapper, { backgroundColor: colors.card }]}>
               <TextInput
-                style={rmStyles.input}
+                style={[rmStyles.input, { color: colors.text }]}
                 placeholder="Room name"
-                placeholderTextColor="#8E8E9B"
+                placeholderTextColor={colors.textSecondary}
                 value={name}
                 onChangeText={setName}
               />
             </View>
 
             <TouchableOpacity
-              style={rmStyles.checkboxRow}
+              style={[rmStyles.checkboxRow, { backgroundColor: colors.card }]}
               onPress={() => setSpeakers(!speakers)}
               activeOpacity={0.8}
             >
               <View style={rmStyles.checkboxInfo}>
-                <Text style={rmStyles.checkboxTitle}>Allow all participants to speak</Text>
-                <Text style={rmStyles.checkboxSub}>You can always change this in the Live Room</Text>
+                <Text style={[rmStyles.checkboxTitle, { color: colors.text }]}>Allow all participants to speak</Text>
+                <Text style={[rmStyles.checkboxSub, { color: colors.textSecondary }]}>You can always change this in the Live Room</Text>
               </View>
-              <View style={[rmStyles.checkbox, speakers && rmStyles.checkboxActive]}>
-                {speakers && <Feather name="check" size={12} color="#111111" />}
+              <View style={[rmStyles.checkbox, { borderColor: colors.border }, speakers && [rmStyles.checkboxActive, { backgroundColor: colors.text, borderColor: colors.text }]]}>
+                {speakers && <Feather name="check" size={12} color={colors.background} />}
               </View>
             </TouchableOpacity>
 
             <View style={rmStyles.footer}>
               <TouchableOpacity style={rmStyles.cancelBtn} onPress={onClose}>
-                <Text style={rmStyles.cancelBtnText}>Cancel</Text>
+                <Text style={[rmStyles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={rmStyles.continueBtn} 
+                style={[rmStyles.continueBtn, { backgroundColor: colors.primary }]} 
                 onPress={() => onContinue(name, speakers)}
               >
-                <Text style={rmStyles.continueBtnText}>Continue</Text>
+                <Text style={[rmStyles.continueBtnText, { color: colors.background }]}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -219,6 +223,7 @@ function QRScannerModal({
   onClose: () => void;
   onScan: (event: string) => void;
 }) {
+  const { colors, isDark } = useTheme();
   const [tab, setTab] = useState<'scan' | 'type'>('scan');
   const [qrCode, setQrCode] = useState('');
   const [permission, requestPermission] = useCameraPermissions();
@@ -227,26 +232,26 @@ function QRScannerModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <SafeAreaView style={qsStyles.root}>
-        <StatusBar barStyle="light-content" />
+      <SafeAreaView style={[qsStyles.root, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
         {/* Header */}
         <View style={qsStyles.header}>
-          <TouchableOpacity onPress={onClose} style={qsStyles.backBtn}>
-            <Feather name="chevron-left" size={24} color="#FFFFFF" />
+          <TouchableOpacity onPress={onClose} style={[qsStyles.backBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+            <Feather name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
-          <View style={qsStyles.tabRow}>
+          <View style={[qsStyles.tabRow, { backgroundColor: colors.card }]}>
             <TouchableOpacity
-              style={[qsStyles.tab, tab === 'scan' && qsStyles.tabActive]}
+              style={[qsStyles.tab, tab === 'scan' && [qsStyles.tabActive, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]]}
               onPress={() => setTab('scan')}
             >
-              <Text style={[qsStyles.tabText, tab === 'scan' && qsStyles.tabTextActive]}>Scan</Text>
+              <Text style={[qsStyles.tabText, { color: colors.textSecondary }, tab === 'scan' && [qsStyles.tabTextActive, { color: colors.text }]]}>Scan</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[qsStyles.tab, tab === 'type' && qsStyles.tabActive]}
+              style={[qsStyles.tab, tab === 'type' && [qsStyles.tabActive, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]]}
               onPress={() => setTab('type')}
             >
-              <Text style={[qsStyles.tabText, tab === 'type' && qsStyles.tabTextActive]}>Type QR Code</Text>
+              <Text style={[qsStyles.tabText, { color: colors.textSecondary }, tab === 'type' && [qsStyles.tabTextActive, { color: colors.text }]]}>Type QR Code</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -297,24 +302,24 @@ function QRScannerModal({
           </View>
         ) : (
           <View style={qsStyles.typeBody}>
-            <Text style={qsStyles.scanTitle}>Scan QR CODE</Text>
+            <Text style={[qsStyles.scanTitle, { color: colors.text }]}>Scan QR CODE</Text>
             <TextInput
-              style={qsStyles.typeInput}
+              style={[qsStyles.typeInput, { backgroundColor: colors.card, color: colors.text }]}
               placeholder="Type QR Code"
-              placeholderTextColor="#454555"
+              placeholderTextColor={colors.textSecondary}
               value={qrCode}
               onChangeText={setQrCode}
             />
             <View style={{ flex: 1 }} />
             <View style={qsStyles.typeFooter}>
-              <TouchableOpacity style={qsStyles.typeCancel} onPress={onClose}>
-                <Text style={qsStyles.typeCancelText}>Cancel</Text>
+              <TouchableOpacity style={[qsStyles.typeCancel, { backgroundColor: colors.card }]} onPress={onClose}>
+                <Text style={[qsStyles.typeCancelText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={qsStyles.typeContinue}
+                style={[qsStyles.typeContinue, { backgroundColor: colors.primary }]}
                 onPress={() => onScan('Rooftop Session Vol. 4')}
               >
-                <Text style={qsStyles.typeContinueText}>Continue</Text>
+                <Text style={[qsStyles.typeContinueText, { color: colors.background }]}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -336,6 +341,7 @@ function QRDetailsModal({
   onContinue: () => void;
   eventTitle: string;
 }) {
+  const { colors, isDark } = useTheme();
   React.useEffect(() => {
     if (visible) {
       const timer = setTimeout(() => {
@@ -347,43 +353,43 @@ function QRDetailsModal({
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
-      <View style={qdStyles.overlay}>
+      <View style={[qdStyles.overlay, { backgroundColor: colors.background }]}>
         <View style={qdStyles.container}>
           <View style={qdStyles.header}>
-            <TouchableOpacity onPress={onClose} style={qdStyles.backBtn}>
-              <Feather name="chevron-left" size={24} color="#FFFFFF" />
+            <TouchableOpacity onPress={onClose} style={[qdStyles.backBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+              <Feather name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={qdStyles.headerTitle}>QR Code</Text>
+            <Text style={[qdStyles.headerTitle, { color: colors.text }]}>QR Code</Text>
             <View style={{ width: 40 }} />
           </View>
 
-          <View style={qdStyles.productCard}>
+          <View style={[qdStyles.productCard, { backgroundColor: colors.card }]}>
             <Image
               source={{ uri: 'https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=200' }}
               style={qdStyles.productImg}
             />
             <View style={{ flex: 1 }}>
-              <Text style={qdStyles.productTitle}>Medusa Skin Whitening Cream</Text>
-              <Text style={qdStyles.productMeta}>@df_koko • QTY: 1</Text>
-              <Text style={qdStyles.productPrice}>£28</Text>
+              <Text style={[qdStyles.productTitle, { color: colors.text }]}>Medusa Skin Whitening Cream</Text>
+              <Text style={[qdStyles.productMeta, { color: colors.textSecondary }]}>@df_koko • QTY: 1</Text>
+              <Text style={[qdStyles.productPrice, { color: colors.primary }]}>£28</Text>
             </View>
           </View>
 
-          <View style={qdStyles.venueCard}>
+          <View style={[qdStyles.venueCard, { backgroundColor: colors.card }]}>
             <View style={qdStyles.venueHeader}>
-              <Feather name="map-pin" size={18} color="#FFFFFF" />
-              <Text style={qdStyles.venueTitle}>New York City</Text>
+              <Feather name="map-pin" size={18} color={colors.text} />
+              <Text style={[qdStyles.venueTitle, { color: colors.text }]}>New York City</Text>
             </View>
             <View style={qdStyles.venueDetails}>
-              <Text style={qdStyles.venueLabel}>Venue: <Text style={qdStyles.venueValue}>The Rooftop Lounge</Text></Text>
-              <Text style={qdStyles.venueLabel}>Address: <Text style={qdStyles.venueValue}>123 Main Street, New York, NY 1001</Text></Text>
-              <Text style={qdStyles.venueLabel}>Time: <Text style={qdStyles.venueValue}>Tonight • 9pm</Text></Text>
+              <Text style={[qdStyles.venueLabel, { color: colors.textSecondary }]}>Venue: <Text style={[qdStyles.venueValue, { color: colors.text }]}>The Rooftop Lounge</Text></Text>
+              <Text style={[qdStyles.venueLabel, { color: colors.textSecondary }]}>Address: <Text style={[qdStyles.venueValue, { color: colors.text }]}>123 Main Street, New York, NY 1001</Text></Text>
+              <Text style={[qdStyles.venueLabel, { color: colors.textSecondary }]}>Time: <Text style={[qdStyles.venueValue, { color: colors.text }]}>Tonight • 9pm</Text></Text>
             </View>
           </View>
 
           <View style={qdStyles.orderRow}>
-            <Text style={qdStyles.orderText}>Order No: <Text style={qdStyles.orderId}>MOM-2026-8741</Text></Text>
-            <Feather name="check-circle" size={18} color="#FFFFFF" />
+            <Text style={[qdStyles.orderText, { color: colors.textSecondary }]}>Order No: <Text style={[qdStyles.orderId, { color: colors.text }]}>MOM-2026-8741</Text></Text>
+            <Feather name="check-circle" size={18} color={colors.primary} />
           </View>
 
           <View style={qdStyles.qrContainer}>
@@ -393,9 +399,9 @@ function QRDetailsModal({
             />
           </View>
 
-          <View style={qdStyles.statusBanner}>
+          <View style={[qdStyles.statusBanner, { backgroundColor: isDark ? 'rgba(22,216,105,0.06)' : 'rgba(22,216,105,0.1)' }]}>
             <Feather name="check" size={16} color="#16D869" />
-            <Text style={qdStyles.statusMsg}>Your Product has been handover to you in the venue. Thank you for buying from us.</Text>
+            <Text style={[qdStyles.statusMsg, { color: colors.textSecondary }]}>Your Product has been handover to you in the venue. Thank you for buying from us.</Text>
           </View>
         </View>
       </View>
@@ -404,7 +410,7 @@ function QRDetailsModal({
 }
 
 const camStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1 },
   camera: { flex: 1 },
   header: { paddingHorizontal: 16, paddingTop: 10 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
@@ -412,13 +418,14 @@ const camStyles = StyleSheet.create({
   captureOuter: { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
   captureInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFFFFF' },
   permissionView: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingHorizontal: 32 },
-  permissionText: { color: '#8E8E9B', fontSize: 16, textAlign: 'center' },
-  permissionBtn: { backgroundColor: '#D4B0EB', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16 },
-  permissionBtnText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 14 },
+  permissionText: { fontSize: 16, textAlign: 'center' },
+  permissionBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16 },
+  permissionBtnText: { fontWeight: 'bold', fontSize: 14 },
 });
 
 // ── Main Screen ───────────────────────────────────────────────────────────
 export default function CreateMomentScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const [mode, setMode] = useState<MomentMode>('feed');
@@ -456,8 +463,8 @@ export default function CreateMomentScreen() {
   const taggedLabel = taggedPeople.join(', ');
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* Confetti Animation */}
       <ConfettiOverlay
@@ -468,19 +475,19 @@ export default function CreateMomentScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Create Mooment</Text>
-        <TouchableOpacity style={styles.doneBtn} onPress={handleDone} activeOpacity={0.8}>
-          <Text style={styles.doneBtnText}>Done</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Mooment</Text>
+        <TouchableOpacity style={[styles.doneBtn, { backgroundColor: colors.primary }]} onPress={handleDone} activeOpacity={0.8}>
+          <Text style={[styles.doneBtnText, { color: colors.background }]}>Done</Text>
         </TouchableOpacity>
       </View>
 
       {/* ── Mode Checkboxes ── */}
       <View style={styles.checkboxRow}>
         <TouchableOpacity style={styles.checkboxItem} onPress={() => setMode('feed')} activeOpacity={0.8}>
-          <View style={[styles.checkbox, mode === 'feed' && styles.checkboxActive]}>
-            {mode === 'feed' && <Feather name="check" size={11} color="#111111" />}
+          <View style={[styles.checkbox, { borderColor: colors.border }, mode === 'feed' && [styles.checkboxActive, { backgroundColor: colors.text, borderColor: colors.text }]]}>
+            {mode === 'feed' && <Feather name="check" size={11} color={colors.background} />}
           </View>
-          <Text style={[styles.checkboxLabel, mode === 'feed' && styles.checkboxLabelActive]}>Feed</Text>
+          <Text style={[styles.checkboxLabel, { color: colors.textSecondary }, mode === 'feed' && [styles.checkboxLabelActive, { color: colors.text }]]}>Feed</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -488,10 +495,10 @@ export default function CreateMomentScreen() {
           onPress={() => setMode('event')}
           activeOpacity={0.8}
         >
-          <View style={[styles.checkbox, mode === 'event' && styles.checkboxActive]}>
-            {mode === 'event' && <Feather name="check" size={11} color="#111111" />}
+          <View style={[styles.checkbox, { borderColor: colors.border }, mode === 'event' && [styles.checkboxActive, { backgroundColor: colors.text, borderColor: colors.text }]]}>
+            {mode === 'event' && <Feather name="check" size={11} color={colors.background} />}
           </View>
-          <Text style={[styles.checkboxLabel, mode === 'event' && styles.checkboxLabelActive]}>Event</Text>
+          <Text style={[styles.checkboxLabel, { color: colors.textSecondary }, mode === 'event' && [styles.checkboxLabelActive, { color: colors.text }]]}>Event</Text>
         </TouchableOpacity>
       </View>
 
@@ -509,19 +516,19 @@ export default function CreateMomentScreen() {
           />
           <View style={styles.authorInfo}>
             <Text style={styles.authorNameFull} numberOfLines={2}>
-              <Text style={styles.authorBold}>Tuval Mor</Text>
+              <Text style={[styles.authorBold, { color: colors.text }]}>Tuval Mor</Text>
               {/* Tagged people visible in both modes */}
               {taggedPeople.length > 0 && (
                 <>
-                  <Text style={styles.authorMuted}> with </Text>
-                  <Text style={styles.authorBold}>{taggedLabel}</Text>
+                  <Text style={[styles.authorMuted, { color: colors.textSecondary }]}> with </Text>
+                  <Text style={[styles.authorBold, { color: colors.text }]}>{taggedLabel}</Text>
                 </>
               )}
               {/* Event link only in Event mode */}
               {mode === 'event' && (
                 <>
-                  <Text style={styles.authorMuted}> at </Text>
-                  <Text style={styles.authorBold}>{selectedEvent}</Text>
+                  <Text style={[styles.authorMuted, { color: colors.textSecondary }]}> at </Text>
+                  <Text style={[styles.authorBold, { color: colors.text }]}>{selectedEvent}</Text>
                 </>
               )}
             </Text>
@@ -547,9 +554,9 @@ export default function CreateMomentScreen() {
         ) : null}
 
         <TextInput
-          style={styles.stitchInput}
+          style={[styles.stitchInput, { color: colors.text }]}
           placeholder={mode === 'feed' ? "Write your stitch here. . ." : "Share what this moment means to you..."}
-          placeholderTextColor="#454555"
+          placeholderTextColor={colors.textSecondary}
           value={caption}
           onChangeText={setCaption}
           multiline
@@ -559,37 +566,37 @@ export default function CreateMomentScreen() {
       </ScrollView>
 
       {/* ── Bottom Toolbar ── */}
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
         {/* People */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? '#D4B0EB' : '#B3B3B3'} />
+          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
+            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? colors.primary : colors.textSecondary} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && { color: '#D4B0EB' }]}>People</Text>
+          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }, taggedPeople.length > 0 && { color: colors.primary }]}>People</Text>
         </TouchableOpacity>
 
         {/* Image / Gallery */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage ? '#D4B0EB' : '#B3B3B3'} />
+          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
+            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage ? colors.primary : colors.textSecondary} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, selectedImage && { color: '#D4B0EB' }]}>Image</Text>
+          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }, selectedImage && { color: colors.primary }]}>Image</Text>
         </TouchableOpacity>
 
         {/* Camera */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowCamera(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <Feather name="camera" size={22} color="#B3B3B3" />
+          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
+            <Feather name="camera" size={22} color={colors.textSecondary} />
           </BlurView>
-          <Text style={styles.toolbarLabel}>Camera</Text>
+          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>Camera</Text>
         </TouchableOpacity>
 
         {/* Video */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <HugeiconsIcon icon={Video02Icon} size={22} color="#B3B3B3" />
+          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
+            <HugeiconsIcon icon={Video02Icon} size={22} color={colors.textSecondary} />
           </BlurView>
-          <Text style={styles.toolbarLabel}>Video</Text>
+          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>Video</Text>
         </TouchableOpacity>
 
         {/* Audio */}
@@ -598,10 +605,10 @@ export default function CreateMomentScreen() {
           onPress={() => Alert.alert('Audio', 'Record or choose audio for your moment')}
           activeOpacity={0.8}
         >
-          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <HugeiconsIcon icon={MusicNote04Icon} size={22} color="#B3B3B3" />
+          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
+            <HugeiconsIcon icon={MusicNote04Icon} size={22} color={colors.textSecondary} />
           </BlurView>
-          <Text style={styles.toolbarLabel}>Audio</Text>
+          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>Audio</Text>
         </TouchableOpacity>
       </View>
 
@@ -655,27 +662,25 @@ export default function CreateMomentScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 56 : 24 },
+  safe: { flex: 1, paddingTop: Platform.OS === 'android' ? 56 : 24 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18 },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 18, marginLeft: 20 },
-  doneBtn: { backgroundColor: '#B2ABBA', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 14 },
-  doneBtnText: { color: '#0e0d12', fontWeight: '700', fontSize: 14 },
+  headerTitle: { flex: 1, fontWeight: '700', fontSize: 18, marginLeft: 20 },
+  doneBtn: { paddingHorizontal: 32, paddingVertical: 12, borderRadius: 14 },
+  doneBtnText: { fontWeight: '700', fontSize: 14 },
 
   checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
   checkboxItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#454555', justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: { backgroundColor: '#B2ABBA', borderColor: '#B2ABBA' },
-  checkboxLabel: { color: '#8E8E9B', fontSize: 14, fontWeight: '500' },
-  checkboxLabelActive: { color: '#FFFFFF', fontWeight: '600' },
+  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: {},
+  checkboxLabel: { fontSize: 14, fontWeight: '500' },
+  checkboxLabelActive: { fontWeight: '600' },
 
   authorRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 14 },
   avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   authorInfo: { flex: 1 },
-  authorName: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   authorNameFull: { fontSize: 13, lineHeight: 19 },
-  authorBold: { color: '#FFFFFF', fontWeight: '700' },
-  authorMuted: { color: '#8E8E9B', fontWeight: '400' },
+  authorBold: { fontWeight: '700' },
+  authorMuted: { fontWeight: '400' },
 
   eventPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(22,216,105,0.12)', borderWidth: 1, borderColor: 'rgba(22,216,105,0.35)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 5 },
   eventPillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#16D869' },
@@ -685,48 +690,45 @@ const styles = StyleSheet.create({
   momentImage: { width: '100%', height: 220, borderRadius: 12 },
   imageRemoveBtn: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
 
+  stitchInput: { fontSize: 15, paddingHorizontal: 16, lineHeight: 22, minHeight: 180 },
 
-
-  stitchInput: { color: '#FFFFFF', fontSize: 15, paddingHorizontal: 16, lineHeight: 22, minHeight: 180 },
-  eventCaptionInput: { color: '#FFFFFF', fontSize: 14, paddingHorizontal: 16, lineHeight: 22, minHeight: 220 },
-
-  toolbar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#13131A', paddingVertical: 18, paddingHorizontal: 24, backgroundColor: '#0e0d12' },
+  toolbar: { flexDirection: 'row', borderTopWidth: 1, paddingVertical: 18, paddingHorizontal: 24 },
   toolbarItem: { flex: 1, alignItems: 'center', gap: 6 },
-  toolbarIconBox: { width: 54, height: 54, borderRadius: 16, backgroundColor: 'rgba(104, 104, 104, 0.1)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  toolbarLabel: { color: '#8E8E9B', fontSize: 11 },
+  toolbarIconBox: { width: 54, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  toolbarLabel: { fontSize: 11 },
 });
 
 const rmStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)' },
   blur: { width: '85%', borderRadius: 28, overflow: 'hidden' },
-  container: { padding: 24, backgroundColor: '#13131A' },
-  title: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 24 },
-  inputWrapper: { backgroundColor: '#1A1A22', borderRadius: 14, paddingHorizontal: 16, height: 56, justifyContent: 'center', marginBottom: 20 },
-  input: { color: '#FFFFFF', fontSize: 15 },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1A1A22', padding: 16, borderRadius: 14, marginBottom: 30 },
+  container: { padding: 24 },
+  title: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 24 },
+  inputWrapper: { borderRadius: 14, paddingHorizontal: 16, height: 56, justifyContent: 'center', marginBottom: 20 },
+  input: { fontSize: 15 },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderRadius: 14, marginBottom: 30 },
   checkboxInfo: { flex: 1, marginRight: 10 },
-  checkboxTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  checkboxSub: { color: '#8E8E9B', fontSize: 11 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#454555', justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  checkboxTitle: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  checkboxSub: { fontSize: 11 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: {},
   footer: { flexDirection: 'row', gap: 12 },
   cancelBtn: { flex: 1, height: 54, justifyContent: 'center', alignItems: 'center' },
-  cancelBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  continueBtn: { flex: 1.5, height: 54, backgroundColor: '#B2ABBA', borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  continueBtnText: { color: '#0e0d12', fontSize: 16, fontWeight: 'bold' },
+  cancelBtnText: { fontSize: 16, fontWeight: 'bold' },
+  continueBtn: { flex: 1.5, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  continueBtnText: { fontSize: 16, fontWeight: 'bold' },
 });
 
 const qsStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0e0d12' },
+  root: { flex: 1 },
   header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  tabRow: { flexDirection: 'row', backgroundColor: '#13131A', borderRadius: 25, padding: 5, marginHorizontal: 20 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  tabRow: { flexDirection: 'row', borderRadius: 25, padding: 5, marginHorizontal: 20 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
-  tabActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  tabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#FFFFFF' },
+  tabActive: {},
+  tabText: { fontSize: 13, fontWeight: '600' },
+  tabTextActive: {},
   scanBody: { flex: 1, position: 'relative' },
-  scanTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 40, textAlign: 'center' },
+  scanTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 40, textAlign: 'center' },
   scannerBox: { width: width * 0.7, height: width * 0.7, position: 'relative', backgroundColor: 'transparent' },
   corner: { position: 'absolute', width: 40, height: 40, borderColor: '#3090F1', borderWidth: 2 },
   topLeft: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 12 },
@@ -735,44 +737,41 @@ const qsStyles = StyleSheet.create({
   bottomRight: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 12 },
   captureBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FFFFFF', marginTop: 80 },
   typeBody: { flex: 1, paddingHorizontal: 24, paddingTop: 30 },
-  typeInput: { backgroundColor: '#1A1A22', borderRadius: 16, paddingHorizontal: 20, height: 58, color: '#FFFFFF', fontSize: 15, marginTop: 20 },
+  typeInput: { borderRadius: 16, paddingHorizontal: 20, height: 58, fontSize: 15, marginTop: 20 },
   typeFooter: { flexDirection: 'row', paddingBottom: 40, gap: 16, paddingHorizontal: 4 },
-  typeCancel: { flex: 1, height: 54, borderRadius: 16, backgroundColor: '#1A1A22', justifyContent: 'center', alignItems: 'center' },
-  typeCancelText: { color: '#FFFFFF', fontWeight: 'bold' },
-  typeContinue: { flex: 1.5, height: 54, borderRadius: 16, backgroundColor: '#B2ABBA', justifyContent: 'center', alignItems: 'center' },
-  typeContinueText: { color: '#0e0d12', fontWeight: 'bold' },
+  typeCancel: { flex: 1, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  typeCancelText: { fontWeight: 'bold' },
+  typeContinue: { flex: 1.5, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  typeContinueText: { fontWeight: 'bold' },
 });
 
 const qdStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: '#0e0d12' },
+  overlay: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 20 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingBottom: 20 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
 
-  productCard: { backgroundColor: '#13131A', borderRadius: 20, padding: 12, flexDirection: 'row', gap: 14, marginBottom: 16 },
+  productCard: { borderRadius: 20, padding: 12, flexDirection: 'row', gap: 14, marginBottom: 16 },
   productImg: { width: 70, height: 70, borderRadius: 14 },
-  productTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
-  productMeta: { color: '#8E8E9B', fontSize: 12, marginBottom: 6 },
-  productPrice: { color: '#D4B0EB', fontSize: 18, fontWeight: 'bold' },
+  productTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
+  productMeta: { fontSize: 12, marginBottom: 6 },
+  productPrice: { fontSize: 18, fontWeight: 'bold' },
 
-  venueCard: { backgroundColor: '#13131A', borderRadius: 20, padding: 18, marginBottom: 24 },
+  venueCard: { borderRadius: 20, padding: 18, marginBottom: 24 },
   venueHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  venueTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  venueTitle: { fontSize: 16, fontWeight: 'bold' },
   venueDetails: { gap: 6 },
-  venueLabel: { color: '#8E8E9B', fontSize: 13 },
-  venueValue: { color: '#FFFFFF' },
+  venueLabel: { fontSize: 13 },
+  venueValue: { },
 
   orderRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 24 },
-  orderText: { color: '#8E8E9B', fontSize: 13 },
-  orderId: { color: '#FFFFFF', fontWeight: 'bold' },
+  orderText: { fontSize: 13 },
+  orderId: { fontWeight: 'bold' },
 
   qrContainer: { alignItems: 'center', marginBottom: 24 },
   qrImage: { width: 260, height: 260, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 10 },
 
-  statusBanner: { flexDirection: 'row', gap: 12, backgroundColor: 'rgba(22,216,105,0.06)', padding: 18, borderRadius: 16, marginBottom: 24, alignItems: 'center' },
-  statusMsg: { flex: 1, color: '#8E8E9B', fontSize: 12, lineHeight: 18 },
-
-  mainBtn: { backgroundColor: '#B2ABBA', height: 56, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginTop: 'auto', marginBottom: 40 },
-  mainBtnText: { color: '#0e0d12', fontSize: 16, fontWeight: 'bold' },
+  statusBanner: { flexDirection: 'row', gap: 12, padding: 18, borderRadius: 16, marginBottom: 24, alignItems: 'center' },
+  statusMsg: { flex: 1, fontSize: 12, lineHeight: 18 },
 });

@@ -43,11 +43,17 @@ const MOCK_POSTS: PostData[] = [
   }
 ];
 
+import { View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
+
 export default function ProfileTab() {
+  const { colors } = useTheme();
   return (
-    <ProfileView 
-      user={MOCK_ME} 
-      posts={MOCK_POSTS} 
-    />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ProfileView 
+        user={MOCK_ME} 
+        posts={MOCK_POSTS} 
+      />
+    </View>
   );
 }

@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Dimensions, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 // Components
 import FeaturedProducts, { ProductData } from "@/components/home/FeaturedProducts";
@@ -266,6 +267,7 @@ const MOCK_FEED: FeedItem[] = [
 ];
 
 export default function HomeFeed() {
+  const { theme, colors, isDark } = useTheme();
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -294,7 +296,7 @@ export default function HomeFeed() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
         {/* Top Navigation */}
         <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
@@ -357,25 +359,25 @@ export default function HomeFeed() {
         animationType="fade"
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
             <View style={styles.starContainer}>
-              <Feather name="star" size={60} color="#FFFFFF" />
+              <Feather name="star" size={60} color={colors.text} />
             </View>
 
-            <Text style={styles.modalTitle}>One Last step</Text>
-            <Text style={styles.modalSubtitle}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>One Last step</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
               We just need a few quick details to personalized your experience and get your account fully ready to go
             </Text>
 
             <TouchableOpacity
-              style={styles.modalButton}
+              style={[styles.modalButton, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowSuccessModal(false);
                 router.push('/profile-screen/edit-profile');
               }}
             >
-              <Text style={styles.modalButtonText}>Add My Profile</Text>
+              <Text style={[styles.modalButtonText, { color: colors.background }]}>Add My Profile</Text>
             </TouchableOpacity>
           </View>
         </View>

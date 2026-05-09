@@ -1,17 +1,20 @@
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
-import { ImageBackground, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ImageBackground, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 
 export default function Onboarding() {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
       <ImageBackground
         source={require("../../assets/images/splash.png")}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
         <View style={styles.overlayContainer}>
-          {/* Manually simulate a seamless gradient fade to dark using steps */}
+          {/* Manually simulate a seamless gradient fade to theme background using steps */}
           <View style={styles.fade1} />
           <View style={styles.fade2} />
           <View style={styles.fade3} />
@@ -44,7 +47,7 @@ export default function Onboarding() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0e0d12",
+    backgroundColor: "#0E0D12",
   },
   backgroundImage: {
     flex: 1,
@@ -56,23 +59,23 @@ const styles = StyleSheet.create({
   },
   fade1: {
     height: 30,
-    backgroundColor: "rgba(14, 13, 18, 0.2)",
+    backgroundColor: 'rgba(14, 13, 18, 0.2)',
   },
   fade2: {
     height: 30,
-    backgroundColor: "rgba(14, 13, 18, 0.4)",
+    backgroundColor: 'rgba(14, 13, 18, 0.4)',
   },
   fade3: {
     height: 30,
-    backgroundColor: "rgba(14, 13, 18, 0.6)",
+    backgroundColor: 'rgba(14, 13, 18, 0.6)',
   },
   fade4: {
     height: 30,
-    backgroundColor: "rgba(14, 13, 18, 0.8)",
+    backgroundColor: 'rgba(14, 13, 18, 0.8)',
   },
   solidBottom: {
-    backgroundColor: "#0e0d12", // Blend straight into pure dark background for text
     paddingBottom: 20,
+    backgroundColor: "#0E0D12",
   },
   content: {
     paddingHorizontal: 28,
@@ -83,28 +86,28 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 16,
+    color: "#FFFFFF",
   },
   subtitle: {
     fontSize: 13,
-    color: "#8E8E9B",
     textAlign: "center",
     paddingHorizontal: 10,
     lineHeight: 20,
     marginBottom: 40,
+    color: "#8E8E9B",
   },
   button: {
-    backgroundColor: "#B59EBE",
     width: "100%",
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#B59EBE",
   },
   buttonText: {
-    color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
+    color: "#0E0D12",
   },
 });

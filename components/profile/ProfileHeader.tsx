@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
@@ -25,6 +26,7 @@ type ProfileHeaderProps = {
 };
 
 export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
 
@@ -32,14 +34,14 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
     <View style={styles.container}>
       {isOwnProfile ? (
         <View style={styles.brandedHeader}>
-          <TouchableOpacity style={styles.iconBtn} onPress={onMenuPress}>
-            <HugeiconsIcon icon={Menu01Icon} size={24} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onMenuPress}>
+            <HugeiconsIcon icon={Menu01Icon} size={24} color={colors.text} />
           </TouchableOpacity>
           
-          <Text style={styles.logoText}>Mooment</Text>
+          <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
           
-          <TouchableOpacity style={styles.iconBtn}>
-            <HugeiconsIcon icon={Search01Icon} size={24} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
       ) : (
@@ -51,8 +53,8 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             activeOpacity={0.8}
             onPress={() => setShowMore(true)}
           >
-            <BlurView intensity={20} tint="dark" style={styles.glassCircle}>
-              <Feather name="more-horizontal" size={20} color="#FFFFFF" />
+            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.glassCircle}>
+              <Feather name="more-horizontal" size={20} color={colors.text} />
             </BlurView>
           </TouchableOpacity>
         </View>
@@ -68,29 +70,29 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
       />
 
       <View style={styles.infoRow}>
-        <View style={styles.avatarBorder}>
+        <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
           <Image source={{ uri: avatar }} style={styles.avatar} />
         </View>
         
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats.posts}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats.posts}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats.reviews}</Text>
-            <Text style={styles.statLabel}>Reviews</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats.reviews}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Reviews</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/followers')}>
-            <Text style={styles.statValue}>{stats.followers}</Text>
-            <Text style={styles.statLabel}>Followers</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats.followers}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
           </TouchableOpacity>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/following')}>
-            <Text style={styles.statValue}>{stats.following}</Text>
-            <Text style={styles.statLabel}>Following</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats.following}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -114,16 +116,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#13131A',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1A1A22',
   },
   logoText: {
     fontFamily: 'OleoScript-Regular',
     fontSize: 28,
-    color: '#FFFFFF',
   },
   topRow: {
     flexDirection: 'row',
@@ -134,7 +133,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -152,7 +150,6 @@ const styles = StyleSheet.create({
     borderRadius: 43,
     padding: 3,
     borderWidth: 2,
-    borderColor: '#D4B0EB',
   },
   avatar: {
     width: '100%',
@@ -169,18 +166,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
   statLabel: {
-    color: '#8E8E9B',
     fontSize: 11,
     marginTop: 2,
   },
   statDivider: {
     width: 1,
     height: 24,
-    backgroundColor: '#2A2A3A',
   },
 });

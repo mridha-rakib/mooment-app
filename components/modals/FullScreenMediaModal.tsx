@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTheme } from '@/hooks/useTheme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ export default function FullScreenMediaModal({
   mediaUris,
   initialIndex,
 }: FullScreenMediaModalProps) {
+  const { colors, isDark } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
   const handleScroll = (event: any) => {
@@ -47,7 +49,7 @@ export default function FullScreenMediaModal({
       <View style={styles.container}>
         <SafeAreaView style={styles.header}>
           <TouchableOpacity 
-            style={styles.closeBtn} 
+            style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' }]} 
             onPress={onClose}
             activeOpacity={0.7}
           >
@@ -82,7 +84,8 @@ export default function FullScreenMediaModal({
                     key={i} 
                     style={[
                       styles.indicator, 
-                      i === currentIndex && styles.activeIndicator
+                      { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)' },
+                      i === currentIndex && [styles.activeIndicator, { backgroundColor: colors.primary }]
                     ]} 
                   />
                 ))}
@@ -112,7 +115,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -144,10 +146,8 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   activeIndicator: {
-    backgroundColor: '#FFFFFF',
     width: 12,
   },
 });

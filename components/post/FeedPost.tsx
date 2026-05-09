@@ -4,6 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
@@ -77,6 +78,7 @@ export default function FeedPost({
   onViewMapPress?: () => void;
   isOwnPost?: boolean;
 }) {
+  const { theme, colors, isDark } = useTheme();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -119,37 +121,37 @@ export default function FeedPost({
             }
           }}
         >
-          <Text style={styles.headerLabelText}>{post.headerLabel}</Text>
+          <Text style={[styles.headerLabelText, { color: colors.textSecondary }]}>{post.headerLabel}</Text>
         </TouchableOpacity>
       )}
       {post.likedBy && (
-        <Text style={styles.likedByText}>
-          <Text style={styles.likedByNormal}>liked by </Text>
+        <Text style={[styles.likedByText, { color: colors.text }]}>
+          <Text style={[styles.likedByNormal, { color: colors.textSecondary }]}>liked by </Text>
           {post.likedBy}
         </Text>
       )}
 
-      <View style={styles.postCard}>
+      <View style={[styles.postCard, { backgroundColor: colors.card }]}>
         {/* Post Header */}
         <View style={styles.postHeader}>
           <View style={styles.postAuthorInfo}>
             <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
             <View style={styles.authorTextContainer}>
               <Text style={styles.authorLine} numberOfLines={2}>
-                <Text style={styles.postAuthor}>{post.authorName}</Text>
+                <Text style={[styles.postAuthor, { color: colors.text }]}>{post.authorName}</Text>
                 {post.authorContextNodes?.map((node, i) => (
-                  <Text key={i} style={node.type === 'muted' ? styles.authorMuted : styles.postAuthor}>
+                  <Text key={i} style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}>
                     {node.text}
                   </Text>
                 ))}
               </Text>
 
               <View style={styles.timeRow}>
-                <Text style={styles.postTime}>{post.timeAgo}</Text>
+                <Text style={[styles.postTime, { color: colors.textSecondary }]}>{post.timeAgo}</Text>
                 {post.isPublic && (
                   <>
-                    <Text style={styles.dotSeparator}> • </Text>
-                    <Feather name="globe" size={10} color="#8E8E9B" />
+                    <Text style={[styles.dotSeparator, { color: colors.textSecondary }]}> • </Text>
+                    <Feather name="globe" size={10} color={colors.textSecondary} />
                   </>
                 )}
               </View>
@@ -158,20 +160,20 @@ export default function FeedPost({
           <View style={styles.postHeaderActions}>
             {isFollowing ? (
               <TouchableOpacity
-                style={styles.followingBtn}
+                style={[styles.followingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
                 activeOpacity={0.8}
                 onPress={toggleFollow}
               >
-                <Text style={styles.followingBtnText}>Following</Text>
+                <Text style={[styles.followingBtnText, { color: colors.textSecondary }]}>Following</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.followBtn}
+                style={[styles.followBtn, { borderColor: colors.primary }]}
                 activeOpacity={0.8}
                 onPress={toggleFollow}
               >
-                <Feather name="plus" size={12} color="#D4B0EB" />
-                <Text style={styles.followBtnText}>Follow</Text>
+                <Feather name="plus" size={12} color={colors.primary} />
+                <Text style={[styles.followBtnText, { color: colors.primary }]}>Follow</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -179,14 +181,14 @@ export default function FeedPost({
               style={styles.moreBtn}
               onPress={handleMorePress}
             >
-              <Feather name="more-horizontal" size={20} color="#8E8E9B" />
+              <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Post Text */}
         {post.caption ? (
-          <Text style={styles.postCaption}>{post.caption}</Text>
+          <Text style={[styles.postCaption, { color: colors.textSecondary }]}>{post.caption}</Text>
         ) : null}
 
         {/* Dynamic Media Section based on Post Type */}
@@ -198,16 +200,16 @@ export default function FeedPost({
                   key={i}
                   style={[
                     styles.waveBar,
-                    { height: h, backgroundColor: i < 15 ? '#8E54E9' : '#454555' }
+                    { height: h, backgroundColor: i < 15 ? colors.primary : colors.border }
                   ]}
                 />
               ))}
             </View>
             <View style={styles.audioControlsRow}>
-              <TouchableOpacity style={styles.playBtn} activeOpacity={0.8}>
-                <Ionicons name="play" size={16} color="#000000" style={{ marginLeft: 2 }} />
+              <TouchableOpacity style={[styles.playBtn, { backgroundColor: colors.textSecondary }]} activeOpacity={0.8}>
+                <Ionicons name="play" size={16} color={colors.background} style={{ marginLeft: 2 }} />
               </TouchableOpacity>
-              <Text style={styles.audioTimeText}>{post.audioDetails.currentTime} / {post.audioDetails.duration}</Text>
+              <Text style={[styles.audioTimeText, { color: colors.text }]}>{post.audioDetails.currentTime} / {post.audioDetails.duration}</Text>
             </View>
           </View>
         )}
@@ -351,15 +353,15 @@ export default function FeedPost({
         {post.postType === 'product' && post.productDetails && (
           <View style={styles.productFooterContainer}>
             <View style={styles.productFooterTextCol}>
-              <Text style={styles.productFooterTitle}>{post.productDetails.title}</Text>
-              <Text style={styles.productFooterPrice}>{post.productDetails.price}</Text>
+              <Text style={[styles.productFooterTitle, { color: colors.textSecondary }]}>{post.productDetails.title}</Text>
+              <Text style={[styles.productFooterPrice, { color: colors.text }]}>{post.productDetails.price}</Text>
             </View>
             <TouchableOpacity 
-              style={styles.productViewBtn} 
+              style={[styles.productViewBtn, { backgroundColor: colors.primary }]} 
               activeOpacity={0.8}
               onPress={() => router.push('/product-screen/product-details')}
             >
-              <Text style={styles.productViewBtnText}>{post.productDetails.buttonText}</Text>
+              <Text style={[styles.productViewBtnText, { color: colors.background }]}>{post.productDetails.buttonText}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -371,19 +373,19 @@ export default function FeedPost({
               {post.likesCount !== undefined && (
                 <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
                   <Ionicons name="heart" size={22} color="#F2245C" />
-                  <Text style={styles.actionText}>{post.likesCount}</Text>
+                  <Text style={[styles.actionText, { color: colors.text }]}>{post.likesCount}</Text>
                 </TouchableOpacity>
               )}
               {post.commentsCount !== undefined && (
                 <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
-                  <HugeiconsIcon icon={Comment02Icon} size={20} color="#8E8E9B" />
-                  <Text style={styles.actionText}>{post.commentsCount}</Text>
+                  <HugeiconsIcon icon={Comment02Icon} size={20} color={colors.textSecondary} />
+                  <Text style={[styles.actionText, { color: colors.text }]}>{post.commentsCount}</Text>
                 </TouchableOpacity>
               )}
               {post.sharesCount !== undefined && (
                 <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
-                  <HugeiconsIcon icon={Share01Icon} size={20} color="#8E8E9B" />
-                  <Text style={styles.actionText}>{post.sharesCount}</Text>
+                  <HugeiconsIcon icon={Share01Icon} size={20} color={colors.textSecondary} />
+                  <Text style={[styles.actionText, { color: colors.text }]}>{post.sharesCount}</Text>
                 </TouchableOpacity>
               )}
             </View>

@@ -4,11 +4,13 @@ import React, { useRef, useState } from "react";
 import {
   Animated,
   SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 /* 🔥 Types */
 type CustomSwitchProps = {
@@ -21,6 +23,7 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
   value,
   onValueChange,
 }) => {
+  const { colors, isDark } = useTheme();
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   const toggle = () => {
@@ -44,7 +47,7 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
         style={[
           styles.track,
           {
-            backgroundColor: value ? "#B8A1E9" : "#2B2B36",
+            backgroundColor: value ? colors.primary : (isDark ? "#2B2B36" : "#E0E0E0"),
           },
         ]}
       >
@@ -52,6 +55,7 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
           style={[
             styles.thumb,
             {
+              backgroundColor: value ? (isDark ? colors.background : "#FFFFFF") : (isDark ? "#555566" : "#AAAAAA"),
               transform: [{ translateX }],
             },
           ]}
@@ -62,30 +66,32 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
 };
 
 export default function OnboardingSettings() {
+  const { colors, isDark } = useTheme();
   const [locationEnabled, setLocationEnabled] = useState<boolean>(true);
   const [notificationsEnabled, setNotificationsEnabled] =
     useState<boolean>(true);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <View style={styles.container}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Welcome to Mooment!</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.text }]}>Welcome to Mooment!</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               To get the best experience. Please enable
             </Text>
           </View>
 
           {/* Location */}
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <View style={styles.cardHeader}>
-              <View style={styles.iconContainer}>
-                <Feather name="map-pin" size={20} color="#FFFFFF" />
+              <View style={[styles.iconContainer, { backgroundColor: isDark ? "#333333" : "#F0F0F3" }]}>
+                <Feather name="map-pin" size={20} color={colors.text} />
               </View>
               <View style={styles.cardTextContainer}>
-                <Text style={styles.cardTitle}>Location Service</Text>
-                <Text style={styles.cardDescription}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Location Service</Text>
+                <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
                   Find events near you by allowing location access
                 </Text>
               </View>
@@ -98,14 +104,14 @@ export default function OnboardingSettings() {
           </View>
 
           {/* Notifications */}
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <View style={styles.cardHeader}>
-              <View style={styles.iconContainer}>
-                <Feather name="bell" size={20} color="#FFFFFF" />
+              <View style={[styles.iconContainer, { backgroundColor: isDark ? "#333333" : "#F0F0F3" }]}>
+                <Feather name="bell" size={20} color={colors.text} />
               </View>
               <View style={styles.cardTextContainer}>
-                <Text style={styles.cardTitle}>Notifications</Text>
-                <Text style={styles.cardDescription}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Notifications</Text>
+                <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
                   Stay updated with the latest events and alerts
                 </Text>
               </View>
@@ -118,16 +124,16 @@ export default function OnboardingSettings() {
           </View>
 
           <TouchableOpacity
-            style={styles.doneButton}
+            style={[styles.doneButton, { backgroundColor: colors.primary }]}
             activeOpacity={0.8}
             onPress={() => router.replace('/(tabs)/home?showSuccess=true')}
           >
-            <Text style={styles.doneButtonText}>Done</Text>
+            <Text style={[styles.doneButtonText, { color: colors.background }]}>Done</Text>
           </TouchableOpacity>
 
-          <Text style={styles.footerText}>
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
             You can change these at any time from the{" "}
-            <Text style={styles.footerHighlight}>app settings</Text>
+            <Text style={[styles.footerHighlight, { color: colors.primary }]}>app settings</Text>
           </Text>
         </View>
       </View>
@@ -138,7 +144,6 @@ export default function OnboardingSettings() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
   container: {
     flex: 1,
@@ -155,20 +160,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 13,
-    color: "#8E8E9B",
   },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0e0d12",
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#E2E2E0",
     padding: 16,
     marginBottom: 16,
   },
@@ -181,7 +182,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#666666",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -193,12 +193,10 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 4,
   },
   cardDescription: {
     fontSize: 12,
-    color: "#8E8E9B",
     lineHeight: 16,
   },
 
@@ -213,12 +211,10 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 9,
-    backgroundColor: "#5C30BB",
     position: "absolute",
   },
 
   doneButton: {
-    backgroundColor: "#B59EBE",
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
@@ -227,17 +223,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   doneButtonText: {
-    color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
   },
   footerText: {
     fontSize: 12,
-    color: "#8E8E9B",
     textAlign: "center",
   },
   footerHighlight: {
-    color: "#B59EBE",
     fontWeight: "bold",
   },
 });

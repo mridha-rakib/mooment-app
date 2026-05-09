@@ -11,8 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function MapSelectionScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
   const [showConfetti, setShowConfetti] = useState(false);
@@ -33,8 +35,8 @@ export default function MapSelectionScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       {/* Confetti / Success Animation */}
       <ConfettiOverlay
@@ -45,7 +47,7 @@ export default function MapSelectionScreen() {
 
       {/* Background Map Image */}
       <Image
-        source={require('../../assets/images/dark-map.png')}
+        source={isDark ? require('../../assets/images/dark-map.png') : require('../../assets/images/map_bg.png')}
         style={styles.mapBackground}
         resizeMode="cover"
       />
@@ -53,38 +55,38 @@ export default function MapSelectionScreen() {
       <SafeAreaView style={styles.overlay}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backBtn} activeOpacity={0.8}>
-            <Feather name="chevron-left" size={24} color="#FFFFFF" />
+          <TouchableOpacity onPress={handleBack} style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
+            <Feather name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Map</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Map</Text>
           <View style={{ width: 40 }} />
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Feather name="map-pin" size={18} color="#8E8E9B" style={styles.searchIcon} />
-            <Text style={styles.searchText}>{params.planLocation || 'Los Angeles, CA'}</Text>
+          <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Feather name="map-pin" size={18} color={colors.textSecondary} style={styles.searchIcon} />
+            <Text style={[styles.searchText, { color: colors.text }]}>{params.planLocation || 'Los Angeles, CA'}</Text>
           </View>
         </View>
 
         {/* Center Pin */}
         <View style={styles.pinContainer}>
           <View style={styles.pinWrapper}>
-            <View style={styles.pinCircle}>
-              <View style={styles.pinDot} />
+            <View style={[styles.pinCircle, { backgroundColor: colors.primary + 'CC' }]}>
+              <View style={[styles.pinDot, { backgroundColor: colors.background }]} />
             </View>
-            <View style={styles.pinLine} />
+            <View style={[styles.pinLine, { backgroundColor: colors.primary }]} />
           </View>
         </View>
 
         {/* Bottom Buttons */}
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.cancelBtn} activeOpacity={0.8} onPress={handleBack}>
-            <Text style={styles.cancelText}>Canel</Text>
+          <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8} onPress={handleBack}>
+            <Text style={[styles.cancelText, { color: colors.text }]}>Canel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.confirmBtn} activeOpacity={0.8} onPress={handleConfirm}>
-            <Text style={styles.confirmText}>Confirm</Text>
+          <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleConfirm}>
+            <Text style={[styles.confirmText, { color: colors.background }]}>Confirm</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -95,7 +97,6 @@ export default function MapSelectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   mapBackground: {
     ...StyleSheet.absoluteFillObject,
@@ -116,13 +117,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(26, 26, 46, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
   },
   headerTitle: {
     flex: 1,
-    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 18,
     textAlign: 'center',
@@ -134,18 +134,15 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(26, 26, 46, 0.9)',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 56,
     borderWidth: 1,
-    borderColor: '#2A2A3A',
   },
   searchIcon: {
     marginRight: 12,
   },
   searchText: {
-    color: '#FFFFFF',
     fontSize: 15,
   },
   pinContainer: {
@@ -161,7 +158,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(194, 181, 205, 0.8)', // Theme purple
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
@@ -171,12 +167,10 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FFFFFF',
   },
   pinLine: {
     width: 2,
     height: 24,
-    backgroundColor: '#FFFFFF',
   },
   bottomBar: {
     flexDirection: 'row',
@@ -189,14 +183,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#1A1A2E',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2A2A3A',
   },
   cancelText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -204,12 +195,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#C2B5CD', // Theme purple
     justifyContent: 'center',
     alignItems: 'center',
   },
   confirmText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '700',
   },

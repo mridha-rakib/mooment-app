@@ -8,6 +8,7 @@ import {
   Search01Icon, 
   ArrowDown01Icon 
 } from "@hugeicons/core-free-icons";
+import { useTheme } from "@/hooks/useTheme";
 
 const USERS = [
   { id: '1', name: 'Alexia', handle: '@alexia_d', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150', role: 'Viewer' },
@@ -17,6 +18,7 @@ const USERS = [
 ];
 
 export default function EditPermissionScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [users, setUsers] = useState(USERS);
@@ -31,44 +33,44 @@ export default function EditPermissionScreen() {
   };
 
   return (
-    <View style={s.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
+    <View style={[s.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
-          <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFF" />
+        <TouchableOpacity onPress={() => router.back()} style={[s.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
+          <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Edit Permission</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>Edit Permission</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Search */}
-      <View style={s.searchContainer}>
-        <HugeiconsIcon icon={Search01Icon} size={18} color="#8E8E9B" style={s.searchIcon} />
+      <View style={[s.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <HugeiconsIcon icon={Search01Icon} size={18} color={colors.textSecondary} style={s.searchIcon} />
         <TextInput 
-          style={s.searchInput}
+          style={[s.searchInput, { color: colors.text }]}
           placeholder="Search"
-          placeholderTextColor="#8E8E9B"
+          placeholderTextColor={colors.textSecondary}
         />
       </View>
 
       {/* List */}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.listContent}>
         {users.map((user) => (
-          <View key={user.id} style={s.userRow}>
+          <View key={user.id} style={[s.userRow, { borderBottomColor: colors.border }]}>
             <Image source={{ uri: user.image }} style={s.avatar} />
             <View style={s.userInfo}>
-              <Text style={s.userName}>{user.name}</Text>
-              <Text style={s.userHandle}>{user.handle}</Text>
+              <Text style={[s.userName, { color: colors.text }]}>{user.name}</Text>
+              <Text style={[s.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
             </View>
             <TouchableOpacity 
-              style={s.actionBtn}
+              style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => toggleRole(user.id)}
               activeOpacity={0.7}
             >
-              <Text style={s.actionBtnText}>{user.role}</Text>
-              <HugeiconsIcon icon={ArrowDown01Icon} size={14} color="#FFF" style={{ marginLeft: 6 }} />
+              <Text style={[s.actionBtnText, { color: colors.text }]}>{user.role}</Text>
+              <HugeiconsIcon icon={ArrowDown01Icon} size={14} color={colors.text} style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           </View>
         ))}
@@ -78,7 +80,7 @@ export default function EditPermissionScreen() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#000' },
+  safe: { flex: 1 },
   header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -90,18 +92,15 @@ const s = StyleSheet.create({
     width: 36, 
     height: 36, 
     borderRadius: 18, 
-    backgroundColor: '#111', 
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
   
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111',
     borderRadius: 24,
     marginHorizontal: 20,
     marginTop: 10,
@@ -109,34 +108,29 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     height: 48,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, color: '#FFF', fontSize: 14 },
+  searchInput: { flex: 1, fontSize: 14 },
 
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   userRow: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    marginBottom: 20, 
-    paddingBottom: 16, 
+    paddingVertical: 16, 
     borderBottomWidth: 1, 
-    borderBottomColor: 'rgba(255,255,255,0.05)' 
   },
   avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
   userInfo: { flex: 1 },
-  userName: { color: '#FFF', fontSize: 15, fontWeight: '700', marginBottom: 2 },
-  userHandle: { color: '#8E8E9B', fontSize: 12 },
+  userName: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  userHandle: { fontSize: 12 },
 
   actionBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: '#111', 
     paddingHorizontal: 14, 
     paddingVertical: 8, 
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)'
   },
-  actionBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  actionBtnText: { fontSize: 13, fontWeight: '700' },
 });

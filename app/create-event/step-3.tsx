@@ -12,52 +12,54 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function CreateEventStep3() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [venue, setVenue] = useState('Rooftop Terace, NYC');
   const [address, setAddress] = useState('123, Main Street NYC');
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Create Event</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
         <TouchableOpacity>
-          <Text style={styles.saveDraft}>Save Draft</Text>
+          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
-        <Text style={styles.stepText}>Step 3</Text>
-        <Text style={styles.stepText}>3 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 3</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>3 out of 6</Text>
       </View>
 
       {/* Form Content */}
       <View style={styles.formContainer}>
         {/* Location Search */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>LOCATION</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>LOCATION</Text>
           <TouchableOpacity 
-            style={styles.searchBox}
+            style={[styles.searchBox, { borderColor: colors.border }]}
             onPress={() => router.push('/create-event/location-picker')}
           >
-            <Ionicons name="location-outline" size={20} color="#8E8E9B" style={{ marginRight: 10 }} />
-            <Text style={styles.searchText}>123, Main Street NYC</Text>
+            <Ionicons name="location-outline" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
+            <Text style={[styles.searchText, { color: colors.text }]}>123, Main Street NYC</Text>
           </TouchableOpacity>
         </View>
 
         {/* Venue */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>VENUE</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>VENUE</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Venue Name"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
             value={venue}
             onChangeText={setVenue}
           />
@@ -65,11 +67,11 @@ export default function CreateEventStep3() {
 
         {/* Address */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>ADDRESS</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>ADDRESS</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Full Address"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
             value={address}
             onChangeText={setAddress}
           />
@@ -82,10 +84,10 @@ export default function CreateEventStep3() {
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={styles.nextButton}
+          style={[styles.nextButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-event/step-4')}
         >
-          <Text style={styles.nextButtonText}>Next</Text>
+          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -95,7 +97,6 @@ export default function CreateEventStep3() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
     paddingTop: 70,
   },
   header: {
@@ -105,16 +106,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A1A22',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
@@ -122,7 +114,6 @@ const styles = StyleSheet.create({
     marginLeft: 20,
   },
   saveDraft: {
-    color: '#AFA9EC',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -134,7 +125,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   stepText: {
-    color: '#8E8E9B',
     fontSize: 13,
   },
   formContainer: {
@@ -144,7 +134,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   label: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -154,20 +143,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#3F3F46',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   searchText: {
-    color: '#FFF',
     fontSize: 15,
   },
   input: {
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
-    color: '#FFF',
     fontSize: 15,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -178,13 +163,11 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   nextButton: {
-    backgroundColor: '#A29CB5',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   nextButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },

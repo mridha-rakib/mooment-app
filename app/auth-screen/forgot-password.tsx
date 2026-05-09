@@ -1,14 +1,17 @@
 import { Feather } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <KeyboardAvoidingView 
         style={styles.container} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -16,19 +19,18 @@ export default function ForgotPassword() {
         <View style={styles.content}>
           <View style={styles.header}>
             {/* Logo placeholder */}
-            <Text style={styles.logoText}>Mooment</Text>
- 
-            
-            <Text style={styles.title}>Forget Password</Text>
-            <Text style={styles.subtitle}>Type your email to recover your account</Text>
+            <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
+             
+            <Text style={[styles.title, { color: colors.text }]}>Forget Password</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Type your email to recover your account</Text>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Feather name="mail" size={20} color="#7A7A85" style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Feather name="mail" size={20} color={colors.textSecondary} style={styles.icon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="name@nocturnal.com"
-              placeholderTextColor="#7A7A85"
+              placeholderTextColor={colors.textSecondary}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -37,16 +39,16 @@ export default function ForgotPassword() {
           </View>
 
           <TouchableOpacity 
-            style={styles.continueButton} 
+            style={[styles.continueButton, { backgroundColor: colors.primary }]} 
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/verify-email')}
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
             <TouchableOpacity onPress={() => router.push('/auth-screen/login')}>
-              <Text style={styles.backLoginText}>Back to Log In</Text>
+              <Text style={[styles.backLoginText, { color: colors.primary }]}>Back to Log In</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -58,7 +60,6 @@ export default function ForgotPassword() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
   container: {
     flex: 1,
@@ -73,7 +74,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logoText: {
-    color: "#FFFFFF",
     fontSize: 40,
     fontFamily: 'OleoScript-Regular',
     marginBottom: 48,
@@ -81,33 +81,29 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 13,
-    color: "#8E8E9B",
     textAlign: "center",
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1A1A22",
     borderRadius: 14,
     paddingHorizontal: 16,
     height: 56,
     marginBottom: 24,
+    borderWidth: 1,
   },
   icon: {
     marginRight: 14,
   },
   input: {
     flex: 1,
-    color: "#FFFFFF",
     fontSize: 14,
   },
   continueButton: {
-    backgroundColor: "#B59EBE",
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
@@ -115,7 +111,6 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   continueButtonText: {
-    color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
   },
@@ -123,7 +118,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   backLoginText: {
-    color: "#B59EBE",
     fontSize: 12,
     fontWeight: "bold",
   },

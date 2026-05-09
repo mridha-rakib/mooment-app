@@ -6,6 +6,7 @@ import {
   ScrollView, StatusBar, StyleSheet, Switch,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 // Background story/feed mock items
 const BG_STORIES = [
@@ -16,40 +17,41 @@ const BG_STORIES = [
 ];
 
 export default function LiveRoomSetupScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [roomName, setRoomName] = useState('');
   const [allowAll, setAllowAll] = useState(true);
 
   const handleContinue = () => {
     if (roomName.trim()) {
-      router.push('/event-screen/event-details' as any);
+      router.push('/event-screen/event-details');
     }
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* ── Dimmed Feed Background ── */}
       <View style={styles.bgLayer} pointerEvents="none">
         <SafeAreaView style={styles.bgSafe}>
           {/* Mock Header */}
           <View style={styles.bgHeader}>
-            <Text style={styles.bgFeedLabel}>← Feed</Text>
-            <Text style={styles.bgTitle}>Mooment</Text>
+            <Text style={[styles.bgFeedLabel, { color: colors.textSecondary + '33' }]}>← Feed</Text>
+            <Text style={[styles.bgTitle, { color: colors.textSecondary + '40' }]}>Mooment</Text>
             <View style={styles.bgHeaderIcons}>
-              <Feather name="search" size={20} color="rgba(255,255,255,0.25)" style={{ marginRight: 14 }} />
-              <Feather name="settings" size={20} color="rgba(255,255,255,0.25)" />
+              <Feather name="search" size={20} color={colors.textSecondary + '40'} style={{ marginRight: 14 }} />
+              <Feather name="settings" size={20} color={colors.textSecondary + '40'} />
             </View>
           </View>
 
           {/* Story row */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bgStoryRow} contentContainerStyle={{ gap: 10, paddingHorizontal: 16 }}>
-            <View style={styles.bgAddCircle}>
-              <Feather name="plus" size={18} color="rgba(255,255,255,0.3)" />
+            <View style={[styles.bgAddCircle, { backgroundColor: colors.card + '1A', borderColor: colors.border + '1A' }]}>
+              <Feather name="plus" size={18} color={colors.textSecondary + '4D'} />
             </View>
             {BG_STORIES.map((uri, i) => (
-              <View key={i} style={[styles.bgStoryCircle, i === 0 && styles.bgStoryLive]}>
+              <View key={i} style={[styles.bgStoryCircle, { borderColor: colors.primary + '40' }, i === 0 && [styles.bgStoryLive, { borderColor: '#F2245C80' }]]}>
                 <Image source={{ uri }} style={styles.bgStoryImg} />
                 {i === 0 && (
                   <View style={styles.bgLiveBadge}>
@@ -67,34 +69,34 @@ export default function LiveRoomSetupScreen() {
               style={styles.bgAvatar}
             />
             <View style={styles.bgPostLines}>
-              <View style={styles.bgLine1} />
-              <View style={styles.bgLine2} />
+              <View style={[styles.bgLine1, { backgroundColor: colors.text }]} />
+              <View style={[styles.bgLine2, { backgroundColor: colors.textSecondary }]} />
             </View>
           </View>
         </SafeAreaView>
       </View>
 
       {/* Dark overlay */}
-      <View style={styles.overlay} pointerEvents="none" />
+      <View style={[styles.overlay, { backgroundColor: isDark ? 'rgba(14,13,18,0.7)' : 'rgba(255,255,255,0.4)' }]} pointerEvents="none" />
 
       {/* ── Bottom Sheet ── */}
       <KeyboardAvoidingView
         style={styles.sheetWrap}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border, borderTopWidth: isDark ? 0 : 1 }]}>
           {/* Handle */}
-          <View style={styles.handle} />
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
           {/* Title */}
-          <Text style={styles.sheetTitle}>Name your Room</Text>
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Name your Room</Text>
 
           {/* Room name input */}
-          <View style={styles.inputWrap}>
+          <View style={[styles.inputWrap, { backgroundColor: colors.card }]}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="Room name"
-              placeholderTextColor="#454555"
+              placeholderTextColor={colors.textSecondary}
               value={roomName}
               onChangeText={setRoomName}
               returnKeyType="done"
@@ -102,34 +104,34 @@ export default function LiveRoomSetupScreen() {
           </View>
 
           {/* Allow participants toggle */}
-          <View style={styles.toggleRow}>
+          <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
             <View style={styles.toggleInfo}>
-              <Text style={styles.toggleLabel}>Allow all participants to speak</Text>
-              <Text style={styles.toggleDesc}>
+              <Text style={[styles.toggleLabel, { color: colors.text }]}>Allow all participants to speak</Text>
+              <Text style={[styles.toggleDesc, { color: colors.textSecondary }]}>
                 You can always change this in the Live Room
               </Text>
             </View>
             <Switch
               value={allowAll}
               onValueChange={setAllowAll}
-              trackColor={{ false: '#2A2A3A', true: '#D4B0EB' }}
-              thumbColor={allowAll ? '#FFFFFF' : '#8E8E9B'}
-              ios_backgroundColor="#2A2A3A"
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={allowAll ? '#FFFFFF' : colors.textSecondary}
+              ios_backgroundColor={colors.border}
             />
           </View>
 
           {/* Cancel / Continue buttons */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.8}>
-              <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card }]} onPress={() => router.back()} activeOpacity={0.8}>
+              <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.continueBtn, !roomName.trim() && styles.continueBtnDisabled]}
+              style={[styles.continueBtn, { backgroundColor: colors.primary }, !roomName.trim() && [styles.continueBtnDisabled, { backgroundColor: colors.border }]]}
               onPress={handleContinue}
               activeOpacity={0.8}
             >
-              <Text style={[styles.continueText, !roomName.trim() && styles.continueTextDisabled]}>
+              <Text style={[styles.continueText, { color: colors.background }, !roomName.trim() && [styles.continueTextDisabled, { color: colors.textSecondary }]]}>
                 Continue
               </Text>
             </TouchableOpacity>
@@ -143,58 +145,57 @@ export default function LiveRoomSetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0e0d12' },
+  root: { flex: 1 },
 
   bgLayer: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
   bgSafe: { flex: 1, paddingTop: Platform.OS === 'android' ? 32 : 0 },
   bgHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  bgFeedLabel: { color: 'rgba(255,255,255,0.2)', fontSize: 13, flex: 1 },
-  bgTitle: { color: 'rgba(255,255,255,0.25)', fontSize: 20, fontWeight: 'bold', position: 'absolute', left: 0, right: 0, textAlign: 'center' },
+  bgFeedLabel: { fontSize: 13, flex: 1 },
+  bgTitle: { fontSize: 20, fontWeight: 'bold', position: 'absolute', left: 0, right: 0, textAlign: 'center' },
   bgHeaderIcons: { flexDirection: 'row', alignItems: 'center' },
   bgStoryRow: { flexGrow: 0, marginBottom: 12 },
-  bgAddCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
-  bgStoryCircle: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: 'rgba(212,176,235,0.25)', overflow: 'hidden' },
-  bgStoryLive: { borderColor: 'rgba(242,36,92,0.5)' },
+  bgAddCircle: { width: 60, height: 60, borderRadius: 30, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  bgStoryCircle: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, overflow: 'hidden' },
+  bgStoryLive: {},
   bgStoryImg: { width: '100%', height: '100%' },
   bgLiveBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(242,36,92,0.7)', alignItems: 'center', paddingVertical: 2 },
   bgLiveText: { color: '#FFF', fontSize: 8, fontWeight: 'bold' },
   bgPost: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, opacity: 0.2 },
   bgAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 10 },
   bgPostLines: { flex: 1, gap: 6 },
-  bgLine1: { height: 9, backgroundColor: '#FFF', borderRadius: 5, width: '60%' },
-  bgLine2: { height: 7, backgroundColor: '#8E8E9B', borderRadius: 4, width: '40%' },
+  bgLine1: { height: 9, borderRadius: 5, width: '60%' },
+  bgLine2: { height: 7, borderRadius: 4, width: '40%' },
 
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(14,13,18,0.7)', zIndex: 1 },
+  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
 
   sheetWrap: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
   sheet: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     paddingHorizontal: 20, paddingTop: 10,
   },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#2A2A3A', alignSelf: 'center', marginBottom: 20 },
-  sheetTitle: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 18, textAlign: 'center', marginBottom: 20 },
+  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  sheetTitle: { fontWeight: 'bold', fontSize: 18, textAlign: 'center', marginBottom: 20 },
 
-  inputWrap: { backgroundColor: '#1A1A2E', borderRadius: 12, marginBottom: 16, paddingHorizontal: 16, paddingVertical: 14 },
-  input: { color: '#FFFFFF', fontSize: 15 },
+  inputWrap: { borderRadius: 12, marginBottom: 16, paddingHorizontal: 16, paddingVertical: 14 },
+  input: { fontSize: 15 },
 
   /* Toggle row */
   toggleRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1A1A2E', borderRadius: 12,
+    borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12,
     marginBottom: 20, gap: 12,
   },
   toggleInfo: { flex: 1 },
-  toggleLabel: { color: '#FFFFFF', fontWeight: '600', fontSize: 14, marginBottom: 3 },
-  toggleDesc: { color: '#8E8E9B', fontSize: 12, lineHeight: 17 },
+  toggleLabel: { fontWeight: '600', fontSize: 14, marginBottom: 3 },
+  toggleDesc: { fontSize: 12, lineHeight: 17 },
 
   /* Buttons */
   actionRow: { flexDirection: 'row', gap: 12 },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#1A1A2E' },
-  cancelText: { color: '#8E8E9B', fontWeight: '600', fontSize: 15 },
-  continueBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#D4B0EB' },
-  continueBtnDisabled: { backgroundColor: '#2A2A3A' },
-  continueText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 15 },
-  continueTextDisabled: { color: '#454555' },
+  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  cancelText: { fontWeight: '600', fontSize: 15 },
+  continueBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  continueBtnDisabled: {},
+  continueText: { fontWeight: 'bold', fontSize: 15 },
+  continueTextDisabled: {},
 });

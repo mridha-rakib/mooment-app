@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 type ActivityItem = {
   id: string;
@@ -50,41 +51,42 @@ const LAST_WEEK_DATA: ActivityItem[] = [
 ];
 
 export default function Explore() {
+  const { colors, isDark } = useTheme();
   const [isEmpty, setIsEmpty] = useState(false);
 
   const renderItem = (item: ActivityItem) => {
     if (item.type === 'follow') {
       return (
-        <View key={item.id} style={styles.activityCard}>
+        <View key={item.id} style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardContent}>
             <Image source={{ uri: item.user?.avatar }} style={styles.avatar} />
             <View style={styles.textContainer}>
-              <Text style={styles.mainText}>
-                <Text style={styles.boldText}>{item.user?.name}</Text> started following you
+              <Text style={[styles.mainText, { color: colors.textSecondary }]}>
+                <Text style={[styles.boldText, { color: colors.text }]}>{item.user?.name}</Text> started following you
               </Text>
-              <Text style={styles.timeText}>{item.time}</Text>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{item.time}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
-            <Text style={styles.followBtnText}>Follow</Text>
+          <TouchableOpacity style={[styles.followBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
+            <Text style={[styles.followBtnText, { color: colors.background }]}>Follow</Text>
           </TouchableOpacity>
         </View>
       );
     } else {
       return (
-        <View key={item.id} style={styles.activityCard}>
+        <View key={item.id} style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardContent}>
-            <View style={styles.ticketIconContainer}>
-              <Ionicons name="ticket" size={20} color="#D4B0EB" />
+            <View style={[styles.ticketIconContainer, { backgroundColor: isDark ? 'rgba(212, 176, 235, 0.1)' : 'rgba(212, 176, 235, 0.2)' }]}>
+              <Ionicons name="ticket" size={20} color={colors.primary} />
             </View>
             <View style={styles.textContainer}>
-              <Text style={styles.mainText} numberOfLines={2}>
-                Ticket confirmed for <Text style={styles.boldText}>{item.event}</Text>
+              <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                Ticket confirmed for <Text style={[styles.boldText, { color: colors.text }]}>{item.event}</Text>
               </Text>
-              <Text style={styles.timeText}>{item.time}</Text>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{item.time}</Text>
             </View>
           </View>
-          <Feather name="chevron-right" size={20} color="#8E8E9B" />
+          <Feather name="chevron-right" size={20} color={colors.textSecondary} />
         </View>
       );
     }
@@ -92,20 +94,20 @@ export default function Explore() {
 
   if (isEmpty) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
-          <Text style={styles.headerTitleCentered}>Activity</Text>
+          <Text style={[styles.headerTitleCentered, { color: colors.text }]}>Activity</Text>
         </View>
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconBox}>
-            <Feather name="star" size={32} color="#8E8E9B" />
+          <View style={[styles.emptyIconBox, { backgroundColor: colors.card }]}>
+            <Feather name="star" size={32} color={colors.textSecondary} />
           </View>
-          <Text style={styles.emptyTitle}>No Activity yet</Text>
-          <Text style={styles.emptySubtitle}>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activity yet</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
             Likes, comments, follows, tickets and rewards will show up here
           </Text>
-          <TouchableOpacity style={styles.discoverBtn} activeOpacity={0.8} onPress={() => setIsEmpty(false)}>
-            <Text style={styles.discoverBtnText}>Go discover something</Text>
+          <TouchableOpacity style={[styles.discoverBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={() => setIsEmpty(false)}>
+            <Text style={[styles.discoverBtnText, { color: colors.background }]}>Go discover something</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -113,19 +115,19 @@ export default function Explore() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Activity</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
         <TouchableOpacity onPress={() => setIsEmpty(true)}>
-          <Text style={styles.markReadText}>Mark all read</Text>
+          <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.sectionTitle}>Today</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Today</Text>
         {TODAY_DATA.map(renderItem)}
 
-        <Text style={[styles.sectionTitle, { marginTop: 32 }]}>Last week</Text>
+        <Text style={[styles.sectionTitle, { marginTop: 32, color: colors.textSecondary }]}>Last week</Text>
         {LAST_WEEK_DATA.map(renderItem)}
       </ScrollView>
     </SafeAreaView>
@@ -135,7 +137,6 @@ export default function Explore() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0e0d12",
     paddingTop: 60,
   },
   header: {
@@ -147,19 +148,16 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   headerTitle: {
-    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "bold",
   },
   headerTitleCentered: {
-    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
     flex: 1,
   },
   markReadText: {
-    color: "#D4B0EB",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -168,7 +166,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sectionTitle: {
-    color: "#8E8E9B",
     fontSize: 14,
     fontWeight: "600",
     marginBottom: 16,
@@ -177,7 +174,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#1A1A22",
     padding: 16,
     borderRadius: 16,
     marginBottom: 12,
@@ -197,7 +193,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "rgba(212, 176, 235, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -207,27 +202,22 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   mainText: {
-    color: "#D0D0D8",
     fontSize: 14,
     lineHeight: 20,
   },
   boldText: {
-    color: "#FFFFFF",
     fontWeight: "bold",
   },
   timeText: {
-    color: "#8E8E9B",
     fontSize: 12,
     marginTop: 2,
   },
   followBtn: {
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
   },
   followBtnText: {
-    color: "#0e0d12",
     fontSize: 13,
     fontWeight: "bold",
   },
@@ -243,32 +233,27 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#1A1A22",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
   },
   emptyTitle: {
-    color: "#FFFFFF",
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 12,
   },
   emptySubtitle: {
-    color: "#8E8E9B",
     fontSize: 14,
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 32,
   },
   discoverBtn: {
-    backgroundColor: "#B2ABBA",
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
   },
   discoverBtnText: {
-    color: "#0e0d12",
     fontSize: 15,
     fontWeight: "bold",
   },

@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 type ProfileBioProps = {
   name: string;
@@ -10,12 +11,13 @@ type ProfileBioProps = {
 };
 
 export default function ProfileBio({ name, handle, bio, isOwnProfile = true, actions }: ProfileBioProps) {
+  const { colors } = useTheme();
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
         <View style={styles.nameCol}>
-          <Text style={styles.name}>{name}</Text>
-          <Text style={styles.handle}>{handle}</Text>
+          <Text style={[styles.name, { color: colors.text }]}>{name}</Text>
+          <Text style={[styles.handle, { color: colors.textSecondary }]}>{handle}</Text>
         </View>
         {!isOwnProfile && actions && (
           <View style={styles.actionsCol}>
@@ -23,7 +25,7 @@ export default function ProfileBio({ name, handle, bio, isOwnProfile = true, act
           </View>
         )}
       </View>
-      <Text style={styles.bioText}>{bio}</Text>
+      <Text style={[styles.bioText, { color: colors.text }]}>{bio}</Text>
     </View>
   );
 }
@@ -48,17 +50,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   name: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
   handle: {
-    color: '#8E8E9B',
     fontSize: 13,
     marginTop: 1,
   },
   bioText: {
-    color: '#FFFFFF',
     fontSize: 13,
     lineHeight: 18,
     marginTop: 8,

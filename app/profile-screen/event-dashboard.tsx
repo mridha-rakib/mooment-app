@@ -3,19 +3,22 @@ import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 import BackButton from "@/components/ui/BackButton";
 
 export default function EventDashboardScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Rooftop Session Vol.4</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Rooftop Session Vol.4</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -24,213 +27,213 @@ export default function EventDashboardScreen() {
         {/* Earnings Top */}
         <View style={styles.topRow}>
           <View>
-            <Text style={styles.label}>Total Earnings</Text>
-            <Text style={styles.largeBalance}>$ 1100.00</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Total Earnings</Text>
+            <Text style={[styles.largeBalance, { color: colors.text }]}>$ 1100.00</Text>
           </View>
-          <TouchableOpacity style={styles.shareBtn}>
-            <Text style={styles.shareText}>Share Event</Text>
-            <Feather name="chevron-down" size={14} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.shareBtn, { backgroundColor: colors.card }]}>
+            <Text style={[styles.shareText, { color: colors.text }]}>Share Event</Text>
+            <Feather name="chevron-down" size={14} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         {/* 4-Grid Earnings */}
         <View style={styles.gridContainer}>
           <View style={styles.gridItem}>
-            <Text style={styles.label}>Ticket Earnings</Text>
-            <Text style={styles.mediumBalance}>$ 550.00</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Ticket Earnings</Text>
+            <Text style={[styles.mediumBalance, { color: colors.text }]}>$ 550.00</Text>
           </View>
           <View style={styles.gridItem}>
-            <Text style={styles.label}>Product Earnings</Text>
-            <Text style={styles.mediumBalance}>$ 550.00</Text>
-          </View>
-
-          <View style={styles.gridItem}>
-            <Text style={styles.smallLabel}>Ticket Earnings from{'\n'}Mooment Credit</Text>
-            <View style={styles.valueRow}>
-              <Text style={styles.smallBalance}>550.00</Text>
-              <Feather name="chevron-up" size={14} color="#8E8E9B" />
-            </View>
-          </View>
-          <View style={styles.gridItem}>
-            <Text style={styles.smallLabel}>Ticket Earnings</Text>
-            <Text style={styles.mediumBalance}>$ 550.00</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Product Earnings</Text>
+            <Text style={[styles.mediumBalance, { color: colors.text }]}>$ 550.00</Text>
           </View>
 
           <View style={styles.gridItem}>
-            <Text style={styles.smallLabel}>Product Earnings from{'\n'}Mooment Credit</Text>
+            <Text style={[styles.smallLabel, { color: colors.textSecondary }]}>Ticket Earnings from{'\n'}Mooment Credit</Text>
             <View style={styles.valueRow}>
-              <Text style={styles.smallBalance}>550.00</Text>
-              <Feather name="chevron-down" size={14} color="#8E8E9B" />
+              <Text style={[styles.smallBalance, { color: colors.text }]}>550.00</Text>
+              <Feather name="chevron-up" size={14} color={colors.textSecondary} />
             </View>
           </View>
           <View style={styles.gridItem}>
-            <Text style={styles.smallLabel}>Product Earnings</Text>
-            <Text style={styles.mediumBalance}>$ 550.00</Text>
+            <Text style={[styles.smallLabel, { color: colors.textSecondary }]}>Ticket Earnings</Text>
+            <Text style={[styles.mediumBalance, { color: colors.text }]}>$ 550.00</Text>
+          </View>
+
+          <View style={styles.gridItem}>
+            <Text style={[styles.smallLabel, { color: colors.textSecondary }]}>Product Earnings from{'\n'}Mooment Credit</Text>
+            <View style={styles.valueRow}>
+              <Text style={[styles.smallBalance, { color: colors.text }]}>550.00</Text>
+              <Feather name="chevron-down" size={14} color={colors.textSecondary} />
+            </View>
+          </View>
+          <View style={styles.gridItem}>
+            <Text style={[styles.smallLabel, { color: colors.textSecondary }]}>Product Earnings</Text>
+            <Text style={[styles.mediumBalance, { color: colors.text }]}>$ 550.00</Text>
           </View>
         </View>
 
         {/* Status Legend */}
         <View style={styles.legendRow}>
           <View style={styles.avatarsRow}>
-            <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={styles.tinyAvatar} />
-            <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8 }]} />
+            <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={[styles.tinyAvatar, { borderColor: colors.background }]} />
+            <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8, borderColor: colors.background }]} />
           </View>
           <TouchableOpacity
             style={styles.legendItem}
             onPress={() => router.push('/profile-screen/attendee-list')}
           >
             <View style={[styles.dot, { backgroundColor: '#2DB46D' }]} />
-            <Text style={styles.legendText}>47 Ongoing</Text>
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>47 Ongoing</Text>
           </TouchableOpacity>
-          <Text style={styles.legendDot}>•</Text>
+          <Text style={[styles.legendDot, { color: colors.textSecondary }]}>•</Text>
           <View style={styles.legendItem}>
             <View style={[styles.dot, { backgroundColor: '#E2B93B' }]} />
-            <Text style={styles.legendText}>41 canceled</Text>
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>41 canceled</Text>
           </View>
-          <Text style={styles.legendDot}>•</Text>
+          <Text style={[styles.legendDot, { color: colors.textSecondary }]}>•</Text>
           <View style={styles.legendItem}>
             <View style={[styles.dot, { backgroundColor: '#D64646' }]} />
-            <Text style={styles.legendText}>0 canceled</Text>
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>0 canceled</Text>
           </View>
-          <Text style={styles.legendDot}>•</Text>
+          <Text style={[styles.legendDot, { color: colors.textSecondary }]}>•</Text>
           <View style={styles.legendItem}>
-            <Feather name="lock" size={10} color="#8E8E9B" style={{ marginRight: 4 }} />
-            <Text style={styles.legendText}>No show</Text>
+            <Feather name="lock" size={10} color={colors.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>No show</Text>
           </View>
         </View>
 
         {/* Sales Stats */}
-        <View style={styles.statsContainer}>
+        <View style={[styles.statsContainer, { borderColor: colors.border }]}>
           <View style={styles.statBox}>
-            <Text style={styles.label}>Ticket Sold</Text>
-            <Text style={styles.statValue}>200</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Ticket Sold</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>200</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.label}>Product Sold</Text>
-            <Text style={styles.statValue}>200</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Product Sold</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>200</Text>
           </View>
         </View>
 
         {/* Location Info */}
-        <View style={styles.locationContainer}>
+        <View style={[styles.locationContainer, { borderColor: colors.border }]}>
           <View style={styles.locationTop}>
-            <Feather name="lock" size={14} color="#FFFFFF" />
-            <Text style={styles.cityText}>New York City</Text>
+            <Feather name="lock" size={14} color={colors.text} />
+            <Text style={[styles.cityText, { color: colors.text }]}>New York City</Text>
           </View>
-          <Text style={styles.locationDetail}><Text style={styles.locationDetailLabel}>Venue:</Text> The Rooftop Lounge</Text>
-          <Text style={styles.locationDetail}><Text style={styles.locationDetailLabel}>Address:</Text> 123 Main Street, New York, NY 10001</Text>
+          <Text style={[styles.locationDetail, { color: colors.text }]}><Text style={[styles.locationDetailLabel, { color: colors.textSecondary }]}>Venue:</Text> The Rooftop Lounge</Text>
+          <Text style={[styles.locationDetail, { color: colors.text }]}><Text style={[styles.locationDetailLabel, { color: colors.textSecondary }]}>Address:</Text> 123 Main Street, New York, NY 10001</Text>
         </View>
 
         {/* Ticket Sales */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Ticket Sales</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Ticket Sales</Text>
           <TouchableOpacity
             style={styles.seeAllBtn}
             onPress={() => router.push('/profile-screen/ticket-stat')}
           >
-            <Text style={styles.seeAllText}>See Stat</Text>
-            <HugeiconsIcon icon={ArrowRight02Icon} size={14} color="#FFFFFF" />
+            <Text style={[styles.seeAllText, { color: colors.text }]}>See Stat</Text>
+            <HugeiconsIcon icon={ArrowRight02Icon} size={14} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         {/* Ticket List */}
         <View style={styles.ticketsList}>
           {/* General */}
-          <View style={styles.ticketCard}>
+          <View style={[styles.ticketCard, { borderColor: colors.border }]}>
             <View style={styles.ticketHeader}>
-              <Text style={styles.ticketName}>General Ticket</Text>
+              <Text style={[styles.ticketName, { color: colors.text }]}>General Ticket</Text>
               <View style={styles.ticketPills}>
-                <View style={styles.pillGrey}><Text style={styles.pillText}>50/100</Text></View>
-                <View style={styles.pillGrey}><Text style={styles.pillText}>Active</Text></View>
+                <View style={[styles.pillGrey, { backgroundColor: colors.card }]}><Text style={[styles.pillText, { color: colors.text }]}>50/100</Text></View>
+                <View style={[styles.pillGrey, { backgroundColor: colors.card }]}><Text style={[styles.pillText, { color: colors.text }]}>Active</Text></View>
               </View>
             </View>
-            <Text style={styles.ticketDesc}>Entry to rooftop lounge party</Text>
-            <Text style={styles.ticketDate}>August 21  •  Sat, Sep 9  •  8:00 PM</Text>
+            <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>Entry to rooftop lounge party</Text>
+            <Text style={[styles.ticketDate, { color: colors.textSecondary }]}>August 21  •  Sat, Sep 9  •  8:00 PM</Text>
             <View style={styles.ticketFooter}>
               <View>
-                <Text style={styles.ticketPrice}>$45</Text>
-                <Text style={styles.ticketSubPrice}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>$45</Text>
+                <Text style={[styles.ticketSubPrice, { color: colors.textSecondary }]}>per ticket</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.ticketSubPrice}>Earnings</Text>
-                <Text style={styles.ticketEarnings}>$200</Text>
+                <Text style={[styles.ticketSubPrice, { color: colors.textSecondary }]}>Earnings</Text>
+                <Text style={[styles.ticketEarnings, { color: colors.text }]}>$200</Text>
               </View>
             </View>
           </View>
 
           {/* VIP */}
-          <View style={styles.ticketCard}>
+          <View style={[styles.ticketCard, { borderColor: colors.border }]}>
             <View style={styles.ticketHeader}>
-              <Text style={styles.ticketName}>VIP</Text>
+              <Text style={[styles.ticketName, { color: colors.text }]}>VIP</Text>
               <View style={styles.ticketPills}>
-                <View style={styles.pillGrey}><Text style={styles.pillText}>10/100</Text></View>
-                <View style={styles.pillGrey}><Text style={styles.pillText}>Active</Text></View>
+                <View style={[styles.pillGrey, { backgroundColor: colors.card }]}><Text style={[styles.pillText, { color: colors.text }]}>10/100</Text></View>
+                <View style={[styles.pillGrey, { backgroundColor: colors.card }]}><Text style={[styles.pillText, { color: colors.text }]}>Active</Text></View>
               </View>
             </View>
-            <Text style={styles.ticketDesc}>Priority entry, includes seated area and complimentary drinks.</Text>
-            <Text style={styles.ticketDate}>August 21  •  Sat, Sep 9  •  8:00 PM</Text>
+            <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>Priority entry, includes seated area and complimentary drinks.</Text>
+            <Text style={[styles.ticketDate, { color: colors.textSecondary }]}>August 21  •  Sat, Sep 9  •  8:00 PM</Text>
             <View style={styles.ticketFooter}>
               <View>
-                <Text style={styles.ticketPrice}>$45</Text>
-                <Text style={styles.ticketSubPrice}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>$45</Text>
+                <Text style={[styles.ticketSubPrice, { color: colors.textSecondary }]}>per ticket</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.ticketSubPrice}>Earnings</Text>
-                <Text style={styles.ticketEarnings}>$200</Text>
+                <Text style={[styles.ticketSubPrice, { color: colors.textSecondary }]}>Earnings</Text>
+                <Text style={[styles.ticketEarnings, { color: colors.text }]}>$200</Text>
               </View>
             </View>
           </View>
 
           {/* Early Bird */}
-          <View style={styles.ticketCard}>
+          <View style={[styles.ticketCard, { borderColor: colors.border }]}>
             <View style={styles.ticketHeader}>
-              <Text style={styles.ticketName}>Early Bird</Text>
+              <Text style={[styles.ticketName, { color: colors.text }]}>Early Bird</Text>
               <View style={styles.ticketPills}>
-                <View style={styles.pillWhite}><Text style={styles.pillTextDark}>20/20</Text></View>
-                <View style={styles.pillGrey}><Text style={styles.pillText}>Done</Text></View>
+                <View style={[styles.pillWhite, { backgroundColor: colors.text }]}><Text style={[styles.pillTextDark, { color: colors.background }]}>20/20</Text></View>
+                <View style={[styles.pillGrey, { backgroundColor: colors.card }]}><Text style={[styles.pillText, { color: colors.text }]}>Done</Text></View>
               </View>
             </View>
-            <Text style={styles.ticketDesc}>Entry to rooftop lounge party</Text>
-            <Text style={styles.ticketDate}>August 21  •  Sat, Sep 9  •  8:00 PM</Text>
+            <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>Entry to rooftop lounge party</Text>
+            <Text style={[styles.ticketDate, { color: colors.textSecondary }]}>August 21  •  Sat, Sep 9  •  8:00 PM</Text>
             <View style={styles.ticketFooter}>
               <View>
-                <Text style={styles.ticketPrice}>$45</Text>
-                <Text style={styles.ticketSubPrice}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>$45</Text>
+                <Text style={[styles.ticketSubPrice, { color: colors.textSecondary }]}>per ticket</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.ticketSubPrice}>Earnings</Text>
-                <Text style={styles.ticketEarnings}>$200</Text>
+                <Text style={[styles.ticketSubPrice, { color: colors.textSecondary }]}>Earnings</Text>
+                <Text style={[styles.ticketEarnings, { color: colors.text }]}>$200</Text>
               </View>
             </View>
           </View>
         </View>
 
         {/* Sales Report */}
-        <Text style={[styles.sectionTitle, { marginTop: 10, marginBottom: 15 }]}>Sales Report</Text>
-        <View style={styles.chartSection}>
+        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 10, marginBottom: 15 }]}>Sales Report</Text>
+        <View style={[styles.chartSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.chartArea}>
             <View style={styles.yAxis}>
-              <Text style={styles.axisLabel}>$1k</Text>
-              <Text style={styles.axisLabel}>$750</Text>
-              <Text style={styles.axisLabel}>$500</Text>
-              <Text style={styles.axisLabel}>$250</Text>
-              <Text style={styles.axisLabel}>$0</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$1k</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$750</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$500</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$250</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$0</Text>
             </View>
             <View style={styles.barsContainer}>
               <View style={styles.gridLines}>
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
               </View>
               <View style={styles.barsRow}>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '60%' }]} /><Text style={styles.xLabel}>Oct 11</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '80%' }]} /><Text style={styles.xLabel}>Oct 12</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '50%' }]} /><Text style={styles.xLabel}>Oct 13</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '70%' }]} /><Text style={styles.xLabel}>Oct 14</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '90%' }]} /><Text style={styles.xLabel}>Oct 15</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '85%' }]} /><Text style={styles.xLabel}>Oct 16</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '60%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Oct 11</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '80%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Oct 12</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '50%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Oct 13</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '70%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Oct 14</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '90%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Oct 15</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '85%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Oct 16</Text></View>
               </View>
             </View>
           </View>
@@ -238,28 +241,28 @@ export default function EventDashboardScreen() {
 
         {/* Products Section */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>All Product</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>All Product</Text>
           <TouchableOpacity
             style={styles.seeAllBtn}
             onPress={() => router.push('/profile-screen/product-stat')}
           >
-            <Text style={styles.seeAllText}>See Stat</Text>
-            <HugeiconsIcon icon={ArrowRight02Icon} size={14} color="#FFFFFF" />
+            <Text style={[styles.seeAllText, { color: colors.text }]}>See Stat</Text>
+            <HugeiconsIcon icon={ArrowRight02Icon} size={14} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         {/* Products List */}
         <View style={styles.productsList}>
           {[1, 2, 3].map((item, index) => (
-            <View key={index} style={styles.productCard}>
+            <View key={index} style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Image source={{ uri: 'https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=300' }} style={styles.productImage} />
               <View style={styles.productInfo}>
-                <Text style={styles.productName}>Medusa Skin Whitening Cream</Text>
-                <Text style={styles.productStock}>45 items left</Text>
+                <Text style={[styles.productName, { color: colors.text }]}>Medusa Skin Whitening Cream</Text>
+                <Text style={[styles.productStock, { color: '#2DB46D' }]}>45 items left</Text>
                 <View style={styles.productFooter}>
-                  <Text style={styles.productPrice}>$45.00</Text>
-                  <TouchableOpacity style={styles.viewBtn}>
-                    <Text style={styles.viewBtnText}>View</Text>
+                  <Text style={[styles.productPrice, { color: colors.text }]}>$45.00</Text>
+                  <TouchableOpacity style={[styles.viewBtn, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.viewBtnText, { color: colors.background }]}>View</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -275,7 +278,6 @@ export default function EventDashboardScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
@@ -285,27 +287,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 15,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
   },
   scrollContent: {
     padding: 20,
@@ -318,26 +302,22 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   label: {
-    color: '#8E8E9B',
     fontSize: 12,
     marginBottom: 4,
   },
   largeBalance: {
-    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: 'bold',
   },
   shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     gap: 6,
   },
   shareText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '500',
   },
@@ -351,12 +331,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   mediumBalance: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: 'bold',
   },
   smallLabel: {
-    color: '#8E8E9B',
     fontSize: 11,
     lineHeight: 16,
     marginBottom: 4,
@@ -367,7 +345,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   smallBalance: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -387,7 +364,6 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#0e0d12',
   },
   legendItem: {
     flexDirection: 'row',
@@ -400,17 +376,14 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   legendText: {
-    color: '#8E8E9B',
     fontSize: 11,
   },
   legendDot: {
-    color: '#8E8E9B',
     fontSize: 11,
   },
   statsContainer: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#1A1A22',
     borderRadius: 12,
     padding: 15,
     marginBottom: 20,
@@ -419,13 +392,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statValue: {
-    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: 'bold',
   },
   locationContainer: {
     borderWidth: 1,
-    borderColor: '#1A1A22',
     borderRadius: 12,
     padding: 15,
     marginBottom: 30,
@@ -437,18 +408,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   cityText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
   },
   locationDetail: {
-    color: '#FFFFFF',
     fontSize: 12,
     marginBottom: 4,
   },
-  locationDetailLabel: {
-    color: '#8E8E9B',
-  },
+  locationDetailLabel: {},
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -457,7 +424,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   sectionTitle: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -467,7 +433,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   seeAllText: {
-    color: '#FFFFFF',
     fontSize: 12,
   },
   ticketsList: {
@@ -476,7 +441,6 @@ const styles = StyleSheet.create({
   },
   ticketCard: {
     borderWidth: 1,
-    borderColor: '#1A1A22',
     borderRadius: 12,
     padding: 15,
   },
@@ -487,7 +451,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   ticketName: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -496,36 +459,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pillGrey: {
-    backgroundColor: '#2A2A32',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   pillWhite: {
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   pillText: {
-    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '600',
   },
   pillTextDark: {
-    color: '#0e0d12',
     fontSize: 10,
     fontWeight: 'bold',
   },
   ticketDesc: {
-    color: '#8E8E9B',
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 8,
     paddingRight: 20,
   },
   ticketDate: {
-    color: '#8E8E9B',
     fontSize: 11,
     marginBottom: 15,
   },
@@ -535,26 +492,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   ticketPrice: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: 'bold',
   },
   ticketSubPrice: {
-    color: '#8E8E9B',
     fontSize: 10,
     marginTop: 2,
   },
   ticketEarnings: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
   chartSection: {
-    backgroundColor: '#13131A',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#1A1A22',
     marginBottom: 30,
   },
   chartArea: {
@@ -567,7 +519,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   axisLabel: {
-    color: '#8E8E9B',
     fontSize: 10,
   },
   barsContainer: {
@@ -581,7 +532,6 @@ const styles = StyleSheet.create({
   },
   gridLine: {
     height: 1,
-    backgroundColor: '#1A1A22',
     width: '100%',
   },
   barsRow: {
@@ -599,12 +549,10 @@ const styles = StyleSheet.create({
   },
   bar: {
     width: 8,
-    backgroundColor: '#B2ABBA',
     borderRadius: 4,
     marginBottom: 10,
   },
   xLabel: {
-    color: '#8E8E9B',
     fontSize: 9,
   },
   productsList: {
@@ -612,10 +560,8 @@ const styles = StyleSheet.create({
   },
   productCard: {
     flexDirection: 'row',
-    backgroundColor: '#13131A',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1A1A22',
     padding: 10,
   },
   productImage: {
@@ -629,13 +575,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   productName: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   productStock: {
-    color: '#2DB46D',
     fontSize: 11,
     marginBottom: 8,
   },
@@ -645,18 +589,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   productPrice: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
   viewBtn: {
-    backgroundColor: '#B2ABBA',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   viewBtnText: {
-    color: '#0e0d12',
     fontSize: 12,
     fontWeight: 'bold',
   },

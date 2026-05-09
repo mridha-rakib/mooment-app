@@ -15,9 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function TicketDetailsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [ticketType, setTicketType] = useState('Free'); // 'Free' or 'Pay'
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -70,8 +72,8 @@ export default function TicketDetailsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Success Animation */}
       <ConfettiOverlay 
@@ -82,52 +84,52 @@ export default function TicketDetailsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton iconName="x" size={24} />
-        <Text style={styles.headerTitle}>Set Ticket Details</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Set Ticket Details</Text>
         <View style={{ width: 40 }} /> {/* Spacer */}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Ticket Name */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>TICKET NAME</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>TICKET NAME</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Name"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
           />
         </View>
 
         {/* Description */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>DESCRIPTION</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Detail about ticket"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
           />
         </View>
 
         {/* Date and Time Row */}
         <View style={styles.row}>
           <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-            <Text style={styles.label}>END DATE</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
             <TouchableOpacity 
-              style={styles.selector}
+              style={[styles.selector, { backgroundColor: colors.card }]}
               onPress={() => setShowDatePicker(true)}
             >
-              <Ionicons name="calendar-outline" size={18} color="#8E8E9B" style={{ marginRight: 8 }} />
-              <Text style={styles.selectorText}>{formatDate(date)}</Text>
+              <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(date)}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-            <Text style={styles.label}>END TIME</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
             <TouchableOpacity 
-              style={styles.selector}
+              style={[styles.selector, { backgroundColor: colors.card }]}
               onPress={() => setShowTimePicker(true)}
             >
-              <Ionicons name="time-outline" size={18} color="#8E8E9B" style={{ marginRight: 8 }} />
-              <Text style={styles.selectorText}>{formatTime(date)}</Text>
+              <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(date)}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -157,30 +159,30 @@ export default function TicketDetailsScreen() {
             style={styles.radioItem} 
             onPress={() => setTicketType('Free')}
           >
-            <View style={[styles.radioOuter, ticketType === 'Free' && styles.radioOuterActive]}>
-              {ticketType === 'Free' && <View style={styles.radioInner} />}
+            <View style={[styles.radioOuter, { borderColor: colors.border }, ticketType === 'Free' && { borderColor: colors.primary }]}>
+              {ticketType === 'Free' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
             </View>
-            <Text style={styles.radioLabel}>Free</Text>
+            <Text style={[styles.radioLabel, { color: colors.text }]}>Free</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.radioItem} 
             onPress={() => setTicketType('Pay')}
           >
-            <View style={[styles.radioOuter, ticketType === 'Pay' && styles.radioOuterActive]}>
-              {ticketType === 'Pay' && <View style={styles.radioInner} />}
+            <View style={[styles.radioOuter, { borderColor: colors.border }, ticketType === 'Pay' && { borderColor: colors.primary }]}>
+              {ticketType === 'Pay' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
             </View>
-            <Text style={styles.radioLabel}>Pay</Text>
+            <Text style={[styles.radioLabel, { color: colors.text }]}>Pay</Text>
           </TouchableOpacity>
         </View>
 
         {/* Capacity */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>CAPACITY</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>CAPACITY</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="185"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             defaultValue="185"
           />
@@ -188,18 +190,18 @@ export default function TicketDetailsScreen() {
       </ScrollView>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.background }]}>
         <TouchableOpacity 
-          style={styles.cancelButton}
+          style={[styles.cancelButton, { backgroundColor: colors.card }]}
           onPress={() => router.back()}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={styles.confirmButton}
+          style={[styles.confirmButton, { backgroundColor: colors.primary }]}
           onPress={handleConfirm}
         >
-          <Text style={styles.confirmButtonText}>Confirm</Text>
+          <Text style={[styles.confirmButtonText, { color: colors.background }]}>Confirm</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -209,8 +211,7 @@ export default function TicketDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
-    paddingTop: 60,
+    paddingTop: 10,
   },
   header: {
     flexDirection: 'row',
@@ -219,16 +220,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1A1A22',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -240,16 +232,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   label: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
-    color: '#FFF',
     fontSize: 15,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -259,7 +248,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selector: {
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -267,7 +255,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   selectorText: {
-    color: '#FFF',
     fontSize: 15,
   },
   radioRow: {
@@ -285,21 +272,15 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#3F3F46',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  radioOuterActive: {
-    borderColor: '#FFF',
   },
   radioInner: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#FFF',
   },
   radioLabel: {
-    color: '#FFF',
     fontSize: 14,
   },
   footer: {
@@ -307,30 +288,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     paddingTop: 16,
-    backgroundColor: '#0e0d12',
     gap: 16,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#1A1A22',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: '#A29CB5',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   confirmButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },

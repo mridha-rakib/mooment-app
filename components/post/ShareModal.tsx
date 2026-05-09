@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ScrollView, Platform, Dimensions, KeyboardAvoidingView } from 'react-native';
-import { Feather, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/hooks/useTheme';
 
 const { height } = Dimensions.get('window');
 
@@ -13,7 +14,7 @@ type ShareUser = {
 type ShareApp = {
   id: string;
   name: string;
-  iconFn: () => React.ReactNode;
+  iconFn: (colors: any) => React.ReactNode;
 };
 
 const MOCK_USERS: ShareUser[] = [
@@ -29,12 +30,12 @@ const MOCK_APPS: ShareApp[] = [
   {
     id: 'repost',
     name: 'Repost',
-    iconFn: () => <Feather name="repeat" size={24} color="#FFFFFF" />
+    iconFn: (colors) => <Feather name="repeat" size={24} color={colors.text} />
   },
   {
     id: 'copy',
     name: 'Copy Link',
-    iconFn: () => <Feather name="link" size={24} color="#FFFFFF" />
+    iconFn: (colors) => <Feather name="link" size={24} color={colors.text} />
   },
   {
     id: 'whatsapp',
@@ -73,6 +74,8 @@ export default function ShareModal({
   visible: boolean; 
   onClose: () => void;
 }) {
+  const { colors, isDark } = useTheme();
+
   return (
     <Modal
       visible={visible}
@@ -86,21 +89,21 @@ export default function ShareModal({
       >
         <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
         
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
           {/* Grabber */}
           <View style={styles.grabberContainer}>
-            <View style={styles.grabber} />
+            <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           </View>
           
-          <Text style={styles.titleText}>Share to...</Text>
+          <Text style={[styles.titleText, { color: colors.text }]}>Share to...</Text>
           
           {/* Search Input */}
-          <View style={styles.searchContainer}>
-            <Feather name="search" size={18} color="#8E8E9B" style={styles.searchIcon} />
+          <View style={[styles.searchContainer, { borderColor: colors.border }]}>
+            <Feather name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput 
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search"
-              placeholderTextColor="#8E8E9B"
+              placeholderTextColor={colors.textSecondary}
             />
           </View>
 
@@ -113,10 +116,10 @@ export default function ShareModal({
             >
               {MOCK_USERS.map((user) => (
                 <TouchableOpacity key={user.id} style={styles.userItem} activeOpacity={0.8}>
-                  <View style={styles.avatarRing}>
-                    <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+                  <View style={[styles.avatarRing, { borderColor: colors.primary }]}>
+                    <Image source={{ uri: user.avatar }} style={[styles.avatarImage, { borderColor: colors.card }]} />
                   </View>
-                  <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
+                  <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>{user.name}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -131,10 +134,10 @@ export default function ShareModal({
             >
               {MOCK_APPS.map((app) => (
                 <TouchableOpacity key={app.id} style={styles.appItem} activeOpacity={0.8}>
-                  <View style={styles.appIconContainer}>
-                    {app.iconFn()}
+                  <View style={[styles.appIconContainer, { borderColor: colors.border }]}>
+                    {app.iconFn(colors)}
                   </View>
-                  <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
+                  <Text style={[styles.appName, { color: colors.text }]} numberOfLines={1}>{app.name}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -156,7 +159,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   modalContainer: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: 20,
@@ -169,11 +171,9 @@ const styles = StyleSheet.create({
   grabber: {
     width: 44,
     height: 4,
-    backgroundColor: '#D0D0D8',
     borderRadius: 2,
   },
   titleText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -187,7 +187,6 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#454555',
     backgroundColor: 'transparent',
     paddingHorizontal: 12,
   },
@@ -196,7 +195,6 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 15,
   },
   sectionContainer: {
@@ -214,7 +212,6 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: '#F2245C',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
@@ -225,10 +222,8 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     borderWidth: 2,
-    borderColor: '#13131A', // creates the gap effect between ring and image
   },
   userName: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
@@ -242,14 +237,12 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 20, // squircle shape
     borderWidth: 1,
-    borderColor: '#454555',
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   appName: {
-    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '500',
     textAlign: 'center',

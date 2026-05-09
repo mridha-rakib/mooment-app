@@ -5,12 +5,14 @@ import {
     Alert, Platform, SafeAreaView, ScrollView, StatusBar,
     StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 /* ─── Fake Event / Friends Dropdown Data ─── */
 const EVENTS = ['Rooftop Session Vol 4', 'Summer Fest 2026', 'Underground Beats', 'Jazz Night'];
 const FRIENDS = ['Dj Koko', 'Tuval', 'Nosel', 'Alex', 'Maya', 'Jordan'];
 
 export default function CreatePlanScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string; planName?: string; planDate?: string; planTime?: string; planEvent?: string; planFriends?: string }>();
 
@@ -43,26 +45,26 @@ export default function CreatePlanScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleCancel} style={styles.closeBtn} activeOpacity={0.8}>
-          <Feather name="x" size={20} color="#FFFFFF" />
+        <TouchableOpacity onPress={handleCancel} style={[styles.closeBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
+          <Feather name="x" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isEdit ? 'Edit Plan' : 'Create Plan'}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEdit ? 'Edit Plan' : 'Create Plan'}</Text>
         <View style={{ width: 36 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* ── Plan Name ── */}
-        <Text style={styles.label}>PLAN NAME</Text>
-        <View style={styles.inputWrap}>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>PLAN NAME</Text>
+        <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { color: colors.text }]}
             placeholder="Name"
-            placeholderTextColor="#555"
+            placeholderTextColor={colors.textSecondary}
             value={name}
             onChangeText={setName}
           />
@@ -71,27 +73,27 @@ export default function CreatePlanScreen() {
         {/* ── Date & Time Row ── */}
         <View style={styles.dateTimeRow}>
           <View style={styles.dateCol}>
-            <Text style={styles.label}>DATE</Text>
-            <TouchableOpacity style={styles.inputWrap} activeOpacity={0.8}>
-              <Feather name="calendar" size={14} color="#8E8E9B" style={{ marginRight: 8 }} />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
+            <TouchableOpacity style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
+              <Feather name="calendar" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
               <TextInput
-                style={[styles.textInput, { flex: 1 }]}
+                style={[styles.textInput, { color: colors.text, flex: 1 }]}
                 value={date}
                 onChangeText={setDate}
-                placeholderTextColor="#555"
+                placeholderTextColor={colors.textSecondary}
                 placeholder="Date"
               />
             </TouchableOpacity>
           </View>
           <View style={styles.timeCol}>
-            <Text style={styles.label}>TIME</Text>
-            <TouchableOpacity style={styles.inputWrap} activeOpacity={0.8}>
-              <Feather name="clock" size={14} color="#8E8E9B" style={{ marginRight: 8 }} />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>TIME</Text>
+            <TouchableOpacity style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
+              <Feather name="clock" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
               <TextInput
-                style={[styles.textInput, { flex: 1 }]}
+                style={[styles.textInput, { color: colors.text, flex: 1 }]}
                 value={time}
                 onChangeText={setTime}
-                placeholderTextColor="#555"
+                placeholderTextColor={colors.textSecondary}
                 placeholder="Time"
               />
             </TouchableOpacity>
@@ -99,84 +101,84 @@ export default function CreatePlanScreen() {
         </View>
 
         {/* ── Event Selector ── */}
-        <Text style={styles.label}>EVENT</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>EVENT</Text>
         <TouchableOpacity
-          style={styles.dropdownBtn}
+          style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
           onPress={() => { setShowEventDropdown(!showEventDropdown); setShowFriendsDropdown(false); }}
         >
-          <Text style={[styles.dropdownText, !selectedEvent && styles.dropdownPlaceholder]}>
+          <Text style={[styles.dropdownText, { color: colors.text }, !selectedEvent && { color: colors.textSecondary }]}>
             {selectedEvent || 'Select Event'}
           </Text>
-          <Feather name={showEventDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#8E8E9B" />
+          <Feather name={showEventDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         {showEventDropdown && (
-          <View style={styles.dropdownList}>
+          <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {EVENTS.map((ev) => (
               <TouchableOpacity
                 key={ev}
-                style={[styles.dropdownItem, selectedEvent === ev && styles.dropdownItemActive]}
+                style={[styles.dropdownItem, { borderBottomColor: colors.border }, selectedEvent === ev && styles.dropdownItemActive]}
                 onPress={() => { setSelectedEvent(ev); setShowEventDropdown(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.dropdownItemText, selectedEvent === ev && styles.dropdownItemTextActive]}>{ev}</Text>
-                {selectedEvent === ev && <Feather name="check" size={14} color="#16D869" />}
+                <Text style={[styles.dropdownItemText, { color: colors.textSecondary }, selectedEvent === ev && styles.dropdownItemTextActive]}>{ev}</Text>
+                {selectedEvent === ev && <Feather name="check" size={14} color={colors.primary} />}
               </TouchableOpacity>
             ))}
           </View>
         )}
 
         {/* ── Location Selector ── */}
-        <Text style={styles.label}>LOCATION</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>LOCATION</Text>
         <TouchableOpacity
-          style={styles.dropdownBtn}
+          style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
           onPress={() => { setShowLocationDropdown(!showLocationDropdown); setShowEventDropdown(false); setShowFriendsDropdown(false); }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Feather name="map-pin" size={14} color="#8E8E9B" style={{ marginRight: 8 }} />
-            <Text style={[styles.dropdownText, !selectedLocation && styles.dropdownPlaceholder]}>
+            <Feather name="map-pin" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
+            <Text style={[styles.dropdownText, { color: colors.text }, !selectedLocation && { color: colors.textSecondary }]}>
               {selectedLocation || 'Select Location'}
             </Text>
           </View>
-          <Feather name={showLocationDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#8E8E9B" />
+          <Feather name={showLocationDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         {showLocationDropdown && (
-          <View style={styles.dropdownList}>
+          <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {['123, Main Street NYC', 'Los Angeles, CA', 'Central Park'].map((loc) => (
               <TouchableOpacity
                 key={loc}
-                style={[styles.dropdownItem, selectedLocation === loc && styles.dropdownItemActive]}
+                style={[styles.dropdownItem, { borderBottomColor: colors.border }, selectedLocation === loc && styles.dropdownItemActive]}
                 onPress={() => { setSelectedLocation(loc); setShowLocationDropdown(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.dropdownItemText, selectedLocation === loc && styles.dropdownItemTextActive]}>{loc}</Text>
-                {selectedLocation === loc && <Feather name="check" size={14} color="#16D869" />}
+                <Text style={[styles.dropdownItemText, { color: colors.textSecondary }, selectedLocation === loc && styles.dropdownItemTextActive]}>{loc}</Text>
+                {selectedLocation === loc && <Feather name="check" size={14} color={colors.primary} />}
               </TouchableOpacity>
             ))}
           </View>
         )}
 
         {/* ── Friends Selector ── */}
-        <Text style={styles.label}>ADD FRIENDS</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>ADD FRIENDS</Text>
         <TouchableOpacity
-          style={styles.dropdownBtn}
+          style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
           onPress={() => { setShowFriendsDropdown(!showFriendsDropdown); setShowEventDropdown(false); setShowLocationDropdown(false); }}
         >
-          <Text style={[styles.dropdownText, !selectedFriends && styles.dropdownPlaceholder]}>
+          <Text style={[styles.dropdownText, { color: colors.text }, !selectedFriends && { color: colors.textSecondary }]}>
             {selectedFriends || 'Select Friends'}
           </Text>
-          <Feather name={showFriendsDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#8E8E9B" />
+          <Feather name={showFriendsDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         {showFriendsDropdown && (
-          <View style={styles.dropdownList}>
+          <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {FRIENDS.map((fr) => {
               const isSelected = selectedFriends.split(', ').includes(fr);
               return (
                 <TouchableOpacity
                   key={fr}
-                  style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                  style={[styles.dropdownItem, { borderBottomColor: colors.border }, isSelected && styles.dropdownItemActive]}
                   onPress={() => {
                     if (isSelected) {
                       setSelectedFriends(selectedFriends.split(', ').filter((f) => f !== fr).join(', '));
@@ -186,8 +188,8 @@ export default function CreatePlanScreen() {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}>{fr}</Text>
-                  {isSelected && <Feather name="check" size={14} color="#16D869" />}
+                  <Text style={[styles.dropdownItemText, { color: colors.textSecondary }, isSelected && styles.dropdownItemTextActive]}>{fr}</Text>
+                  {isSelected && <Feather name="check" size={14} color={colors.primary} />}
                 </TouchableOpacity>
               );
             })}
@@ -196,12 +198,12 @@ export default function CreatePlanScreen() {
       </ScrollView>
 
       {/* ── Bottom Buttons ── */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.cancelBtn} activeOpacity={0.8} onPress={handleCancel}>
-          <Text style={styles.cancelText}>Canel</Text>
+      <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
+        <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card }]} activeOpacity={0.8} onPress={handleCancel}>
+          <Text style={[styles.cancelText, { color: colors.text }]}>Canel</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.doneBtn} activeOpacity={0.8} onPress={handleDone}>
-          <Text style={styles.doneText}>Done</Text>
+        <TouchableOpacity style={[styles.doneBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleDone}>
+          <Text style={[styles.doneText, { color: colors.background }]}>Done</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -209,26 +211,26 @@ export default function CreatePlanScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  safe: { flex: 1, paddingTop: Platform.OS === 'android' ? 32 : 0 },
 
   /* Header */
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 17, textAlign: 'center' },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  headerTitle: { flex: 1, fontWeight: '700', fontSize: 17, textAlign: 'center' },
 
   scrollContent: { paddingHorizontal: 16, paddingBottom: 20 },
 
   /* Labels */
-  label: { color: '#8E8E9B', fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginBottom: 8, marginTop: 20 },
+  label: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginBottom: 8, marginTop: 20 },
 
   /* Text Inputs */
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1A1A2E', borderRadius: 12,
-    borderWidth: 1, borderColor: '#2A2A3A',
+    borderRadius: 12,
+    borderWidth: 1,
     paddingHorizontal: 14, height: 48,
   },
-  textInput: { color: '#FFFFFF', fontSize: 14, flex: 1, padding: 0 },
+  textInput: { fontSize: 14, flex: 1, padding: 0 },
 
   /* Date/Time Row */
   dateTimeRow: { flexDirection: 'row', gap: 12 },
@@ -238,39 +240,38 @@ const styles = StyleSheet.create({
   /* Dropdown */
   dropdownBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#1A1A2E', borderRadius: 12,
-    borderWidth: 1, borderColor: '#2A2A3A',
+    borderRadius: 12,
+    borderWidth: 1,
     paddingHorizontal: 14, height: 48,
   },
-  dropdownText: { color: '#FFFFFF', fontSize: 14 },
-  dropdownPlaceholder: { color: '#555' },
+  dropdownText: { fontSize: 14 },
   dropdownList: {
-    backgroundColor: '#1A1A2E', borderRadius: 12,
-    borderWidth: 1, borderColor: '#2A2A3A',
+    borderRadius: 12,
+    borderWidth: 1,
     marginTop: 4, overflow: 'hidden',
   },
   dropdownItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 14, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: '#13131A',
+    borderBottomWidth: 1,
   },
-  dropdownItemActive: { backgroundColor: 'rgba(22,216,105,0.08)' },
-  dropdownItemText: { color: '#CCCCCC', fontSize: 14 },
-  dropdownItemTextActive: { color: '#16D869' },
+  dropdownItemActive: { backgroundColor: 'rgba(178, 171, 186, 0.1)' },
+  dropdownItemText: { fontSize: 14 },
+  dropdownItemTextActive: { fontWeight: 'bold' },
 
   /* Bottom Buttons */
   bottomBar: {
     flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 14, gap: 12,
-    borderTopWidth: 1, borderTopColor: '#1A1A2E',
+    borderTopWidth: 1,
   },
   cancelBtn: {
     flex: 1, height: 48, borderRadius: 12,
-    backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
-  cancelText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  cancelText: { fontSize: 15, fontWeight: '600' },
   doneBtn: {
     flex: 1, height: 48, borderRadius: 12,
-    backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
-  doneText: { color: '#0e0d12', fontSize: 15, fontWeight: '700' },
+  doneText: { fontSize: 15, fontWeight: '700' },
 });

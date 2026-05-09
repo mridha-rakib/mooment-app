@@ -2,8 +2,9 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import BackButton from "@/components/ui/BackButton";
+import { useTheme } from "@/hooks/useTheme";
 
 type TicketStatItem = {
   id: string;
@@ -55,6 +56,7 @@ const STAT_DATA: TicketStatItem[] = [
 ];
 
 export default function TicketStatScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const getStatusIcon = (status: TicketStatItem['status']) => {
@@ -73,8 +75,8 @@ export default function TicketStatScreen() {
         );
       case 'pending':
         return (
-          <View style={[styles.statusCircle, { backgroundColor: '#8E8E9B' }]}>
-            <Feather name="minus" size={14} color="#0e0d12" />
+          <View style={[styles.statusCircle, { backgroundColor: colors.textSecondary }]}>
+            <Feather name="minus" size={14} color={colors.background} />
           </View>
         );
     }
@@ -83,30 +85,31 @@ export default function TicketStatScreen() {
   const renderItem = ({ item }: { item: TicketStatItem }) => (
     <View style={styles.statRow}>
       <View style={styles.userInfo}>
-        <View style={styles.avatarContainer}>
+        <View style={[styles.avatarContainer, { borderColor: colors.primary }]}>
           <Image source={{ uri: item.avatar }} style={styles.avatar} />
         </View>
         <View>
-          <Text style={styles.userName}>{item.name}</Text>
-          <Text style={styles.userHandle}>{item.handle}</Text>
+          <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
+          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{item.handle}</Text>
         </View>
       </View>
       
       <View style={styles.ticketInfo}>
         {getStatusIcon(item.status)}
-        <Text style={styles.ticketType}>{item.ticketType}</Text>
+        <Text style={[styles.ticketType, { color: colors.text }]}>{item.ticketType}</Text>
       </View>
 
-      <Text style={styles.amount}>{item.amount}</Text>
+      <Text style={[styles.amount, { color: colors.text }]}>{item.amount}</Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Ticket Stat</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Stat</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -115,7 +118,7 @@ export default function TicketStatScreen() {
         keyExtractor={item => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
         showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
@@ -125,7 +128,6 @@ export default function TicketStatScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
@@ -136,27 +138,9 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     marginBottom: 10,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -177,7 +161,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#D84B79', // Pinkish border as per design
     padding: 2,
     marginRight: 12,
   },
@@ -187,13 +170,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   userName: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 2,
   },
   userHandle: {
-    color: '#8E8E9B',
     fontSize: 12,
   },
   ticketInfo: {
@@ -210,12 +191,10 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   ticketType: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },
   amount: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     width: '20%',
@@ -223,6 +202,5 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: '#1A1A22',
   },
 });

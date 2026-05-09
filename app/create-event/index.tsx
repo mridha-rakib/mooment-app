@@ -14,9 +14,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function CreateEventScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [bannerImage, setBannerImage] = useState<string | null>(null);
@@ -39,33 +41,33 @@ export default function CreateEventScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Create Event</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
         <TouchableOpacity>
-          <Text style={styles.saveDraft}>Save Draft</Text>
+          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
-        <Text style={styles.stepText}>Step 1</Text>
-        <Text style={styles.stepText}>1 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 1</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>1 out of 6</Text>
       </View>
 
       {/* Form Content */}
       <View style={styles.formContainer}>
         {/* Event Name */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>EVENT NAME</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>EVENT NAME</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Name"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
             value={name}
             onChangeText={setName}
           />
@@ -73,11 +75,11 @@ export default function CreateEventScreen() {
 
         {/* Description */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>DESCRIPTION</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
           <TextInput
-            style={[styles.input, styles.textArea]}
+            style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Event main highlights"
-            placeholderTextColor="#8E8E9B"
+            placeholderTextColor={colors.textSecondary}
             multiline
             textAlignVertical="top"
             value={description}
@@ -88,15 +90,15 @@ export default function CreateEventScreen() {
         {/* Banner */}
         <View style={styles.inputGroup}>
           <View style={styles.labelRow}>
-            <Text style={styles.label}>BANNER</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>BANNER</Text>
             {bannerImage && (
               <TouchableOpacity onPress={removeImage} activeOpacity={0.7}>
-                <Ionicons name="trash-outline" size={18} color="#FFF" />
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
               </TouchableOpacity>
             )}
           </View>
           <TouchableOpacity 
-            style={[styles.uploadBox, bannerImage ? { padding: 0, borderWidth: 0 } : {}]}
+            style={[styles.uploadBox, { borderColor: colors.border }, bannerImage ? { padding: 0, borderWidth: 0 } : {}]}
             activeOpacity={0.8}
             onPress={bannerImage ? undefined : pickImage}
           >
@@ -106,14 +108,14 @@ export default function CreateEventScreen() {
               </View>
             ) : (
               <>
-                <Text style={styles.uploadText}>You can only upload one image for the banner</Text>
+                <Text style={[styles.uploadText, { color: colors.textSecondary }]}>You can only upload one image for the banner</Text>
                 
-                <View style={styles.uploadButton}>
-                  <Feather name="arrow-up-circle" size={16} color="#1A1A22" />
-                  <Text style={styles.uploadButtonText}>Upload Image</Text>
+                <View style={[styles.uploadButton, { backgroundColor: isDark ? "#D1D1D6" : colors.card }]}>
+                  <Feather name="arrow-up-circle" size={16} color={isDark ? "#1A1A22" : colors.text} />
+                  <Text style={[styles.uploadButtonText, { color: isDark ? "#1A1A22" : colors.text }]}>Upload Image</Text>
                 </View>
                 
-                <Text style={styles.uploadHint}>JPEG, or PNG</Text>
+                <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
               </>
             )}
           </TouchableOpacity>
@@ -126,10 +128,10 @@ export default function CreateEventScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={styles.nextButton}
+          style={[styles.nextButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-event/step-2')}
         >
-          <Text style={styles.nextButtonText}>Next</Text>
+          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -139,7 +141,6 @@ export default function CreateEventScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
     paddingTop: 70,
   },
   header: {
@@ -149,16 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A1A22',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
@@ -166,7 +158,6 @@ const styles = StyleSheet.create({
     marginLeft: 20,
   },
   saveDraft: {
-    color: '#AFA9EC',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -178,7 +169,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   stepText: {
-    color: '#8E8E9B',
     fontSize: 13,
   },
   formContainer: {
@@ -188,15 +178,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   label: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
-    color: '#FFF',
     fontSize: 15,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -207,7 +194,6 @@ const styles = StyleSheet.create({
   },
   uploadBox: {
     borderWidth: 1.5,
-    borderColor: '#2A2A32',
     borderStyle: 'dashed',
     borderRadius: 16,
     padding: 24,
@@ -232,7 +218,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   uploadText: {
-    color: '#8E8E9B',
     fontSize: 13,
     marginBottom: 16,
     textAlign: 'center',
@@ -240,7 +225,6 @@ const styles = StyleSheet.create({
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1D1D6',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
@@ -248,12 +232,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   uploadButtonText: {
-    color: '#1A1A22',
     fontSize: 14,
     fontWeight: '600',
   },
   uploadHint: {
-    color: '#8E8E9B',
     fontSize: 12,
   },
   footer: {
@@ -262,13 +244,11 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   nextButton: {
-    backgroundColor: '#A29CB5',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   nextButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },

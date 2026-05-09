@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import BackButton from "@/components/ui/BackButton";
+import { useTheme } from "@/hooks/useTheme";
 
 const MOCK_FOLLOWERS = [
   { id: '1', name: 'Dj Koko', handle: '@sdfd._dl', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', isFollowing: false },
@@ -11,6 +12,7 @@ const MOCK_FOLLOWERS = [
 ];
 
 export default function FollowersScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [followers, setFollowers] = useState(MOCK_FOLLOWERS);
 
@@ -19,29 +21,37 @@ export default function FollowersScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={styles.header}>
         <BackButton iconName="x" size={18} />
-        <Text style={styles.headerTitle}>Followers</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Followers</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
         {followers.map((user) => (
-          <View key={user.id} style={styles.userItem}>
-            <View style={styles.avatarBorder}>
+          <View key={user.id} style={[styles.userItem, { borderBottomColor: colors.border }]}>
+            <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
               <Image source={{ uri: user.avatar }} style={styles.avatar} />
             </View>
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{user.name}</Text>
-              <Text style={styles.userHandle}>{user.handle}</Text>
+              <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
+              <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.followBtn, user.isFollowing && styles.followingBtn]}
+              style={[
+                styles.followBtn, 
+                { backgroundColor: colors.primary },
+                user.isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }]
+              ]}
               onPress={() => toggleFollow(user.id)}
             >
-              <Text style={[styles.followBtnText, user.isFollowing && styles.followingBtnText]}>
+              <Text style={[
+                styles.followBtnText, 
+                { color: colors.background },
+                user.isFollowing && [styles.followingBtnText, { color: colors.text }]
+              ]}>
                 {user.isFollowing ? 'Following' : 'Follow'}
               </Text>
             </TouchableOpacity>
@@ -55,7 +65,6 @@ export default function FollowersScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
@@ -65,27 +74,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 15,
   },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  closeCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#2A2A32',
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -99,14 +88,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A22',
   },
   avatarBorder: {
     width: 48,
     height: 48,
     borderRadius: 24,
     borderWidth: 2,
-    borderColor: '#E85B81', // pinkish-red from screenshot
     padding: 2,
     marginRight: 15,
   },
@@ -119,32 +106,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   userHandle: {
-    color: '#8E8E9B',
     fontSize: 12,
   },
   followBtn: {
-    backgroundColor: '#B2ABBA', // Light purple-grey
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 8,
   },
   followingBtn: {
-    backgroundColor: '#13131A',
     borderWidth: 1,
-    borderColor: '#2A2A32',
   },
   followBtnText: {
-    color: '#0e0d12',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  followingBtnText: {
-    color: '#FFFFFF',
-  },
+  followingBtnText: {},
 });

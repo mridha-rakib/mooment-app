@@ -1,0 +1,30 @@
+export const Colors = {
+  light: {
+    background: '#FFFFFF',
+    backgroundSecondary: '#F5F5F7',
+    text: '#000000',
+    textSecondary: '#8E8E9B',
+    border: '#E5E5E5',
+    card: '#FFFFFF',
+    icon: '#000000',
+    tabBar: '#FFFFFF',
+    tabBarActive: '#000000',
+    tabBarInactive: '#8E8E9B',
+    primary: '#6B4E71',
+    danger: '#FF3B30',
+  },
+  dark: {
+    background: '#0e0d12',
+    backgroundSecondary: '#111111',
+    text: '#FFFFFF',
+    textSecondary: '#8E8E9B',
+    border: 'rgba(255,255,255,0.1)',
+    card: '#1A1A1A',
+    icon: '#FFFFFF',
+    tabBar: '#0e0d12',
+    tabBarActive: '#FFFFFF',
+    tabBarInactive: '#454555',
+    primary: '#C2B5CD',
+    danger: '#FF3B30',
+  }
+};

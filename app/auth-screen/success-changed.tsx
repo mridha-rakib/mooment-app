@@ -1,21 +1,26 @@
 import { ChevronLeft } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function SuccessChanged() {
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <View style={styles.container}>
         <View style={styles.content}>
           
           <Image source={require("../../assets/images/success.png")} style={{ width: 147, height: 170, marginBottom: 40 }} />
 
           <View style={styles.textContainer}>
-            <Text style={styles.title}>Successfully Changed</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.text }]}>Successfully Changed</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               Return to the login page to enter your account with your new password
             </Text>
           </View>
@@ -25,8 +30,8 @@ export default function SuccessChanged() {
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/login')}
           >
-            <HugeiconsIcon icon={ChevronLeft} size={16} color="#8E8E9B" />
-            <Text style={styles.backLinkText}>Back to Login</Text>
+            <HugeiconsIcon icon={ChevronLeft} size={16} color={colors.textSecondary} />
+            <Text style={[styles.backLinkText, { color: colors.textSecondary }]}>Back to Login</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -37,7 +42,6 @@ export default function SuccessChanged() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
   container: {
     flex: 1,
@@ -49,34 +53,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 40,
   },
-  graphicContainer: {
-    height: 200,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 40,
-  },
-  glow: {
-    position: "absolute",
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "#0A291A",
-    opacity: 0.8,
-    shadowColor: "#2DB46D",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 50,
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: "#2DB46D",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#0e0d12",
-  },
   textContainer: {
     alignItems: "center",
     marginBottom: 40,
@@ -84,12 +60,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 13,
-    color: "#8E8E9B",
     textAlign: "center",
     paddingHorizontal: 30,
     lineHeight: 20,
@@ -100,7 +74,6 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   backLinkText: {
-    color: "#8E8E9B",
     fontSize: 13,
     fontWeight: "bold",
     marginLeft: 4,

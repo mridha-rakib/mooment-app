@@ -2,7 +2,9 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
+import BackButton from "@/components/ui/BackButton";
 
 type ProductStatItem = {
   id: string;
@@ -58,9 +60,8 @@ const STAT_DATA: ProductStatItem[] = [
   },
 ];
 
-import BackButton from "@/components/ui/BackButton";
-
 export default function ProductStatScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const getStatusIcon = (status: ProductStatItem['status']) => {
@@ -79,8 +80,8 @@ export default function ProductStatScreen() {
         );
       case 'pending':
         return (
-          <View style={[styles.statusCircle, { backgroundColor: '#8E8E9B' }]}>
-            <Feather name="minus" size={14} color="#0e0d12" />
+          <View style={[styles.statusCircle, { backgroundColor: colors.textSecondary }]}>
+            <Feather name="minus" size={14} color={colors.background} />
           </View>
         );
     }
@@ -91,8 +92,8 @@ export default function ProductStatScreen() {
       {/* Top Row: Product Info & Status */}
       <View style={styles.topRow}>
         <View style={styles.productInfo}>
-          <Image source={{ uri: item.productImage }} style={styles.productAvatar} />
-          <Text style={styles.productName}>{item.productName}</Text>
+          <Image source={{ uri: item.productImage }} style={[styles.productAvatar, { backgroundColor: colors.card }]} />
+          <Text style={[styles.productName, { color: colors.text }]}>{item.productName}</Text>
         </View>
         {getStatusIcon(item.status)}
       </View>
@@ -100,25 +101,26 @@ export default function ProductStatScreen() {
       {/* Bottom Row: User Info & Amount */}
       <View style={styles.bottomRow}>
         <View style={styles.userInfo}>
-          <View style={styles.userAvatarContainer}>
+          <View style={[styles.userAvatarContainer, { borderColor: colors.primary }]}>
             <Image source={{ uri: item.userAvatar }} style={styles.userAvatar} />
           </View>
           <View>
-            <Text style={styles.userName}>{item.userName}</Text>
-            <Text style={styles.userHandle}>{item.userHandle}</Text>
+            <Text style={[styles.userName, { color: colors.text }]}>{item.userName}</Text>
+            <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{item.userHandle}</Text>
           </View>
         </View>
-        <Text style={styles.amount}>{item.amount}</Text>
+        <Text style={[styles.amount, { color: colors.text }]}>{item.amount}</Text>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Product Stat</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Product Stat</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -127,7 +129,7 @@ export default function ProductStatScreen() {
         keyExtractor={item => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
         showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
@@ -137,7 +139,6 @@ export default function ProductStatScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
@@ -148,27 +149,9 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     marginBottom: 10,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -193,10 +176,8 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     marginRight: 12,
-    backgroundColor: '#FFFFFF',
   },
   productName: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -223,7 +204,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#D84B79', // Pinkish border as per design
     padding: 2,
     marginRight: 12,
   },
@@ -233,22 +213,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   userName: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 2,
   },
   userHandle: {
-    color: '#8E8E9B',
     fontSize: 12,
   },
   amount: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
   },
   separator: {
     height: 1,
-    backgroundColor: '#1A1A22',
   },
 });

@@ -14,9 +14,11 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function CreateEventStep2() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [selectedAge, setSelectedAge] = useState('All Ages');
   const [isCategorySheetVisible, setIsCategorySheetVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -36,43 +38,44 @@ export default function CreateEventStep2() {
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Create Event</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
         <TouchableOpacity>
-          <Text style={styles.saveDraft}>Save Draft</Text>
+          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
-        <Text style={styles.stepText}>Step 2</Text>
-        <Text style={styles.stepText}>2 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 2</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>2 out of 6</Text>
       </View>
 
       {/* Form Content */}
       <View style={styles.formContainer}>
         {/* Age Restrictions */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>AGE RESTRICTIONS</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>AGE RESTRICTIONS</Text>
           <View style={styles.chipRow}>
             {ageOptions.map((age) => (
               <TouchableOpacity
                 key={age}
                 style={[
                   styles.chip,
-                  selectedAge === age ? styles.chipSelected : styles.chipUnselected,
+                  { borderColor: colors.border },
+                  selectedAge === age ? { backgroundColor: colors.text, borderColor: colors.text } : { backgroundColor: 'transparent' },
                 ]}
                 onPress={() => setSelectedAge(age)}
               >
                 <Text
                   style={[
                     styles.chipText,
-                    selectedAge === age ? styles.chipTextSelected : styles.chipTextUnselected,
+                    selectedAge === age ? { color: colors.background } : { color: colors.text },
                   ]}
                 >
                   {age}
@@ -84,33 +87,33 @@ export default function CreateEventStep2() {
 
         {/* Category */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>CATEGORY</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>CATEGORY</Text>
           <TouchableOpacity 
-            style={styles.selector}
+            style={[styles.selector, { backgroundColor: colors.card }]}
             onPress={() => setIsCategorySheetVisible(true)}
           >
-            <Text style={selectedCategory ? styles.selectorText : styles.selectorPlaceholder}>
+            <Text style={selectedCategory ? [styles.selectorText, { color: colors.text }] : [styles.selectorPlaceholder, { color: colors.textSecondary }]}>
               {selectedCategory || 'Select Category'}
             </Text>
-            <Ionicons name="chevron-down" size={20} color="#8E8E9B" />
+            <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
         {/* Date and Time Row */}
         <View style={styles.row}>
           <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-            <Text style={styles.label}>DATE</Text>
-            <TouchableOpacity style={styles.selector}>
-              <Ionicons name="calendar-outline" size={18} color="#8E8E9B" style={{ marginRight: 8 }} />
-              <Text style={styles.selectorText}>Sep 9, 2026</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
+            <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card }]}>
+              <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={[styles.selectorText, { color: colors.text }]}>Sep 9, 2026</Text>
             </TouchableOpacity>
           </View>
 
           <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-            <Text style={styles.label}>TIME</Text>
-            <TouchableOpacity style={styles.selector}>
-              <Ionicons name="time-outline" size={18} color="#8E8E9B" style={{ marginRight: 8 }} />
-              <Text style={styles.selectorText}>10:00 AM</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>TIME</Text>
+            <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card }]}>
+              <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={[styles.selectorText, { color: colors.text }]}>10:00 AM</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -122,10 +125,10 @@ export default function CreateEventStep2() {
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={styles.nextButton}
+          style={[styles.nextButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-event/step-3')}
         >
-          <Text style={styles.nextButtonText}>Next</Text>
+          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
         </TouchableOpacity>
       </View>
 
@@ -139,9 +142,9 @@ export default function CreateEventStep2() {
         <TouchableWithoutFeedback onPress={() => setIsCategorySheetVisible(false)}>
           <View style={styles.modalOverlay} />
         </TouchableWithoutFeedback>
-        <View style={styles.bottomSheet}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Select Category</Text>
+        <View style={[styles.bottomSheet, { backgroundColor: colors.card }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select Category</Text>
           
           <ScrollView style={styles.categoryList} showsVerticalScrollIndicator={false}>
             {categories.map((item) => (
@@ -153,7 +156,8 @@ export default function CreateEventStep2() {
                 <Text
                   style={[
                     styles.categoryText,
-                    selectedCategory === item && styles.categoryTextSelected,
+                    { color: colors.textSecondary },
+                    selectedCategory === item && [styles.categoryTextSelected, { color: colors.text }],
                   ]}
                 >
                   {item}
@@ -167,13 +171,13 @@ export default function CreateEventStep2() {
               style={styles.cancelButton}
               onPress={() => setIsCategorySheetVisible(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.continueButton}
+              style={[styles.continueButton, { backgroundColor: colors.primary }]}
               onPress={() => setIsCategorySheetVisible(false)}
             >
-              <Text style={styles.continueButtonText}>Continue</Text>
+              <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -185,7 +189,6 @@ export default function CreateEventStep2() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0d12',
     paddingTop: 70,
   },
   header: {
@@ -195,16 +198,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A1A22',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
@@ -212,7 +206,6 @@ const styles = StyleSheet.create({
     marginLeft: 20,
   },
   saveDraft: {
-    color: '#AFA9EC',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -224,7 +217,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   stepText: {
-    color: '#8E8E9B',
     fontSize: 13,
   },
   formContainer: {
@@ -234,7 +226,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   label: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -252,26 +243,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipSelected: {
-    backgroundColor: '#FFF',
-    borderColor: '#FFF',
-  },
-  chipUnselected: {
-    backgroundColor: 'transparent',
-    borderColor: '#2A2A32',
-  },
   chipText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  chipTextSelected: {
-    color: '#0e0d12',
-  },
-  chipTextUnselected: {
-    color: '#FFF',
-  },
   selector: {
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -280,11 +256,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   selectorPlaceholder: {
-    color: '#8E8E9B',
     fontSize: 15,
   },
   selectorText: {
-    color: '#FFF',
     fontSize: 15,
   },
   row: {
@@ -297,13 +271,11 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   nextButton: {
-    backgroundColor: '#A29CB5',
     paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
   },
   nextButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -316,7 +288,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 10,
@@ -326,13 +297,11 @@ const styles = StyleSheet.create({
   sheetHandle: {
     width: 60,
     height: 4,
-    backgroundColor: '#3F3F46',
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 20,
   },
   sheetTitle: {
-    color: '#FFF',
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
@@ -345,11 +314,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   categoryText: {
-    color: '#A1A1AA',
     fontSize: 16,
   },
   categoryTextSelected: {
-    color: '#FFF',
     fontWeight: '700',
   },
   sheetFooter: {
@@ -365,19 +332,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },
   continueButton: {
     flex: 1,
-    backgroundColor: '#A29CB5',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
   continueButtonText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: '600',
   },

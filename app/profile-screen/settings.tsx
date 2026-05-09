@@ -3,8 +3,12 @@ import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useDispatch, useSelector } from "react-redux";
+import { RootState } from "@/redux/store";
+import { setTheme } from "@/redux/slice/preference";
+import { useTheme } from "@/hooks/useTheme";
 
 type SettingItemProps = {
   icon: string;
@@ -15,29 +19,29 @@ type SettingItemProps = {
   onPress?: () => void;
 };
 
-const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress }: SettingItemProps) => (
+const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, colors }: SettingItemProps & { colors: any }) => (
   <TouchableOpacity 
-    style={styles.settingItem} 
+    style={[styles.settingItem, { backgroundColor: colors.card, borderColor: colors.border }]} 
     onPress={onPress} 
     activeOpacity={type === 'toggle' ? 1 : 0.7}
   >
     <View style={styles.settingItemLeft}>
-      <Feather name={icon as any} size={18} color="#8E8E9B" />
-      <Text style={styles.settingLabel}>{label}</Text>
+      <Feather name={icon as any} size={18} color={colors.textSecondary} />
+      <Text style={[styles.settingLabel, { color: colors.text }]}>{label}</Text>
     </View>
     <View style={styles.settingItemRight}>
       {type === 'toggle' && (
         <Switch
           value={value}
           onValueChange={onValueChange}
-          trackColor={{ false: '#2A2A32', true: '#E5D5F0' }}
-          thumbColor={value ? '#0e0d12' : '#FFFFFF'}
-          ios_backgroundColor="#2A2A32"
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={value ? (colors.isDark ? '#FFFFFF' : colors.background) : '#FFFFFF'}
+          ios_backgroundColor={colors.border}
           style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
         />
       )}
-      {type === 'arrow' && <Feather name="chevron-right" size={18} color="#8E8E9B" />}
-      {type === 'dropdown' && <Feather name="chevron-down" size={18} color="#8E8E9B" />}
+      {type === 'arrow' && <Feather name="chevron-right" size={18} color={colors.textSecondary} />}
+      {type === 'dropdown' && <Feather name="chevron-down" size={18} color={colors.textSecondary} />}
     </View>
   </TouchableOpacity>
 );
@@ -45,29 +49,32 @@ const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPres
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const dispatch = useDispatch();
+  const { colors, isDark } = useTheme();
 
   // Settings states
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(true);
-  const [darkModeEnabled, setDarkModeEnabled] = useState(true);
 
   // Bottom sheet states
   const [isAccountTypeModalVisible, setAccountTypeModalVisible] = useState(false);
   const [selectedAccountType, setSelectedAccountType] = useState<'personal' | 'business'>('personal');
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         {/* ESSENTIALS Section */}
-        <Text style={styles.sectionTitle}>ESSENTIALS</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ESSENTIALS</Text>
         <View style={styles.sectionGroup}>
           <SettingItem 
             icon="map-pin" 
@@ -75,6 +82,7 @@ export default function SettingsScreen() {
             type="toggle" 
             value={locationEnabled}
             onValueChange={setLocationEnabled}
+            colors={colors}
           />
           <SettingItem 
             icon="bell" 
@@ -82,33 +90,36 @@ export default function SettingsScreen() {
             type="toggle" 
             value={notificationEnabled}
             onValueChange={setNotificationEnabled}
+            colors={colors}
           />
           <SettingItem 
             icon="moon" 
             label="Dark Mode" 
             type="toggle" 
-            value={darkModeEnabled}
-            onValueChange={setDarkModeEnabled}
+            value={isDark}
+            onValueChange={(val) => dispatch(setTheme(val ? 'dark' : 'light'))}
+            colors={colors}
           />
           <SettingItem 
             icon="refresh-cw" 
             label="Switch Account Type" 
             type="dropdown" 
             onPress={() => setAccountTypeModalVisible(true)}
+            colors={colors}
           />
         </View>
 
         {/* TERMS & POLICIES Section */}
-        <Text style={styles.sectionTitle}>TERMS & POLICIES</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TERMS & POLICIES</Text>
         <View style={styles.sectionGroup}>
-          <SettingItem icon="file-text" label="Terms & Conditions" onPress={() => router.push('/profile-screen/terms')} />
-          <SettingItem icon="shield" label="Privacy & Policy" onPress={() => router.push('/profile-screen/privacy')} />
-          <SettingItem icon="headphones" label="Contact Support" />
+          <SettingItem icon="file-text" label="Terms & Conditions" onPress={() => router.push('/profile-screen/terms')} colors={colors} />
+          <SettingItem icon="shield" label="Privacy & Policy" onPress={() => router.push('/profile-screen/privacy')} colors={colors} />
+          <SettingItem icon="headphones" label="Contact Support" colors={colors} />
         </View>
 
         {/* Delete Account */}
-        <TouchableOpacity style={styles.deleteAccountBtn}>
-          <Text style={styles.deleteAccountText}>Delete Account</Text>
+        <TouchableOpacity style={[styles.deleteAccountBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.deleteAccountText, { color: colors.danger }]}>Delete Account</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -121,36 +132,45 @@ export default function SettingsScreen() {
         onRequestClose={() => setAccountTypeModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHandle} />
-            <Text style={styles.modalTitle}>Select Account Type</Text>
-            <Text style={styles.modalSubtitle}>You can always change the account type</Text>
+          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          <View style={[styles.bottomSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            <View style={[styles.bottomSheetHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Select Account Type</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>You can always change the account type</Text>
 
             <TouchableOpacity 
-              style={[styles.radioItem, selectedAccountType === 'personal' && styles.radioItemSelected]} 
+              style={[
+                styles.radioItem, 
+                { backgroundColor: colors.card, borderColor: colors.border },
+                selectedAccountType === 'personal' && { borderColor: colors.primary }
+              ]} 
               onPress={() => setSelectedAccountType('personal')}
               activeOpacity={0.8}
             >
               <View style={styles.radioItemLeft}>
-                <Text style={styles.radioLabel}>Personal Account</Text>
-                {selectedAccountType === 'personal' && <View style={styles.greenDot} />}
+                <Text style={[styles.radioLabel, { color: colors.text }]}>Personal Account</Text>
+                {selectedAccountType === 'personal' && <View style={[styles.statusDot, { backgroundColor: '#2DB46D' }]} />}
               </View>
-              <View style={[styles.radioCircle, selectedAccountType === 'personal' && styles.radioCircleSelected]}>
-                {selectedAccountType === 'personal' && <View style={styles.radioInnerCircle} />}
+              <View style={[styles.radioCircle, { borderColor: colors.textSecondary }, selectedAccountType === 'personal' && { borderColor: colors.primary }]}>
+                {selectedAccountType === 'personal' && <View style={[styles.radioInnerCircle, { backgroundColor: colors.primary }]} />}
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.radioItem, selectedAccountType === 'business' && styles.radioItemSelected]} 
+              style={[
+                styles.radioItem, 
+                { backgroundColor: colors.card, borderColor: colors.border },
+                selectedAccountType === 'business' && { borderColor: colors.primary }
+              ]} 
               onPress={() => setSelectedAccountType('business')}
               activeOpacity={0.8}
             >
               <View style={styles.radioItemLeft}>
-                <Text style={styles.radioLabel}>Business Account</Text>
-                {selectedAccountType === 'business' && <View style={styles.greenDot} />}
+                <Text style={[styles.radioLabel, { color: colors.text }]}>Business Account</Text>
+                {selectedAccountType === 'business' && <View style={[styles.statusDot, { backgroundColor: '#2DB46D' }]} />}
               </View>
-              <View style={[styles.radioCircle, selectedAccountType === 'business' && styles.radioCircleSelected]}>
-                {selectedAccountType === 'business' && <View style={styles.radioInnerCircle} />}
+              <View style={[styles.radioCircle, { borderColor: colors.textSecondary }, selectedAccountType === 'business' && { borderColor: colors.primary }]}>
+                {selectedAccountType === 'business' && <View style={[styles.radioInnerCircle, { backgroundColor: colors.primary }]} />}
               </View>
             </TouchableOpacity>
 
@@ -159,17 +179,13 @@ export default function SettingsScreen() {
                 style={styles.cancelModalBtn} 
                 onPress={() => setAccountTypeModalVisible(false)}
               >
-                <Text style={styles.cancelModalText}>Cancel</Text>
+                <Text style={[styles.cancelModalText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.doneModalBtn} 
-                onPress={() => {
-                  setAccountTypeModalVisible(false);
-                  // Optionally redirect or update global state here
-                  // router.push({ pathname: '/profile-screen/edit-profile', params: { type: selectedAccountType }});
-                }}
+                style={[styles.doneModalBtn, { backgroundColor: colors.primary }]} 
+                onPress={() => setAccountTypeModalVisible(false)}
               >
-                <Text style={styles.doneModalText}>Done</Text>
+                <Text style={[styles.doneModalText, { color: colors.background }]}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -183,35 +199,15 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 15,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -220,7 +216,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sectionTitle: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1,
@@ -229,7 +224,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   sectionGroup: {
-    backgroundColor: '#0e0d12', // matching background since items have borders
     borderRadius: 12,
   },
   settingItem: {
@@ -238,11 +232,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#13131A',
     marginBottom: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1A1A22',
   },
   settingItemLeft: {
     flexDirection: 'row',
@@ -250,7 +242,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingLabel: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -264,11 +255,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1A1A22',
-    backgroundColor: '#13131A',
   },
   deleteAccountText: {
-    color: '#FF4B4B',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -280,32 +268,27 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bottomSheet: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A22',
   },
   bottomSheetHandle: {
     width: 40,
     height: 4,
-    backgroundColor: '#2A2A32',
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 20,
   },
   modalTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
   },
   modalSubtitle: {
-    color: '#8E8E9B',
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 25,
@@ -318,12 +301,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1A1A22',
     marginBottom: 12,
-    backgroundColor: '#0e0d12',
-  },
-  radioItemSelected: {
-    borderColor: '#3B3B45',
   },
   radioItemLeft: {
     flexDirection: 'row',
@@ -331,33 +309,26 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   radioLabel: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
   },
-  greenDot: {
+  statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#2DB46D',
   },
   radioCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#8E8E9B',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  radioCircleSelected: {
-    borderColor: '#E5D5F0',
   },
   radioInnerCircle: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#E5D5F0',
   },
   modalFooter: {
     flexDirection: 'row',
@@ -372,7 +343,6 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   cancelModalText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -381,12 +351,10 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E5D5F0',
     borderRadius: 12,
     marginLeft: 10,
   },
   doneModalText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: 'bold',
   },

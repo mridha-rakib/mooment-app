@@ -11,24 +11,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/useTheme";
 
 const { width } = Dimensions.get("window");
 
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#D4B0EB",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentGreen: "#16D869",
-  border: "rgba(255, 255, 255, 0.05)",
-  tabBg: "rgba(255, 255, 255, 0.05)",
-  tabActive: "rgba(255, 255, 255, 0.15)",
-};
-
 const ProductWalletScreen = () => {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState("Active");
@@ -69,30 +60,31 @@ const ProductWalletScreen = () => {
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Product Wallet</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Product Wallet</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
-        <View style={styles.tabWrapper}>
+        <View style={[styles.tabWrapper, { backgroundColor: colors.card }]}>
           {["Active", "Canceled"].map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[
                 styles.tab,
-                activeTab === tab && styles.tabActive,
+                activeTab === tab && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
               ]}
               onPress={() => setActiveTab(tab)}
             >
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
+                  { color: activeTab === tab ? colors.text : colors.textSecondary },
                 ]}
               >
                 {tab}
@@ -108,44 +100,44 @@ const ProductWalletScreen = () => {
       >
         {sections.map((section, idx) => (
           <View key={idx} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
             {section.items.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.card} activeOpacity={0.9}>
+              <TouchableOpacity key={item.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.9}>
                 {/* Card Header */}
                 <LinearGradient
-                  colors={["rgba(212, 176, 235, 0.12)", "rgba(19, 19, 26, 0)"]}
+                  colors={[isDark ? "rgba(212, 176, 235, 0.12)" : "rgba(212, 176, 235, 0.05)", "transparent"]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.cardHeader}
                 >
                   <View>
-                    <Text style={styles.eventTitle}>{item.eventTitle}</Text>
-                    <Text style={styles.hostText}>by {item.host}</Text>
+                    <Text style={[styles.eventTitle, { color: colors.text }]}>{item.eventTitle}</Text>
+                    <Text style={[styles.hostText, { color: colors.textSecondary }]}>by {item.host}</Text>
                   </View>
-                  <View style={styles.statusBadge}>
+                  <View style={[styles.statusBadge, { backgroundColor: 'rgba(22, 216, 105, 0.1)' }]}>
                     <Text style={styles.statusText}>{item.status}</Text>
                   </View>
                 </LinearGradient>
 
                 {/* Card Content */}
                 <View style={styles.cardBody}>
-                  <Image source={{ uri: item.image }} style={styles.productImage} />
+                  <Image source={{ uri: item.image }} style={[styles.productImage, { backgroundColor: colors.border }]} />
                   <View style={styles.productInfo}>
                     <View style={styles.locationRow}>
-                      <Ionicons name="location-outline" size={14} color={COLORS.textMuted} />
-                      <Text style={styles.locationText}>{item.location}</Text>
+                      <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+                      <Text style={[styles.locationText, { color: colors.text }]}>{item.location}</Text>
                     </View>
-                    <Text style={styles.productName}>{item.productName}</Text>
-                    <Text style={styles.dateTimeText}>{item.dateTime}</Text>
+                    <Text style={[styles.productName, { color: colors.text }]}>{item.productName}</Text>
+                    <Text style={[styles.dateTimeText, { color: colors.textSecondary }]}>{item.dateTime}</Text>
                     
                     <View style={styles.footerRow}>
-                      <Text style={styles.priceText}>{item.price}</Text>
+                      <Text style={[styles.priceText, { color: colors.text }]}>{item.price}</Text>
                       <TouchableOpacity 
-                        style={styles.viewQrBtn}
+                        style={[styles.viewQrBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
                         onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "product" } })}
                       >
-                        <Text style={styles.viewQrText}>View QR</Text>
-                        <Feather name="arrow-right" size={14} color={COLORS.textMuted} />
+                        <Text style={[styles.viewQrText, { color: colors.textSecondary }]}>View QR</Text>
+                        <Feather name="arrow-right" size={14} color={colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -165,7 +157,6 @@ export default ProductWalletScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   header: {
     flexDirection: "row",
@@ -175,16 +166,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 12,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   headerTitle: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "600",
   },
@@ -194,7 +176,6 @@ const styles = StyleSheet.create({
   },
   tabWrapper: {
     flexDirection: "row",
-    backgroundColor: COLORS.tabBg,
     borderRadius: 12,
     padding: 4,
   },
@@ -204,16 +185,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 10,
   },
-  tabActive: {
-    backgroundColor: COLORS.tabActive,
-  },
   tabText: {
-    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "500",
-  },
-  tabTextActive: {
-    color: COLORS.text,
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -222,17 +196,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 16,
   },
   card: {
-    backgroundColor: COLORS.card,
     borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: COLORS.border,
     marginBottom: 16,
   },
   cardHeader: {
@@ -243,23 +214,20 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   eventTitle: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
   },
   hostText: {
-    color: COLORS.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
   statusBadge: {
-    backgroundColor: "rgba(22, 216, 105, 0.1)",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
   statusText: {
-    color: COLORS.accentGreen,
+    color: "#16D869",
     fontSize: 12,
     fontWeight: "600",
   },
@@ -272,7 +240,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 110,
     borderRadius: 12,
-    backgroundColor: "#222",
   },
   productInfo: {
     flex: 1,
@@ -285,18 +252,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   locationText: {
-    color: COLORS.text,
     fontSize: 13,
     fontWeight: "500",
   },
   productName: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "600",
     marginBottom: 4,
   },
   dateTimeText: {
-    color: COLORS.textMuted,
     fontSize: 12,
     marginBottom: 8,
   },
@@ -307,23 +271,19 @@ const styles = StyleSheet.create({
     marginTop: "auto",
   },
   priceText: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "bold",
   },
   viewQrBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
     gap: 6,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
   },
   viewQrText: {
-    color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: "500",
   },

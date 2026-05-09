@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import FilterModal from './FilterModal';
+import { useTheme } from '@/hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 
@@ -17,69 +18,70 @@ interface HomeHeaderProps {
 
 export default function HomeHeader({ selectedType, setSelectedType }: HomeHeaderProps) {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [filterVisible, setFilterVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
 
   const isMapMode = selectedType === 'Map';
 
   return (
-    <View style={styles.headerContainer}>
+    <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         {isMapMode ? (
           <View style={styles.mapHeaderLeft}>
             <TouchableOpacity 
-              style={styles.backBtn} 
+              style={[styles.backBtn, { backgroundColor: colors.card }]} 
               onPress={() => setSelectedType('Feed')}
               activeOpacity={0.7}
             >
-              <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFFFFF" />
+              <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.mapTitle}>Map</Text>
+            <Text style={[styles.mapTitle, { color: colors.text }]}>Map</Text>
           </View>
         ) : (
           <TouchableOpacity 
-            style={styles.feedBtn} 
+            style={[styles.feedBtn, { backgroundColor: colors.card }]} 
             activeOpacity={0.8}
             onPress={() => setDropdownVisible(true)}
           >
             <View style={styles.greenDot} />
-            <Text style={styles.feedText}>{selectedType}</Text>
-            <Feather name="chevron-down" size={14} color="#FFFFFF" />
+            <Text style={[styles.feedText, { color: colors.text }]}>{selectedType}</Text>
+            <Feather name="chevron-down" size={14} color={colors.text} />
           </TouchableOpacity>
         )}
 
-        {!isMapMode && <Text style={styles.logoText}>Mooment</Text>}
+        {!isMapMode && <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>}
 
         <View style={styles.headerIcons}>
           {!isMapMode ? (
             <>
               <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.headerBtnBorder}
                 >
-                  <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-                    <HugeiconsIcon icon={Search01Icon} size={20} color="#FFFFFF" />
+                  <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
+                    <HugeiconsIcon icon={Search01Icon} size={20} color={colors.text} />
                   </BlurView>
                 </LinearGradient>
               </TouchableOpacity>
               <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.headerBtnBorder}
                 >
-                  <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-                    <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color="#FFFFFF" />
+                  <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
+                    <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color={colors.text} />
                   </BlurView>
                 </LinearGradient>
               </TouchableOpacity>
             </>
           ) : (
-            <View style={{ width: 40 }} /> // Placeholder to balance map header
+            <View style={{ width: 40 }} />
           )}
         </View>
       </View>
@@ -87,9 +89,9 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
       {/* Location Bar for Map Mode */}
       {isMapMode && (
         <View style={styles.locationBarContainer}>
-          <TouchableOpacity style={styles.locationBar} activeOpacity={0.9}>
-            <HugeiconsIcon icon={Location01Icon} size={20} color="#8E8E9B" style={styles.locationIcon} />
-            <Text style={styles.locationText}>Los Angeles, CA</Text>
+          <TouchableOpacity style={[styles.locationBar, { backgroundColor: colors.card }]} activeOpacity={0.9}>
+            <HugeiconsIcon icon={Location01Icon} size={20} color={colors.textSecondary} style={styles.locationIcon} />
+            <Text style={[styles.locationText, { color: colors.text }]}>Los Angeles, CA</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -103,21 +105,21 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
       >
         <TouchableWithoutFeedback onPress={() => setDropdownVisible(false)}>
           <View style={styles.dropdownOverlay}>
-            <View style={styles.dropdownMenu}>
+            <View style={[styles.dropdownMenu, { backgroundColor: colors.card }]}>
               <TouchableOpacity 
                 style={styles.dropdownItem} 
                 onPress={() => { setSelectedType('Feed'); setDropdownVisible(false); }}
               >
                 <View style={[styles.greenDot, selectedType === 'Feed' ? { opacity: 1 } : { opacity: 0 }]} />
-                <Text style={styles.dropdownText}>Feed</Text>
+                <Text style={[styles.dropdownText, { color: colors.text }]}>Feed</Text>
               </TouchableOpacity>
-              <View style={styles.dropdownSeparator} />
+              <View style={[styles.dropdownSeparator, { backgroundColor: colors.border }]} />
               <TouchableOpacity 
                 style={styles.dropdownItem} 
                 onPress={() => { setSelectedType('Map'); setDropdownVisible(false); }}
               >
                 <View style={[styles.greenDot, selectedType === 'Map' ? { opacity: 1 } : { opacity: 0 }]} />
-                <Text style={styles.dropdownText}>Map</Text>
+                <Text style={[styles.dropdownText, { color: colors.text }]}>Map</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -131,7 +133,6 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
 const styles = StyleSheet.create({
   headerContainer: {
     zIndex: 100,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: "row",
@@ -149,20 +150,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1A1A22',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   mapTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
   feedBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1A1A22",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -175,7 +173,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   feedText: {
-    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "bold",
     marginRight: 4,
@@ -183,7 +180,6 @@ const styles = StyleSheet.create({
   logoText: {
     fontFamily: 'OleoScript-Regular',
     fontSize: 32,
-    color: '#FFFFFF',
     lineHeight: 32,
     position: 'absolute',
     left: width / 2 - 60,
@@ -203,7 +199,6 @@ const styles = StyleSheet.create({
   headerBtnBg: {
     width: 40,
     height: 40,
-    backgroundColor: "#1e1d21",
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
@@ -216,7 +211,6 @@ const styles = StyleSheet.create({
   locationBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 52,
@@ -225,7 +219,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   locationText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -237,15 +230,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 80,
     left: 20,
-    backgroundColor: '#35353A',
     borderRadius: 12,
     paddingVertical: 8,
     width: 120,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -254,13 +246,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   dropdownText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
   },
   dropdownSeparator: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
     marginHorizontal: 12,
   },
 });

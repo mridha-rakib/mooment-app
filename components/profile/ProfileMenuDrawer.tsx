@@ -21,6 +21,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 type MenuDrawerProps = {
   visible: boolean;
@@ -36,26 +37,28 @@ type MenuItemProps = {
   onPress: () => void;
   isDestructive?: boolean;
   hideSeparator?: boolean;
+  colors: any;
 };
 
-const MenuItem = ({ icon, label, onPress, isDestructive, hideSeparator }: MenuItemProps) => (
+const MenuItem = ({ icon, label, onPress, isDestructive, hideSeparator, colors }: MenuItemProps) => (
   <>
     <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.menuItemLeft}>
-        <HugeiconsIcon icon={icon} size={20} color={isDestructive ? '#FF4B4B' : '#FFFFFF'} />
-        <Text style={[styles.menuItemLabel, isDestructive && { color: '#FF4B4B' }]}>{label}</Text>
+        <HugeiconsIcon icon={icon} size={20} color={isDestructive ? colors.danger || '#FF4B4B' : colors.text} />
+        <Text style={[styles.menuItemLabel, { color: colors.text }, isDestructive && { color: colors.danger || '#FF4B4B' }]}>{label}</Text>
       </View>
     </TouchableOpacity>
-    {!hideSeparator && <View style={styles.itemSeparator} />}
+    {!hideSeparator && <View style={[styles.itemSeparator, { backgroundColor: colors.border }]} />}
   </>
 );
 
-const SectionLabel = ({ label }: { label: string }) => (
-  <Text style={styles.sectionLabel}>{label}</Text>
+const SectionLabel = ({ label, colors }: { label: string, colors: any }) => (
+  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{label}</Text>
 );
 
 export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress, userName, userHandle }: MenuDrawerProps) {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
 
   return (
     <Modal
@@ -65,42 +68,45 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <SafeAreaView style={styles.drawerContainer}>
+        <SafeAreaView style={[styles.drawerContainer, { backgroundColor: colors.background }]}>
           <View style={styles.header}>
             <View>
-              <Text style={styles.userName}>{userName}</Text>
-              <Text style={styles.userHandle}>{userHandle}</Text>
+              <Text style={[styles.userName, { color: colors.text }]}>{userName}</Text>
+              <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{userHandle}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <BlurView intensity={20} tint="dark" style={styles.closeCircle}>
-                <Feather name="x" size={20} color="#FFFFFF" />
+              <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.closeCircle}>
+                <Feather name="x" size={20} color={colors.text} />
               </BlurView>
             </TouchableOpacity>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            <SectionLabel label="ESSENTIALS" />
+            <SectionLabel label="ESSENTIALS" colors={colors} />
             <MenuItem 
               icon={UserEdit01Icon} 
               label="Edit Profile" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/edit-profile');
               }} 
             />
-            <MenuItem icon={Bookmark02Icon} label="Saved Posts" onPress={() => {}} />
+            <MenuItem icon={Bookmark02Icon} label="Saved Posts" colors={colors} onPress={() => {}} />
             <MenuItem 
               icon={Calendar03Icon} 
               label="Draft Events" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/event-screen/event');
               }} 
             />
-            <MenuItem icon={Calendar01Icon} label="My Plan" onPress={() => {}} />
+            <MenuItem icon={Calendar01Icon} label="My Plan" colors={colors} onPress={() => {}} />
             <MenuItem 
               icon={Analytics01Icon} 
               label="Creator Dashboard" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/creator-dashboard');
@@ -109,6 +115,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={ShoppingCart01Icon} 
               label="My Cart" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/event-screen/product/cart');
@@ -116,10 +123,11 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               hideSeparator 
             />
 
-            <SectionLabel label="WALLET" />
+            <SectionLabel label="WALLET" colors={colors} />
             <MenuItem 
               icon={StripeIcon} 
               label="Add Stripe Account" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/add-stripe');
@@ -128,6 +136,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={BitcoinIcon} 
               label="Buy Mooment Credits" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/buy-credits');
@@ -136,6 +145,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={Wallet01Icon} 
               label="Mooment Wallet" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/mooment-wallet');
@@ -144,6 +154,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={Ticket01Icon} 
               label="Ticket Wallet" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/ticket-wallet');
@@ -152,6 +163,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={ShoppingBag01Icon} 
               label="Product Wallet" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/product-wallet');
@@ -159,11 +171,12 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               hideSeparator 
             />
 
-            <SectionLabel label="PRODUCT" />
-            <MenuItem icon={Add01Icon} label="Add Product" onPress={onAddProductPress} />
+            <SectionLabel label="PRODUCT" colors={colors} />
+            <MenuItem icon={Add01Icon} label="Add Product" colors={colors} onPress={onAddProductPress} />
             <MenuItem 
               icon={Archive01Icon} 
               label="My Inventory" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/inventory');
@@ -176,6 +189,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={Settings02Icon} 
               label="Settings" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/settings');
@@ -186,6 +200,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             <MenuItem 
               icon={Logout01Icon} 
               label="Logout" 
+              colors={colors}
               onPress={() => {
                 onClose();
                 router.replace('/auth-screen/login');
@@ -207,7 +222,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   drawerContainer: {
-    backgroundColor: '#0e0d12',
     height: '92%',
     paddingTop: 10,
   },
@@ -219,12 +233,10 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   userName: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: 'bold',
   },
   userHandle: {
-    color: '#8E8E9B',
     fontSize: 14,
     marginTop: 2,
   },
@@ -233,7 +245,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -243,7 +254,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sectionLabel: {
-    color: '#8E8E9B',
     fontSize: 12,
     fontWeight: 'bold',
     marginTop: 25,
@@ -262,13 +272,11 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   menuItemLabel: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
   },
   itemSeparator: {
     height: 1,
-    backgroundColor: '#1A1A22',
     marginLeft: 37,
   },
 });

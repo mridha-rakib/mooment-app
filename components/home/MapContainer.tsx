@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,11 +29,12 @@ const MapMarker = ({
   isGMarker?: boolean;
   clusterCount?: number;
 }) => {
+  const { colors } = useTheme();
   return (
     <View style={[styles.markerContainer, { top, left, right }]}>
       <View style={styles.markerContent}>
         {isCluster ? (
-          <View style={styles.clusterMarker}>
+          <View style={[styles.clusterMarker, { backgroundColor: 'rgba(142, 142, 155, 0.8)', borderColor: colors.border }]}>
             <Text style={styles.clusterText}>{clusterCount}</Text>
           </View>
         ) : isGMarker ? (
@@ -41,7 +43,7 @@ const MapMarker = ({
           </View>
         ) : (
           <>
-            <View style={[styles.imageWrapper, { shadowColor: glowColor }]}>
+            <View style={[styles.imageWrapper, { shadowColor: glowColor, backgroundColor: colors.background }]}>
               <Image source={{ uri: image }} style={styles.markerImage} />
               <LinearGradient
                 colors={['transparent', glowColor]}
@@ -50,7 +52,7 @@ const MapMarker = ({
             </View>
             {label && (
               <View style={styles.labelContainer}>
-                <Text style={styles.labelText}>{label}</Text>
+                <Text style={[styles.labelText, { color: '#FFFFFF' }]}>{label}</Text>
               </View>
             )}
           </>
@@ -61,14 +63,15 @@ const MapMarker = ({
 };
 
 export default function MapContainer() {
+  const { colors, isDark } = useTheme();
   const MAP_BG = require('../../assets/images/Basemap image.png');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Map Background */}
       <Image 
         source={MAP_BG} 
-        style={styles.mapImage}
+        style={[styles.mapImage, { opacity: isDark ? 0.7 : 1 }]}
         resizeMode="cover"
       />
 
@@ -141,28 +144,28 @@ export default function MapContainer() {
       <View style={styles.controlsContainer}>
         {/* Left Side: Zoom */}
         <View style={styles.leftControls}>
-          <TouchableOpacity style={styles.glassBtn}>
-            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
-              <Feather name="plus" size={24} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.glassBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)', borderColor: colors.border }]}>
+            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.glassBtnInner}>
+              <Feather name="plus" size={24} color={colors.text} />
             </BlurView>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.glassBtn}>
-            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
-              <Feather name="minus" size={24} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.glassBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)', borderColor: colors.border }]}>
+            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.glassBtnInner}>
+              <Feather name="minus" size={24} color={colors.text} />
             </BlurView>
           </TouchableOpacity>
         </View>
 
         {/* Right Side: Layers and Location */}
         <View style={styles.rightControls}>
-          <TouchableOpacity style={styles.glassBtn}>
-            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
-              <MaterialCommunityIcons name="satellite-variant" size={24} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.glassBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)', borderColor: colors.border }]}>
+            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.glassBtnInner}>
+              <MaterialCommunityIcons name="satellite-variant" size={24} color={colors.text} />
             </BlurView>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.glassBtn}>
-            <BlurView intensity={20} tint="dark" style={styles.glassBtnInner}>
-              <MaterialCommunityIcons name="crosshairs-gps" size={24} color="#FFFFFF" />
+          <TouchableOpacity style={[styles.glassBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)', borderColor: colors.border }]}>
+            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.glassBtnInner}>
+              <MaterialCommunityIcons name="crosshairs-gps" size={24} color={colors.text} />
             </BlurView>
           </TouchableOpacity>
         </View>
@@ -174,7 +177,6 @@ export default function MapContainer() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
   mapImage: {
     width: width,
@@ -194,7 +196,6 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: '#000',
     padding: 2,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
@@ -225,7 +226,6 @@ const styles = StyleSheet.create({
     maxWidth: 100,
   },
   labelText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
@@ -236,11 +236,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(142, 142, 155, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   clusterText: {
     color: '#FFFFFF',
@@ -303,9 +301,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   glassBtnInner: {
     flex: 1,

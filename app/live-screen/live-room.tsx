@@ -23,6 +23,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/useTheme";
 
 const MOCK_CHAT = [
   {
@@ -52,40 +53,41 @@ const MOCK_CHAT = [
 ];
 
 export default function LiveRoomScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <View style={[styles.safeArea, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.back()}
-            style={styles.headerBtn}
+            style={[styles.headerBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
             activeOpacity={0.7}
           >
-            <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color="#FFF" />
+            <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Pre-show with DJ Nova</Text>
-          <TouchableOpacity style={styles.headerBtn} activeOpacity={0.7}>
-            <HugeiconsIcon icon={MoreHorizontalIcon} size={20} color="#FFF" />
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Pre-show with DJ Nova</Text>
+          <TouchableOpacity style={[styles.headerBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.7}>
+            <HugeiconsIcon icon={MoreHorizontalIcon} size={20} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         {/* Live Info Bar */}
         <View style={styles.liveBar}>
-          <View style={styles.liveBadgeContainer}>
+          <View style={[styles.liveBadgeContainer, { backgroundColor: isDark ? "rgba(0, 200, 83, 0.15)" : "rgba(0, 200, 83, 0.1)" }]}>
             <View style={styles.liveDot} />
             <Text style={styles.liveText}>Live</Text>
           </View>
           <View style={styles.listenerContainer}>
-            <HugeiconsIcon icon={UserGroupIcon} size={16} color="#8E8E9B" />
-            <Text style={styles.listenerText}>412 listening</Text>
+            <HugeiconsIcon icon={UserGroupIcon} size={16} color={colors.textSecondary} />
+            <Text style={[styles.listenerText, { color: colors.textSecondary }]}>412 listening</Text>
           </View>
           <TouchableOpacity
-            style={styles.leaveBtn}
+            style={[styles.leaveBtn, { borderColor: "#F2545B" }]}
             activeOpacity={0.7}
             onPress={() => router.back()}
           >
@@ -98,10 +100,10 @@ export default function LiveRoomScreen() {
           <View style={styles.hostSection}>
             <View style={styles.glowContainer}>
               <LinearGradient
-                colors={["rgba(142, 84, 233, 0.3)", "transparent"]}
+                colors={[colors.primary + "4D", "transparent"]}
                 style={styles.radialGlow}
               />
-              <View style={styles.avatarWrapper}>
+              <View style={[styles.avatarWrapper, { borderColor: colors.primary + "99", backgroundColor: colors.background }]}>
                 <Image
                   source={{ uri: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=300&auto=format&fit=crop" }}
                   style={styles.hostAvatar}
@@ -113,38 +115,38 @@ export default function LiveRoomScreen() {
               </View>
             </View>
             <View style={styles.hostInfo}>
-              <Text style={styles.hostName}>DJ Nova</Text>
-              <View style={styles.hostTag}>
-                <Text style={styles.hostTagText}>Host</Text>
+              <Text style={[styles.hostName, { color: colors.text }]}>DJ Nova</Text>
+              <View style={[styles.hostTag, { backgroundColor: colors.card }]}>
+                <Text style={[styles.hostTagText, { color: colors.textSecondary }]}>Host</Text>
               </View>
             </View>
 
             {/* Equalizer Mockup */}
             <View style={styles.equalizer}>
               {[0.4, 0.7, 0.9, 0.5, 0.8, 0.4, 0.6, 1.0, 0.7, 0.4].map((h, i) => (
-                <View key={i} style={[styles.eqBar, { height: 20 * h }]} />
+                <View key={i} style={[styles.eqBar, { backgroundColor: colors.primary, height: 20 * h }]} />
               ))}
             </View>
           </View>
 
           {/* Live Chat Section */}
-          <View style={styles.chatSection}>
-            <Text style={styles.chatHeading}>Live Chat</Text>
+          <View style={[styles.chatSection, { borderTopColor: colors.border }]}>
+            <Text style={[styles.chatHeading, { color: colors.text }]}>Live Chat</Text>
             {MOCK_CHAT.map((msg) => (
               <View key={msg.id} style={styles.chatItem}>
                 <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
                 <View style={styles.chatContent}>
                   <View style={styles.chatMeta}>
-                    <Text style={styles.chatName}>{msg.name}</Text>
+                    <Text style={[styles.chatName, { color: colors.text }]}>{msg.name}</Text>
                     {msg.role && (
-                      <View style={styles.roleTag}>
-                        <Text style={styles.roleTagText}>{msg.role}</Text>
+                      <View style={[styles.roleTag, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.roleTagText, { color: colors.textSecondary }]}>{msg.role}</Text>
                       </View>
                     )}
-                    <View style={styles.metaDot} />
-                    <Text style={styles.chatTime}>{msg.time}</Text>
+                    <View style={[styles.metaDot, { backgroundColor: colors.border }]} />
+                    <Text style={[styles.chatTime, { color: colors.textSecondary }]}>{msg.time}</Text>
                   </View>
-                  <Text style={styles.chatMessage}>{msg.message}</Text>
+                  <Text style={[styles.chatMessage, { color: colors.text + "CC" }]}>{msg.message}</Text>
                 </View>
               </View>
             ))}
@@ -156,22 +158,22 @@ export default function LiveRoomScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
-          <View style={[styles.bottomBar, { paddingBottom: insets.bottom || 12 }]}>
-            <TouchableOpacity style={styles.micBtn} activeOpacity={0.8}>
-              <HugeiconsIcon icon={Mic01Icon} size={20} color="#FFF" />
+          <View style={[styles.bottomBar, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: insets.bottom || 12 }]}>
+            <TouchableOpacity style={[styles.micBtn, { backgroundColor: colors.card }]} activeOpacity={0.8}>
+              <HugeiconsIcon icon={Mic01Icon} size={20} color={colors.text} />
             </TouchableOpacity>
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity style={styles.emojiBtn}>
-                <HugeiconsIcon icon={SmileIcon} size={20} color="#8E8E9B" />
+                <HugeiconsIcon icon={SmileIcon} size={20} color={colors.textSecondary} />
               </TouchableOpacity>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Add Comment"
-                placeholderTextColor="#8E8E9B"
+                placeholderTextColor={colors.textSecondary}
               />
             </View>
-            <TouchableOpacity style={styles.sendBtn} activeOpacity={0.8}>
-              <HugeiconsIcon icon={SentIcon} size={20} color="#0e0d12" />
+            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
+              <HugeiconsIcon icon={SentIcon} size={20} color={colors.background} />
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -183,7 +185,6 @@ export default function LiveRoomScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
   safeArea: {
     flex: 1,
@@ -199,14 +200,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.05)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
   },
   headerTitle: {
-    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -219,7 +217,6 @@ const styles = StyleSheet.create({
   liveBadgeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 200, 83, 0.15)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
@@ -244,7 +241,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   listenerText: {
-    color: "#8E8E9B",
     fontSize: 12,
   },
   leaveBtn: {
@@ -252,7 +248,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#F2545B",
   },
   leaveText: {
     color: "#F2545B",
@@ -285,9 +280,7 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: "rgba(142, 84, 233, 0.6)",
     padding: 4,
-    backgroundColor: "#0e0d12",
   },
   hostAvatar: {
     width: "100%",
@@ -318,18 +311,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hostName: {
-    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "bold",
   },
   hostTag: {
-    backgroundColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   hostTagText: {
-    color: "#8E8E9B",
     fontSize: 10,
     fontWeight: "600",
   },
@@ -342,17 +332,14 @@ const styles = StyleSheet.create({
   },
   eqBar: {
     width: 3,
-    backgroundColor: "#A78BFA",
     borderRadius: 2,
   },
   chatSection: {
     paddingHorizontal: 20,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
     paddingTop: 24,
   },
   chatHeading: {
-    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "bold",
     marginBottom: 20,
@@ -376,20 +363,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   chatName: {
-    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
     marginRight: 8,
   },
   roleTag: {
-    backgroundColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     marginRight: 8,
   },
   roleTagText: {
-    color: "#8E8E9B",
     fontSize: 10,
     fontWeight: "bold",
   },
@@ -397,15 +381,12 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "#454555",
     marginRight: 8,
   },
   chatTime: {
-    color: "#8E8E9B",
     fontSize: 11,
   },
   chatMessage: {
-    color: "#D0D0D8",
     fontSize: 14,
     lineHeight: 20,
   },
@@ -414,16 +395,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: "#0e0d12",
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
     gap: 12,
   },
   micBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "#2A2A3A",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -431,26 +409,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#13131A",
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 44,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
   },
   emojiBtn: {
     marginRight: 10,
   },
   input: {
     flex: 1,
-    color: "#FFFFFF",
     fontSize: 14,
   },
   sendBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "#D4B0EB",
     justifyContent: "center",
     alignItems: "center",
   },

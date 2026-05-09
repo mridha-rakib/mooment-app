@@ -4,19 +4,23 @@ import { Calendar01Icon, ShoppingBag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function CreatorDashboardScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.safe}>
+    <View style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <BackButton />
-        <Text style={styles.headerTitle}>Creator Dashboard</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Creator Dashboard</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -24,82 +28,82 @@ export default function CreatorDashboardScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionBtn}>
-            <HugeiconsIcon icon={Calendar01Icon} size={20} color="#8E8E9B" />
-            <Text style={styles.actionText}>Create Event</Text>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <HugeiconsIcon icon={Calendar01Icon} size={20} color={colors.textSecondary} />
+            <Text style={[styles.actionText, { color: colors.text }]}>Create Event</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn}>
-            <HugeiconsIcon icon={ShoppingBag01Icon} size={20} color="#8E8E9B" />
-            <Text style={styles.actionText}>Add Product</Text>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <HugeiconsIcon icon={ShoppingBag01Icon} size={20} color={colors.textSecondary} />
+            <Text style={[styles.actionText, { color: colors.text }]}>Add Product</Text>
           </TouchableOpacity>
         </View>
 
         {/* Main Balance */}
         <View style={styles.balanceSection}>
-          <Text style={styles.sectionLabel}>Available Balance For this Month</Text>
-          <Text style={styles.mainBalance}>$ 55.00</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Available Balance For this Month</Text>
+          <Text style={[styles.mainBalance, { color: colors.text }]}>$ 55.00</Text>
 
           <View style={styles.balanceSplit}>
             <View style={styles.balanceColumn}>
-              <Text style={styles.subLabel}>Available Mooment Credit{'\n'}Balance</Text>
-              <Text style={styles.subBalance}>MCB 55.00</Text>
+              <Text style={[styles.subLabel, { color: colors.textSecondary }]}>Available Mooment Credit{'\n'}Balance</Text>
+              <Text style={[styles.subBalance, { color: colors.text }]}>MCB 55.00</Text>
             </View>
-            <Feather name="arrow-right" size={16} color="#8E8E9B" style={styles.arrowIcon} />
+            <Feather name="arrow-right" size={16} color={colors.textSecondary} style={styles.arrowIcon} />
             <View style={styles.balanceColumn}>
-              <Text style={styles.subLabel}>Available Mooment{'\n'}Balance</Text>
-              <Text style={styles.subBalance}>$ 55.00</Text>
+              <Text style={[styles.subLabel, { color: colors.textSecondary }]}>Available Mooment{'\n'}Balance</Text>
+              <Text style={[styles.subBalance, { color: colors.text }]}>$ 55.00</Text>
             </View>
           </View>
         </View>
 
         {/* Filters */}
         <View style={styles.filterRow}>
-          <TouchableOpacity style={styles.filterPill}>
-            <Text style={styles.filterText}>Weekly</Text>
-            <Feather name="chevron-down" size={14} color="#8E8E9B" />
+          <TouchableOpacity style={[styles.filterPill, { backgroundColor: isDark ? colors.card : '#EBEBEB' }]}>
+            <Text style={[styles.filterText, { color: isDark ? colors.text : '#0e0d12' }]}>Weekly</Text>
+            <Feather name="chevron-down" size={14} color={isDark ? colors.textSecondary : '#8E8E9B'} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterPill}>
-            <Text style={styles.filterText}>Month</Text>
-            <Feather name="chevron-down" size={14} color="#8E8E9B" />
+          <TouchableOpacity style={[styles.filterPill, { backgroundColor: isDark ? colors.card : '#EBEBEB' }]}>
+            <Text style={[styles.filterText, { color: isDark ? colors.text : '#0e0d12' }]}>Month</Text>
+            <Feather name="chevron-down" size={14} color={isDark ? colors.textSecondary : '#8E8E9B'} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterPill}>
-            <Text style={styles.filterText}>Year</Text>
-            <Feather name="chevron-down" size={14} color="#8E8E9B" />
+          <TouchableOpacity style={[styles.filterPill, { backgroundColor: isDark ? colors.card : '#EBEBEB' }]}>
+            <Text style={[styles.filterText, { color: isDark ? colors.text : '#0e0d12' }]}>Year</Text>
+            <Feather name="chevron-down" size={14} color={isDark ? colors.textSecondary : '#8E8E9B'} />
           </TouchableOpacity>
         </View>
 
         {/* Earnings */}
         <View style={styles.earningsSection}>
           <View style={styles.earningItem}>
-            <Text style={styles.earningLabel}>All Earnings</Text>
-            <Text style={styles.earningAmount}>$ 11000.00</Text>
+            <Text style={[styles.earningLabel, { color: colors.textSecondary }]}>All Earnings</Text>
+            <Text style={[styles.earningAmount, { color: colors.text }]}>$ 11000.00</Text>
           </View>
           <View style={styles.earningItem}>
-            <Text style={styles.earningLabel}>All Earnings</Text>
-            <Text style={styles.earningAmount}>MCB 55.00</Text>
+            <Text style={[styles.earningLabel, { color: colors.textSecondary }]}>All Earnings</Text>
+            <Text style={[styles.earningAmount, { color: colors.text }]}>MCB 55.00</Text>
           </View>
         </View>
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statColumn}>
-            <Text style={styles.statLabel}>Ticket Sold</Text>
-            <Text style={styles.statValue}>200</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Ticket Sold</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>200</Text>
           </View>
           <View style={styles.statColumn}>
-            <Text style={styles.statLabel}>Product Sold</Text>
-            <Text style={styles.statValue}>200</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Product Sold</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>200</Text>
           </View>
         </View>
 
         {/* All Events List */}
         <View style={styles.eventsSection}>
-          <Text style={styles.eventsTitle}>All Events</Text>
+          <Text style={[styles.eventsTitle, { color: colors.text }]}>All Events</Text>
 
           {[1, 2, 3].map((item, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.eventCard}
+              style={[styles.eventCard, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => router.push('/profile-screen/event-dashboard')}
             >
               <Image
@@ -107,60 +111,60 @@ export default function CreatorDashboardScreen() {
                 style={styles.eventImage}
               />
               <View style={styles.eventInfo}>
-                <Text style={styles.eventTitle}>Rooftop Session Vol.4</Text>
-                <Text style={styles.eventDetails}>Sat, Sep 9  •  9:00  •  <Feather name="lock" size={10} /></Text>
+                <Text style={[styles.eventTitle, { color: colors.text }]}>Rooftop Session Vol.4</Text>
+                <Text style={[styles.eventDetails, { color: colors.textSecondary }]}>Sat, Sep 9  •  9:00  •  <Feather name="lock" size={10} color={colors.textSecondary} /></Text>
 
                 <View style={styles.eventBottom}>
                   <View style={styles.avatarsRow}>
-                    <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={styles.tinyAvatar} />
-                    <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8 }]} />
-                    <Image source={{ uri: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8 }]} />
+                    <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }} style={[styles.tinyAvatar, { borderColor: colors.card }]} />
+                    <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8, borderColor: colors.card }]} />
+                    <Image source={{ uri: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=100' }} style={[styles.tinyAvatar, { marginLeft: -8, borderColor: colors.card }]} />
                   </View>
-                  <Text style={styles.goingText}>41 going  •  {index === 2 ? '88 tickets left' : 'Sold Out'}</Text>
+                  <Text style={[styles.goingText, { color: colors.text }]}>41 going  •  {index === 2 ? '88 tickets left' : 'Sold Out'}</Text>
                 </View>
               </View>
-              <Feather name="chevron-right" size={20} color="#8E8E9B" style={styles.eventChevron} />
+              <Feather name="chevron-right" size={20} color={colors.textSecondary} style={styles.eventChevron} />
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Chart Section */}
-        <View style={styles.chartSection}>
+        <View style={[styles.chartSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Total Sales</Text>
+            <Text style={[styles.chartTitle, { color: colors.text }]}>Total Sales</Text>
             <TouchableOpacity style={styles.chartFilter}>
-              <Text style={styles.chartFilterText}>Year</Text>
-              <Feather name="chevron-down" size={14} color="#8E8E9B" />
+              <Text style={[styles.chartFilterText, { color: colors.textSecondary }]}>Year</Text>
+              <Feather name="chevron-down" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.chartArea}>
             {/* Y Axis */}
             <View style={styles.yAxis}>
-              <Text style={styles.axisLabel}>$1k</Text>
-              <Text style={styles.axisLabel}>$750</Text>
-              <Text style={styles.axisLabel}>$500</Text>
-              <Text style={styles.axisLabel}>$250</Text>
-              <Text style={styles.axisLabel}>$0</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$1k</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$750</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$500</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$250</Text>
+              <Text style={[styles.axisLabel, { color: colors.textSecondary }]}>$0</Text>
             </View>
 
             {/* Bars */}
             <View style={styles.barsContainer}>
               <View style={styles.gridLines}>
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
-                <View style={styles.gridLine} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.gridLine, { backgroundColor: colors.border }]} />
               </View>
 
               <View style={styles.barsRow}>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '60%' }]} /><Text style={styles.xLabel}>Jan</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '80%' }]} /><Text style={styles.xLabel}>Feb</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '50%' }]} /><Text style={styles.xLabel}>Mar</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '70%' }]} /><Text style={styles.xLabel}>Apr</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '90%' }]} /><Text style={styles.xLabel}>May</Text></View>
-                <View style={styles.barWrapper}><View style={[styles.bar, { height: '85%' }]} /><Text style={styles.xLabel}>Jun</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '60%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Jan</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '80%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Feb</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '50%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Mar</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '70%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Apr</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '90%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>May</Text></View>
+                <View style={styles.barWrapper}><View style={[styles.bar, { height: '85%', backgroundColor: colors.primary }]} /><Text style={[styles.xLabel, { color: colors.textSecondary }]}>Jun</Text></View>
               </View>
             </View>
           </View>
@@ -174,37 +178,17 @@ export default function CreatorDashboardScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 15,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
   },
   scrollContent: {
     padding: 20,
@@ -218,8 +202,6 @@ const styles = StyleSheet.create({
   actionBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#1A1A22',
-    backgroundColor: '#13131A',
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
@@ -227,7 +209,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -235,12 +216,10 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   sectionLabel: {
-    color: '#8E8E9B',
     fontSize: 12,
     marginBottom: 8,
   },
   mainBalance: {
-    color: '#FFFFFF',
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 20,
@@ -254,13 +233,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   subLabel: {
-    color: '#8E8E9B',
     fontSize: 11,
     lineHeight: 16,
     marginBottom: 4,
   },
   subBalance: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -275,14 +252,12 @@ const styles = StyleSheet.create({
   filterPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBEBEB',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
   },
   filterText: {
-    color: '#0e0d12',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -292,12 +267,10 @@ const styles = StyleSheet.create({
   },
   earningItem: {},
   earningLabel: {
-    color: '#8E8E9B',
     fontSize: 12,
     marginBottom: 4,
   },
   earningAmount: {
-    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: 'bold',
   },
@@ -309,12 +282,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statLabel: {
-    color: '#8E8E9B',
     fontSize: 12,
     marginBottom: 4,
   },
   statValue: {
-    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: 'bold',
   },
@@ -322,7 +293,6 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   eventsTitle: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 15,
@@ -330,12 +300,10 @@ const styles = StyleSheet.create({
   eventCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#13131A',
     borderRadius: 12,
     padding: 10,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#1A1A22',
   },
   eventImage: {
     width: 60,
@@ -347,13 +315,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   eventTitle: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   eventDetails: {
-    color: '#8E8E9B',
     fontSize: 10,
     marginBottom: 6,
   },
@@ -370,21 +336,17 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#13131A',
   },
   goingText: {
-    color: '#FFFFFF',
     fontSize: 10,
   },
   eventChevron: {
     marginLeft: 10,
   },
   chartSection: {
-    backgroundColor: '#13131A',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#1A1A22',
   },
   chartHeader: {
     flexDirection: 'row',
@@ -393,7 +355,6 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   chartTitle: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -403,7 +364,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   chartFilterText: {
-    color: '#8E8E9B',
     fontSize: 12,
   },
   chartArea: {
@@ -416,7 +376,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20, // space for x labels
   },
   axisLabel: {
-    color: '#8E8E9B',
     fontSize: 10,
   },
   barsContainer: {
@@ -430,7 +389,6 @@ const styles = StyleSheet.create({
   },
   gridLine: {
     height: 1,
-    backgroundColor: '#1A1A22',
     width: '100%',
   },
   barsRow: {
@@ -448,12 +406,10 @@ const styles = StyleSheet.create({
   },
   bar: {
     width: 8,
-    backgroundColor: '#B2ABBA',
     borderRadius: 4,
     marginBottom: 10, // space above label
   },
   xLabel: {
-    color: '#8E8E9B',
     fontSize: 10,
   },
 });

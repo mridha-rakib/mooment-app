@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 type MoreMenuModalProps = {
   visible: boolean;
@@ -21,6 +22,8 @@ export default function MoreMenuModal({
   showDelete = false,
   top
 }: MoreMenuModalProps) {
+  const { colors } = useTheme();
+
   return (
     <Modal
       visible={visible}
@@ -31,9 +34,9 @@ export default function MoreMenuModal({
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={[styles.modalOverlay, top !== undefined && styles.alignTopRight]}>
           <View style={[styles.menuContainer, top !== undefined && { marginTop: top }]}>
-            <Text style={styles.menuLabel}>more</Text>
+            <Text style={[styles.menuLabel, { color: colors.textSecondary }]}>more</Text>
             
-            <View style={styles.menuContent}>
+            <View style={[styles.menuContent, { backgroundColor: colors.card }]}>
               {onReport && (
                 <>
                   <TouchableOpacity 
@@ -44,10 +47,10 @@ export default function MoreMenuModal({
                       onClose();
                     }}
                   >
-                    <Feather name="flag" size={20} color="#FFFFFF" style={styles.menuIcon} />
-                    <Text style={styles.menuText}>Report</Text>
+                    <Feather name="flag" size={20} color={colors.text} style={styles.menuIcon} />
+                    <Text style={[styles.menuText, { color: colors.text }]}>Report</Text>
                   </TouchableOpacity>
-                  {(onSave || (showDelete && onDelete)) && <View style={styles.separator} />}
+                  {(onSave || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
               )}
 
@@ -61,10 +64,10 @@ export default function MoreMenuModal({
                       onClose();
                     }}
                   >
-                    <Feather name="bookmark" size={20} color="#FFFFFF" style={styles.menuIcon} />
-                    <Text style={styles.menuText}>Save</Text>
+                    <Feather name="bookmark" size={20} color={colors.text} style={styles.menuIcon} />
+                    <Text style={[styles.menuText, { color: colors.text }]}>Save</Text>
                   </TouchableOpacity>
-                  {showDelete && onDelete && <View style={styles.separator} />}
+                  {showDelete && onDelete && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
               )}
 
@@ -77,8 +80,8 @@ export default function MoreMenuModal({
                     onClose();
                   }}
                 >
-                  <Feather name="trash-2" size={20} color="#FFFFFF" style={styles.menuIcon} />
-                  <Text style={styles.menuText}>Delete</Text>
+                  <Feather name="trash-2" size={20} color={colors.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuText, { color: colors.primary }]}>Delete</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -105,13 +108,11 @@ const styles = StyleSheet.create({
     width: 180,
   },
   menuLabel: {
-    color: '#8E8E9B',
     fontSize: 14,
     marginBottom: 8,
     marginLeft: 4,
   },
   menuContent: {
-    backgroundColor: '#333333',
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -125,13 +126,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   menuText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   separator: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     marginHorizontal: 0,
   },
 });

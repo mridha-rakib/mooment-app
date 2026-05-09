@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ScrollView, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/hooks/useTheme';
 
 const { height } = Dimensions.get('window');
 
@@ -68,35 +69,37 @@ export default function CommentsModal({
   visible: boolean; 
   onClose: () => void;
 }) {
+  const { colors, isDark } = useTheme();
 
-  const renderComment = (item: CommentType, isChild = false, isLast = false, parentHasMoreReplies = false) => {
+  const renderComment = (item: CommentType, isChild = false, isLast = false) => {
     return (
       <View key={item.id} style={[styles.commentRow, isChild && styles.childCommentRow]}>
         {/* Connection line for replies */}
         {isChild && (
           <View style={[
             styles.replyLineVertical,
+            { borderColor: colors.border },
             isLast ? styles.replyLineVerticalLast : undefined
           ]} />
         )}
         {isChild && (
-          <View style={styles.replyLineHorizontal} />
+          <View style={[styles.replyLineHorizontal, { borderColor: colors.border }]} />
         )}
         
         <Image source={{ uri: item.authorAvatar }} style={styles.commentAvatar} />
         
         <View style={styles.commentContent}>
-          <Text style={styles.commentName}>{item.authorName}</Text>
-          <Text style={styles.commentText}>{item.text}</Text>
+          <Text style={[styles.commentName, { color: colors.text }]}>{item.authorName}</Text>
+          <Text style={[styles.commentText, { color: colors.textSecondary }]}>{item.text}</Text>
           
           <View style={styles.commentActions}>
-            <Text style={styles.actionMutedText}>{item.timeAgo}</Text>
+            <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>{item.timeAgo}</Text>
             {item.likesCount ? (
-              <Text style={styles.actionPurpleText}>{item.likesCount} Like</Text>
+              <Text style={[styles.actionPurpleText, { color: colors.primary }]}>{item.likesCount} Like</Text>
             ) : (
-              <Text style={styles.actionMutedText}>Like</Text>
+              <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>Like</Text>
             )}
-            <Text style={styles.actionMutedText}>Reply</Text>
+            <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>Reply</Text>
           </View>
         </View>
       </View>
@@ -119,22 +122,22 @@ export default function CommentsModal({
         
         {/* Comment Heading Outside Container */}
         <View style={styles.headerLabelContainer}>
-          <Text style={styles.headerLabel}>Comment</Text>
+          <Text style={[styles.headerLabel, { color: colors.textSecondary }]}>Comment</Text>
         </View>
 
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
           {/* Top Indicator */}
           <View style={styles.grabberContainer}>
-            <View style={styles.grabber} />
+            <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           </View>
           
           {/* Stats Header */}
           <View style={styles.statsHeader}>
             <View style={styles.statsLeft}>
               <Ionicons name="heart" size={16} color="#F2245C" />
-              <Text style={styles.statsText}>12.5K</Text>
+              <Text style={[styles.statsText, { color: colors.textSecondary }]}>12.5K</Text>
             </View>
-            <Text style={styles.statsShares}>33 shares</Text>
+            <Text style={[styles.statsShares, { color: colors.textSecondary }]}>33 shares</Text>
           </View>
 
           {/* Comments List */}
@@ -145,8 +148,8 @@ export default function CommentsModal({
             {/* Comment 2 with View More */}
             {renderComment(MOCK_COMMENTS[1])}
             <View style={styles.viewMoreRow}>
-              <View style={styles.viewMoreLine} />
-              <Text style={styles.viewMoreText}>View 4 replies</Text>
+              <View style={[styles.viewMoreLine, { borderColor: colors.border }]} />
+              <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>View 4 replies</Text>
             </View>
 
             {/* Comment 3 with deeply nested children */}
@@ -162,16 +165,16 @@ export default function CommentsModal({
           </ScrollView>
 
           {/* Bottom Input */}
-          <View style={styles.inputSection}>
-            <View style={styles.inputWrapper}>
+          <View style={[styles.inputSection, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Add Comment"
-                placeholderTextColor="#8E8E9B"
+                placeholderTextColor={colors.textSecondary}
               />
             </View>
-            <TouchableOpacity style={styles.sendBtn} activeOpacity={0.8}>
-               <Feather name="send" size={18} color="#13131A" />
+            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
+               <Feather name="send" size={18} color={colors.background} />
             </TouchableOpacity>
           </View>
         </View>
@@ -194,12 +197,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   headerLabel: {
-    color: '#D0D0D8',
     fontSize: 16,
     fontWeight: 'normal',
   },
   modalContainer: {
-    backgroundColor: '#13131A',
     height: height * 0.85,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -213,7 +214,6 @@ const styles = StyleSheet.create({
   grabber: {
     width: 40,
     height: 4,
-    backgroundColor: '#8E8E9B',
     borderRadius: 2,
   },
   statsHeader: {
@@ -227,12 +227,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statsText: {
-    color: '#D0D0D8',
     fontSize: 13,
     marginLeft: 6,
   },
   statsShares: {
-    color: '#8E8E9B',
     fontSize: 13,
   },
   scrollList: {
@@ -258,13 +256,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   commentName: {
-    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   commentText: {
-    color: '#D0D0D8',
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 8,
@@ -274,12 +270,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   actionMutedText: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
   },
   actionPurpleText: {
-    color: '#D4B0EB',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -295,12 +289,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderBottomWidth: 1,
     borderBottomLeftRadius: 8,
-    borderColor: '#454555',
     marginRight: 8,
     marginTop: -16,
   },
   viewMoreText: {
-    color: '#8E8E9B',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -313,7 +305,6 @@ const styles = StyleSheet.create({
     top: -30, // Connect from previous comment
     bottom: -20, // Continue to next comment
     borderLeftWidth: 1,
-    borderColor: '#454555',
     zIndex: 1,
   },
   replyLineVerticalLast: {
@@ -327,7 +318,6 @@ const styles = StyleSheet.create({
     top: 18, // Center of the 36x36 avatar
     width: 18,
     borderTopWidth: 1,
-    borderColor: '#454555',
     zIndex: 1,
   },
   inputSection: {
@@ -335,28 +325,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#2C2C35',
     alignItems: 'center',
-    backgroundColor: '#13131A',
   },
   inputWrapper: {
     flex: 1,
-    backgroundColor: '#1A1A22',
     borderWidth: 1,
-    borderColor: '#454555',
     borderRadius: 8,
     marginRight: 10,
     paddingHorizontal: 12,
   },
   input: {
     height: 40,
-    color: '#FFFFFF',
     fontSize: 14,
   },
   sendBtn: {
     width: 40,
     height: 40,
-    backgroundColor: '#D0D0D8',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',

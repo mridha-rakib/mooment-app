@@ -5,7 +5,8 @@ import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, SafeAreaView, KeyboardAvoidingView, Platform, Image, ImageBackground, Alert } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, SafeAreaView, KeyboardAvoidingView, Platform, Image, ImageBackground, Alert, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 type AddProductModalProps = {
   visible: boolean;
@@ -21,14 +22,15 @@ type AddProductModalProps = {
   };
 };
 
-const InputLabel = ({ label, sublabel }: { label: string; sublabel?: string }) => (
+const InputLabel = ({ label, sublabel, colors }: { label: string; sublabel?: string; colors: any }) => (
   <View style={styles.labelContainer}>
-    <Text style={styles.inputLabel}>{label}</Text>
-    {sublabel && <Text style={styles.sublabel}>{sublabel}</Text>}
+    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
+    {sublabel && <Text style={[styles.sublabel, { color: colors.textSecondary, opacity: 0.7 }]}>{sublabel}</Text>}
   </View>
 );
 
 export default function AddProductModal({ visible, onClose, initialData }: AddProductModalProps) {
+  const { colors, isDark } = useTheme();
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
@@ -92,7 +94,8 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
       transparent={false}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <KeyboardAvoidingView 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
@@ -100,17 +103,17 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <View style={styles.closeCircle}>
-                <Feather name="x" size={20} color="#FFFFFF" />
+              <View style={[styles.closeCircle, { backgroundColor: colors.card }]}>
+                <Feather name="x" size={20} color={colors.text} />
               </View>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{initialData ? 'Edit Product' : 'Add Product'}</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>{initialData ? 'Edit Product' : 'Add Product'}</Text>
             <View style={{ width: 40 }} /> 
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             {/* Image Upload */}
-            <InputLabel label="IMAGE" />
+            <InputLabel label="IMAGE" colors={colors} />
             
             {images.length > 0 ? (
               <View style={styles.galleryContainer}>
@@ -133,56 +136,56 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
                     </ImageBackground>
                   ))}
                 </ScrollView>
-                <TouchableOpacity style={styles.uploadBtnSmall} onPress={handleUpload}>
-                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color="#0e0d12" />
-                  <Text style={styles.uploadBtnText}>Upload Image</Text>
+                <TouchableOpacity style={[styles.uploadBtnSmall, { backgroundColor: colors.primary }]} onPress={handleUpload}>
+                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color={colors.background} />
+                  <Text style={[styles.uploadBtnText, { color: colors.background }]}>Upload Image</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.uploadBox} activeOpacity={0.7} onPress={handleUpload}>
-                <Text style={styles.uploadHint}>You can upload multiple images</Text>
-                <View style={styles.uploadBtn}>
-                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color="#0e0d12" />
-                  <Text style={styles.uploadBtnText}>Upload Image</Text>
+              <TouchableOpacity style={[styles.uploadBox, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.7} onPress={handleUpload}>
+                <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>You can upload multiple images</Text>
+                <View style={[styles.uploadBtn, { backgroundColor: colors.primary }]}>
+                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color={colors.background} />
+                  <Text style={[styles.uploadBtnText, { color: colors.background }]}>Upload Image</Text>
                 </View>
-                <Text style={styles.fileHint}>JPEG, or PNG</Text>
+                <Text style={[styles.fileHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
               </TouchableOpacity>
             )}
 
             {/* Category */}
-            <InputLabel label="CATEGORY" />
-            <TouchableOpacity style={styles.dropdown} activeOpacity={0.8}>
-              <Text style={styles.dropdownText}>Select Category</Text>
-              <Feather name="chevron-down" size={20} color="#8E8E9B" />
+            <InputLabel label="CATEGORY" colors={colors} />
+            <TouchableOpacity style={[styles.dropdown, { backgroundColor: colors.card }]} activeOpacity={0.8}>
+              <Text style={[styles.dropdownText, { color: colors.textSecondary }]}>Select Category</Text>
+              <Feather name="chevron-down" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
             {/* Product Name */}
-            <InputLabel label="PRODUCT NAME" />
+            <InputLabel label="PRODUCT NAME" colors={colors} />
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text }]} 
               placeholder="Name" 
-              placeholderTextColor="#555"
+              placeholderTextColor={colors.textSecondary}
               value={name}
               onChangeText={setName}
             />
 
             {/* Description */}
-            <InputLabel label="DESCRIPTION" />
+            <InputLabel label="DESCRIPTION" colors={colors} />
             <TextInput 
-              style={[styles.input, styles.textArea]} 
+              style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text }]} 
               placeholder="Detail about ticket" 
-              placeholderTextColor="#555"
+              placeholderTextColor={colors.textSecondary}
               multiline
               value={description}
               onChangeText={setDescription}
             />
 
             {/* Set Tag */}
-            <InputLabel label="SET TAG" sublabel="You can only set one tag for your product" />
+            <InputLabel label="SET TAG" sublabel="You can only set one tag for your product" colors={colors} />
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text }]} 
               placeholder="Skin Care" 
-              placeholderTextColor="#555"
+              placeholderTextColor={colors.textSecondary}
               value={tag}
               onChangeText={setTag}
             />
@@ -190,13 +193,13 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
             {/* Price & Discount */}
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <InputLabel label="PRICE" />
-                <View style={styles.inputWithIcon}>
-                  <Text style={styles.iconPrefix}>$</Text>
+                <InputLabel label="PRICE" colors={colors} />
+                <View style={[styles.inputWithIcon, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.iconPrefix, { color: colors.textSecondary }]}>$</Text>
                   <TextInput 
-                    style={styles.flexInput} 
+                    style={[styles.flexInput, { color: colors.text }]} 
                     placeholder="185" 
-                    placeholderTextColor="#555"
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="numeric"
                     value={price}
                     onChangeText={setPrice}
@@ -204,13 +207,13 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
                 </View>
               </View>
               <View style={{ flex: 1 }}>
-                <InputLabel label="DISCOUNT" />
-                <View style={styles.inputWithIcon}>
-                  <Text style={styles.iconPrefix}>%</Text>
+                <InputLabel label="DISCOUNT" colors={colors} />
+                <View style={[styles.inputWithIcon, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.iconPrefix, { color: colors.textSecondary }]}>%</Text>
                   <TextInput 
-                    style={styles.flexInput} 
+                    style={[styles.flexInput, { color: colors.text }]} 
                     placeholder="0" 
-                    placeholderTextColor="#555"
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="numeric"
                     value={discount}
                     onChangeText={setDiscount}
@@ -220,11 +223,11 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
             </View>
 
             {/* Total Product */}
-            <InputLabel label="TOTAL PRODUCT" />
+            <InputLabel label="TOTAL PRODUCT" colors={colors} />
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text }]} 
               placeholder="185" 
-              placeholderTextColor="#555"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               value={stock}
               onChangeText={setStock}
@@ -232,11 +235,11 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
 
             {/* Actions */}
             <View style={styles.footerActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={onClose}>
+                <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.publishBtn} onPress={handlePublish}>
-                <Text style={styles.publishText}>{initialData ? 'Save Changes' : 'Publish'}</Text>
+              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: colors.primary }]} onPress={handlePublish}>
+                <Text style={[styles.publishText, { color: colors.background }]}>{initialData ? 'Save Changes' : 'Publish'}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -249,7 +252,6 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
@@ -260,7 +262,6 @@ const styles = StyleSheet.create({
   },
   closeBtn: {},
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -268,7 +269,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1A1A22',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -281,13 +281,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   inputLabel: {
-    color: '#8E8E9B',
     fontSize: 12,
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
   sublabel: {
-    color: '#555',
     fontSize: 11,
     marginTop: 4,
   },
@@ -295,15 +293,12 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 160,
     borderWidth: 1,
-    borderColor: '#333',
     borderStyle: 'dashed',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#13131A',
   },
   uploadHint: {
-    color: '#8E8E9B',
     fontSize: 13,
     marginBottom: 15,
   },
@@ -338,7 +333,6 @@ const styles = StyleSheet.create({
   uploadBtnSmall: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#B2ABBA',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -348,24 +342,20 @@ const styles = StyleSheet.create({
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#B2ABBA',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
     gap: 8,
   },
   uploadBtnText: {
-    color: '#0e0d12',
     fontSize: 14,
     fontWeight: 'bold',
   },
   fileHint: {
-    color: '#555',
     fontSize: 11,
     marginTop: 10,
   },
   dropdown: {
-    backgroundColor: '#1C1C24',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -373,14 +363,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dropdownText: {
-    color: '#8E8E9B',
     fontSize: 15,
   },
   input: {
-    backgroundColor: '#1C1C24',
     borderRadius: 12,
     padding: 16,
-    color: '#FFFFFF',
     fontSize: 15,
   },
   textArea: {
@@ -394,19 +381,16 @@ const styles = StyleSheet.create({
   inputWithIcon: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C24',
     borderRadius: 12,
     paddingHorizontal: 16,
   },
   iconPrefix: {
-    color: '#555',
     fontSize: 16,
     marginRight: 8,
   },
   flexInput: {
     flex: 1,
     paddingVertical: 16,
-    color: '#FFFFFF',
     fontSize: 15,
   },
   footerActions: {
@@ -420,10 +404,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1C1C24',
   },
   cancelText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -431,11 +413,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
     alignItems: 'center',
-    backgroundColor: '#B2ABBA',
     borderRadius: 12,
   },
   publishText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: 'bold',
   },

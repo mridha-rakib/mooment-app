@@ -3,25 +3,27 @@ import BackButton from "@/components/ui/BackButton";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/useTheme";
 
-const CustomInput = ({ icon, placeholder, value, rightIcon, multiline, style }: any) => (
-  <View style={[styles.inputContainer, multiline && styles.inputContainerMultiline, style]}>
-    {icon && <Feather name={icon} size={16} color="#8E8E9B" style={styles.inputIcon} />}
+const CustomInput = ({ icon, placeholder, value, rightIcon, multiline, style, colors }: any) => (
+  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }, multiline && styles.inputContainerMultiline, style]}>
+    {icon && <Feather name={icon} size={16} color={colors.textSecondary} style={styles.inputIcon} />}
     <TextInput
-      style={[styles.input, multiline && styles.inputMultiline]}
+      style={[styles.input, { color: colors.text }, multiline && styles.inputMultiline]}
       placeholder={placeholder}
-      placeholderTextColor="#8E8E9B"
+      placeholderTextColor={colors.textSecondary}
       value={value}
       multiline={multiline}
       textAlignVertical={multiline ? "top" : "center"}
     />
-    {rightIcon && <Feather name={rightIcon} size={16} color="#8E8E9B" style={styles.inputRightIcon} />}
+    {rightIcon && <Feather name={rightIcon} size={16} color={colors.textSecondary} style={styles.inputRightIcon} />}
   </View>
 );
 
 export default function EditProfileScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const { type } = useLocalSearchParams<{ type?: 'personal' | 'business' }>();
 
@@ -33,16 +35,18 @@ export default function EditProfileScreen() {
   const isBusiness = profileType === 'business';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
         <TouchableOpacity
           style={styles.toggleBtn}
           onPress={() => setProfileType(isBusiness ? 'personal' : 'business')}
         >
-          <Feather name="refresh-cw" size={16} color="#8E8E9B" />
+          <Feather name="refresh-cw" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -54,16 +58,16 @@ export default function EditProfileScreen() {
 
           {/* Image Section */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>IMAGE</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>IMAGE</Text>
             {hasImage && (
               <TouchableOpacity onPress={() => setHasImage(false)}>
-                <Feather name="trash-2" size={16} color="#8E8E9B" />
+                <Feather name="trash-2" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
 
           <View style={styles.avatarWrapper}>
-            <View style={styles.avatarContainer}>
+            <View style={[styles.avatarContainer, { backgroundColor: colors.card }]}>
               {hasImage ? (
                 <Image
                   source={{ uri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200' }}
@@ -71,41 +75,46 @@ export default function EditProfileScreen() {
                   contentFit="cover"
                 />
               ) : (
-                <View style={styles.emptyAvatar}>
-                  <Feather name="user" size={40} color="#8E8E9B" />
+                <View style={[styles.emptyAvatar, { backgroundColor: colors.border }]}>
+                  <Feather name="user" size={40} color={colors.textSecondary} />
                 </View>
               )}
             </View>
             <TouchableOpacity
-              style={styles.cameraBadge}
+              style={[styles.cameraBadge, { backgroundColor: colors.primary, borderColor: colors.background }]}
               onPress={() => setHasImage(true)}
             >
-              <Feather name="camera" size={14} color="#FFFFFF" />
+              <Feather name="camera" size={14} color={colors.background} />
             </TouchableOpacity>
           </View>
 
           {/* Form Fields */}
           <View style={styles.formGroup}>
             <CustomInput
+              colors={colors}
               icon="user"
               placeholder={isBusiness ? "Business name" : "Fullname"}
             />
             <CustomInput
+              colors={colors}
               icon="at-sign"
               placeholder="username"
             />
             <CustomInput
+              colors={colors}
               icon="mail"
               placeholder="name@nocturnal.com"
             />
 
             {isBusiness ? (
               <CustomInput
+                colors={colors}
                 icon="map-pin"
                 placeholder="Address"
               />
             ) : (
               <CustomInput
+                colors={colors}
                 icon="target" // approximate icon for gender
                 placeholder="Gender"
                 rightIcon="chevron-down"
@@ -116,44 +125,44 @@ export default function EditProfileScreen() {
           {/* Age (Personal only) */}
           {!isBusiness && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>AGE</Text>
-              <CustomInput placeholder="21" />
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AGE</Text>
+              <CustomInput colors={colors} placeholder="21" />
             </View>
           )}
 
           {/* Business Documents (Business only) */}
           {isBusiness && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>SUBMIT BUSINESS DOCUMENTS FOR REVIEW</Text>
-              <Text style={styles.docDesc}>
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SUBMIT BUSINESS DOCUMENTS FOR REVIEW</Text>
+              <Text style={[styles.docDesc, { color: colors.textSecondary }]}>
                 To confirm your business is legitimate, we require an official registration document (PDF). Our team will review this in the background while you use your account.
               </Text>
 
               {!hasDocument ? (
                 <TouchableOpacity
-                  style={styles.uploadBtn}
+                  style={[styles.uploadBtn, { backgroundColor: colors.primary }]}
                   onPress={() => setHasDocument(true)}
                 >
-                  <Feather name="upload-cloud" size={16} color="#0e0d12" style={{ marginRight: 8 }} />
-                  <Text style={styles.uploadBtnText}>Upload PDF</Text>
+                  <Feather name="upload-cloud" size={16} color={colors.background} style={{ marginRight: 8 }} />
+                  <Text style={[styles.uploadBtnText, { color: colors.background }]}>Upload PDF</Text>
                 </TouchableOpacity>
               ) : (
-                <View style={styles.uploadedDocCard}>
-                  <View style={styles.docIconWrapper}>
-                    <Feather name="file-text" size={20} color="#8E8E9B" />
+                <View style={[styles.uploadedDocCard, { backgroundColor: colors.card }]}>
+                  <View style={[styles.docIconWrapper, { backgroundColor: colors.border }]}>
+                    <Feather name="file-text" size={20} color={colors.textSecondary} />
                   </View>
                   <View style={styles.docInfo}>
-                    <Text style={styles.docName}>File name</Text>
-                    <Text style={styles.docMeta}>File type  •  245KB</Text>
+                    <Text style={[styles.docName, { color: colors.text }]}>File name</Text>
+                    <Text style={[styles.docMeta, { color: colors.textSecondary }]}>File type  •  245KB</Text>
                   </View>
                   <View style={styles.docActions}>
-                    <TouchableOpacity style={styles.docActionBtn}><Feather name="download" size={16} color="#8E8E9B" /></TouchableOpacity>
-                    <TouchableOpacity style={styles.docActionBtn}><Feather name="eye" size={16} color="#8E8E9B" /></TouchableOpacity>
+                    <TouchableOpacity style={styles.docActionBtn}><Feather name="download" size={16} color={colors.textSecondary} /></TouchableOpacity>
+                    <TouchableOpacity style={styles.docActionBtn}><Feather name="eye" size={16} color={colors.textSecondary} /></TouchableOpacity>
                     <TouchableOpacity
                       style={styles.docActionBtn}
                       onPress={() => setHasDocument(false)}
                     >
-                      <Feather name="x" size={16} color="#8E8E9B" />
+                      <Feather name="x" size={16} color={colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -163,8 +172,9 @@ export default function EditProfileScreen() {
 
           {/* Bio */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>BIO</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BIO</Text>
             <CustomInput
+              colors={colors}
               placeholder={isBusiness ? "Detail about business" : "Detail about yourselft"}
               multiline={true}
               style={{ height: 100 }}
@@ -175,12 +185,12 @@ export default function EditProfileScreen() {
       </KeyboardAvoidingView>
 
       {/* Footer Buttons */}
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-          <Text style={styles.cancelBtnText}>Cancel</Text>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card }]} onPress={() => router.back()}>
+          <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.saveBtn} onPress={() => router.back()}>
-          <Text style={styles.saveBtnText}>Save</Text>
+        <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+          <Text style={[styles.saveBtnText, { color: colors.background }]}>Save</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -190,7 +200,6 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0e0d12',
   },
   header: {
     flexDirection: 'row',
@@ -200,25 +209,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 15,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -240,7 +231,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionTitle: {
-    color: '#8E8E9B',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -254,7 +244,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#1A1A22',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -266,7 +255,6 @@ const styles = StyleSheet.create({
   emptyAvatar: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -277,11 +265,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#3B3B45',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#0e0d12',
   },
   formGroup: {
     gap: 12,
@@ -290,10 +276,10 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     paddingHorizontal: 15,
     height: 50,
+    borderWidth: 1,
   },
   inputContainerMultiline: {
     height: 'auto',
@@ -308,7 +294,6 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 14,
   },
   inputMultiline: {
@@ -318,7 +303,6 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   docDesc: {
-    color: '#8E8E9B',
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 15,
@@ -327,21 +311,18 @@ const styles = StyleSheet.create({
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E5D5F0',
     alignSelf: 'flex-start',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
   },
   uploadBtnText: {
-    color: '#0e0d12',
     fontSize: 13,
     fontWeight: 'bold',
   },
   uploadedDocCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     padding: 15,
   },
@@ -349,7 +330,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -358,13 +338,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   docName: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 4,
   },
   docMeta: {
-    color: '#8E8E9B',
     fontSize: 11,
   },
   docActions: {
@@ -382,19 +360,16 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 25,
     borderTopWidth: 1,
-    borderTopColor: '#1A1A22',
   },
   cancelBtn: {
     flex: 1,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1A1A22',
     borderRadius: 12,
     marginRight: 10,
   },
   cancelBtnText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -403,12 +378,10 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E5D5F0',
     borderRadius: 12,
     marginLeft: 10,
   },
   saveBtnText: {
-    color: '#0e0d12',
     fontSize: 16,
     fontWeight: 'bold',
   },

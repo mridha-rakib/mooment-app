@@ -1,5 +1,6 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, Text } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 import FeedPost, { PostData } from "../post/FeedPost";
 import ProfileEvents from "./ProfileEvents";
 import ProfileShop from "./ProfileShop";
@@ -20,18 +21,26 @@ export default function ProfileContent({
   onSharePress,
   isOwnProfile = true 
 }: ProfileContentProps) {
+  const { colors } = useTheme();
+  
   return (
     <View style={styles.container}>
       {activeTab === 'feed' && (
-        posts.map((post) => (
-          <FeedPost 
-            key={post.id} 
-            post={post} 
-            onCommentPress={onCommentPress} 
-            onSharePress={onSharePress} 
-            isOwnPost={isOwnProfile}
-          />
-        ))
+        posts.length > 0 ? (
+          posts.map((post) => (
+            <FeedPost 
+              key={post.id} 
+              post={post} 
+              onCommentPress={onCommentPress} 
+              onSharePress={onSharePress} 
+              isOwnPost={isOwnProfile}
+            />
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No posts yet</Text>
+          </View>
+        )
       )}
       
       {activeTab === 'events' && (
@@ -60,7 +69,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: '#8E8E9B',
     textAlign: 'center',
   }
 });

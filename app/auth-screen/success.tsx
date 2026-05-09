@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
-import { router } from "expo-router";
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar } from "react-native";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
+import { useTheme } from "@/hooks/useTheme";
 
 export default function Success() {
   const [showConfetti, setShowConfetti] = useState(false);
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
 
   useEffect(() => {
     // Show confetti after a short delay when the screen appears
@@ -17,7 +20,8 @@ export default function Success() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Confetti Animation */}
       <ConfettiOverlay 
         visible={showConfetti} 
@@ -27,25 +31,25 @@ export default function Success() {
       <View style={styles.container}>
         <View style={styles.content}>
           <View style={styles.graphicContainer}>
-            <View style={styles.glow} />
-            <View style={styles.iconCircle}>
-              <Feather name="check" size={32} color="#2DB46D" />
+            <View style={[styles.glow, { backgroundColor: isDark ? "#0A291A" : "#E8F5E9" }]} />
+            <View style={[styles.iconCircle, { borderColor: colors.success, backgroundColor: colors.background }]}>
+              <Feather name="check" size={32} color={colors.success} />
             </View>
           </View>
 
           <View style={styles.textContainer}>
-            <Text style={styles.title}>Successfully Verified</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.text }]}>Successfully Verified</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               Your account is verified. You can Enjoy browsing the application
             </Text>
           </View>
 
           <TouchableOpacity 
-            style={styles.continueButton} 
+            style={[styles.continueButton, { backgroundColor: colors.primary }]} 
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/login')}
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -56,7 +60,6 @@ export default function Success() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
   container: {
     flex: 1,
@@ -78,22 +81,15 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: "#0A291A",
     opacity: 0.8,
-    shadowColor: "#2DB46D",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 50,
   },
   iconCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
     borderWidth: 2,
-    borderColor: "#2DB46D",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#0e0d12",
   },
   textContainer: {
     alignItems: "center",
@@ -102,25 +98,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 13,
-    color: "#8E8E9B",
     textAlign: "center",
     paddingHorizontal: 30,
     lineHeight: 20,
   },
   continueButton: {
-    backgroundColor: "#B59EBE",
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
   continueButtonText: {
-    color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
   },

@@ -1,50 +1,54 @@
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(false);
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <KeyboardAvoidingView 
         style={styles.container} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Enter your credentials to sync with the pulse.</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Enter your credentials to sync with the pulse.</Text>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Feather name="user" size={20} color="#7A7A85" style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Feather name="user" size={20} color={colors.textSecondary} style={styles.icon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="Email or username"
-              placeholderTextColor="#7A7A85"
+              placeholderTextColor={colors.textSecondary}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
             />
           </View>
 
-          <View style={styles.inputContainer}>
-            <Feather name="lock" size={20} color="#7A7A85" style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Feather name="lock" size={20} color={colors.textSecondary} style={styles.icon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="........"
-              placeholderTextColor="#7A7A85"
+              placeholderTextColor={colors.textSecondary}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#7A7A85" />
+              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -54,29 +58,29 @@ export default function Login() {
               onPress={() => setKeepSignedIn(!keepSignedIn)}
               activeOpacity={0.7}
             >
-              <View style={[styles.checkbox, keepSignedIn && styles.checkboxChecked]}>
-                {keepSignedIn && <Feather name="check" size={12} color="#0e0d12" />}
+              <View style={[styles.checkbox, { backgroundColor: colors.border }, keepSignedIn && { backgroundColor: colors.primary }]}>
+                {keepSignedIn && <Feather name="check" size={12} color={colors.background} />}
               </View>
-              <Text style={styles.checkboxText}>Keep me signed in</Text>
+              <Text style={[styles.checkboxText, { color: colors.textSecondary }]}>Keep me signed in</Text>
             </TouchableOpacity>
             
             <TouchableOpacity onPress={() => router.push('/auth-screen/forgot-password')}>
-              <Text style={styles.forgotText}>FORGOT PASSWORD?</Text>
+              <Text style={[styles.forgotText, { color: colors.primary }]}>FORGOT PASSWORD?</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity 
-            style={styles.loginButton} 
+            style={[styles.loginButton, { backgroundColor: colors.primary }]} 
             activeOpacity={0.8}
             onPress={() => router.push("/home")}
           >
-            <Text style={styles.loginButtonText}>Log In</Text>
+            <Text style={[styles.loginButtonText, { color: colors.background }]}>Log In</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={[styles.footerText, { color: colors.textSecondary }]}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/auth-screen/signup')}>
-              <Text style={styles.createOneText}>Create One</Text>
+              <Text style={[styles.createOneText, { color: colors.primary }]}>Create One</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -88,7 +92,6 @@ export default function Login() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0e0d12",
   },
   container: {
     flex: 1,
@@ -105,28 +108,25 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 13,
-    color: "#8E8E9B",
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1A1A22",
     borderRadius: 14,
     paddingHorizontal: 16,
     height: 56,
     marginBottom: 16,
+    borderWidth: 1,
   },
   icon: {
     marginRight: 14,
   },
   input: {
     flex: 1,
-    color: "#FFFFFF",
     fontSize: 15,
   },
   eyeBtn: {
@@ -147,26 +147,19 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 6,
-    backgroundColor: "#2B2B36",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
-  checkboxChecked: {
-    backgroundColor: "#B59EBE", // Soft purple/gray matching the button
-  },
   checkboxText: {
-    color: "#8E8E9B",
     fontSize: 13,
   },
   forgotText: {
-    color: "#AC86D4",
     fontSize: 10,
     fontWeight: "bold",
     letterSpacing: 0.5,
   },
   loginButton: {
-    backgroundColor: "#B59EBE",
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
@@ -174,7 +167,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loginButtonText: {
-    color: "#0e0d12",
     fontSize: 16,
     fontWeight: "bold",
   },
@@ -184,11 +176,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   footerText: {
-    color: "#8E8E9B",
     fontSize: 14,
   },
   createOneText: {
-    color: "#AC86D4",
     fontSize: 14,
     fontWeight: "bold",
   },
