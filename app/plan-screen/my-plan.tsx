@@ -465,7 +465,7 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                         <View style={s.footerActions}>
                           <TouchableOpacity 
                             style={[s.viewBtnSmall, { backgroundColor: colors.background }]}
-                            onPress={() => router.push('/event-screen/event-details')}
+                            onPress={() => router.push('/live-screen/live-room-screen')}
                           >
                             <Text style={[s.viewBtnTextSmall, { color: colors.text }]}>View</Text>
                           </TouchableOpacity>

@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useTheme } from "@/hooks/useTheme";
 import React, { useState } from "react";
 import {
   Dimensions,
@@ -13,17 +14,7 @@ import {
 } from "react-native";
 const { width } = Dimensions.get("window");
 
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#D4B0EB",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentPurple: "#8E54E9",
-  accentOrange: "#FF6B3D",
-  accentGreen: "#16D869",
-  border: "rgba(255, 255, 255, 0.1)",
-};
+// Removed hardcoded COLORS to use useTheme hook
 
 const ROOMS_DATA = [
   {
@@ -84,56 +75,57 @@ const MOOMENTS_DATA = [
 
 const VibeTab = () => {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [vibeSubTab, setVibeSubTab] = useState("Live");
 
   const renderLive = () => (
     <View style={{ marginTop: 20 }}>
-      <Text style={styles.sectionTitle}>2 Active Rooms</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>2 Active Rooms</Text>
       <View style={styles.roomsRow}>
         {ROOMS_DATA.map((room) => (
           <View key={room.id} style={styles.roomContainer}>
-            <View style={styles.ovalCard}>
+            <View style={[styles.ovalCard, { backgroundColor: isDark ? 'rgba(142, 84, 233, 0.05)' : 'rgba(142, 84, 233, 0.02)', borderColor: isDark ? 'rgba(142, 84, 233, 0.3)' : 'rgba(142, 84, 233, 0.15)' }]}>
               <View style={styles.avatarContainer}>
-                <Image source={{ uri: room.hostAvatar }} style={styles.roomAvatar} />
-                <View style={styles.onlineIndicator} />
+                <Image source={{ uri: room.hostAvatar }} style={[styles.roomAvatar, { borderColor: colors.primary }]} />
+                <View style={[styles.onlineIndicator, { borderColor: colors.background, backgroundColor: '#16D869' }]} />
               </View>
 
               {room.isHost && (
-                <View style={styles.hostBadge}>
-                  <Text style={styles.hostBadgeText}>Host</Text>
+                <View style={[styles.hostBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}>
+                  <Text style={[styles.hostBadgeText, { color: colors.text }]}>Host</Text>
                 </View>
               )}
 
               <TouchableOpacity
-                style={styles.joinBtn}
-              // onPress={() => router.push('/event-screen/event-details')}
+                style={[styles.joinBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+                onPress={() => router.push('/live-screen/live-room-screen')}
               >
-                <Text style={styles.joinBtnText}>Join</Text>
+                <Text style={[styles.joinBtnText, { color: colors.text }]}>Join</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.roomInfo}>
-              <Text style={styles.roomTitle}>{room.title}</Text>
-              <Text style={styles.speakingText}>
-                <Text style={styles.hostNameHighlight}>{room.host}</Text> is speaking
+              <Text style={[styles.roomTitle, { color: colors.text }]}>{room.title}</Text>
+              <Text style={[styles.speakingText, { color: colors.textSecondary }]}>
+                <Text style={[styles.hostNameHighlight, { color: colors.text }]}>{room.host}</Text> is speaking
               </Text>
 
               <View style={styles.listenerRow}>
                 <View style={styles.avatarCluster}>
                   <Image
                     source={{ uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop" }}
-                    style={[styles.avatarSmall, { zIndex: 3 }]}
+                    style={[styles.avatarSmall, { zIndex: 3, borderColor: colors.background }]}
                   />
                   <Image
                     source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop" }}
-                    style={[styles.avatarSmall, { zIndex: 2, marginLeft: -8 }]}
+                    style={[styles.avatarSmall, { zIndex: 2, marginLeft: -8, borderColor: colors.background }]}
                   />
                   <Image
                     source={{ uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop" }}
-                    style={[styles.avatarSmall, { zIndex: 1, marginLeft: -8 }]}
+                    style={[styles.avatarSmall, { zIndex: 1, marginLeft: -8, borderColor: colors.background }]}
                   />
                 </View>
-                <Text style={styles.listenerCount}>{room.listeners} listening</Text>
+                <Text style={[styles.listenerCount, { color: colors.textSecondary }]}>{room.listeners} listening</Text>
               </View>
             </View>
           </View>
@@ -145,50 +137,52 @@ const VibeTab = () => {
   const renderMooments = () => (
     <View style={{ marginTop: 20 }}>
       {/* Post Button */}
-      <TouchableOpacity style={styles.postBtn}>
-        <Feather name="plus" size={20} color={COLORS.textMuted} />
-        <Text style={styles.postBtnText}>Post Mooment</Text>
+      <TouchableOpacity style={[styles.postBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}>
+        <Feather name="plus" size={20} color={colors.textSecondary} />
+        <Text style={[styles.postBtnText, { color: colors.textSecondary }]}>Post Mooment</Text>
       </TouchableOpacity>
 
       {/* Timer Banner */}
-      <View style={styles.timerBanner}>
+      <View style={[styles.timerBanner, { backgroundColor: isDark ? 'rgba(255, 107, 61, 0.1)' : 'rgba(255, 107, 61, 0.05)' }]}>
         <View style={styles.timerLeft}>
-          <Feather name="info" size={16} color={COLORS.accentOrange} />
-          <Text style={styles.timerText}>Next mooment available in</Text>
+          <Feather name="info" size={16} color="#FF6B3D" />
+          <Text style={[styles.timerText, { color: "#FF6B3D" }]}>Next mooment available in</Text>
         </View>
-        <Text style={styles.timerCountdown}>10 min</Text>
+        <Text style={[styles.timerCountdown, { color: "#FF6B3D" }]}>10 min</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>24 Mooments</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>24 Mooments</Text>
 
       {/* Feed */}
       {MOOMENTS_DATA.map((item) => (
-        <View key={item.id} style={styles.postCard}>
+        <View key={item.id} style={[styles.postCard, { backgroundColor: colors.card }]}>
           <View style={styles.postHeader}>
             <Image source={{ uri: item.avatar }} style={styles.postAvatar} />
             <View style={styles.postUserInfo}>
-              <Text style={styles.postUserName}>{item.user}</Text>
-              <Text style={styles.postTime}>{item.time}</Text>
+              <Text style={[styles.postUserName, { color: colors.text }]}>{item.user}</Text>
+              <Text style={[styles.postTime, { color: colors.textSecondary }]}>{item.time}</Text>
             </View>
             <TouchableOpacity
               style={[
                 styles.followBtn,
-                item.isFollowing && styles.followBtnActive
+                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.border },
+                item.isFollowing && [styles.followBtnActive, { backgroundColor: 'transparent', borderColor: colors.border }]
               ]}
             >
               <Text style={[
                 styles.followBtnText,
-                item.isFollowing && styles.followBtnTextActive
+                { color: colors.text },
+                item.isFollowing && [styles.followBtnTextActive, { color: colors.textSecondary }]
               ]}>
                 {item.isFollowing ? "Following" : "+ Follow"}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreBtn}>
-              <Feather name="more-horizontal" size={18} color={COLORS.textMuted} />
+              <Feather name="more-horizontal" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.postText}>{item.text}</Text>
+          <Text style={[styles.postText, { color: colors.text }]}>{item.text}</Text>
 
           {item.image && (
             <Image source={{ uri: item.image }} style={styles.postImage} />
@@ -196,17 +190,17 @@ const VibeTab = () => {
 
           <View style={styles.postFooter}>
             <View style={styles.footerStat}>
-              <Feather name="heart" size={16} color={COLORS.textMuted} />
-              <Text style={styles.footerStatText}>{item.likes}</Text>
+              <Feather name="heart" size={16} color={colors.textSecondary} />
+              <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>{item.likes}</Text>
             </View>
             <View style={styles.footerStat}>
-              <Feather name="message-circle" size={16} color={COLORS.textMuted} />
-              <Text style={styles.footerStatText}>{item.comments}</Text>
+              <Feather name="message-circle" size={16} color={colors.textSecondary} />
+              <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>{item.comments}</Text>
             </View>
             {item.shares > 0 && (
               <View style={styles.footerStat}>
-                <Feather name="share-2" size={16} color={COLORS.textMuted} />
-                <Text style={styles.footerStatText}>{item.shares}</Text>
+                <Feather name="share-2" size={16} color={colors.textSecondary} />
+                <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>{item.shares}</Text>
               </View>
             )}
           </View>
@@ -220,31 +214,31 @@ const VibeTab = () => {
       {/* Sub-Tabs / Toggle */}
       <View style={styles.tabWrapper}>
         <LinearGradient
-          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.border, colors.border, colors.border]}
           start={{ x: 1, y: 1 }}
           end={{ x: 0, y: 1 }}
           style={styles.subTabBorder}
         >
-          <BlurView intensity={40} tint="dark" style={styles.subTabBg}>
+          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.subTabBg, { backgroundColor: isDark ? "#1c1b20" : colors.card }]}>
             <TouchableOpacity
               onPress={() => setVibeSubTab("Live")}
               style={styles.subTabItem}
             >
               {vibeSubTab === "Live" ? (
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.activeBtnBorder}
                 >
-                  <View style={styles.activeBtnInner}>
-                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
+                    <Text style={[styles.subTabText, { color: colors.text }]}>
                       Live
                     </Text>
                   </View>
                 </LinearGradient>
               ) : (
-                <Text style={styles.subTabText}>Live</Text>
+                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Live</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -253,19 +247,19 @@ const VibeTab = () => {
             >
               {vibeSubTab === "Mooments" ? (
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.activeBtnBorder}
                 >
-                  <View style={styles.activeBtnInner}>
-                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
+                    <Text style={[styles.subTabText, { color: colors.text }]}>
                       Mooments
                     </Text>
                   </View>
                 </LinearGradient>
               ) : (
-                <Text style={styles.subTabText}>Mooments</Text>
+                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Mooments</Text>
               )}
             </TouchableOpacity>
           </BlurView>
@@ -316,16 +310,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   subTabText: {
-    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
   },
   subTabTextActive: {
-    color: COLORS.text,
   },
   sectionTitle: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 20,
@@ -359,7 +350,6 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: COLORS.accentPurple,
   },
   onlineIndicator: {
     position: "absolute",
@@ -368,9 +358,8 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: COLORS.accentGreen,
+    backgroundColor: "#16D869",
     borderWidth: 2,
-    borderColor: "#0e0d12",
   },
   hostBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -380,7 +369,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   hostBadgeText: {
-    color: COLORS.text,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -393,7 +381,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   joinBtnText: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
   },
@@ -401,7 +388,6 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   roomTitle: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: "bold",
     textAlign: "center",
@@ -409,13 +395,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   speakingText: {
-    color: COLORS.textMuted,
     fontSize: 12,
     textAlign: "center",
     marginBottom: 10,
   },
   hostNameHighlight: {
-    color: COLORS.text,
     fontWeight: "bold",
   },
   listenerRow: {
@@ -432,10 +416,8 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: COLORS.background,
   },
   listenerCount: {
-    color: COLORS.textMuted,
     fontSize: 11,
   },
   /* Mooments Styles */
@@ -450,7 +432,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   postBtnText: {
-    color: COLORS.textMuted,
     fontSize: 15,
     fontWeight: "600",
   },
@@ -469,17 +450,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timerText: {
-    color: COLORS.accentOrange,
+    color: "#FF6B3D",
     fontSize: 14,
     fontWeight: "600",
   },
   timerCountdown: {
-    color: COLORS.accentOrange,
     fontSize: 14,
     fontWeight: "bold",
   },
   postCard: {
-    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
@@ -499,12 +478,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   postUserName: {
-    color: COLORS.text,
     fontSize: 15,
     fontWeight: "bold",
   },
   postTime: {
-    color: COLORS.textMuted,
     fontSize: 12,
   },
   followBtn: {
@@ -521,18 +498,15 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.2)",
   },
   followBtnText: {
-    color: COLORS.text,
     fontSize: 12,
     fontWeight: "600",
   },
   followBtnTextActive: {
-    color: COLORS.textMuted,
   },
   moreBtn: {
     padding: 4,
   },
   postText: {
-    color: COLORS.text,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 14,
@@ -553,7 +527,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   footerStatText: {
-    color: COLORS.textMuted,
     fontSize: 13,
   },
 });

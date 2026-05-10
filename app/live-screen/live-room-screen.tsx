@@ -1,13 +1,15 @@
+import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Animated, Dimensions, Image, Platform, SafeAreaView,
-  ScrollView, StatusBar, StyleSheet, Text,
-  TextInput, TouchableOpacity, View,
+  Alert, Animated, Dimensions, Image,
+  ScrollView, StatusBar,
+  StyleSheet, Text,
+  TextInput, TouchableOpacity, View
 } from 'react-native';
-import BackButton from '@/components/ui/BackButton';
-import { useTheme } from '@/hooks/useTheme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 const { width } = Dimensions.get('window');
@@ -102,6 +104,7 @@ function PulsingDot() {
 export default function EventDetailsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string; title?: string }>();
 
   const scrollRef = useRef<ScrollView>(null);
@@ -185,7 +188,7 @@ export default function EventDetailsScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+    <View style={[styles.safe, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── Header ── */}
@@ -304,7 +307,11 @@ export default function EventDetailsScreen() {
       </ScrollView>
 
       {/* ── Bottom Bar ── */}
-      <View style={[styles.bottomBar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+      <View style={[styles.bottomBar, {
+        borderTopColor: colors.border,
+        backgroundColor: colors.background,
+        paddingBottom: Math.max(insets.bottom, 16)
+      }]}>
         <TouchableOpacity style={[styles.bellBtn, { backgroundColor: colors.card }]} activeOpacity={0.7}>
           <Feather name="bell" size={20} color={colors.text} />
         </TouchableOpacity>
@@ -327,7 +334,7 @@ export default function EventDetailsScreen() {
         </TouchableOpacity>
       </View>
 
-    </SafeAreaView>
+    </View>
   );
 }
 

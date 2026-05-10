@@ -1,12 +1,13 @@
+import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Image, KeyboardAvoidingView, Platform, SafeAreaView,
+  Image, KeyboardAvoidingView, Platform,
   ScrollView, StatusBar, StyleSheet, Switch,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Background story/feed mock items
 const BG_STORIES = [
@@ -19,22 +20,23 @@ const BG_STORIES = [
 export default function LiveRoomSetupScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [roomName, setRoomName] = useState('');
   const [allowAll, setAllowAll] = useState(true);
 
   const handleContinue = () => {
     if (roomName.trim()) {
-      router.push('/event-screen/event-details');
+      router.push('/live-screen/live-room-screen');
     }
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── Dimmed Feed Background ── */}
       <View style={styles.bgLayer} pointerEvents="none">
-        <SafeAreaView style={styles.bgSafe}>
+        <View style={styles.bgSafe}>
           {/* Mock Header */}
           <View style={styles.bgHeader}>
             <Text style={[styles.bgFeedLabel, { color: colors.textSecondary + '33' }]}>← Feed</Text>
@@ -73,7 +75,7 @@ export default function LiveRoomSetupScreen() {
               <View style={[styles.bgLine2, { backgroundColor: colors.textSecondary }]} />
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
 
       {/* Dark overlay */}
@@ -137,18 +139,18 @@ export default function LiveRoomSetupScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
+          <View style={{ height: Math.max(insets.bottom, 16) }} />
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, },
 
   bgLayer: { ...StyleSheet.absoluteFillObject, zIndex: 0 },
-  bgSafe: { flex: 1, paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  bgSafe: { flex: 1 },
   bgHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   bgFeedLabel: { fontSize: 13, flex: 1 },
   bgTitle: { fontSize: 20, fontWeight: 'bold', position: 'absolute', left: 0, right: 0, textAlign: 'center' },

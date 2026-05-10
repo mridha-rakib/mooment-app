@@ -47,7 +47,7 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
         </View>
       ) : (
         <View style={styles.topRow}>
-          <BackButton size={20} />
+          <BackButton size={20} style={styles.backBtnWithShadow} />
 
           <TouchableOpacity
             style={styles.moreBtn}
@@ -159,7 +159,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-  backBtn: {},
+  backBtnWithShadow: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   moreBtn: {},
   infoRow: {
     flexDirection: 'row',

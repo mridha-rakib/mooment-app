@@ -651,7 +651,7 @@ export default function CreateMomentScreen() {
           setSelectedEvent(ev);
           setShowQRScanner(false);
           router.push({
-            pathname: '/event-screen/event-details',
+            pathname: '/live-screen/live-room-screen',
             params: { title: ev || selectedEvent }
           });
         }}
