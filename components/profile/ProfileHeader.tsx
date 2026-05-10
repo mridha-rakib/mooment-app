@@ -80,10 +80,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/reviews')}>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats.reviews}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Reviews</Text>
-          </View>
+          </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/followers')}>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats.followers}</Text>

@@ -1,12 +1,13 @@
-import { Feather } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
-import { useRouter } from "expo-router";
-import React from "react";
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import BackButton from "@/components/ui/BackButton";
 import { useTheme } from "@/hooks/useTheme";
+import { Feather } from "@expo/vector-icons";
+import * as Haptics from 'expo-haptics';
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import { Image, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 
-const REVIEW_DATA = [
+const INITIAL_REVIEWS = [
   {
     id: '1',
     name: 'Jane Cooper',
@@ -36,6 +37,25 @@ const REVIEW_DATA = [
 export default function ReviewsScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+
+  // Animation values
+  const scaleValues = INITIAL_REVIEWS.reduce((acc, curr) => {
+    acc[curr.id] = useSharedValue(1);
+    return acc;
+  }, {} as any);
+
+  const toggleLike = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Trigger animation
+    scaleValues[id].value = withSequence(
+      withSpring(1.4, { damping: 10, stiffness: 100 }),
+      withSpring(1, { damping: 10, stiffness: 100 })
+    );
+
+    setReviews(prev => prev.map(r => r.id === id ? { ...r, liked: !r.liked } : r));
+  };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -48,25 +68,33 @@ export default function ReviewsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {REVIEW_DATA.map((review) => (
-          <View key={review.id} style={[styles.reviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.reviewHeader}>
-              <View style={styles.userInfo}>
-                <Image source={{ uri: review.avatar }} style={styles.avatar} />
-                <Text style={[styles.userName, { color: colors.text }]}>{review.name}</Text>
+        {reviews.map((review) => {
+          const animatedStyle = useAnimatedStyle(() => ({
+            transform: [{ scale: scaleValues[review.id].value }]
+          }));
+
+          return (
+            <View key={review.id} style={[styles.reviewCard, { backgroundColor: "#111112", borderColor: colors.border }]}>
+              <View style={styles.reviewHeader}>
+                <View style={styles.userInfo}>
+                  <Image source={{ uri: review.avatar }} style={styles.avatar} />
+                  <Text style={[styles.userName, { color: colors.text }]}>{review.name}</Text>
+                </View>
+                <TouchableOpacity onPress={() => toggleLike(review.id)} activeOpacity={0.7}>
+                  <Animated.View style={animatedStyle}>
+                    <Feather
+                      name={review.liked ? "thumbs-up" : "thumbs-down"}
+                      size={16}
+                      color={review.liked ? colors.primary : colors.text}
+                    />
+                  </Animated.View>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity>
-                <Feather 
-                  name={review.liked ? "thumbs-up" : "thumbs-down"} 
-                  size={16} 
-                  color={colors.text} 
-                />
-              </TouchableOpacity>
+              <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
+              <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{review.time}</Text>
             </View>
-            <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
-            <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{review.time}</Text>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );
