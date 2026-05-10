@@ -214,7 +214,11 @@ export default function MessagesScreen() {
   );
 
   const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
-    <TouchableOpacity style={styles.roomCard} activeOpacity={0.85}>
+    <TouchableOpacity 
+      style={styles.roomCard} 
+      activeOpacity={0.85}
+      onPress={() => router.push('/live-screen/live-room-screen')}
+    >
       <View style={[styles.roomCapsule, { backgroundColor: isDark ? '#130B24' : colors.card, borderColor: isDark ? '#2D1B4E' : colors.border }]}>
         <View style={styles.roomAvatarWrap}>
           <Image source={{ uri: item.hostAvatar }} style={styles.roomAvatar} />
@@ -225,7 +229,11 @@ export default function MessagesScreen() {
             <Text style={[styles.roomHostText, { color: colors.primary }]}>Host</Text>
           </View>
         )}
-        <TouchableOpacity style={[styles.roomJoinBtn, { backgroundColor: colors.background }]} activeOpacity={0.8}>
+        <TouchableOpacity 
+          style={[styles.roomJoinBtn, { backgroundColor: colors.background }]} 
+          activeOpacity={0.8}
+          onPress={() => router.push('/live-screen/live-room-screen')}
+        >
           <Text style={[styles.roomJoinText, { color: colors.text }]}>Join</Text>
         </TouchableOpacity>
       </View>
