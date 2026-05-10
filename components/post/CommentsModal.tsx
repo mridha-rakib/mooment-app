@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useRef, useState } from 'react';
 import { Dimensions, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -77,6 +78,7 @@ export default function CommentsModal({
   const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
   const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const router = useRouter();
 
   const toggleCommentLike = (commentId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -106,6 +108,21 @@ export default function CommentsModal({
     inputRef.current?.focus();
   };
 
+  const handleProfilePress = (item: CommentType) => {
+    onClose();
+    // Use a small timeout to allow modal to close before navigating
+    setTimeout(() => {
+      router.push({
+        pathname: '/profile-screen/user-profile',
+        params: {
+          userId: item.id,
+          name: item.authorName,
+          avatar: item.authorAvatar
+        }
+      } as any);
+    }, 300);
+  };
+
   const renderComment = (item: CommentType, isChild = false, isLast = false) => {
     const formattedLikes = item.likesCount >= 1000 ? `${(item.likesCount / 1000).toFixed(0)}K` : item.likesCount;
     
@@ -123,10 +140,14 @@ export default function CommentsModal({
           <View style={[styles.replyLineHorizontal, { borderColor: colors.border }]} />
         )}
         
-        <Image source={{ uri: item.authorAvatar }} style={styles.commentAvatar} />
+        <TouchableOpacity activeOpacity={0.7} onPress={() => handleProfilePress(item)}>
+          <Image source={{ uri: item.authorAvatar }} style={styles.commentAvatar} />
+        </TouchableOpacity>
         
         <View style={styles.commentContent}>
-          <Text style={[styles.commentName, { color: colors.text }]}>{item.authorName}</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => handleProfilePress(item)}>
+            <Text style={[styles.commentName, { color: colors.text }]}>{item.authorName}</Text>
+          </TouchableOpacity>
           <Text style={[styles.commentText, { color: colors.textSecondary }]}>{item.text}</Text>
           
           <View style={styles.commentActions}>
