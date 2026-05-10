@@ -9,18 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#D4B0EB",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentPurple: "#8E54E9",
-  accentOrange: "#FF6B3D",
-  accentGreen: "#16D869",
-  border: "rgba(255, 255, 255, 0.1)",
-};
+// Removed hardcoded COLORS to use useTheme hook
 
 const REWARDS_DATA = [
   {
@@ -80,6 +71,7 @@ const REWARDS_DATA = [
 ];
 
 const AccessTab = () => {
+  const { colors, isDark } = useTheme();
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
 
   const renderTickets = () => (
@@ -95,48 +87,48 @@ const AccessTab = () => {
       {/* Availability Status */}
       <View style={styles.availabilityRow}>
         <View style={styles.availabilityLabel}>
-          <View style={styles.greenDot} />
-          <Text style={styles.availabilityText}>Tickets available</Text>
+          <View style={[styles.greenDot, { backgroundColor: colors.success }]} />
+          <Text style={[styles.availabilityText, { color: colors.success }]}>Tickets available</Text>
         </View>
-        <Text style={styles.availabilityCount}>58 left</Text>
+        <Text style={[styles.availabilityCount, { color: colors.success }]}>58 left</Text>
       </View>
 
       {/* General Ticket */}
-      <View style={styles.ticketCard}>
+      <View style={[styles.ticketCard, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border }]}>
         <View style={styles.rewardAppliedRow}>
           <View style={styles.rewardLeft}>
-            <Text style={styles.rewardTitle}>Reward applied</Text>
-            <Text style={styles.rewardSub}>Buy 1 get 1 Free</Text>
+            <Text style={[styles.rewardTitle, { color: colors.text }]}>Reward applied</Text>
+            <Text style={[styles.rewardSub, { color: colors.textSecondary }]}>Buy 1 get 1 Free</Text>
           </View>
-          <TouchableOpacity style={styles.claimBtn}>
-            <Text style={styles.claimBtnText}>Claim Reward</Text>
+          <TouchableOpacity style={[styles.claimBtn, { backgroundColor: colors.text }]}>
+            <Text style={[styles.claimBtnText, { color: colors.background }]}>Claim Reward</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.ticketInnerCard}>
+        <View style={[styles.ticketInnerCard, { backgroundColor: isDark ? "#0F0E13" : colors.card }]}>
           <View style={styles.ticketHeader}>
-            <Text style={styles.ticketType}>General Ticket</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>42 left</Text>
+            <Text style={[styles.ticketType, { color: colors.text }]}>General Ticket</Text>
+            <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
+              <Text style={[styles.countBadgeText, { color: colors.text }]}>42 left</Text>
             </View>
           </View>
-          <Text style={styles.ticketDesc}>Entry from 9pm. Standing only.</Text>
-          <Text style={styles.expiryText}>
+          <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>Entry from 9pm. Standing only.</Text>
+          <Text style={[styles.expiryText, { color: colors.textSecondary }]}>
             Expires in • Sat, Sep 19 • 4:00 PM
           </Text>
           
           <View style={styles.ticketFooter}>
              <View>
-                <Text style={styles.ticketPrice}>£45</Text>
-                <Text style={styles.perTicketText}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>£45</Text>
+                <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>per ticket</Text>
              </View>
-             <View style={styles.counter}>
-                <TouchableOpacity style={styles.counterBtn}>
-                  <Feather name="minus" size={16} color={COLORS.text} />
+             <View style={[styles.counter, { backgroundColor: isDark ? "#222129" : colors.backgroundSecondary }]}>
+                <TouchableOpacity style={[styles.counterBtn, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                  <Feather name="minus" size={16} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.counterValue}>1</Text>
-                <TouchableOpacity style={styles.counterBtn}>
-                  <Feather name="plus" size={16} color={COLORS.text} />
+                <Text style={[styles.counterValue, { color: colors.text }]}>1</Text>
+                <TouchableOpacity style={[styles.counterBtn, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                  <Feather name="plus" size={16} color={colors.text} />
                 </TouchableOpacity>
              </View>
           </View>
@@ -144,42 +136,42 @@ const AccessTab = () => {
       </View>
 
       {/* VIP Ticket */}
-      <View style={styles.ticketCard}>
+      <View style={[styles.ticketCard, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border }]}>
         <View style={styles.rewardAppliedRow}>
           <View style={styles.rewardLeft}>
-            <Text style={styles.rewardTitle}>Reward applied</Text>
-            <Text style={styles.rewardSub}>Buy 1 get 1 Free</Text>
+            <Text style={[styles.rewardTitle, { color: colors.text }]}>Reward applied</Text>
+            <Text style={[styles.rewardSub, { color: colors.textSecondary }]}>Buy 1 get 1 Free</Text>
           </View>
-          <View style={styles.claimedBadge}>
-            <Feather name="check" size={12} color={COLORS.accentGreen} />
-            <Text style={styles.claimedText}>Claimed</Text>
+          <View style={[styles.claimedBadge, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" }]}>
+            <Feather name="check" size={12} color={colors.success} />
+            <Text style={[styles.claimedText, { color: colors.success }]}>Claimed</Text>
           </View>
         </View>
 
-        <View style={styles.ticketInnerCard}>
+        <View style={[styles.ticketInnerCard, { backgroundColor: isDark ? "#0F0E13" : colors.card }]}>
           <View style={styles.ticketHeader}>
-            <Text style={styles.ticketType}>VIP</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>42 left</Text>
+            <Text style={[styles.ticketType, { color: colors.text }]}>VIP</Text>
+            <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
+              <Text style={[styles.countBadgeText, { color: colors.text }]}>42 left</Text>
             </View>
           </View>
-          <Text style={styles.ticketDesc}>Priority entry. Includes seated area and complimentary drinks.</Text>
-          <Text style={styles.expiryText}>
+          <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>Priority entry. Includes seated area and complimentary drinks.</Text>
+          <Text style={[styles.expiryText, { color: colors.textSecondary }]}>
             Expires in • Sat, Sep 19 • 4:00 PM
           </Text>
           
           <View style={styles.ticketFooter}>
              <View>
-                <Text style={styles.ticketPrice}>£85</Text>
-                <Text style={styles.perTicketText}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>£85</Text>
+                <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>per ticket</Text>
              </View>
-             <View style={styles.counter}>
-                <TouchableOpacity style={styles.counterBtn}>
-                  <Feather name="minus" size={16} color={COLORS.text} />
+             <View style={[styles.counter, { backgroundColor: isDark ? "#222129" : colors.backgroundSecondary }]}>
+                <TouchableOpacity style={[styles.counterBtn, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                  <Feather name="minus" size={16} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.counterValue}>1</Text>
-                <TouchableOpacity style={styles.counterBtn}>
-                  <Feather name="plus" size={16} color={COLORS.text} />
+                <Text style={[styles.counterValue, { color: colors.text }]}>1</Text>
+                <TouchableOpacity style={[styles.counterBtn, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                  <Feather name="plus" size={16} color={colors.text} />
                 </TouchableOpacity>
              </View>
           </View>
@@ -187,31 +179,31 @@ const AccessTab = () => {
       </View>
 
       {/* Early Bird (Sold Out) */}
-      <View style={[styles.ticketCard, { opacity: 0.5 }]}>
-        <View style={styles.ticketInnerCard}>
+      <View style={[styles.ticketCard, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border, opacity: 0.5 }]}>
+        <View style={[styles.ticketInnerCard, { backgroundColor: isDark ? "#0F0E13" : colors.card }]}>
           <View style={styles.ticketHeader}>
-            <Text style={styles.ticketType}>Early Bird</Text>
+            <Text style={[styles.ticketType, { color: colors.text }]}>Early Bird</Text>
             <View style={[styles.countBadge, { backgroundColor: 'rgba(255, 77, 77, 0.1)' }]}>
               <Text style={[styles.countBadgeText, { color: '#FF4D4D' }]}>Sold Out</Text>
             </View>
           </View>
-          <Text style={styles.ticketDesc}>Entry from 9pm. Standing only.</Text>
-          <Text style={styles.expiryText}>
+          <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>Entry from 9pm. Standing only.</Text>
+          <Text style={[styles.expiryText, { color: colors.textSecondary }]}>
             Expires in • Sat, Sep 19 • 4:00 PM
           </Text>
           
           <View style={styles.ticketFooter}>
              <View>
-                <Text style={styles.ticketPrice}>£30</Text>
-                <Text style={styles.perTicketText}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>£30</Text>
+                <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>per ticket</Text>
              </View>
-             <View style={styles.counter}>
-                <View style={styles.counterBtn}>
-                  <Feather name="minus" size={16} color={COLORS.border} />
+             <View style={[styles.counter, { backgroundColor: isDark ? "#222129" : colors.backgroundSecondary }]}>
+                <View style={[styles.counterBtn, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                  <Feather name="minus" size={16} color={colors.textSecondary} />
                 </View>
-                <Text style={[styles.counterValue, { color: COLORS.border }]}>1</Text>
-                <View style={styles.counterBtn}>
-                  <Feather name="plus" size={16} color={COLORS.border} />
+                <Text style={[styles.counterValue, { color: colors.textSecondary }]}>1</Text>
+                <View style={[styles.counterBtn, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                  <Feather name="plus" size={16} color={colors.textSecondary} />
                 </View>
              </View>
           </View>
@@ -219,9 +211,9 @@ const AccessTab = () => {
       </View>
 
       {/* Secure Payment Note */}
-      <View style={styles.secureBadge}>
-        <Feather name="shield" size={14} color={COLORS.accentGreen} />
-        <Text style={styles.secureText}>
+      <View style={[styles.secureBadge, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.05)" : "rgba(22, 216, 105, 0.02)" }]}>
+        <Feather name="shield" size={14} color={colors.success} />
+        <Text style={[styles.secureText, { color: colors.success }]}>
           Payment held securely until event completes
         </Text>
       </View>
@@ -231,19 +223,19 @@ const AccessTab = () => {
   const renderRewards = () => (
     <View style={{ marginTop: 20 }}>
       {REWARDS_DATA.map((item) => (
-        <View key={item.id} style={styles.rewardCard}>
+        <View key={item.id} style={[styles.rewardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.rewardMain}>
             {item.image && (
               <Image source={{ uri: item.image }} style={styles.rewardImage} />
             )}
             <View style={styles.rewardInfo}>
               <View style={styles.rewardHeader}>
-                <Text style={styles.rewardTitleText} numberOfLines={1}>
+                <Text style={[styles.rewardTitleText, { color: colors.text }]} numberOfLines={1}>
                   {item.title}
                 </Text>
                 {item.left && (
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>{item.left}</Text>
+                  <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
+                    <Text style={[styles.countBadgeText, { color: colors.text }]}>{item.left}</Text>
                   </View>
                 )}
                 {item.status === "expired" && (
@@ -254,29 +246,24 @@ const AccessTab = () => {
               </View>
               
               {item.desc && !item.image && (
-                <Text style={styles.rewardDescText}>{item.desc}</Text>
+                <Text style={[styles.rewardDescText, { color: colors.textSecondary }]}>{item.desc}</Text>
               )}
               
-              <Text style={styles.rewardExpiryText}>
+              <Text style={[styles.rewardExpiryText, { color: colors.textSecondary }]}>
                 Expires in • {item.expires}
               </Text>
-
+ 
               <View style={styles.rewardFooterRow}>
                 {item.status === "claimed" && (
-                   <View style={styles.claimedBadge}>
-                    <Feather name="check" size={12} color={COLORS.accentGreen} />
-                    <Text style={styles.claimedText}>Claimed</Text>
+                   <View style={[styles.claimedBadge, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" }]}>
+                    <Feather name="check" size={12} color={colors.success} />
+                    <Text style={[styles.claimedText, { color: colors.success }]}>Claimed</Text>
                   </View>
                 )}
                 {item.status === "available" && (
-                  <TouchableOpacity style={styles.claimRewardBtn}>
-                    <Text style={styles.claimRewardBtnText}>Claim Reward</Text>
+                  <TouchableOpacity style={[styles.claimRewardBtn, { backgroundColor: colors.text }]}>
+                    <Text style={[styles.claimRewardBtnText, { color: colors.background }]}>Claim Reward</Text>
                   </TouchableOpacity>
-                )}
-                {item.status === "expired" && item.image && (
-                   <View style={[styles.countBadge, { backgroundColor: "rgba(255, 77, 77, 0.1)" }]}>
-                    <Text style={[styles.countBadgeText, { color: "#FF4D4D" }]}>Expired</Text>
-                  </View>
                 )}
               </View>
             </View>
@@ -291,31 +278,31 @@ const AccessTab = () => {
       {/* Sub-Tabs / Toggle */}
       <View style={styles.tabWrapper}>
         <LinearGradient
-          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.border, colors.border, colors.border]}
           start={{ x: 1, y: 1 }}
           end={{ x: 0, y: 1 }}
           style={styles.subTabBorder}
         >
-          <BlurView intensity={40} tint="dark" style={styles.subTabBg}>
+          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.subTabBg, { backgroundColor: isDark ? "#1c1b20" : colors.card }]}>
             <TouchableOpacity
               onPress={() => setAccessSubTab("Tickets")}
               style={styles.subTabItem}
             >
               {accessSubTab === "Tickets" ? (
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.activeBtnBorder}
                 >
-                  <View style={styles.activeBtnInner}>
-                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
+                    <Text style={[styles.subTabText, { color: colors.text }]}>
                       Tickets
                     </Text>
                   </View>
                 </LinearGradient>
               ) : (
-                <Text style={styles.subTabText}>Tickets</Text>
+                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Tickets</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -324,19 +311,19 @@ const AccessTab = () => {
             >
               {accessSubTab === "Rewards" ? (
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.activeBtnBorder}
                 >
-                  <View style={styles.activeBtnInner}>
-                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
+                    <Text style={[styles.subTabText, { color: colors.text }]}>
                       Rewards
                     </Text>
                   </View>
                 </LinearGradient>
               ) : (
-                <Text style={styles.subTabText}>Rewards</Text>
+                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Rewards</Text>
               )}
             </TouchableOpacity>
           </BlurView>
@@ -387,13 +374,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   subTabText: {
-    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
   },
   subTabTextActive: {
-    color: COLORS.text,
   },
   alertBanner: {
     flexDirection: "row",
@@ -424,24 +409,19 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.accentGreen,
   },
   availabilityText: {
-    color: COLORS.accentGreen,
     fontSize: 14,
     fontWeight: "600",
   },
   availabilityCount: {
-    color: COLORS.accentGreen,
     fontSize: 14,
     fontWeight: "bold",
   },
   ticketCard: {
-    backgroundColor: "#161521",
     borderRadius: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
     overflow: "hidden",
   },
   rewardAppliedRow: {
@@ -454,17 +434,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rewardTitle: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 6,
   },
   rewardSub: {
-    color: COLORS.textMuted,
     fontSize: 14,
   },
   claimBtn: {
-    backgroundColor: COLORS.text,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
@@ -475,7 +452,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   ticketInnerCard: {
-    backgroundColor: "#0F0E13",
     borderRadius: 18,
     margin: 4,
     padding: 16,
@@ -490,7 +466,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   claimedText: {
-    color: COLORS.accentGreen,
     fontSize: 11,
     fontWeight: "bold",
   },
@@ -532,7 +507,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ticketPrice: {
-    color: COLORS.text,
     fontSize: 28,
     fontWeight: "bold",
   },
@@ -558,7 +532,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   counterValue: {
-    color: COLORS.text,
     fontSize: 24,
     fontWeight: "600",
   },
@@ -573,18 +546,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   secureText: {
-    color: COLORS.accentGreen,
     fontSize: 12,
     fontWeight: "600",
   },
   /* Rewards Styles */
   rewardCard: {
-    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   rewardMain: {
     flexDirection: "row",
@@ -606,18 +576,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   rewardTitleText: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
     flex: 1,
   },
   rewardDescText: {
-    color: COLORS.textMuted,
     fontSize: 12,
     marginBottom: 4,
   },
   rewardExpiryText: {
-    color: COLORS.textMuted,
     fontSize: 11,
     marginBottom: 8,
   },
@@ -628,7 +595,6 @@ const styles = StyleSheet.create({
     minHeight: 24,
   },
   claimRewardBtn: {
-    backgroundColor: COLORS.text,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,

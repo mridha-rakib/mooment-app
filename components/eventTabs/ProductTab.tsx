@@ -9,20 +9,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 const { width } = Dimensions.get("window");
 
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#D4B0EB",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentPurple: "#8E54E9",
-  accentOrange: "#FF6B3D",
-  accentGreen: "#16D869",
-  border: "rgba(255, 255, 255, 0.1)",
-};
+// Removed hardcoded COLORS to use useTheme hook
 
 const PRODUCTS_DATA = [
   {
@@ -51,23 +42,24 @@ const PRODUCTS_DATA = [
 
 const ProductTab = () => {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   
   return (
     <View style={{ marginTop: 20 }}>
       {PRODUCTS_DATA.map((product) => (
-        <View key={product.id} style={styles.productCard}>
+        <View key={product.id} style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* User Header */}
           <View style={styles.header}>
             <Image source={{ uri: product.avatar }} style={styles.avatar} />
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{product.user}</Text>
-              <Text style={styles.time}>{product.time}</Text>
+              <Text style={[styles.userName, { color: colors.text }]}>{product.user}</Text>
+              <Text style={[styles.time, { color: colors.textSecondary }]}>{product.time}</Text>
             </View>
-            <TouchableOpacity style={styles.followBtn}>
-              <Text style={styles.followBtnText}>+ Follow</Text>
+            <TouchableOpacity style={[styles.followBtn, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}>
+              <Text style={[styles.followBtnText, { color: colors.text }]}>+ Follow</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreBtn}>
-              <Feather name="more-horizontal" size={18} color={COLORS.textMuted} />
+              <Feather name="more-horizontal" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -82,14 +74,14 @@ const ProductTab = () => {
           {/* Product Info Row */}
           <View style={styles.infoRow}>
             <View style={styles.infoLeft}>
-              <Text style={styles.productTitle}>{product.title}</Text>
-              <Text style={styles.productPrice}>{product.price}</Text>
+              <Text style={[styles.productTitle, { color: colors.textSecondary }]}>{product.title}</Text>
+              <Text style={[styles.productPrice, { color: colors.text }]}>{product.price}</Text>
             </View>
             <TouchableOpacity 
-              style={styles.viewBtn}
+              style={[styles.viewBtn, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}
               onPress={() => router.push("/event-screen/product/details")}
             >
-              <Text style={styles.viewBtnText}>View</Text>
+              <Text style={[styles.viewBtnText, { color: colors.text }]}>View</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -102,12 +94,10 @@ export default ProductTab;
 
 const styles = StyleSheet.create({
   productCard: {
-    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   header: {
     flexDirection: "row",
@@ -124,12 +114,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    color: COLORS.text,
     fontSize: 15,
     fontWeight: "bold",
   },
   time: {
-    color: COLORS.textMuted,
     fontSize: 12,
   },
   followBtn: {
@@ -140,7 +128,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   followBtnText: {
-    color: COLORS.text,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -169,7 +156,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   indicatorText: {
-    color: COLORS.text,
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "bold",
   },
@@ -182,12 +169,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productTitle: {
-    color: COLORS.textMuted,
     fontSize: 13,
     marginBottom: 4,
   },
   productPrice: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "bold",
   },
@@ -198,7 +183,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   viewBtnText: {
-    color: COLORS.text,
     fontSize: 13,
     fontWeight: "bold",
   },

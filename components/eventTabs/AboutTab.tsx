@@ -10,23 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 import FullScreen from "../event/FullScreen";
 
 const { width } = Dimensions.get("window");
 
-const COLORS = {
-  background: "#0e0d12",
-  card: "#13131A",
-  primary: "#D4B0EB",
-  text: "#FFFFFF",
-  textMuted: "#8E8E9B",
-  accentPurple: "#8E54E9",
-  accentOrange: "#FF6B3D",
-  accentGreen: "#16D869",
-  border: "rgba(255, 255, 255, 0.1)",
-};
+// Removed hardcoded COLORS to use useTheme hook
 
 const AboutTab = () => {
+  const { colors, isDark } = useTheme();
   const [subTab, setSubTab] = useState("Description");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
@@ -83,19 +75,19 @@ const AboutTab = () => {
       {GALLERY_IMAGES.map((item) => (
         <TouchableOpacity
           key={item.id}
-          style={styles.galleryItemContainer}
+          style={[styles.galleryItemContainer, { backgroundColor: colors.card }]}
           onPress={() => setSelectedImage(item.uri)}
           activeOpacity={0.9}
         >
           <Image source={{ uri: item.uri }} style={styles.galleryImage} />
           {item.type === "carousel" && (
             <View style={styles.galleryIcon}>
-              <Ionicons name="copy" size={12} color={COLORS.text} />
+              <Ionicons name="copy" size={12} color="#FFFFFF" />
             </View>
           )}
           {item.type === "video" && (
             <View style={styles.galleryIcon}>
-              <Ionicons name="videocam" size={12} color={COLORS.text} />
+              <Ionicons name="videocam" size={12} color="#FFFFFF" />
             </View>
           )}
         </TouchableOpacity>
@@ -114,31 +106,31 @@ const AboutTab = () => {
       {/* Sub-Tabs / Toggle */}
       <View style={styles.tabWrapper}>
         <LinearGradient
-          colors={["#18181c", "#c1c0c5", "#18181c"]}
+          colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.border, colors.border, colors.border]}
           start={{ x: 1, y: 1 }}
           end={{ x: 0, y: 1 }}
           style={styles.subTabBorder}
         >
-          <BlurView intensity={40} tint="dark" style={styles.subTabBg}>
+          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.subTabBg, { backgroundColor: isDark ? "#1c1b20" : colors.card }]}>
             <TouchableOpacity
               onPress={() => setSubTab("Description")}
               style={styles.subTabItem}
             >
               {subTab === "Description" ? (
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.activeBtnBorder}
                 >
-                  <View style={styles.activeBtnInner}>
-                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
+                    <Text style={[styles.subTabText, { color: colors.text }]}>
                       Description
                     </Text>
                   </View>
                 </LinearGradient>
               ) : (
-                <Text style={styles.subTabText}>Description</Text>
+                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Description</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -147,19 +139,19 @@ const AboutTab = () => {
             >
               {subTab === "Gallery" ? (
                 <LinearGradient
-                  colors={["#18181c", "#c1c0c5", "#18181c"]}
+                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
                   start={{ x: 1, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={styles.activeBtnBorder}
                 >
-                  <View style={styles.activeBtnInner}>
-                    <Text style={[styles.subTabText, styles.subTabTextActive]}>
+                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
+                    <Text style={[styles.subTabText, { color: colors.text }]}>
                       Gallery
                     </Text>
                   </View>
                 </LinearGradient>
               ) : (
-                <Text style={styles.subTabText}>Gallery</Text>
+                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Gallery</Text>
               )}
             </TouchableOpacity>
           </BlurView>
@@ -169,30 +161,30 @@ const AboutTab = () => {
       <View style={{ marginTop: 20 }}>
         {subTab === "Description" ? (
           <>
-            <Text style={styles.descriptionText}>
+            <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
               An unforgettable rooftop experience featuring the best in house
               and techno. Doors open at 8pm. Dress code: smart casual.
             </Text>
-            <View style={styles.ageTag}>
-              <Text style={styles.ageTagText}>18+ only</Text>
+            <View style={[styles.ageTag, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" }]}>
+              <Text style={[styles.ageTagText, { color: colors.text }]}>18+ only</Text>
             </View>
 
-            <Text style={styles.sectionTitle}>Location</Text>
-            <View style={styles.locationCard}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
+            <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.locationHeader}>
-                <View style={styles.locationIconBg}>
-                  <Ionicons name="location" size={18} color={COLORS.text} />
+                <View style={[styles.locationIconBg, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}>
+                  <Ionicons name="location" size={18} color={colors.text} />
                 </View>
-                <Text style={styles.locationCity}>New York City</Text>
+                <Text style={[styles.locationCity, { color: colors.text }]}>New York City</Text>
               </View>
               <View style={styles.locationDetails}>
-                <Text style={styles.detailLabel}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
                   Venue:{" "}
-                  <Text style={styles.detailValue}>The Rooftop Lounge</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]}>The Rooftop Lounge</Text>
                 </Text>
-                <Text style={styles.detailLabel}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
                   Address:{" "}
-                  <Text style={styles.detailValue}>
+                  <Text style={[styles.detailValue, { color: colors.text }]}>
                     123 Main Street, New York, NY 1001
                   </Text>
                 </Text>
@@ -206,7 +198,7 @@ const AboutTab = () => {
                   }}
                   style={styles.mapImage}
                 />
-                <View style={styles.mapOverlayAvatar}>
+                <View style={[styles.mapOverlayAvatar, { borderColor: colors.text, backgroundColor: colors.card }]}>
                   <Image
                     source={{
                       uri: "https://images.unsplash.com/photo-1514525253361-bee1a31f440a?q=80&w=200&auto=format&fit=crop",
@@ -215,26 +207,26 @@ const AboutTab = () => {
                   />
                 </View>
                 <TouchableOpacity style={styles.expandMapBtn}>
-                  <Feather name="maximize" size={16} color={COLORS.text} />
+                  <Feather name="maximize" size={16} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            <View style={styles.additionalInfoCard}>
-              <Text style={styles.cardTitle}>Additional Info</Text>
-              <Text style={styles.bulletItem}>
+            <View style={[styles.additionalInfoCard, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)" }]}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Additional Info</Text>
+              <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
                 • Use back entrance after 10PM
               </Text>
-              <Text style={styles.bulletItem}>
+              <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
                 • Parking available at adjacent garage - $20 flat rate
               </Text>
-              <Text style={styles.bulletItem}>
+              <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
                 • Nearest subway 7th Ave Station
               </Text>
             </View>
 
-            <Text style={styles.sectionTitle}>Host</Text>
-            <View style={styles.hostCard}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Host</Text>
+            <View style={[styles.hostCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.hostCardHeader}>
                 <Image
                   source={{
@@ -243,22 +235,22 @@ const AboutTab = () => {
                   style={styles.hostCardAvatar}
                 />
                 <View style={styles.hostCardInfo}>
-                  <Text style={styles.hostCardName}>Dj Koko</Text>
-                  <Text style={styles.hostCardUser}>@scfc_t</Text>
+                  <Text style={[styles.hostCardName, { color: colors.text }]}>Dj Koko</Text>
+                  <Text style={[styles.hostCardUser, { color: colors.textSecondary }]}>@scfc_t</Text>
                 </View>
-                <TouchableOpacity style={styles.followBtnLarge}>
-                  <Text style={styles.followBtnTextLarge}>Follow</Text>
+                <TouchableOpacity style={[styles.followBtnLarge, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}>
+                  <Text style={[styles.followBtnTextLarge, { color: colors.text }]}>Follow</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.hostStatsRow}>
-                <Text style={styles.hostStatItem}>
-                  <Text style={styles.hostStatValue}>12.4K</Text> Followers
+                <Text style={[styles.hostStatItem, { color: colors.textSecondary }]}>
+                  <Text style={[styles.hostStatValue, { color: colors.text }]}>12.4K</Text> Followers
                 </Text>
-                <Text style={styles.hostStatItem}>
-                  <Text style={styles.hostStatValue}>48</Text> Events
+                <Text style={[styles.hostStatItem, { color: colors.textSecondary }]}>
+                  <Text style={[styles.hostStatValue, { color: colors.text }]}>48</Text> Events
                 </Text>
               </View>
-              <Text style={styles.hostBio}>
+              <Text style={[styles.hostBio, { color: colors.textSecondary }]}>
                 House & techno DJ. Resident at Fabric. 10+ years on the decks.
               </Text>
             </View>
@@ -311,16 +303,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   subTabText: {
-    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
   },
   subTabTextActive: {
-    color: COLORS.text,
   },
   descriptionText: {
-    color: COLORS.textMuted,
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 16,
@@ -334,24 +323,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   ageTagText: {
-    color: COLORS.text,
     fontSize: 12,
     fontWeight: "600",
   },
   sectionTitle: {
-    color: COLORS.text,
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 16,
     marginTop: 8,
   },
   locationCard: {
-    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   locationHeader: {
     flexDirection: "row",
@@ -368,7 +353,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   locationCity: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
   },
@@ -376,12 +360,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   detailLabel: {
-    color: COLORS.textMuted,
     fontSize: 13,
     marginBottom: 4,
   },
   detailValue: {
-    color: COLORS.text,
     fontWeight: "500",
   },
   mapContainer: {
@@ -403,9 +385,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: COLORS.text,
     overflow: "hidden",
-    backgroundColor: COLORS.card,
   },
   mapAvatar: {
     width: "100%",
@@ -429,23 +409,19 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   cardTitle: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 12,
   },
   bulletItem: {
-    color: COLORS.textMuted,
     fontSize: 13,
     marginBottom: 8,
   },
   hostCard: {
-    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   hostCardHeader: {
     flexDirection: "row",
@@ -462,12 +438,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   hostCardName: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
   },
   hostCardUser: {
-    color: COLORS.textMuted,
     fontSize: 13,
   },
   followBtnLarge: {
@@ -477,7 +451,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   followBtnTextLarge: {
-    color: COLORS.text,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -487,15 +460,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   hostStatItem: {
-    color: COLORS.textMuted,
     fontSize: 13,
   },
   hostStatValue: {
-    color: COLORS.text,
     fontWeight: "bold",
   },
   hostBio: {
-    color: COLORS.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -512,7 +482,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 16,
     position: "relative",
-    backgroundColor: COLORS.card,
   },
   galleryImage: {
     width: "100%",
