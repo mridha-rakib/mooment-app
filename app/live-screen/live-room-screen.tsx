@@ -428,7 +428,7 @@ export default function EventDetailsScreen() {
         paddingBottom: Math.max(insets.bottom, 16)
       }]}>
         <TouchableOpacity style={[styles.bellBtn, { backgroundColor: colors.card }]} activeOpacity={0.7}>
-          <Feather name="bell" size={20} color={colors.text} />
+          <Feather name="mic" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={[styles.commentInputWrap, { backgroundColor: colors.card }]}>
           <TouchableOpacity activeOpacity={0.7} style={styles.emojiBtn}>
@@ -444,8 +444,8 @@ export default function EventDetailsScreen() {
             returnKeyType="send"
           />
         </View>
-        <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.7} onPress={handleSend}>
-          <Feather name="send" size={18} color={colors.background} />
+        <TouchableOpacity style={[styles.sendBtn, { backgroundColor: isDark ? '#D4B0EB' : colors.primary }]} activeOpacity={0.7} onPress={handleSend}>
+          <Feather name="send" size={18} color={isDark ? '#0e0d12' : colors.background} />
         </TouchableOpacity>
       </View>
 
@@ -547,10 +547,10 @@ const styles = StyleSheet.create({
 
   /* Bottom Bar */
   bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, gap: 10 },
-  bellBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  commentInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingHorizontal: 14, height: 42 },
+  bellBtn: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  commentInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingHorizontal: 14, height: 46 },
   emojiBtn: { marginRight: 8 },
   commentInput: { flex: 1, fontSize: 14, padding: 0 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  sendBtn: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
 });
 
