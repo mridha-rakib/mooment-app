@@ -3,7 +3,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
@@ -30,20 +30,46 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
+  const [isSearching, setIsSearching] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
 
   return (
     <View style={styles.container}>
       {isOwnProfile ? (
         <View style={styles.brandedHeader}>
-          <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onMenuPress}>
-            <HugeiconsIcon icon={Menu01Icon} size={24} color={colors.text} />
-          </TouchableOpacity>
+          {!isSearching && (
+            <>
+              <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onMenuPress}>
+                <HugeiconsIcon icon={Menu01Icon} size={24} color={colors.text} />
+              </TouchableOpacity>
 
-          <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
+              <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
+            </>
+          )}
 
-          <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
-          </TouchableOpacity>
+          {isSearching ? (
+            <View style={[styles.searchInputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <HugeiconsIcon icon={Search01Icon} size={20} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder="Search..."
+                placeholderTextColor={colors.textSecondary}
+                autoFocus
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              <TouchableOpacity onPress={() => { setIsSearching(false); setSearchQuery(''); }}>
+                <Feather name="x" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setIsSearching(true)}
+            >
+              <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <View style={styles.topRow}>
@@ -135,12 +161,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    height: '100%',
+    padding: 0,
   },
   logoText: {
     fontFamily: 'OleoScript-Regular',

@@ -61,13 +61,17 @@ export default function SearchScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>People you know</Text>
             {filteredPeople.map((person) => (
-            <View key={person.id} style={styles.listItem}>
+            <TouchableOpacity 
+              key={person.id} 
+              style={styles.listItem}
+              onPress={() => router.push('/profile-screen/user-profile')}
+            >
               <Image source={{ uri: person.avatar }} style={styles.personAvatar} />
               <View style={styles.listTextContainer}>
                 <Text style={[styles.listTitle, { color: colors.text }]}>{person.name}</Text>
                 <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{person.handle}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
         )}
@@ -77,13 +81,17 @@ export default function SearchScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Events</Text>
           {filteredEvents.map((event) => (
-            <View key={event.id} style={styles.listItem}>
+            <TouchableOpacity 
+              key={event.id} 
+              style={styles.listItem}
+              onPress={() => router.push('/event-screen/event')}
+            >
               <Image source={{ uri: event.image }} style={[styles.squareImage, { borderColor: colors.border }]} />
               <View style={styles.listTextContainer}>
                 <Text style={[styles.listTitle, { color: colors.text }]}>{event.title}</Text>
                 <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{event.subtitle}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
         )}
@@ -93,13 +101,17 @@ export default function SearchScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Products</Text>
           {filteredProducts.map((product) => (
-            <View key={product.id} style={styles.listItem}>
+            <TouchableOpacity 
+              key={product.id} 
+              style={styles.listItem}
+              onPress={() => router.push('/event-screen/product/details')}
+            >
               <Image source={{ uri: product.image }} style={[styles.squareImage, { borderColor: colors.border }]} />
               <View style={styles.listTextContainer}>
                 <Text style={[styles.listTitle, { color: colors.text }]}>{product.title}</Text>
                 <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{product.subtitle}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
         )}
