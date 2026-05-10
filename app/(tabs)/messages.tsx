@@ -220,10 +220,13 @@ export default function MessagesScreen() {
       onPress={() => router.push('/live-screen/live-room-screen')}
     >
       <View style={[styles.roomCapsule, { backgroundColor: isDark ? '#130B24' : colors.card, borderColor: isDark ? '#2D1B4E' : colors.border }]}>
-        <View style={styles.roomAvatarWrap}>
+        <TouchableOpacity 
+          style={styles.roomAvatarWrap}
+          onPress={() => router.push('/profile-screen/user-profile')}
+        >
           <Image source={{ uri: item.hostAvatar }} style={styles.roomAvatar} />
           <View style={styles.roomOnlineDot} />
-        </View>
+        </TouchableOpacity>
         {item.isHost && (
           <View style={[styles.roomHostBadge, { borderColor: colors.primary }]}>
             <Text style={[styles.roomHostText, { color: colors.primary }]}>Host</Text>
@@ -241,13 +244,20 @@ export default function MessagesScreen() {
       <Text style={[styles.roomTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
 
       <Text style={[styles.roomSpeakerText, { color: colors.textSecondary }]}>
-        <Text style={[styles.roomSpeakerName, { color: colors.text }]}>{item.hostName}</Text> is speaking
+        <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+          <Text style={[styles.roomSpeakerName, { color: colors.text }]}>{item.hostName}</Text>
+        </TouchableOpacity> is speaking
       </Text>
 
       <View style={styles.roomListenersRow}>
         <View style={styles.roomListenerAvatars}>
           {item.listenerAvatars.map((av, idx) => (
-            <Image key={idx} source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0, borderColor: colors.background }]} />
+            <TouchableOpacity 
+              key={idx} 
+              onPress={() => router.push('/profile-screen/user-profile')}
+            >
+              <Image source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0, borderColor: colors.background }]} />
+            </TouchableOpacity>
           ))}
         </View>
         <Text style={[styles.roomListenersText, { color: colors.textSecondary }]}>{item.listeners} listening</Text>

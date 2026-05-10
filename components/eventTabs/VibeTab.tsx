@@ -85,10 +85,13 @@ const VibeTab = () => {
         {ROOMS_DATA.map((room) => (
           <View key={room.id} style={styles.roomContainer}>
             <View style={[styles.ovalCard, { backgroundColor: isDark ? 'rgba(142, 84, 233, 0.05)' : 'rgba(142, 84, 233, 0.02)', borderColor: isDark ? 'rgba(142, 84, 233, 0.3)' : 'rgba(142, 84, 233, 0.15)' }]}>
-              <View style={styles.avatarContainer}>
+              <TouchableOpacity 
+                style={styles.avatarContainer}
+                onPress={() => router.push('/profile-screen/user-profile')}
+              >
                 <Image source={{ uri: room.hostAvatar }} style={[styles.roomAvatar, { borderColor: colors.primary }]} />
                 <View style={[styles.onlineIndicator, { borderColor: colors.background, backgroundColor: '#16D869' }]} />
-              </View>
+              </TouchableOpacity>
 
               {room.isHost && (
                 <View style={[styles.hostBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}>
@@ -107,23 +110,31 @@ const VibeTab = () => {
             <View style={styles.roomInfo}>
               <Text style={[styles.roomTitle, { color: colors.text }]}>{room.title}</Text>
               <Text style={[styles.speakingText, { color: colors.textSecondary }]}>
-                <Text style={[styles.hostNameHighlight, { color: colors.text }]}>{room.host}</Text> is speaking
+                <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                  <Text style={[styles.hostNameHighlight, { color: colors.text }]}>{room.host}</Text>
+                </TouchableOpacity> is speaking
               </Text>
 
               <View style={styles.listenerRow}>
                 <View style={styles.avatarCluster}>
-                  <Image
-                    source={{ uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop" }}
-                    style={[styles.avatarSmall, { zIndex: 3, borderColor: colors.background }]}
-                  />
-                  <Image
-                    source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop" }}
-                    style={[styles.avatarSmall, { zIndex: 2, marginLeft: -8, borderColor: colors.background }]}
-                  />
-                  <Image
-                    source={{ uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop" }}
-                    style={[styles.avatarSmall, { zIndex: 1, marginLeft: -8, borderColor: colors.background }]}
-                  />
+                  <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                    <Image
+                      source={{ uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop" }}
+                      style={[styles.avatarSmall, { zIndex: 3, borderColor: colors.background }]}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                    <Image
+                      source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop" }}
+                      style={[styles.avatarSmall, { zIndex: 2, marginLeft: -8, borderColor: colors.background }]}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                    <Image
+                      source={{ uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop" }}
+                      style={[styles.avatarSmall, { zIndex: 1, marginLeft: -8, borderColor: colors.background }]}
+                    />
+                  </TouchableOpacity>
                 </View>
                 <Text style={[styles.listenerCount, { color: colors.textSecondary }]}>{room.listeners} listening</Text>
               </View>
