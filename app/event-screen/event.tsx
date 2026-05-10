@@ -19,6 +19,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { Comment02Icon, Share01Icon, FavouriteIcon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get("window");
 
@@ -130,19 +132,19 @@ const EventScreen = () => {
 
             <View style={styles.actionStatsRow}>
               <View style={styles.actionStat}>
-                <Ionicons name="heart" size={18} color="#F2245C" />
+                <HugeiconsIcon icon={FavouriteIcon} size={18} color="#F2245C" />
                 <Text style={[styles.actionStatText, { color: colors.text }]}>25</Text>
               </View>
               <View style={styles.actionStat}>
-                <Feather
-                  name="message-circle"
+                <HugeiconsIcon
+                  icon={Comment02Icon}
                   size={18}
                   color={colors.textSecondary}
                 />
                 <Text style={[styles.actionStatText, { color: colors.text }]}>25</Text>
               </View>
               <View style={styles.actionStat}>
-                <Feather name="share" size={18} color={colors.textSecondary} />
+                <HugeiconsIcon icon={Share01Icon} size={18} color={colors.textSecondary} />
                 <Text style={[styles.actionStatText, { color: colors.text }]}>25</Text>
               </View>
             </View>
