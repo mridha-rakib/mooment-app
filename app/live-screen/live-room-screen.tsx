@@ -112,6 +112,9 @@ export default function EventDetailsScreen() {
   const [allowAll, setAllowAll] = useState(true);
   const [comment, setComment] = useState('');
   const [showMore, setShowMore] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [mutedUsers, setMutedUsers] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
   const [listenerCount, setListenerCount] = useState(412);
@@ -188,6 +191,16 @@ export default function EventDetailsScreen() {
     ]);
   }, []);
 
+  const toggleBlock = (name: string) => {
+    setBlockedUsers(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+    setSelectedMessage(null);
+  };
+
+  const toggleMute = (name: string) => {
+    setMutedUsers(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+    setSelectedMessage(null);
+  };
+
   return (
     <View style={[styles.safe, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -252,6 +265,45 @@ export default function EventDetailsScreen() {
         </Pressable>
       </Modal>
 
+      {/* ── Message Menu Modal ── */}
+      <Modal
+        visible={!!selectedMessage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedMessage(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedMessage(null)}>
+          <View style={[
+            styles.moreMenu, 
+            { 
+              top: '40%', // Fixed central positioning for simplicity
+              right: 40,
+              backgroundColor: isDark ? '#2D2D3D' : '#F2F2F2',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 8,
+              elevation: 5
+            }
+          ]}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleBlock(selectedMessage?.name || '')}>
+              <Feather name="slash" size={18} color={colors.text} />
+              <Text style={[styles.menuText, { color: colors.text }]}>
+                {blockedUsers.includes(selectedMessage?.name || '') ? 'Unblock' : 'Block'}
+              </Text>
+            </TouchableOpacity>
+            <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => toggleMute(selectedMessage?.name || '')}>
+              <Feather name={mutedUsers.includes(selectedMessage?.name || '') ? 'mic' : 'mic-off'} size={18} color={colors.text} />
+              <Text style={[styles.menuText, { color: colors.text }]}>
+                {mutedUsers.includes(selectedMessage?.name || '') ? 'Unmute' : 'Mute'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
 
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* ── Status Row ── */}
@@ -274,9 +326,12 @@ export default function EventDetailsScreen() {
         <View style={styles.speakerSection}>
           <View style={styles.avatarGlow}>
             <View style={[styles.avatarRingOuter, { backgroundColor: isDark ? 'rgba(155,89,182,0.15)' : 'rgba(155,89,182,0.05)' }]}>
-              <View style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking, { borderColor: colors.border }]}>
+              <TouchableOpacity 
+                style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking, { borderColor: colors.border }]}
+                onPress={() => router.push('/profile-screen/user-profile')}
+              >
                 <Image source={{ uri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop' }} style={styles.speakerAvatar} />
-              </View>
+              </TouchableOpacity>
             </View>
             {isSpeaking && (
               <View style={[styles.speakingBadge, { backgroundColor: colors.success }]}>
@@ -309,17 +364,21 @@ export default function EventDetailsScreen() {
           <View style={styles.chatContainer}>
             {messages.map((msg) => (
               <View key={msg.id} style={styles.chatRow}>
-                <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
+                <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                  <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
+                </TouchableOpacity>
                 <View style={styles.chatContent}>
                   <View style={styles.chatMeta}>
-                    <Text style={[styles.chatName, { color: colors.text }]}>{msg.name}</Text>
+                    <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                      <Text style={[styles.chatName, { color: colors.text }]}>{msg.name}</Text>
+                    </TouchableOpacity>
                     {msg.role && (<><Text style={[styles.chatDot, { color: colors.textSecondary }]}> • </Text><Text style={[styles.chatRole, { color: colors.textSecondary }]}>{msg.role}</Text></>)}
                     <Text style={[styles.chatDot, { color: colors.textSecondary }]}> • </Text>
                     <Text style={[styles.chatTime, { color: colors.textSecondary }]}>{msg.time}</Text>
                   </View>
                   <Text style={[styles.chatText, { color: colors.text }]}>{msg.text}</Text>
                 </View>
-                <TouchableOpacity style={styles.chatMore} activeOpacity={0.6} onPress={() => deleteMessage(msg.id)}>
+                <TouchableOpacity style={styles.chatMore} activeOpacity={0.6} onPress={() => setSelectedMessage(msg)}>
                   <Feather name="more-horizontal" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
@@ -341,8 +400,12 @@ export default function EventDetailsScreen() {
 
             {participants.map((p) => (
               <View key={p.id} style={styles.participantRow}>
-                <Image source={{ uri: p.avatar }} style={styles.participantAvatar} />
-                <Text style={[styles.participantName, { color: colors.text }]}>{p.name}</Text>
+                <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                  <Image source={{ uri: p.avatar }} style={styles.participantAvatar} />
+                </TouchableOpacity>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push('/profile-screen/user-profile')}>
+                  <Text style={[styles.participantName, { color: colors.text }]}>{p.name}</Text>
+                </TouchableOpacity>
                 <View style={styles.participantActions}>
                   <TouchableOpacity style={[styles.pActionBtn, { backgroundColor: colors.card }, p.micMuted && { backgroundColor: colors.danger }]} activeOpacity={0.7} onPress={() => toggleMic(p.id)}>
                     <Feather name={p.micMuted ? 'mic-off' : 'mic'} size={16} color={p.micMuted ? colors.background : colors.textSecondary} />
