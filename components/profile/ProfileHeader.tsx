@@ -1,15 +1,16 @@
+import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useTheme } from "@/hooks/useTheme";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 
 import MoreMenuModal from "../post/MoreMenuModal";
 import BackButton from "../ui/BackButton";
+import ChevronRightIcon from "../ui/ChevronRightIcon";
 
 export type ProfileStats = {
   posts: number;
@@ -37,9 +38,9 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onMenuPress}>
             <HugeiconsIcon icon={Menu01Icon} size={24} color={colors.text} />
           </TouchableOpacity>
-          
+
           <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
-          
+
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
           </TouchableOpacity>
@@ -47,9 +48,9 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
       ) : (
         <View style={styles.topRow}>
           <BackButton size={20} />
-          
-          <TouchableOpacity 
-            style={styles.moreBtn} 
+
+          <TouchableOpacity
+            style={styles.moreBtn}
             activeOpacity={0.8}
             onPress={() => setShowMore(true)}
           >
@@ -60,10 +61,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
         </View>
       )}
 
-      <MoreMenuModal 
-        visible={showMore} 
+      <MoreMenuModal
+        visible={showMore}
         onClose={() => setShowMore(false)}
-        showDelete={false} 
+        showDelete={false}
         onReport={() => console.log('Report profile')}
         onSave={() => console.log('Save profile')}
         top={110} // Positioned under the header button
@@ -73,26 +74,47 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
         <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
           <Image source={{ uri: avatar }} style={styles.avatar} />
         </View>
-        
+
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats.posts}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/reviews')}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{stats.reviews}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Reviews</Text>
+          <TouchableOpacity onPress={() => router.push('/profile-screen/reviews')}>
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stats.reviews}</Text>
+              <View style={styles.labelRow}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Reviews</Text>
+                <View style={styles.chevronWrapper}>
+                  <ChevronRightIcon />
+                </View>
+              </View>
+            </View>
           </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/followers')}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{stats.followers}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
+          <TouchableOpacity onPress={() => router.push('/profile-screen/followers')}>
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stats.followers}</Text>
+              <View style={styles.labelRow}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
+                <View style={styles.chevronWrapper}>
+                  <ChevronRightIcon />
+                </View>
+              </View>
+            </View>
           </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity style={styles.statBox} onPress={() => router.push('/profile-screen/following')}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{stats.following}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
+          <TouchableOpacity onPress={() => router.push('/profile-screen/following')}>
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stats.following}</Text>
+              <View style={styles.labelRow}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
+                <View style={styles.chevronWrapper}>
+                  <ChevronRightIcon />
+                </View>
+              </View>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -164,6 +186,15 @@ const styles = StyleSheet.create({
   },
   statBox: {
     alignItems: 'center',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  chevronWrapper: {
+    marginTop: 4,
+    marginLeft: 4,
   },
   statValue: {
     fontSize: 16,
