@@ -55,24 +55,18 @@ export default function MyPlanScreen() {
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [selectedDay, setSelectedDay] = useState(now.getDate());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [events, setEvents] = useState<PlanEvent[]>([]);
-
-  useEffect(() => {
-    if (hasPlan && events.length === 0) {
-      setEvents([
-        {
-          id: '1', day: selectedDay, time: '6:00 PM',
-          title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-          venue: 'Rooftop Series Vol.4',
-        },
-        {
-          id: '2', day: selectedDay, time: '9:00 PM',
-          title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-          venue: 'Rooftop Series Vol.4',
-        }
-      ]);
+  const [events, setEvents] = useState<PlanEvent[]>([
+    {
+      id: '1', day: selectedDay, time: '6:00 PM',
+      title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+      venue: 'Rooftop Series Vol.4',
+    },
+    {
+      id: '2', day: selectedDay, time: '9:00 PM',
+      title: 'Party', image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop',
+      venue: 'Rooftop Series Vol.4',
     }
-  }, [hasPlan, selectedDay]);
+  ]);
 
   const handleAddEvent = () => {
     setEvents([
@@ -627,8 +621,13 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 85,
     alignItems: 'center',
-    paddingVertical: 28,
+    paddingVertical: 32,
     paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
   },
   capsuleIconWrap: {
     width: 44,

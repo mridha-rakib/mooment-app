@@ -1,0 +1,150 @@
+import BackButton from '@/components/ui/BackButton';
+import { useTheme } from '@/hooks/useTheme';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export default function ContactSupportScreen() {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? 10 : 0 }]}>
+        <BackButton />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Contact Support</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>TITLE</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              placeholder="Enter Title of the message"
+              placeholderTextColor={colors.textSecondary}
+              value={title}
+              onChangeText={setTitle}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
+            <TextInput
+              style={[styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              placeholder="Write down your message . . . ."
+              placeholderTextColor={colors.textSecondary}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={10}
+              textAlignVertical="top"
+            />
+          </View>
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+          <TouchableOpacity
+            style={[styles.cancelBtn, { borderColor: colors.border, backgroundColor: isDark ? '#1C1B1F' : '#F5F5F5' }]}
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sendBtn, { backgroundColor: isDark ? '#A399B2' : colors.primary }]}
+            onPress={() => {
+              // Handle send
+              router.back();
+            }}
+          >
+            <Text style={[styles.sendBtnText, { color: isDark ? '#1C1B1F' : colors.background }]}>Send</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  inputGroup: {
+    marginBottom: 25,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 10,
+    letterSpacing: 0.5,
+  },
+  input: {
+    height: 54,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    fontSize: 14,
+  },
+  textArea: {
+    height: 300,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    fontSize: 14,
+  },
+  footer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 15,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 54,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  sendBtn: {
+    flex: 1,
+    height: 54,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

@@ -114,7 +114,12 @@ export default function SettingsScreen() {
         <View style={styles.sectionGroup}>
           <SettingItem icon="file-text" label="Terms & Conditions" onPress={() => router.push('/profile-screen/terms')} colors={colors} />
           <SettingItem icon="shield" label="Privacy & Policy" onPress={() => router.push('/profile-screen/privacy')} colors={colors} />
-          <SettingItem icon="headphones" label="Contact Support" colors={colors} />
+          <SettingItem 
+            icon="headphones" 
+            label="Contact Support" 
+            onPress={() => router.push('/profile-screen/contact-support')} 
+            colors={colors} 
+          />
         </View>
 
         {/* Delete Account */}

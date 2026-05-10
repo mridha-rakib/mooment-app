@@ -47,29 +47,12 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             </>
           )}
 
-          {isSearching ? (
-            <View style={[styles.searchInputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <HugeiconsIcon icon={Search01Icon} size={20} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
-                placeholder="Search..."
-                placeholderTextColor={colors.textSecondary}
-                autoFocus
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              <TouchableOpacity onPress={() => { setIsSearching(false); setSearchQuery(''); }}>
-                <Feather name="x" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity 
-              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => setIsSearching(true)}
-            >
-              <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity 
+            style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/discover-screen/search')}
+          >
+            <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.topRow}>

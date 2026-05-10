@@ -1,27 +1,27 @@
+import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
-import { 
-  UserEdit01Icon, 
-  Bookmark02Icon, 
-  Calendar03Icon, 
-  Calendar01Icon, 
-  Analytics01Icon, 
-  StripeIcon, 
-  BitcoinIcon, 
-  Wallet01Icon, 
-  Ticket01Icon, 
-  ShoppingBag01Icon, 
-  Add01Icon, 
-  Archive01Icon, 
-  Settings02Icon, 
+import {
+  Add01Icon,
+  Analytics01Icon,
+  Archive01Icon,
+  BitcoinIcon,
+  Bookmark02Icon,
+  Calendar01Icon,
+  Calendar03Icon,
   Logout01Icon,
-  ShoppingCart01Icon
+  Settings02Icon,
+  ShoppingBag01Icon,
+  ShoppingCart01Icon,
+  StripeIcon,
+  Ticket01Icon,
+  UserEdit01Icon,
+  Wallet01Icon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } from "react-native";
-import { useTheme } from "@/hooks/useTheme";
+import { Modal, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type MenuDrawerProps = {
   visible: boolean;
@@ -83,130 +83,138 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <SectionLabel label="ESSENTIALS" colors={colors} />
-            <MenuItem 
-              icon={UserEdit01Icon} 
-              label="Edit Profile" 
+            <MenuItem
+              icon={UserEdit01Icon}
+              label="Edit Profile"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/edit-profile');
+              }}
+            />
+            <MenuItem 
+              icon={Bookmark02Icon} 
+              label="Saved Posts" 
+              colors={colors} 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/saved-posts');
               }} 
             />
-            <MenuItem icon={Bookmark02Icon} label="Saved Posts" colors={colors} onPress={() => {}} />
-            <MenuItem 
-              icon={Calendar03Icon} 
-              label="Draft Events" 
+            <MenuItem
+              icon={Calendar03Icon}
+              label="Draft Events"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/event-screen/event');
-              }} 
+              }}
             />
-            <MenuItem icon={Calendar01Icon} label="My Plan" colors={colors} onPress={() => {}} />
-            <MenuItem 
-              icon={Analytics01Icon} 
-              label="Creator Dashboard" 
+            <MenuItem icon={Calendar01Icon} label="My Plan" colors={colors} onPress={() => { }} />
+            <MenuItem
+              icon={Analytics01Icon}
+              label="Creator Dashboard"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/creator-dashboard');
-              }} 
+              }}
             />
-            <MenuItem 
-              icon={ShoppingCart01Icon} 
-              label="My Cart" 
+            <MenuItem
+              icon={ShoppingCart01Icon}
+              label="My Cart"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/event-screen/product/cart');
-              }} 
-              hideSeparator 
+              }}
+              hideSeparator
             />
 
             <SectionLabel label="WALLET" colors={colors} />
-            <MenuItem 
-              icon={StripeIcon} 
-              label="Add Stripe Account" 
+            <MenuItem
+              icon={StripeIcon}
+              label="Add Stripe Account"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/add-stripe');
-              }} 
+              }}
             />
-            <MenuItem 
-              icon={BitcoinIcon} 
-              label="Buy Mooment Credits" 
+            <MenuItem
+              icon={BitcoinIcon}
+              label="Buy Mooment Credits"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/buy-credits');
-              }} 
+              }}
             />
-            <MenuItem 
-              icon={Wallet01Icon} 
-              label="Mooment Wallet" 
+            <MenuItem
+              icon={Wallet01Icon}
+              label="Mooment Wallet"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/mooment-wallet');
-              }} 
+              }}
             />
-            <MenuItem 
-              icon={Ticket01Icon} 
-              label="Ticket Wallet" 
+            <MenuItem
+              icon={Ticket01Icon}
+              label="Ticket Wallet"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/ticket-wallet');
-              }} 
+              }}
             />
-            <MenuItem 
-              icon={ShoppingBag01Icon} 
-              label="Product Wallet" 
+            <MenuItem
+              icon={ShoppingBag01Icon}
+              label="Product Wallet"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/product-wallet');
-              }} 
-              hideSeparator 
+              }}
+              hideSeparator
             />
 
             <SectionLabel label="PRODUCT" colors={colors} />
             <MenuItem icon={Add01Icon} label="Add Product" colors={colors} onPress={onAddProductPress} />
-            <MenuItem 
-              icon={Archive01Icon} 
-              label="My Inventory" 
+            <MenuItem
+              icon={Archive01Icon}
+              label="My Inventory"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/inventory');
-              }} 
-              hideSeparator 
+              }}
+              hideSeparator
             />
 
             <View style={{ height: 30 }} />
 
-            <MenuItem 
-              icon={Settings02Icon} 
-              label="Settings" 
+            <MenuItem
+              icon={Settings02Icon}
+              label="Settings"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.push('/profile-screen/settings');
-              }} 
+              }}
               hideSeparator
             />
             <View style={{ height: 10 }} />
-            <MenuItem 
-              icon={Logout01Icon} 
-              label="Logout" 
+            <MenuItem
+              icon={Logout01Icon}
+              label="Logout"
               colors={colors}
               onPress={() => {
                 onClose();
                 router.replace('/auth-screen/login');
-              }} 
-              isDestructive 
-              hideSeparator 
+              }}
+              isDestructive
+              hideSeparator
             />
           </ScrollView>
         </SafeAreaView>
