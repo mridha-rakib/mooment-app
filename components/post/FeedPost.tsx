@@ -167,7 +167,18 @@ export default function FeedPost({
       <View style={[styles.postCard, { backgroundColor: colors.card }]}>
         {/* Post Header */}
         <View style={styles.postHeader}>
-          <View style={styles.postAuthorInfo}>
+          <TouchableOpacity
+            style={styles.postAuthorInfo}
+            activeOpacity={0.7}
+            onPress={() => router.push({
+              pathname: '/profile-screen/user-profile',
+              params: {
+                userId: post.id,
+                name: post.authorName,
+                avatar: post.authorAvatar
+              }
+            } as any)}
+          >
             <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
             <View style={styles.authorTextContainer}>
               <Text style={styles.authorLine} numberOfLines={2}>
@@ -189,7 +200,7 @@ export default function FeedPost({
                 )}
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.postHeaderActions}>
             {isFollowing ? (
               <TouchableOpacity
