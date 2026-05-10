@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Animated, Dimensions, Image,
-  ScrollView, StatusBar,
+  Modal, Pressable, ScrollView, StatusBar,
   StyleSheet, Text,
   TextInput, TouchableOpacity, View
 } from 'react-native';
@@ -111,6 +111,7 @@ export default function EventDetailsScreen() {
   const [activeTab, setActiveTab] = useState<'chat' | 'permission'>('chat');
   const [allowAll, setAllowAll] = useState(true);
   const [comment, setComment] = useState('');
+  const [showMore, setShowMore] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
   const [listenerCount, setListenerCount] = useState(412);
@@ -195,10 +196,61 @@ export default function EventDetailsScreen() {
       <View style={styles.header}>
         <BackButton size={22} color={colors.text} />
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>Pre-show with {hostName}</Text>
-        <TouchableOpacity style={[styles.menuBtn, { backgroundColor: colors.card }]} activeOpacity={0.8}>
+        <TouchableOpacity 
+          style={[styles.menuBtn, { backgroundColor: colors.card }]} 
+          activeOpacity={0.8}
+          onPress={() => setShowMore(true)}
+        >
           <Feather name="more-horizontal" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
+
+      {/* ── More Menu Modal ── */}
+      <Modal
+        visible={showMore}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMore(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowMore(false)}>
+          <View style={[
+            styles.moreMenu, 
+            { 
+              top: insets.top + 55, 
+              right: 20, 
+              backgroundColor: isDark ? '#2D2D3D' : '#F2F2F2',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 8,
+              elevation: 5
+            }
+          ]}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMore(false); Alert.alert('Reported'); }}>
+              <Feather name="flag" size={18} color={colors.text} />
+              <Text style={[styles.menuText, { color: colors.text }]}>Report</Text>
+            </TouchableOpacity>
+            <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => setShowMore(false)}>
+              <Feather name="share-2" size={18} color={colors.text} />
+              <Text style={[styles.menuText, { color: colors.text }]}>Share to</Text>
+            </TouchableOpacity>
+            <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => setShowMore(false)}>
+              <Feather name="slash" size={18} color={colors.text} />
+              <Text style={[styles.menuText, { color: colors.text }]}>Block</Text>
+            </TouchableOpacity>
+            <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMore(false); handleLeave(); }}>
+              <Feather name="trash-2" size={18} color="#FF4D4D" />
+              <Text style={[styles.menuText, { color: "#FF4D4D" }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
 
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -344,6 +396,32 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   headerTitle: { flex: 1, fontWeight: '700', fontSize: 17, textAlign: 'center' },
   menuBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+
+  /* Modal & More Menu */
+  modalOverlay: { flex: 1, backgroundColor: 'transparent' },
+  moreMenu: {
+    position: 'absolute',
+    width: 150,
+    borderRadius: 12,
+    overflow: 'hidden',
+    padding: 4,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  menuText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  menuSeparator: {
+    height: 1,
+    marginHorizontal: 8,
+  },
+
   scrollContent: { paddingBottom: 20 },
 
   /* Status */
