@@ -2,6 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
+import { useRouter } from "expo-router";
 
 type ActivityItem = {
   id: string;
@@ -51,14 +52,24 @@ const LAST_WEEK_DATA: ActivityItem[] = [
 ];
 
 export default function Explore() {
+  const router = useRouter();
   const { colors, isDark } = useTheme();
   const [isEmpty, setIsEmpty] = useState(false);
+  const [followedUsers, setFollowedUsers] = useState<string[]>([]);
+
+  const toggleFollow = (id: string) => {
+    setFollowedUsers(prev => prev.includes(id) ? prev.filter(uid => uid !== id) : [...prev, id]);
+  };
 
   const renderItem = (item: ActivityItem) => {
-    if (item.type === 'follow') {
+     if (item.type === 'follow') {
       return (
         <View key={item.id} style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.cardContent}>
+          <TouchableOpacity 
+            style={styles.cardContent} 
+            activeOpacity={0.7}
+            onPress={() => router.push('/profile-screen/user-profile')}
+          >
             <Image source={{ uri: item.user?.avatar }} style={styles.avatar} />
             <View style={styles.textContainer}>
               <Text style={[styles.mainText, { color: colors.textSecondary }]}>
@@ -66,15 +77,34 @@ export default function Explore() {
               </Text>
               <Text style={[styles.timeText, { color: colors.textSecondary }]}>{item.time}</Text>
             </View>
-          </View>
-          <TouchableOpacity style={[styles.followBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
-            <Text style={[styles.followBtnText, { color: colors.background }]}>Follow</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[
+              styles.followBtn, 
+              followedUsers.includes(item.id) 
+                ? { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border } 
+                : { backgroundColor: colors.primary }
+            ]} 
+            activeOpacity={0.8}
+            onPress={() => toggleFollow(item.id)}
+          >
+            <Text style={[
+              styles.followBtnText, 
+              { color: followedUsers.includes(item.id) ? colors.text : colors.background }
+            ]}>
+              {followedUsers.includes(item.id) ? 'Following' : 'Follow'}
+            </Text>
           </TouchableOpacity>
         </View>
       );
     } else {
       return (
-        <View key={item.id} style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <TouchableOpacity 
+          key={item.id} 
+          style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          activeOpacity={0.7}
+          onPress={() => router.push('/event-screen/event')}
+        >
           <View style={styles.cardContent}>
             <View style={[styles.ticketIconContainer, { backgroundColor: isDark ? 'rgba(212, 176, 235, 0.1)' : 'rgba(212, 176, 235, 0.2)' }]}>
               <Ionicons name="ticket" size={20} color={colors.primary} />
@@ -87,7 +117,7 @@ export default function Explore() {
             </View>
           </View>
           <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-        </View>
+        </TouchableOpacity>
       );
     }
   };
