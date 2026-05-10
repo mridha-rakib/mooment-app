@@ -1,6 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ScrollView, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import React, { useRef, useState } from 'react';
+import { Dimensions, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 
 const { height } = Dimensions.get('window');
@@ -11,19 +13,21 @@ type CommentType = {
   authorAvatar: string;
   text: string;
   timeAgo: string;
-  likesCount?: string;
+  likesCount: number;
+  isLiked?: boolean;
   viewMoreReplies?: number;
   replies?: CommentType[];
   isViewMore?: boolean;
 };
 
-const MOCK_COMMENTS: CommentType[] = [
+const INITIAL_COMMENTS: CommentType[] = [
   {
     id: '1',
     authorName: 'Del Ray',
     authorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
     text: 'What an amazing DJ party! The atmosphere was electric and everyone had a blast.',
     timeAgo: '5h',
+    likesCount: 0,
   },
   {
     id: '2',
@@ -31,7 +35,7 @@ const MOCK_COMMENTS: CommentType[] = [
     authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
     text: 'This party was so much fun! The DJ played fantastic tracks that kept everyone dancing.',
     timeAgo: '5h',
-    likesCount: '5K',
+    likesCount: 5000,
     viewMoreReplies: 4,
   },
   {
@@ -40,7 +44,7 @@ const MOCK_COMMENTS: CommentType[] = [
     authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
     text: 'I had a great time at the DJ event! The music was on point and the vibe was incredible.',
     timeAgo: '5h',
-    likesCount: '5K',
+    likesCount: 5000,
     replies: [
       {
         id: '3-1',
@@ -48,7 +52,7 @@ const MOCK_COMMENTS: CommentType[] = [
         authorAvatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
         text: 'What a fantastic night at the DJ party! The energy was high and the crowd was loving it.',
         timeAgo: '5h',
-        likesCount: '5K',
+        likesCount: 5000,
       },
       {
         id: '3-2',
@@ -56,22 +60,55 @@ const MOCK_COMMENTS: CommentType[] = [
         authorAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
         text: 'Everyone is loving the concert! The atmosphere is electric, and the performers are amazing.',
         timeAgo: '5h',
-        likesCount: '5K',
+        likesCount: 5000,
       }
     ]
   }
 ];
 
-export default function CommentsModal({ 
-  visible, 
-  onClose 
-}: { 
-  visible: boolean; 
+export default function CommentsModal({
+  visible,
+  onClose
+}: {
+  visible: boolean;
   onClose: () => void;
 }) {
   const { colors, isDark } = useTheme();
+  const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
+  const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  const toggleCommentLike = (commentId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    const updateLikes = (items: CommentType[]): CommentType[] => {
+      return items.map(item => {
+        if (item.id === commentId) {
+          const isLiked = !item.isLiked;
+          return {
+            ...item,
+            isLiked,
+            likesCount: isLiked ? (item.likesCount + 1) : (item.likesCount - 1)
+          };
+        }
+        if (item.replies) {
+          return { ...item, replies: updateLikes(item.replies) };
+        }
+        return item;
+      });
+    };
+
+    setComments(prev => updateLikes(prev));
+  };
+
+  const handleReplyPress = (id: string, name: string) => {
+    setReplyingTo({ id, name });
+    inputRef.current?.focus();
+  };
 
   const renderComment = (item: CommentType, isChild = false, isLast = false) => {
+    const formattedLikes = item.likesCount >= 1000 ? `${(item.likesCount / 1000).toFixed(0)}K` : item.likesCount;
+    
     return (
       <View key={item.id} style={[styles.commentRow, isChild && styles.childCommentRow]}>
         {/* Connection line for replies */}
@@ -94,17 +131,25 @@ export default function CommentsModal({
           
           <View style={styles.commentActions}>
             <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>{item.timeAgo}</Text>
-            {item.likesCount ? (
-              <Text style={[styles.actionPurpleText, { color: colors.primary }]}>{item.likesCount} Like</Text>
-            ) : (
-              <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>Like</Text>
-            )}
-            <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>Reply</Text>
+            
+            <TouchableOpacity onPress={() => toggleCommentLike(item.id)}>
+              <Text style={[
+                item.isLiked ? styles.actionPurpleText : styles.actionMutedText, 
+                { color: item.isLiked ? colors.primary : colors.textSecondary }
+              ]}>
+                {item.likesCount > 0 ? `${formattedLikes} ` : ''}Like
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => handleReplyPress(item.id, item.authorName)}>
+              <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>Reply</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
     );
   };
+
 
   return (
     <Modal
@@ -143,10 +188,10 @@ export default function CommentsModal({
           {/* Comments List */}
           <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
             {/* Comment 1 */}
-            {renderComment(MOCK_COMMENTS[0])}
+            {renderComment(comments[0])}
 
             {/* Comment 2 with View More */}
-            {renderComment(MOCK_COMMENTS[1])}
+            {renderComment(comments[1])}
             <View style={styles.viewMoreRow}>
               <View style={[styles.viewMoreLine, { borderColor: colors.border }]} />
               <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>View 4 replies</Text>
@@ -154,9 +199,9 @@ export default function CommentsModal({
 
             {/* Comment 3 with deeply nested children */}
             <View>
-               {renderComment(MOCK_COMMENTS[2])}
+               {renderComment(comments[2])}
                <View style={styles.repliesContainer}>
-                  {MOCK_COMMENTS[2].replies?.map((reply, index, arr) => 
+                  {comments[2].replies?.map((reply, index, arr) => 
                     renderComment(reply, true, index === arr.length - 1)
                   )}
                </View>
@@ -166,16 +211,29 @@ export default function CommentsModal({
 
           {/* Bottom Input */}
           <View style={[styles.inputSection, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-            <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <TextInput 
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Add Comment"
-                placeholderTextColor={colors.textSecondary}
-              />
+            {replyingTo && (
+              <View style={[styles.replyContextBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}>
+                <Text style={[styles.replyContextText, { color: colors.textSecondary }]}>
+                  Replying to <Text style={{ color: colors.primary, fontWeight: 'bold' }}>@{replyingTo.name}</Text>
+                </Text>
+                <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                  <Feather name="x" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+              <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <TextInput
+                  ref={inputRef}
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder={replyingTo ? `Reply to ${replyingTo.name}...` : "Add Comment"}
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
+                <Feather name="send" size={18} color={colors.background} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
-               <Feather name="send" size={18} color={colors.background} />
-            </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -321,11 +379,21 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   inputSection: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderTopWidth: 1,
+  },
+  replyContextBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  replyContextText: {
+    fontSize: 12,
   },
   inputWrapper: {
     flex: 1,
