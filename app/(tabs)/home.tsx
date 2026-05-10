@@ -73,6 +73,7 @@ const MOCK_POSTS: PostData[] = [
       currentTime: '0:47'
     },
     likesCount: 25,
+    isLiked: true,
     commentsCount: 25,
     sharesCount: 25
   },
@@ -90,6 +91,7 @@ const MOCK_POSTS: PostData[] = [
     caption: 'Behind the scenes at Saturday market',
     mediaUris: [],
     likesCount: 25,
+    isLiked: true,
     commentsCount: 25,
     sharesCount: 25
   },
@@ -103,6 +105,7 @@ const MOCK_POSTS: PostData[] = [
     caption: 'Behind the scenes at Saturday market',
     mediaUris: [],
     likesCount: 25,
+    isLiked: true,
     commentsCount: 25,
     sharesCount: 25
   },
@@ -156,6 +159,7 @@ const MOCK_POSTS: PostData[] = [
       priceLabel: '£45'
     },
     likesCount: 95,
+    isLiked: true,
     commentsCount: 28,
     sharesCount: 95
   },
@@ -172,6 +176,7 @@ const MOCK_POSTS: PostData[] = [
       'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'
     ],
     likesCount: 95,
+    isLiked: true,
     commentsCount: 28,
     sharesCount: 95
   },
@@ -185,7 +190,7 @@ const MOCK_POSTS: PostData[] = [
     mediaUris: [
       'https://images.unsplash.com/photo-1629198688000-71f23e7456cc?q=80&w=1000&auto=format&fit=crop',
       'https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1000&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=80&w=1000&auto=format&fit=crop'
+      'https://images.unsplash.com/photo-1608248593802-8eb3a69466be?q=1000&auto=format&fit=crop'
     ],
     productDetails: {
       title: 'Medusa Skin Whitening Cream',
@@ -216,6 +221,7 @@ const MOCK_POSTS: PostData[] = [
       'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1000&auto=format&fit=crop'
     ],
     likesCount: 25,
+    isLiked: true,
     commentsCount: 25,
     sharesCount: 25
   }
@@ -277,7 +283,6 @@ export default function HomeFeed() {
   useEffect(() => {
     if (params.showSuccess === "true") {
       setShowSuccessModal(true);
-      // Optional: clear the param so it doesn't show again on reload
       router.setParams({ showSuccess: undefined });
     }
 

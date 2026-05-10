@@ -2,8 +2,10 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { Comment02Icon, Share01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import React, { useRef, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
@@ -61,6 +63,7 @@ export type PostData = {
   audioDetails?: AudioDetails;
   productDetails?: ProductDetails;
   isExpandable?: boolean;
+  isLiked?: boolean;
 };
 
 import MoreMenuModal from "./MoreMenuModal";
@@ -88,6 +91,36 @@ export default function FeedPost({
   const [isFollowing, setIsFollowing] = useState(post.isFollowing);
   const moreBtnRef = useRef<View>(null);
   const [menuTop, setMenuTop] = useState(0);
+
+  // Dynamic Interaction State
+  const [isLiked, setIsLiked] = useState(post.isLiked || false);
+  const [likesCount, setLikesCount] = useState(post.likesCount || 0);
+
+  // Reanimated Shared Values
+  const heartScale = useSharedValue(1);
+
+  const heartAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }]
+  }));
+
+  const handleLike = () => {
+    // Haptic Feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Toggle State
+    if (isLiked) {
+      setLikesCount(prev => prev - 1);
+    } else {
+      setLikesCount(prev => prev + 1);
+    }
+    setIsLiked(!isLiked);
+
+    // Animation: Scale up then back to normal
+    heartScale.value = withSequence(
+      withSpring(1.3, { damping: 10, stiffness: 100 }),
+      withSpring(1, { damping: 10, stiffness: 100 })
+    );
+  };
 
   const handleMorePress = () => {
     moreBtnRef.current?.measureInWindow((x, y, width, height) => {
@@ -370,10 +403,20 @@ export default function FeedPost({
         {post.postType !== 'product' && (post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
           <View style={styles.postFooter}>
             <View style={styles.footerStats}>
-              {post.likesCount !== undefined && (
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-                  <Ionicons name="heart" size={22} color="#F2245C" />
-                  <Text style={[styles.actionText, { color: colors.text }]}>{post.likesCount}</Text>
+              {likesCount !== undefined && (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  activeOpacity={0.7}
+                  onPress={handleLike}
+                >
+                  <Animated.View style={heartAnimatedStyle}>
+                    <Ionicons
+                      name={isLiked ? "heart" : "heart-outline"}
+                      size={22}
+                      color={isLiked ? "#F2245C" : colors.textSecondary}
+                    />
+                  </Animated.View>
+                  <Text style={[styles.actionText, { color: colors.text }]}>{likesCount}</Text>
                 </TouchableOpacity>
               )}
               {post.commentsCount !== undefined && (
