@@ -16,7 +16,7 @@ export const Colors = {
     warning: '#F97316',
   },
   dark: {
-    background: '#0e0d12',
+    background: '#000000',
     backgroundSecondary: '#111111',
     text: '#FFFFFF',
     textSecondary: '#8E8E9B',

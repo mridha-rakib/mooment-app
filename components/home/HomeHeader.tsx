@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { FilterHorizontalIcon, Search01Icon, Location01Icon, ArrowLeft01Icon } from '@hugeicons/core-free-icons';
+import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,74 +27,47 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
   return (
     <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        {isMapMode ? (
-          <View style={styles.mapHeaderLeft}>
-            <TouchableOpacity 
-              style={[styles.backBtn, { backgroundColor: colors.card }]} 
-              onPress={() => setSelectedType('Feed')}
-              activeOpacity={0.7}
-            >
-              <HugeiconsIcon icon={ArrowLeft01Icon} size={20} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.mapTitle, { color: colors.text }]}>Map</Text>
-          </View>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.feedBtn, { backgroundColor: colors.card }]} 
-            activeOpacity={0.8}
-            onPress={() => setDropdownVisible(true)}
-          >
-            <View style={styles.greenDot} />
-            <Text style={[styles.feedText, { color: colors.text }]}>{selectedType}</Text>
-            <Feather name="chevron-down" size={14} color={colors.text} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          style={[styles.feedBtn, { backgroundColor: colors.card }]} 
+          activeOpacity={0.8}
+          onPress={() => setDropdownVisible(true)}
+        >
+          <View style={styles.greenDot} />
+          <Text style={[styles.feedText, { color: colors.text }]}>{selectedType}</Text>
+          <Feather name="chevron-down" size={14} color={colors.text} />
+        </TouchableOpacity>
 
-        {!isMapMode && <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>}
+        <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
 
         <View style={styles.headerIcons}>
-          {!isMapMode ? (
-            <>
-              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
-                <LinearGradient
-                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.headerBtnBorder}
-                >
-                  <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
-                    <HugeiconsIcon icon={Search01Icon} size={20} color={colors.text} />
-                  </BlurView>
-                </LinearGradient>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
-                <LinearGradient
-                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.headerBtnBorder}
-                >
-                  <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
-                    <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color={colors.text} />
-                  </BlurView>
-                </LinearGradient>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <View style={{ width: 40 }} />
-          )}
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
+            <LinearGradient
+              colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.headerBtnBorder}
+            >
+              <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
+                <HugeiconsIcon icon={Search01Icon} size={20} color={colors.text} />
+              </BlurView>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
+            <LinearGradient
+              colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.headerBtnBorder}
+            >
+              <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
+                <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color={colors.text} />
+              </BlurView>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Location Bar for Map Mode */}
-      {isMapMode && (
-        <View style={styles.locationBarContainer}>
-          <TouchableOpacity style={[styles.locationBar, { backgroundColor: colors.card }]} activeOpacity={0.9}>
-            <HugeiconsIcon icon={Location01Icon} size={20} color={colors.textSecondary} style={styles.locationIcon} />
-            <Text style={[styles.locationText, { color: colors.text }]}>Los Angeles, CA</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+
 
       {/* Feed/Map Dropdown */}
       <Modal
@@ -204,24 +177,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: 'hidden',
   },
-  locationBarContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  locationBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 52,
-  },
-  locationIcon: {
-    marginRight: 12,
-  },
-  locationText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+
   dropdownOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.1)',

@@ -301,7 +301,7 @@ export default function HomeFeed() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
         {/* Top Navigation */}
         <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
@@ -343,7 +343,7 @@ export default function HomeFeed() {
             <View style={{ height: 100 }} />
           </ScrollView>
         ) : (
-          <MapContainer />
+          <MapContainer onBack={() => setSelectedType('Feed')} />
         )}
       </View>
 
@@ -387,7 +387,7 @@ export default function HomeFeed() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

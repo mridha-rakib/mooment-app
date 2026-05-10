@@ -133,7 +133,7 @@ export default function CreatePlanScreen() {
         <TouchableOpacity
           style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
-          onPress={() => { setShowLocationDropdown(!showLocationDropdown); setShowEventDropdown(false); setShowFriendsDropdown(false); }}
+          onPress={() => router.push("/plan-screen/map-selection")}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Feather name="map-pin" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -141,7 +141,7 @@ export default function CreatePlanScreen() {
               {selectedLocation || 'Select Location'}
             </Text>
           </View>
-          <Feather name={showLocationDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
+          <Feather name="chevron-right" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         {showLocationDropdown && (
           <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>

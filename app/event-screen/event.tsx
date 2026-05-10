@@ -16,6 +16,8 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Modal,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
@@ -29,13 +31,34 @@ const EventScreen = () => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState("About");
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  const handleDelete = () => {
+    setMenuVisible(false);
+    Alert.alert(
+      "Delete Event",
+      "Are you sure you want to delete this event?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive", 
+          onPress: () => {
+            // Logic to delete the event
+            console.log("Event deleted");
+            router.back();
+          } 
+        }
+      ]
+    );
+  };
 
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={colors.text} />
       <BackButton
         iconName="more-horizontal"
-        onPress={() => router.push("/event-screen/wallet")}
+        onPress={() => setMenuVisible(true)}
         color={colors.text}
       />
     </View>
@@ -218,6 +241,31 @@ const EventScreen = () => {
           <Text style={[styles.buyBtnText, { color: colors.background }]}>Buy Now</Text>
         </TouchableOpacity>
       </View>
+
+      {/* More Menu Modal */}
+      <Modal
+        visible={menuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.menuOverlay} 
+          activeOpacity={1} 
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={[styles.menuContent, { backgroundColor: colors.card, top: insets.top + 60 }]}>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={handleDelete}
+              activeOpacity={0.7}
+            >
+              <Feather name="trash-2" size={20} color={colors.text} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -415,5 +463,35 @@ const styles = StyleSheet.create({
   buyBtnText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  /* More Menu Styles */
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  menuContent: {
+    position: "absolute",
+    right: 16,
+    width: 140,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  menuItemText: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginLeft: 10,
   },
 });

@@ -222,7 +222,20 @@ export default function ChatDetailScreen() {
       <View style={styles.header}>
         <BackButton size={20} />
 
-        <TouchableOpacity style={styles.headerCenter} activeOpacity={0.8}>
+        <TouchableOpacity 
+          style={styles.headerCenter} 
+          activeOpacity={0.8}
+          onPress={() => {
+            router.push({
+              pathname: '/profile-screen/user-profile',
+              params: {
+                userId: params.id,
+                name: name,
+                avatar: avatar
+              }
+            } as any);
+          }}
+        >
           <Image source={{ uri: avatar }} style={styles.headerAvatar} />
           <View>
             <Text style={styles.headerName}>{name}</Text>
@@ -358,7 +371,6 @@ export default function ChatDetailScreen() {
       <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
           <View style={styles.moreMenuContainer}>
-            <Text style={styles.moreMenuLabel}>more</Text>
             <View style={styles.moreMenuBox}>
               <TouchableOpacity 
                 style={styles.moreMenuItem} 
@@ -506,10 +518,9 @@ const styles = StyleSheet.create({
   sendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
 
   /* Modal */
-  modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-start', alignItems: 'flex-end' },
-  moreMenuContainer: { marginTop: 75, marginRight: 16, alignItems: 'flex-start' },
-  moreMenuLabel: { color: '#6A9BC3', fontSize: 13, marginBottom: 8, marginLeft: 2 },
-  moreMenuBox: { width: 160, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, overflow: 'hidden', backdropFilter: 'blur(10px)' },
+  modalOverlay: { flex: 1, backgroundColor: 'transparent' },
+  moreMenuContainer: { position: 'absolute', top: 155, right: 16 },
+  moreMenuBox: { width: 160, backgroundColor: 'rgba(30, 29, 33, 0.95)', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   moreMenuIcon: { marginRight: 12 },
   moreMenuText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },

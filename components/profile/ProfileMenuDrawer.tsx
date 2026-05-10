@@ -110,7 +110,15 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 router.push('/event-screen/event');
               }}
             />
-            <MenuItem icon={Calendar01Icon} label="My Plan" colors={colors} onPress={() => { }} />
+            <MenuItem 
+              icon={Calendar01Icon} 
+              label="My Plan" 
+              colors={colors} 
+              onPress={() => {
+                onClose();
+                router.push('/profile-screen/my-plan');
+              }} 
+            />
             <MenuItem
               icon={Analytics01Icon}
               label="Creator Dashboard"

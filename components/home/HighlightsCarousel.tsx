@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
 
 export type HighlightData = {
   id: string;
@@ -23,7 +24,12 @@ export default function HighlightsCarousel({ highlights }: HighlightsProps) {
         contentContainerStyle={styles.scrollContent}
       >
         {highlights.map((item) => (
-          <TouchableOpacity key={item.id} activeOpacity={0.8} style={styles.highlightWrapper}>
+          <TouchableOpacity 
+            key={item.id} 
+            activeOpacity={0.8} 
+            style={styles.highlightWrapper}
+            onPress={() => router.push('/live-screen/live-video')}
+          >
             <View style={[styles.ring, { borderColor: item.ringColor }]}>
               <View style={styles.imageContainer}>
                 <Image source={{ uri: item.imageUri }} style={styles.image} />
