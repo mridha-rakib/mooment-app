@@ -52,9 +52,6 @@ export default function LiveVideo() {
       <VideoView
         style={styles.backgroundImage}
         player={player}
-        allowsFullscreen={false}
-        showsControls={false}
-        nativeControls={false}
         contentFit="cover"
       />
 
@@ -65,7 +62,6 @@ export default function LiveVideo() {
         activeOpacity={1}
         onPress={togglePlay}
       />
-
 
       <View style={styles.safeArea} pointerEvents="box-none">
         {/* Top Navigation Bar */}
@@ -93,7 +89,6 @@ export default function LiveVideo() {
             <Feather name="search" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-
 
         {/* Center Play Button (only shown when paused) */}
         {!isPlaying && (
@@ -150,11 +145,9 @@ export default function LiveVideo() {
             <Text style={styles.progressText}>15s</Text>
           </View>
         </View>
-
       </View>
 
       <CommentsModal
-
         visible={commentModalVisible}
         onClose={() => setCommentModalVisible(false)}
       />
@@ -166,6 +159,7 @@ export default function LiveVideo() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
