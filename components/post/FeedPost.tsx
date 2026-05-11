@@ -350,7 +350,7 @@ export default function FeedPost({
                       <TouchableOpacity
                         style={styles.priceBtn}
                         activeOpacity={0.8}
-                        onPress={() => router.push('/profile-screen/ticket-wallet' as any)}
+                        onPress={() => router.push('/event-screen/wallet' as any)}
                       >
                         <Text style={styles.priceBtnText}>{post.eventDetails.priceLabel}</Text>
                         <Feather name="chevron-right" size={14} color="#000000" style={{ marginTop: 1 }} />

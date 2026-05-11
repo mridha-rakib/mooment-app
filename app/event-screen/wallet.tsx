@@ -14,6 +14,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import CinematicButton from "@/components/ui/CinematicButton";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get("window");
 
@@ -69,36 +72,22 @@ const TicketWalletScreen = () => {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.card }]}>
-          <Feather name="chevron-left" size={24} color={colors.text} />
-        </TouchableOpacity>
+        <CinematicButton
+          onPress={() => router.back()}
+          icon={ArrowLeft01Icon}
+          size={24}
+        />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Wallet</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
-        <View style={[styles.tabWrapper, { backgroundColor: colors.card }]}>
-          {["Shared", "Active", "Used", "Canceled"].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[
-                styles.tab,
-                activeTab === tab && { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' },
-              ]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeTab === tab ? colors.text : colors.textSecondary },
-                ]}
-              >
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <SegmentedControl
+          options={["Shared", "Active", "Used", "Canceled"]}
+          selectedOption={activeTab}
+          onSelect={setActiveTab}
+        />
       </View>
 
       <ScrollView

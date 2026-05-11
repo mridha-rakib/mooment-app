@@ -12,6 +12,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import CinematicButton from "@/components/ui/CinematicButton";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get("window");
 
@@ -71,36 +74,22 @@ const ProductWalletScreen = () => {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="chevron-left" size={24} color={COLORS.text} />
-        </TouchableOpacity>
+        <CinematicButton
+          onPress={() => router.back()}
+          icon={ArrowLeft01Icon}
+          size={24}
+        />
         <Text style={styles.headerTitle}>Product Wallet</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
-        <View style={styles.tabWrapper}>
-          {["Active", "Canceled"].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[
-                styles.tab,
-                activeTab === tab && styles.tabActive,
-              ]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <SegmentedControl
+          options={["Active", "Canceled"]}
+          selectedOption={activeTab}
+          onSelect={setActiveTab}
+        />
       </View>
 
       <ScrollView

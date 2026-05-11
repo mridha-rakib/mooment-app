@@ -34,8 +34,6 @@ export default function MoreMenuModal({
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={[styles.modalOverlay, top !== undefined && styles.alignTopRight]}>
           <View style={[styles.menuContainer, top !== undefined && { marginTop: top }]}>
-            <Text style={[styles.menuLabel, { color: colors.textSecondary }]}>more</Text>
-            
             <View style={[styles.menuContent, { backgroundColor: colors.card }]}>
               {onReport && (
                 <>

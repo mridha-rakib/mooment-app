@@ -173,7 +173,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               colors={colors}
               onPress={() => {
                 onClose();
-                router.push('/profile-screen/ticket-wallet');
+                router.push('/event-screen/wallet');
               }}
             />
             <MenuItem
@@ -182,7 +182,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               colors={colors}
               onPress={() => {
                 onClose();
-                router.push('/profile-screen/product-wallet');
+                router.push('/event-screen/product/wallet');
               }}
               hideSeparator
             />

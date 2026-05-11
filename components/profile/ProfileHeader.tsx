@@ -11,6 +11,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import MoreMenuModal from "../post/MoreMenuModal";
 import BackButton from "../ui/BackButton";
 import ChevronRightIcon from "../ui/ChevronRightIcon";
+import CinematicButton from "../ui/CinematicButton";
 
 export type ProfileStats = {
   posts: number;
@@ -39,20 +40,21 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
         <View style={styles.brandedHeader}>
           {!isSearching && (
             <>
-              <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onMenuPress}>
-                <HugeiconsIcon icon={Menu01Icon} size={24} color={colors.text} />
-              </TouchableOpacity>
+              <CinematicButton
+                icon={Menu01Icon}
+                onPress={onMenuPress}
+                size={24}
+              />
 
               <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
             </>
           )}
 
-          <TouchableOpacity 
-            style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <CinematicButton
+            icon={Search01Icon}
             onPress={() => router.push('/discover-screen/search')}
-          >
-            <HugeiconsIcon icon={Search01Icon} size={24} color={colors.text} />
-          </TouchableOpacity>
+            size={24}
+          />
         </View>
       ) : (
         <View style={styles.topRow}>
