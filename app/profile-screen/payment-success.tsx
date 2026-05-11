@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import React, { useState, useEffect } from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,7 +29,7 @@ export default function PaymentSuccessScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton 
-          iconName="x" 
+          iconName={Cancel01Icon} 
           onPress={() => router.push('/(tabs)/profile')} 
         />
       </View>
