@@ -8,6 +8,8 @@ import {
   StatusBar,
   StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
+import CinematicButton from '@/components/ui/CinematicButton';
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 const MOCK_CONTACTS = [
   { id: '1', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' },
@@ -72,9 +74,11 @@ export default function CreateGroupScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        <CinematicButton
+          onPress={() => router.back()}
+          icon={ArrowLeft01Icon}
+          size={20}
+        />
         <Text style={styles.headerTitle}>Create Group</Text>
         <View style={{ width: 36 }} /> {/* placeholder for centering */}
       </View>

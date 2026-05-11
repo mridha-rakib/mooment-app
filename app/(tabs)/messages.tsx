@@ -13,6 +13,8 @@ import {
   View
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import SegmentedControl from '@/components/ui/SegmentedControl';
+import CinematicButton from '@/components/ui/CinematicButton';
 
 const { width } = Dimensions.get('window');
 
@@ -221,26 +223,29 @@ export default function MessagesScreen() {
       activeOpacity={0.85}
       onPress={() => router.push('/live-screen/live-room-screen')}
     >
-      <View style={[styles.roomCapsule, { backgroundColor: isDark ? '#130B24' : colors.card, borderColor: isDark ? '#2D1B4E' : colors.border }]}>
+      <View style={[styles.roomOvalCard, { backgroundColor: '#0D0D25', borderColor: '#AC86D4' }]}>
         <TouchableOpacity
           style={styles.roomAvatarWrap}
           onPress={() => router.push('/profile-screen/user-profile')}
         >
-          <Image source={{ uri: item.hostAvatar }} style={styles.roomAvatar} />
-          <View style={styles.roomOnlineDot} />
+          <Image source={{ uri: item.hostAvatar }} style={[styles.roomAvatar, { borderColor: colors.primary }]} />
+          <View style={[styles.roomOnlineDot, { borderColor: '#0D0D25' }]} />
         </TouchableOpacity>
+        
         {item.isHost && (
-          <View style={[styles.roomHostBadge, { borderColor: colors.primary }]}>
-            <Text style={[styles.roomHostText, { color: colors.primary }]}>Host</Text>
+          <View style={styles.roomHostBadge}>
+            <Text style={styles.roomHostText}>Host</Text>
           </View>
         )}
-        <TouchableOpacity
-          style={[styles.roomJoinBtn, { backgroundColor: colors.background }]}
-          activeOpacity={0.8}
+        
+        <CinematicButton
+          text="Join"
+          height={32}
+          width={50}
+          borderRadius={12}
           onPress={() => router.push('/live-screen/live-room-screen')}
-        >
-          <Text style={[styles.roomJoinText, { color: colors.text }]}>Join</Text>
-        </TouchableOpacity>
+          style={{ marginTop: 10 }}
+        />
       </View>
 
       <Text style={[styles.roomTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
@@ -291,19 +296,12 @@ export default function MessagesScreen() {
 
 
       {/* Segmented Control */}
-      <View style={[styles.segmentedControl, { backgroundColor: colors.background, borderColor: colors.border }]}>
-        {(['DMs', 'Groups', 'Rooms'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.segmentTab, subTab === tab && [styles.segmentTabActive, { backgroundColor: colors.card }]]}
-            onPress={() => setSubTab(tab)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.segmentTabText, { color: colors.textSecondary }, subTab === tab && { color: colors.text }]}>
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={{ marginBottom: 16 }}>
+        <SegmentedControl
+          options={['DMs', 'Groups', 'Rooms']}
+          selectedOption={subTab}
+          onSelect={(opt) => setSubTab(opt as any)}
+        />
       </View>
 
       {/* Top Tabs (Only for DMs and Groups) */}
@@ -441,14 +439,33 @@ const styles = StyleSheet.create({
 
   /* Rooms Grid */
   roomCard: { width: (width - 48) / 2, marginBottom: 24, alignItems: 'center' },
-  roomCapsule: { width: 94, height: 146, borderRadius: 47, backgroundColor: '#130B24', borderWidth: 1, borderColor: '#2D1B4E', alignItems: 'center', paddingTop: 16, paddingBottom: 16, marginBottom: 12 },
-  roomAvatarWrap: { position: 'relative', marginBottom: 8 },
-  roomAvatar: { width: 44, height: 44, borderRadius: 22 },
-  roomOnlineDot: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#130B24' },
-  roomHostBadge: { borderColor: '#D4B0EB', borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 8 },
-  roomHostText: { color: '#D4B0EB', fontSize: 10, fontWeight: '600' },
-  roomJoinBtn: { backgroundColor: '#1A1A2E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6, marginTop: 'auto' },
-  roomJoinText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  roomOvalCard: { 
+    width: "65%",
+    height: "auto",
+    borderRadius: 55,
+    borderWidth: 1,
+    alignItems: "center",
+    paddingVertical: 22,
+    paddingHorizontal: 8,
+    marginBottom: 16,
+  },
+  roomAvatarWrap: { position: 'relative' },
+  roomAvatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 2 },
+  roomOnlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#16D869', borderWidth: 2 },
+  roomHostBadge: { 
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#AC86D4",
+    marginTop: 10,
+    alignSelf: "center",
+  },
+  roomHostText: { 
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#AC86D4",
+  },
 
   roomTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
   roomSpeakerText: { color: '#8E8E9B', fontSize: 11, textAlign: 'center', marginBottom: 8 },

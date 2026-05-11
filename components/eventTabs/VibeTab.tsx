@@ -129,8 +129,8 @@ const VibeTab = () => {
 
               <CinematicButton
                 text="Join"
-                width="100%"
                 height={32}
+                width={50}
                 borderRadius={12}
                 onPress={() => router.push("/live-screen/live-room-screen")}
                 style={{ marginTop: 10 }}
@@ -413,11 +413,11 @@ const styles = StyleSheet.create({
   },
   ovalCard: {
     width: "65%",
-    aspectRatio: 0.55,
-    borderRadius: 50,
+    height: "auto",
+    borderRadius: 55,
     borderWidth: 1,
     alignItems: "center",
-    paddingVertical: 18,
+    paddingVertical: 22,
     paddingHorizontal: 8,
     marginBottom: 16,
   },

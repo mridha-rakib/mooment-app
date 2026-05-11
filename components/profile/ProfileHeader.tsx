@@ -46,7 +46,11 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
                 size={24}
               />
 
-              <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
+              <Image 
+                source={require('@/assets/images/mooment.png')} 
+                style={[styles.logoImage, { tintColor: colors.text }]} 
+                resizeMode="contain" 
+              />
             </>
           )}
 
@@ -169,9 +173,9 @@ const styles = StyleSheet.create({
     height: '100%',
     padding: 0,
   },
-  logoText: {
-    fontFamily: 'OleoScript-Regular',
-    fontSize: 28,
+  logoImage: {
+    width: 120,
+    height: 28,
   },
   topRow: {
     flexDirection: 'row',

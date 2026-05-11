@@ -20,7 +20,7 @@ const HOME_MAP_MARKERS: MapMarkerData[] = [
     right: width * 0.2, 
     image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
     label: "Rooftop\nSession\nVol4.",
-    glowColor: '#FFFFFF'
+    glowColor: '#16a34a'
   },
   { 
     id: 'h3', 

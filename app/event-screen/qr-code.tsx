@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '@/hooks/useTheme';
+import CinematicButton from '@/components/ui/CinematicButton';
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get('window');
 const QR_SIZE = width * 0.72;
@@ -28,9 +30,11 @@ export default function QRCodeScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={22} color={colors.text} />
-        </TouchableOpacity>
+        <CinematicButton
+          onPress={() => router.back()}
+          icon={ArrowLeft01Icon}
+          size={22}
+        />
         <Text style={[styles.headerTitle, { color: colors.text }]}>QR Code</Text>
         <View style={{ width: 36 }} />
       </View>

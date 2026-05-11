@@ -1,6 +1,8 @@
+import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
+import { useTheme } from "@/hooks/useTheme";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -10,8 +12,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
-import { useTheme } from "@/hooks/useTheme";
 
 const PaymentSuccessScreen = () => {
   const router = useRouter();
@@ -37,57 +37,102 @@ const PaymentSuccessScreen = () => {
   ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top, backgroundColor: colors.background },
+      ]}
+    >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Confetti Animation */}
-      <ConfettiOverlay 
-        visible={showConfetti} 
-        onFinish={() => setShowConfetti(false)} 
+      <ConfettiOverlay
+        visible={showConfetti}
+        onFinish={() => setShowConfetti(false)}
       />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={[styles.closeBtn, { backgroundColor: colors.card }]} 
-          onPress={() => router.push("/event-screen/event")}
+        <TouchableOpacity
+          style={[styles.closeBtn, { backgroundColor: colors.card }]}
+          onPress={() => router.back()}
         >
           <Feather name="x" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Success Animation Placeholder */}
         <View style={styles.successIconWrapper}>
-          <View style={[styles.pulseOuter, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" }]}>
-            <View style={[styles.pulseInner, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.15)" : "rgba(22, 216, 105, 0.1)", borderColor: "rgba(22, 216, 105, 0.3)" }]}>
-              <Ionicons name="checkmark-sharp" size={40} color={colors.success} />
+          <View
+            style={[
+              styles.pulseOuter,
+              {
+                backgroundColor: isDark
+                  ? "rgba(22, 216, 105, 0.1)"
+                  : "rgba(22, 216, 105, 0.05)",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.pulseInner,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(22, 216, 105, 0.15)"
+                    : "rgba(22, 216, 105, 0.1)",
+                  borderColor: "rgba(22, 216, 105, 0.3)",
+                },
+              ]}
+            >
+              <Ionicons
+                name="checkmark-sharp"
+                size={40}
+                color={colors.success}
+              />
             </View>
           </View>
         </View>
 
-        <Text style={[styles.title, { color: colors.text }]}>Payment successful</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Payment successful
+        </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Your ticket is confirmed.{"\n"}Have a great time at the event.
         </Text>
 
         {/* Details Card */}
-        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.detailsCard,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
           {details.map((item, index) => (
             <View key={index}>
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{item.label}</Text>
-                <Text style={[
-                  styles.detailValue,
-                  { color: colors.text },
-                  item.isPrice && { color: colors.success }
-                ]}>
+                <Text
+                  style={[styles.detailLabel, { color: colors.textSecondary }]}
+                >
+                  {item.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    { color: colors.text },
+                    item.isPrice && { color: colors.success },
+                  ]}
+                >
                   {item.value}
                 </Text>
               </View>
-              {index < details.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+              {index < details.length - 1 && (
+                <View
+                  style={[styles.divider, { backgroundColor: colors.border }]}
+                />
+              )}
             </View>
           ))}
         </View>
@@ -97,18 +142,30 @@ const PaymentSuccessScreen = () => {
 
       {/* Footer Buttons */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "event" } })}
+          onPress={() =>
+            router.push({
+              pathname: "/event-screen/qr-code",
+              params: { type: "event" },
+            })
+          }
         >
-          <Text style={[styles.primaryBtnText, { color: colors.background }]}>View my ticket</Text>
+          <Text style={[styles.primaryBtnText, { color: colors.background }]}>
+            View my ticket
+          </Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.secondaryBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push("/event-screen/event")}
+
+        <TouchableOpacity
+          style={[
+            styles.secondaryBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+          onPress={() => router.replace("/event-screen/event")}
         >
-          <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Back to event</Text>
+          <Text style={[styles.secondaryBtnText, { color: colors.text }]}>
+            Back to event
+          </Text>
         </TouchableOpacity>
       </View>
     </View>

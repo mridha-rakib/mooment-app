@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import React, { useEffect } from "react";
-import { StyleSheet, ImageBackground } from "react-native";
+import { StyleSheet, Image, View } from "react-native";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function Splash() {
   useEffect(() => {
@@ -11,20 +12,27 @@ export default function Splash() {
     return () => clearTimeout(timer);
   }, []);
 
+  const { colors } = useTheme();
+
   return (
-    <ImageBackground 
-      source={require("../assets/images/Splash-one.jpg")}
-      style={styles.container}
-      resizeMode="cover"
-    />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Image 
+        source={require("../assets/images/Splash-logo.png")}
+        style={[styles.logo, { tintColor: colors.text }]}
+        resizeMode="contain"
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
     justifyContent: "center",
     alignItems: "center",
+  },
+  logo: {
+    width: 240,
+    height: 240,
   },
 });

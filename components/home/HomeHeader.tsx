@@ -5,7 +5,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import FilterModal from './FilterModal';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '../ui/CinematicButton';
@@ -38,7 +38,11 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
           <Feather name="chevron-down" size={14} color={colors.text} />
         </TouchableOpacity>
 
-        <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
+        <Image 
+          source={require('@/assets/images/mooment.png')} 
+          style={[styles.logoImage, { tintColor: colors.text }]} 
+          resizeMode="contain" 
+        />
 
         <View style={styles.headerIcons}>
           <CinematicButton
@@ -137,13 +141,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginRight: 4,
   },
-  logoText: {
-    fontFamily: 'OleoScript-Regular',
-    fontSize: 32,
-    lineHeight: 32,
-    position: 'absolute',
-    left: width / 2 - 60,
-    top: 10,
+  logoImage: {
+    width: 120,
+    height: 28,
   },
   headerIcons: {
     flexDirection: "row",

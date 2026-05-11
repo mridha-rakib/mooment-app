@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
+import MoreMenuModal from "../post/MoreMenuModal";
 
 const { width } = Dimensions.get("window");
 
@@ -40,51 +41,102 @@ const PRODUCTS_DATA = [
   },
 ];
 
-const ProductTab = () => {
-  const router = useRouter();
+const ProductCard = ({ product }: { product: any }) => {
   const { colors, isDark } = useTheme();
-  
+  const router = useRouter();
+  const [isFollowing, setIsFollowing] = React.useState(product.isFollowing);
+  const [showMoreMenu, setShowMoreMenu] = React.useState(false);
+  const moreBtnRef = React.useRef<View>(null);
+  const [menuTop, setMenuTop] = React.useState(0);
+
+  const toggleFollow = () => {
+    setIsFollowing(!isFollowing);
+  };
+
+  const handleMorePress = () => {
+    moreBtnRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      setMenuTop(pageY + height);
+      setShowMoreMenu(true);
+    });
+  };
+
+  return (
+    <View style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      {/* User Header */}
+      <View style={styles.header}>
+        <Image source={{ uri: product.avatar }} style={styles.avatar} />
+        <View style={styles.userInfo}>
+          <Text style={[styles.userName, { color: colors.text }]}>{product.user}</Text>
+          <Text style={[styles.time, { color: colors.textSecondary }]}>{product.time}</Text>
+        </View>
+        
+        <View style={styles.postHeaderActions}>
+          {isFollowing ? (
+            <TouchableOpacity
+              style={[styles.followingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+              activeOpacity={0.8}
+              onPress={toggleFollow}
+            >
+              <Text style={[styles.followingBtnText, { color: colors.textSecondary }]}>Following</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.followBtn, { borderColor: colors.primary }]}
+              activeOpacity={0.8}
+              onPress={toggleFollow}
+            >
+              <Feather name="plus" size={12} color={colors.primary} />
+              <Text style={[styles.followBtnText, { color: colors.primary }]}>Follow</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            ref={moreBtnRef}
+            style={styles.moreBtn}
+            onPress={handleMorePress}
+          >
+            <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Product Image Section */}
+      <View style={styles.imageWrapper}>
+        <Image source={{ uri: product.image }} style={styles.productImage} />
+        <View style={styles.indicatorBadge}>
+          <Text style={styles.indicatorText}>{product.indicator}</Text>
+        </View>
+      </View>
+
+      {/* Product Info Row */}
+      <View style={styles.infoRow}>
+        <View style={styles.infoLeft}>
+          <Text style={[styles.productTitle, { color: colors.textSecondary }]}>{product.title}</Text>
+          <Text style={[styles.productPrice, { color: colors.text }]}>{product.price}</Text>
+        </View>
+        <TouchableOpacity 
+          style={[styles.viewBtn, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}
+          onPress={() => router.push("/event-screen/product/details")}
+        >
+          <Text style={[styles.viewBtnText, { color: colors.text }]}>View</Text>
+        </TouchableOpacity>
+      </View>
+
+      <MoreMenuModal
+        visible={showMoreMenu}
+        onClose={() => setShowMoreMenu(false)}
+        top={menuTop}
+        onReport={() => console.log('Report product')}
+        onSave={() => console.log('Save product')}
+      />
+    </View>
+  );
+};
+
+const ProductTab = () => {
   return (
     <View style={{ marginTop: 20 }}>
       {PRODUCTS_DATA.map((product) => (
-        <View key={product.id} style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {/* User Header */}
-          <View style={styles.header}>
-            <Image source={{ uri: product.avatar }} style={styles.avatar} />
-            <View style={styles.userInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>{product.user}</Text>
-              <Text style={[styles.time, { color: colors.textSecondary }]}>{product.time}</Text>
-            </View>
-            <TouchableOpacity style={[styles.followBtn, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}>
-              <Text style={[styles.followBtnText, { color: colors.text }]}>+ Follow</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.moreBtn}>
-              <Feather name="more-horizontal" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Product Image Section */}
-          <View style={styles.imageWrapper}>
-            <Image source={{ uri: product.image }} style={styles.productImage} />
-            <View style={styles.indicatorBadge}>
-              <Text style={styles.indicatorText}>{product.indicator}</Text>
-            </View>
-          </View>
-
-          {/* Product Info Row */}
-          <View style={styles.infoRow}>
-            <View style={styles.infoLeft}>
-              <Text style={[styles.productTitle, { color: colors.textSecondary }]}>{product.title}</Text>
-              <Text style={[styles.productPrice, { color: colors.text }]}>{product.price}</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.viewBtn, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}
-              onPress={() => router.push("/event-screen/product/details")}
-            >
-              <Text style={[styles.viewBtnText, { color: colors.text }]}>View</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ProductCard key={product.id} product={product} />
       ))}
     </View>
   );
@@ -120,16 +172,33 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 12,
   },
+  postHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   followBtn: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 10,
-    marginRight: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginRight: 10,
+    gap: 4,
   },
   followBtnText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: '700',
+  },
+  followingBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 10,
+  },
+  followingBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   moreBtn: {
     padding: 4,

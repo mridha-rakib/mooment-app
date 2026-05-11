@@ -8,6 +8,8 @@ import {
   TouchableOpacity, View,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import CinematicButton from '@/components/ui/CinematicButton';
+import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-icons";
 
 const { width, height } = Dimensions.get('window');
 const FRAME = width * 0.65;
@@ -81,12 +83,18 @@ export default function ScanQRScreen() {
 
       {/* Header */}
       <SafeAreaView style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
-          <Feather name="chevron-left" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setFlash(f => !f)} style={styles.flashBtn} activeOpacity={0.8}>
-          <Feather name={flash ? 'zap' : 'zap-off'} size={20} color={flash ? '#F59E0B' : '#FFFFFF'} />
-        </TouchableOpacity>
+        <CinematicButton
+          onPress={() => router.back()}
+          icon={ArrowLeft01Icon}
+          size={22}
+          color="#FFFFFF"
+        />
+        <CinematicButton
+          onPress={() => setFlash(f => !f)}
+          icon={flash ? FlashIcon : FlashOffIcon}
+          size={20}
+          color={flash ? '#F59E0B' : '#FFFFFF'}
+        />
       </SafeAreaView>
 
       {/* Hint text */}

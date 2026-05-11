@@ -57,7 +57,7 @@ const EventScreen = () => {
 
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
-      <BackButton color={colors.text} />
+      <BackButton color={colors.text}  onPress={() => router.back()}/>
       <BackButton
         iconName={MoreHorizontalIcon}
         onPress={() => setMenuVisible(true)}
@@ -130,7 +130,6 @@ const EventScreen = () => {
                 ]}
                 onPress={() => setIsFollowing(!isFollowing)}
               >
-                {isFollowing && <Feather name="check" size={12} color="#FFF" style={{ marginRight: 4 }} />}
                 <Text style={[styles.followBtnTextSmall, { color: isFollowing ? "#FFF" : colors.text }]}>
                   {isFollowing ? "Following" : "Follow"}
                 </Text>

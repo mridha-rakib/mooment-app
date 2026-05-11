@@ -106,7 +106,7 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
           <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
           
           <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
+            <View style={[styles.handle, { backgroundColor: colors.text }]} />
             <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
 
             <View style={styles.optionsList}>

@@ -13,6 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { Tick01Icon } from "@hugeicons/core-free-icons";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -108,7 +110,7 @@ export default function LiveRoomSetupModal({
         >
           <TouchableOpacity activeOpacity={1}>
             {/* Handle */}
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <View style={[styles.handle, { backgroundColor: colors.text }]} />
 
             {/* Title */}
             <Text style={[styles.sheetTitle, { color: colors.text }]}>
@@ -140,13 +142,17 @@ export default function LiveRoomSetupModal({
                   You can always change this in the Live Room
                 </Text>
               </View>
-              <Switch
-                value={allowAll}
-                onValueChange={setAllowAll}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={allowAll ? "#FFFFFF" : colors.textSecondary}
-                ios_backgroundColor={colors.border}
-              />
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => setAllowAll(!allowAll)}
+                style={[
+                  styles.checkbox, 
+                  { borderColor: colors.textSecondary },
+                  allowAll && { backgroundColor: colors.textSecondary, borderColor: colors.textSecondary }
+                ]}
+              >
+                {allowAll && <HugeiconsIcon icon={Tick01Icon} size={18} color="#000000" />}
+              </TouchableOpacity>
             </View>
 
             {/* Cancel / Continue buttons */}
@@ -210,7 +216,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   handle: {
-    width: 40,
+    width: 60,
     height: 4,
     borderRadius: 2,
     alignSelf: "center",
@@ -263,5 +269,13 @@ const styles = StyleSheet.create({
   continueBtnDisabled: {},
   continueText: { fontWeight: "bold", fontSize: 15 },
   continueTextDisabled: {},
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
 

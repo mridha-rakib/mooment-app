@@ -4,6 +4,8 @@ import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import CinematicButton from "@/components/ui/CinematicButton";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 interface CheckoutHeaderProps {
   title?: string;
@@ -16,9 +18,11 @@ const CheckoutHeader = ({ title = "Checkout" }: CheckoutHeaderProps) => {
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-      <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.card }]}>
-        <Feather name="chevron-left" size={24} color={colors.text} />
-      </TouchableOpacity>
+      <CinematicButton
+        onPress={() => router.back()}
+        icon={ArrowLeft01Icon}
+        size={24}
+      />
       <Text style={[styles.headerTitle, { color: colors.text }]}>{title}</Text>
       <View style={{ width: 40 }} />
     </View>

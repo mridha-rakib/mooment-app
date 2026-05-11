@@ -4,7 +4,7 @@ import React from "react";
 import CinematicButton from "./CinematicButton";
 
 interface BackButtonProps {
-  onPress?: () => void;
+  onPress?: any;
   iconName?: any;
   size?: number;
   color?: string;
