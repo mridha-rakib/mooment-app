@@ -1,11 +1,11 @@
-import { Feather } from "@expo/vector-icons";
 import BackButton from "@/components/ui/BackButton";
+import { useTheme } from "@/hooks/useTheme";
+import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useTheme } from "@/hooks/useTheme";
 
 const CustomInput = ({ icon, placeholder, value, rightIcon, multiline, style, colors }: any) => (
   <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }, multiline && styles.inputContainerMultiline, style]}>
@@ -37,7 +37,7 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
@@ -46,7 +46,6 @@ export default function EditProfileScreen() {
           style={styles.toggleBtn}
           onPress={() => setProfileType(isBusiness ? 'personal' : 'business')}
         >
-          <Feather name="refresh-cw" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -185,7 +184,7 @@ export default function EditProfileScreen() {
       </KeyboardAvoidingView>
 
       {/* Footer Buttons */}
-      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+      <View style={[styles.footer]}>
         <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card }]} onPress={() => router.back()}>
           <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
