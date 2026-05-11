@@ -1,12 +1,12 @@
+import { useTheme } from '@/hooks/useTheme';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { PencilEdit02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
+import Svg, { Path } from 'react-native-svg';
 import {
   Dimensions,
   FlatList, Image,
-  Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -14,7 +14,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 
@@ -155,28 +154,32 @@ export default function MessagesScreen() {
 
   const renderConvoItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
-      style={styles.convoRow}
+      style={[styles.convoCard, { backgroundColor: '#111111' }]}
       onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
       activeOpacity={0.85}
     >
       {renderAvatar(item)}
       <View style={styles.convoMeta}>
         <View style={styles.convoTopRow}>
-          <Text style={[styles.convoName, { color: colors.textSecondary }, item.unread > 0 && { color: colors.text, fontWeight: 'bold' }]} numberOfLines={1}>
+          <Text style={[styles.convoName, { color: colors.text }]} numberOfLines={1}>
             {item.name}
+            {item.isMuted && <Feather name="bell-off" size={12} color={colors.textSecondary} style={{ marginLeft: 6 }} />}
           </Text>
-          <View style={styles.convoTimeRow}>
-            {item.isMuted && <Feather name="bell-off" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />}
-            <Text style={[styles.convoTime, { color: colors.textSecondary }, item.unread > 0 && { color: colors.primary, fontWeight: '600' }]}>{item.time}</Text>
-          </View>
+          <Text style={[styles.convoTime, { color: colors.textSecondary }]}>{item.time}</Text>
         </View>
         <View style={styles.convoBottomRow}>
-          {renderMessage(item)}
-          {item.unread > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
-            </View>
-          )}
+          <View style={styles.msgContent}>
+            {item.messageType === 'text' && !item.unread && !item.isTyping && (
+              <Ionicons
+                name={item.id === 'c4' ? 'checkmark-done' : 'checkmark'}
+                size={14}
+                color={item.id === 'c4' ? colors.primary : colors.textSecondary}
+                style={{ marginRight: 4 }}
+              />
+            )}
+            {renderMessage(item)}
+          </View>
+          {item.unread > 0 && <View style={styles.unreadDot} />}
         </View>
       </View>
     </TouchableOpacity>
@@ -214,13 +217,13 @@ export default function MessagesScreen() {
   );
 
   const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
-    <TouchableOpacity 
-      style={styles.roomCard} 
+    <TouchableOpacity
+      style={styles.roomCard}
       activeOpacity={0.85}
       onPress={() => router.push('/live-screen/live-room-screen')}
     >
       <View style={[styles.roomCapsule, { backgroundColor: isDark ? '#130B24' : colors.card, borderColor: isDark ? '#2D1B4E' : colors.border }]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.roomAvatarWrap}
           onPress={() => router.push('/profile-screen/user-profile')}
         >
@@ -232,8 +235,8 @@ export default function MessagesScreen() {
             <Text style={[styles.roomHostText, { color: colors.primary }]}>Host</Text>
           </View>
         )}
-        <TouchableOpacity 
-          style={[styles.roomJoinBtn, { backgroundColor: colors.background }]} 
+        <TouchableOpacity
+          style={[styles.roomJoinBtn, { backgroundColor: colors.background }]}
           activeOpacity={0.8}
           onPress={() => router.push('/live-screen/live-room-screen')}
         >
@@ -252,8 +255,8 @@ export default function MessagesScreen() {
       <View style={styles.roomListenersRow}>
         <View style={styles.roomListenerAvatars}>
           {item.listenerAvatars.map((av, idx) => (
-            <TouchableOpacity 
-              key={idx} 
+            <TouchableOpacity
+              key={idx}
               onPress={() => router.push('/profile-screen/user-profile')}
             >
               <Image source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0, borderColor: colors.background }]} />
@@ -271,14 +274,17 @@ export default function MessagesScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Chats</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Chat</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={[styles.iconBtn, { backgroundColor: colors.card }]}
             activeOpacity={0.8}
             onPress={() => router.push('/chat-screen/create-group')}
           >
-            <HugeiconsIcon icon={PencilEdit02Icon} size={20} color={colors.text} />
+            <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <Path d="M15.2141 5.98239L16.6158 4.58063C17.39 3.80646 18.6452 3.80646 19.4194 4.58063C20.1935 5.3548 20.1935 6.60998 19.4194 7.38415L18.0176 8.78591M15.2141 5.98239L6.98023 14.2163C5.93493 15.2616 5.41226 15.7842 5.05637 16.4211C4.70047 17.058 4.3424 18.5619 4 20C5.43809 19.6576 6.94199 19.2995 7.57889 18.9436C8.21579 18.5877 8.73844 18.0651 9.78375 17.0198L18.0176 8.78591M15.2141 5.98239L18.0176 8.78591" stroke={colors.text} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <Path d="M11 20H17" stroke={colors.text} strokeWidth="1.5" strokeLinecap="round"/>
+            </Svg>
           </TouchableOpacity>
         </View>
       </View>
@@ -307,18 +313,11 @@ export default function MessagesScreen() {
           {(['All', 'Unread', 'Blocked'] as const).map(tab => (
             <TouchableOpacity
               key={tab}
-              style={[styles.tab, { backgroundColor: colors.card }, topTab === tab && { borderColor: colors.text }]}
+              style={[styles.tab, topTab === tab && styles.tabActive]}
               onPress={() => setTopTab(tab)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.tabText, { color: colors.textSecondary }, topTab === tab && { color: colors.text }]}>{tab}</Text>
-              {tab === 'Unread' && (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>
-                    {CONVERSATIONS.filter(c => c.unread > 0).length}
-                  </Text>
-                </View>
-              )}
+              <Text style={[styles.tabText, topTab === tab && { color: '#FFFFFF' }]}>{tab}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -362,8 +361,7 @@ export default function MessagesScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => subTab === 'Groups' ? null : <View style={[styles.separator, { backgroundColor: colors.border }]} />}
-          contentContainerStyle={subTab === 'Groups' ? { paddingBottom: 100, paddingTop: 12 } : { paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
@@ -385,19 +383,12 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
 
-  tabRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 14 },
-  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'transparent', backgroundColor: '#333333' },
-  tabActive: { borderColor: '#FFFFFF' },
-  tabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#FFFFFF' },
-  tabBadge: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#F2245C', justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
-  tabBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 
-  segmentedControl: { flexDirection: 'row', backgroundColor: '#0e0d12', borderRadius: 24, borderWidth: 1, borderColor: '#2A2A3A', marginHorizontal: 16, marginBottom: 14, padding: 4 },
-  segmentTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
-  segmentTabActive: { backgroundColor: '#333333' },
-  segmentTabText: { color: '#8E8E9B', fontSize: 14, fontWeight: '600' },
-  segmentTabTextActive: { color: '#FFFFFF' },
+
+  segmentedControl: { flexDirection: 'row', backgroundColor: '#161616', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, padding: 4 },
+  segmentTab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 12 },
+  segmentTabActive: { backgroundColor: '#2C2C2E' },
+  segmentTabText: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
 
   roomTabsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#2A2A3A', marginHorizontal: 16, marginBottom: 8 },
   roomTab: { flex: 1, paddingVertical: 12, alignItems: 'center', position: 'relative' },
@@ -405,31 +396,46 @@ const styles = StyleSheet.create({
   roomTabTextActive: { color: '#FFFFFF' },
   roomTabIndicator: { position: 'absolute', bottom: -1, width: '100%', height: 2, backgroundColor: '#D4B0EB' },
 
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 18 },
+  tab: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A3A',
+    backgroundColor: 'transparent'
+  },
+  tabActive: { backgroundColor: '#2C2C2E', borderColor: '#2C2C2E' },
+  tabText: { color: '#8E8E9B', fontSize: 12, fontWeight: '600' },
+  tabTextActive: { color: '#FFFFFF' },
 
-
-  separator: { height: 1, backgroundColor: '#13131A', marginLeft: 84 },
-
-  convoRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13 },
-  avatarWrap: { position: 'relative', marginRight: 14 },
-  avatar: { width: 52, height: 52, borderRadius: 26 },
-  onlineDot: { position: 'absolute', bottom: 2, right: 2, width: 13, height: 13, borderRadius: 7, backgroundColor: '#16D869', borderWidth: 2.5, borderColor: '#0e0d12' },
-  groupAvatarWrap: { width: 52, height: 52, marginRight: 14, position: 'relative' },
-  groupAv1: { width: 38, height: 38, borderRadius: 19, position: 'absolute', top: 0, left: 0, borderWidth: 2, borderColor: '#0e0d12' },
-  groupAv2: { width: 32, height: 32, borderRadius: 16, position: 'absolute', bottom: 0, right: 0, borderWidth: 2, borderColor: '#0e0d12' },
+  convoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 16
+  },
+  avatarWrap: { position: 'relative', marginRight: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  groupAvatarWrap: { width: 48, height: 48, marginRight: 12, position: 'relative' },
+  groupAv1: { width: 34, height: 34, borderRadius: 17, position: 'absolute', top: 0, left: 0, borderWidth: 2, borderColor: '#0e0d12' },
+  groupAv2: { width: 28, height: 28, borderRadius: 14, position: 'absolute', bottom: 0, right: 0, borderWidth: 2, borderColor: '#0e0d12' },
+  onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#111111' },
 
   convoMeta: { flex: 1 },
-  convoTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  convoName: { color: '#8E8E9B', fontWeight: '500', fontSize: 15, flex: 1, marginRight: 8 },
-  convoNameUnread: { color: '#FFFFFF', fontWeight: 'bold' },
-  convoTimeRow: { flexDirection: 'row', alignItems: 'center' },
-  convoTime: { color: '#454555', fontSize: 12 },
-  convoTimeUnread: { color: '#D4B0EB', fontWeight: '600' },
+  convoTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  convoName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, flex: 1 },
+  convoTime: { color: '#8E8E9B', fontSize: 11 },
   convoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  lastMsg: { color: '#454555', fontSize: 13, flex: 1, marginRight: 8 },
+  msgContent: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  lastMsg: { color: '#8E8E9B', fontSize: 13, flex: 1 },
   lastMsgUnread: { color: '#FFFFFF', fontWeight: '500' },
   typingText: { color: '#D4B0EB', fontStyle: 'italic' },
-  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#F2245C', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
-  unreadBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F2245C', marginLeft: 8 },
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { color: '#454555', fontSize: 14 },
