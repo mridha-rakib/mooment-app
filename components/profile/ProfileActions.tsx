@@ -1,9 +1,11 @@
+import { useTheme } from "@/hooks/useTheme";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { BubbleChatIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useTheme } from "@/hooks/useTheme";
 
 type ProfileActionsProps = {
   isOwnProfile?: boolean;
@@ -15,27 +17,27 @@ export default function ProfileActions({ isOwnProfile = true, onlyButtons = fals
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
-  
+
   if (isOwnProfile) return null;
 
   const buttons = (
     <>
-      <TouchableOpacity 
-        style={[styles.chatBtn, { backgroundColor: colors.card, borderColor: colors.border }]} 
+      <TouchableOpacity
+        style={[styles.chatBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
         activeOpacity={0.8}
         onPress={() => router.push('/chat-screen/chat-detail')}
       >
         <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.chatBtnGlass}>
-          <MaterialCommunityIcons name="chat-processing-outline" size={20} color={colors.text} />
+          <HugeiconsIcon icon={BubbleChatIcon} size={20} color={colors.text} />
         </BlurView>
       </TouchableOpacity>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[
-          styles.followBtn, 
+          styles.followBtn,
           { backgroundColor: colors.primary },
           isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }]
-        ]} 
+        ]}
         activeOpacity={0.8}
         onPress={() => setIsFollowing(!isFollowing)}
       >
@@ -44,7 +46,7 @@ export default function ProfileActions({ isOwnProfile = true, onlyButtons = fals
             <MaterialCommunityIcons name="check" size={16} color={colors.text} style={{ marginRight: 6 }} />
           )}
           <Text style={[
-            styles.followBtnText, 
+            styles.followBtnText,
             { color: colors.background },
             isFollowing && [styles.followingBtnText, { color: colors.text }]
           ]}>

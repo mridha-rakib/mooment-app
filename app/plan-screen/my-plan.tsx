@@ -1,4 +1,5 @@
 import EventPickerModal from '@/components/post/EventPickerModal';
+import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import {
   Calendar03Icon,
@@ -23,7 +24,6 @@ import {
   StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTheme } from '@/hooks/useTheme';
 
 /* ─── Constants ─── */
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -448,8 +448,8 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                       </View>
                       <View style={s.wideCardFooter}>
                         <View style={s.footerIcons}>
-                          <TouchableOpacity 
-                            style={s.footerIcon} 
+                          <TouchableOpacity
+                            style={s.footerIcon}
                             onPress={() => router.push('/plan-screen/share-plan')}
                           >
                             <HugeiconsIcon icon={Share01Icon} size={18} color={colors.textSecondary} />
@@ -457,13 +457,13 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                           <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Delete02Icon} size={18} color={colors.primary} /></TouchableOpacity>
                         </View>
                         <View style={s.footerActions}>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             style={[s.viewBtnSmall, { backgroundColor: colors.background }]}
                             onPress={() => router.push('/live-screen/live-room-screen')}
                           >
                             <Text style={[s.viewBtnTextSmall, { color: colors.text }]}>View</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             style={[s.addedPillSmall, { backgroundColor: colors.primary }]}
                             activeOpacity={0.8}
                             onPress={() => router.push('/plan-screen/add-friend')}
@@ -473,19 +473,6 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                           </TouchableOpacity>
                         </View>
                       </View>
-                    </TouchableOpacity>
-                    
-                    {/* New field below the wide card as requested */}
-                    <TouchableOpacity 
-                      style={[s.browseEventsRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                      onPress={() => router.push('/(tabs)/explore')}
-
-                    >
-                      <View style={[s.browseIconWrap, { backgroundColor: colors.background }]}>
-                        <HugeiconsIcon icon={Calendar03Icon} size={16} color={colors.primary} />
-                      </View>
-                      <Text style={[s.browseText, { color: colors.textSecondary }]}>Browse more events for your plan</Text>
-                      <Feather name="chevron-right" size={16} color={colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -514,7 +501,7 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                 </Animated.View>
 
                 {isCentered && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[s.browseEventsRow, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12, width: SCREEN_WIDTH * 0.85 }]}
                     onPress={() => router.push('/(tabs)/explore')}
 
@@ -712,7 +699,7 @@ const s = StyleSheet.create({
   calCellHl: { borderRadius: 20, width: 40, height: 40, borderWidth: 1 },
   calDay: { fontSize: 14 },
   calDaySel: { fontWeight: '700' },
-  calDayHl: { },
+  calDayHl: {},
 
   /* Bottom Sheets & Modals */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 80 },
@@ -765,7 +752,7 @@ const s = StyleSheet.create({
   eventTitle: { fontSize: 15, fontWeight: '600', marginBottom: 4 },
   eventSub: { fontSize: 13 },
   radioCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-  radioCircleSelected: { },
+  radioCircleSelected: {},
   radioInner: { width: 12, height: 12, borderRadius: 6 },
 
   planNameInput: { borderRadius: 14, paddingHorizontal: 18, height: 54, fontSize: 15, marginBottom: 24, borderWidth: 1 },

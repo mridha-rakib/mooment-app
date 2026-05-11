@@ -47,7 +47,7 @@ export default function ReviewsScreen() {
 
   const toggleLike = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     // Trigger animation
     scaleValues[id].value = withSequence(
       withSpring(1.4, { damping: 10, stiffness: 100 }),
@@ -63,10 +63,9 @@ export default function ReviewsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Reviews</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Reviews </Text>
         <View style={{ width: 40 }} />
       </View>
-
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {reviews.map((review) => {
           const animatedStyle = useAnimatedStyle(() => ({
@@ -76,10 +75,14 @@ export default function ReviewsScreen() {
           return (
             <View key={review.id} style={[styles.reviewCard, { backgroundColor: "#111112", borderColor: colors.border }]}>
               <View style={styles.reviewHeader}>
-                <View style={styles.userInfo}>
+                <TouchableOpacity 
+                  style={styles.userInfo}
+                  onPress={() => router.push('/profile-screen/user-profile')}
+                  activeOpacity={0.7}
+                >
                   <Image source={{ uri: review.avatar }} style={styles.avatar} />
                   <Text style={[styles.userName, { color: colors.text }]}>{review.name}</Text>
-                </View>
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => toggleLike(review.id)} activeOpacity={0.7}>
                   <Animated.View style={animatedStyle}>
                     <Feather
@@ -90,7 +93,12 @@ export default function ReviewsScreen() {
                   </Animated.View>
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
+              <TouchableOpacity 
+                onPress={() => router.push('/profile-screen/user-profile')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
+              </TouchableOpacity>
               <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{review.time}</Text>
             </View>
           );
