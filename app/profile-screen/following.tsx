@@ -33,13 +33,19 @@ export default function FollowingScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
         {following.map((user) => (
           <View key={user.id} style={[styles.userItem, { borderBottomColor: colors.border }]}>
-            <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
-              <Image source={{ uri: user.avatar }} style={styles.avatar} />
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
-              <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
-            </View>
+            <TouchableOpacity 
+              style={styles.userClickableArea}
+              onPress={() => router.push('/profile-screen/user-profile')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
+                <Image source={{ uri: user.avatar }} style={styles.avatar} />
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
+                <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
+              </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.followBtn, 
@@ -102,6 +108,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 20,
+  },
+  userClickableArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   userInfo: {
     flex: 1,

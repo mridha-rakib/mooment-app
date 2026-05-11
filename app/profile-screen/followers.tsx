@@ -1,10 +1,9 @@
-import { Feather } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
+import { useTheme } from "@/hooks/useTheme";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import BackButton from "@/components/ui/BackButton";
-import { useTheme } from "@/hooks/useTheme";
 
 const MOCK_FOLLOWERS = [
   { id: '1', name: 'Dj Koko', handle: '@sdfd._dl', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', isFollowing: false },
@@ -33,23 +32,29 @@ export default function FollowersScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
         {followers.map((user) => (
           <View key={user.id} style={[styles.userItem, { borderBottomColor: colors.border }]}>
-            <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
-              <Image source={{ uri: user.avatar }} style={styles.avatar} />
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
-              <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.userClickableArea}
+              onPress={() => router.push('/profile-screen/user-profile')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
+                <Image source={{ uri: user.avatar }} style={styles.avatar} />
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
+                <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
+              </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.followBtn, 
+                styles.followBtn,
                 { backgroundColor: colors.primary },
                 user.isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }]
               ]}
               onPress={() => toggleFollow(user.id)}
             >
               <Text style={[
-                styles.followBtnText, 
+                styles.followBtnText,
                 { color: colors.background },
                 user.isFollowing && [styles.followingBtnText, { color: colors.text }]
               ]}>
@@ -102,6 +107,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 20,
+  },
+  userClickableArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   userInfo: {
     flex: 1,
