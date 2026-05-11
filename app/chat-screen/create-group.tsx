@@ -45,9 +45,9 @@ export default function CreateGroupScreen() {
     const isSelected = selectedUsers.includes(item.id);
     return (
       <View style={styles.contactRow}>
-        <Image 
-          source={{ uri: item.avatar }} 
-          style={[styles.avatar, isSelected && styles.avatarSelected]} 
+        <Image
+          source={{ uri: item.avatar }}
+          style={[styles.avatar, isSelected && styles.avatarSelected]}
         />
         <View style={styles.contactInfo}>
           <Text style={styles.contactName}>{item.name}</Text>
@@ -117,14 +117,14 @@ export default function CreateGroupScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setIsModalVisible(false)} />
-          
+
           <View style={styles.modalSheet}>
             <View style={styles.dragHandleWrap}>
               <View style={styles.dragHandle} />
             </View>
 
             <Text style={styles.modalTitle}>Group Name</Text>
-            
+
             <TextInput
               style={styles.modalInput}
               placeholder="Name"
@@ -158,20 +158,20 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
 
   /* Header */
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingVertical: 12,
     marginTop: 20
   },
-  backBtn: { 
-    width: 38, 
-    height: 38, 
-    borderRadius: 12, 
-    backgroundColor: '#111111', 
-    justifyContent: 'center', 
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#111111',
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)'
@@ -179,17 +179,17 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
 
   /* Search */
-  searchContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'transparent', 
-    borderWidth: 1, 
-    borderColor: '#333333', 
-    borderRadius: 12, 
-    marginHorizontal: 16, 
-    paddingHorizontal: 16, 
-    height: 48, 
-    marginBottom: 20 
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 20
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
@@ -209,29 +209,29 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', marginLeft: 64 },
 
   /* Bottom Bar */
-  bottomBar: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 16, 
-    paddingTop: 16, 
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 40,
     backgroundColor: '#0e0d12',
     gap: 12
   },
-  bottomCancelBtn: { 
-    flex: 1, 
-    backgroundColor: '#111111', 
-    alignItems: 'center', 
-    paddingVertical: 14, 
-    borderRadius: 14 
+  bottomCancelBtn: {
+    flex: 1,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 14
   },
   bottomCancelText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
-  bottomContinueBtn: { 
-    flex: 1, 
-    backgroundColor: '#B2ABBA', 
-    alignItems: 'center', 
-    paddingVertical: 14, 
-    borderRadius: 14 
+  bottomContinueBtn: {
+    flex: 1,
+    backgroundColor: '#B2ABBA',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 14
   },
   bottomContinueText: { color: '#0e0d12', fontSize: 15, fontWeight: 'bold' },
 
@@ -241,15 +241,15 @@ const styles = StyleSheet.create({
   modalSheet: { backgroundColor: '#13131A', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40, borderWidth: 1, borderColor: '#2A2A3A' },
   dragHandleWrap: { alignItems: 'center', marginBottom: 20 },
   dragHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#2A2A3A' },
-  
+
   modalTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
-  
+
   modalInput: { backgroundColor: '#1A1A2E', borderRadius: 12, color: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, marginBottom: 16 },
-  
+
   uploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#C2B5CD', borderRadius: 12, paddingVertical: 14, marginBottom: 32 },
   uploadIcon: { marginRight: 8 },
   uploadBtnText: { color: '#0e0d12', fontSize: 14, fontWeight: '600' },
-  
+
   modalActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   modalCancelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },

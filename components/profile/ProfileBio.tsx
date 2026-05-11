@@ -1,6 +1,6 @@
+import { useTheme } from "@/hooks/useTheme";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useTheme } from "@/hooks/useTheme";
 
 type ProfileBioProps = {
   name: string;
