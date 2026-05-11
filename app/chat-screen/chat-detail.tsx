@@ -75,7 +75,7 @@ function TextBubble({ msg }: { msg: Message }) {
       </Text>
 
       {/* Location Attachment */}
-      {/* {msg.locationTitle && (
+      {msg.locationTitle && (
         <TouchableOpacity style={styles.locationBox} activeOpacity={0.8}>
           <View style={styles.locationIconWrap}>
             <Feather name="map-pin" size={16} color="#FFFFFF" />
@@ -85,7 +85,7 @@ function TextBubble({ msg }: { msg: Message }) {
             <Text style={styles.locationDesc}>{msg.locationDesc}</Text>
           </View>
         </TouchableOpacity>
-      )} */}
+      )}
 
       <View style={[styles.bubbleMeta, !msg.fromMe && { justifyContent: 'flex-start' }]}>
         <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>
