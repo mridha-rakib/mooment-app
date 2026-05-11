@@ -1,9 +1,7 @@
+import BackButton from '@/components/ui/BackButton';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { AttachmentIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
-import BackButton from '@/components/ui/BackButton';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
@@ -72,20 +70,12 @@ function TextBubble({ msg }: { msg: Message }) {
 
   return (
     <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : (isHostMsg ? styles.bubbleHost : styles.bubbleThem)]}>
-      {/* Sender Name Row */}
-      {!msg.fromMe && msg.senderName && (
-        <View style={styles.bubbleSenderRow}>
-          <Text style={[styles.bubbleSenderName, isHostMsg && { color: '#D4B0EB' }]}>{msg.senderName}</Text>
-          {msg.isHost && <Text style={styles.bubbleHostTag}> Host</Text>}
-        </View>
-      )}
-
       <Text style={[styles.bubbleText, msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
         {msg.text}
       </Text>
 
       {/* Location Attachment */}
-      {msg.locationTitle && (
+      {/* {msg.locationTitle && (
         <TouchableOpacity style={styles.locationBox} activeOpacity={0.8}>
           <View style={styles.locationIconWrap}>
             <Feather name="map-pin" size={16} color="#FFFFFF" />
@@ -95,7 +85,7 @@ function TextBubble({ msg }: { msg: Message }) {
             <Text style={styles.locationDesc}>{msg.locationDesc}</Text>
           </View>
         </TouchableOpacity>
-      )}
+      )} */}
 
       <View style={[styles.bubbleMeta, !msg.fromMe && { justifyContent: 'flex-start' }]}>
         <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>
@@ -222,8 +212,8 @@ export default function ChatDetailScreen() {
       <View style={styles.header}>
         <BackButton size={20} />
 
-        <TouchableOpacity 
-          style={styles.headerCenter} 
+        <TouchableOpacity
+          style={styles.headerCenter}
           activeOpacity={0.8}
           onPress={() => {
             router.push({
@@ -245,16 +235,7 @@ export default function ChatDetailScreen() {
 
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.headerBtn} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(true)}>
-            <LinearGradient
-              colors={["#18181c", "#c1c0c5", "#18181c"]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={styles.headerBtnBorder}
-            >
-              <BlurView intensity={40} tint="dark" style={styles.headerBtnBg}>
-                <Feather name="more-vertical" size={20} color="#8E8E9B" />
-              </BlurView>
-            </LinearGradient>
+            <Feather name="more-vertical" size={20} color="#8E8E9B" />
           </TouchableOpacity>
         </View>
       </View>
@@ -294,7 +275,7 @@ export default function ChatDetailScreen() {
                     {/* Reactions */}
                     {item.reactions && item.reactions.length > 0 && (
                       <View style={[styles.reactionsRow, item.fromMe ? styles.reactionsRowMe : styles.reactionsRowThem]}>
-                        {item.reactions.map((r:any, i:any) => (
+                        {item.reactions.map((r: any, i: any) => (
                           <View key={i} style={styles.reactionPill}>
                             <Text style={styles.reactionEmoji}>{r.emoji}</Text>
                             {r.count > 1 && <Text style={styles.reactionCount}>{r.count}</Text>}
@@ -372,9 +353,9 @@ export default function ChatDetailScreen() {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
           <View style={styles.moreMenuContainer}>
             <View style={styles.moreMenuBox}>
-              <TouchableOpacity 
-                style={styles.moreMenuItem} 
-                activeOpacity={0.8} 
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                activeOpacity={0.8}
                 onPress={() => {
                   setIsBlocked(!isBlocked);
                   setIsMoreMenuVisible(false);
@@ -383,9 +364,9 @@ export default function ChatDetailScreen() {
                 <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
                 <Text style={styles.moreMenuText}>{isBlocked ? 'Unblock' : 'Block'}</Text>
               </TouchableOpacity>
-              
+
               <View style={styles.moreMenuSeparator} />
-              
+
               <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
                 <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
                 <Text style={styles.moreMenuText}>Create Plan</Text>
@@ -418,41 +399,53 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
 
   /* Header */
-  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', marginHorizontal: 16, marginTop: 40, padding: 10, borderRadius: 12 },
-  headerBtn: { width: 40, height: 40, borderRadius: 16 },
-  headerBtnBorder: { flex: 1, padding: 0.5, borderRadius: 16, overflow: 'hidden' },
-  headerBtnBg: { flex: 1, backgroundColor: '#1e1d21', borderRadius: 16, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    marginHorizontal: 16,
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12
+  },
+  headerAvatar: { width: 34, height: 34, borderRadius: 17, marginRight: 10 },
   headerName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
-  headerStatus: { color: '#8E8E9B', fontSize: 12 },
-  headerRight: { flexDirection: 'row', alignItems: 'center' },
-  iconBtn: { width: 34, height: 34, justifyContent: 'center', alignItems: 'center' },
+  headerStatus: { color: '#8E8E9B', fontSize: 11, marginTop: 1 },
+  headerRight: { paddingRight: 4 },
+  headerBtn: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
 
   /* Messages */
-  messagesContainer: { paddingHorizontal: 12, paddingTop: 16, paddingBottom: 12 },
-  dateSep: { flexDirection: 'row', alignItems: 'center', marginVertical: 16 },
-  dateSepLine: { flex: 1, height: 1, backgroundColor: '#1A1A2E' },
-  dateSepText: { color: '#454555', fontSize: 12, marginHorizontal: 12 },
-  msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 3 },
+  messagesContainer: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12 },
+  dateSep: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
+  dateSepLine: { flex: 1, height: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+  dateSepText: { color: '#8E8E9B', fontSize: 11, marginHorizontal: 12 },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
   msgRowMe: { justifyContent: 'flex-end' },
   msgRowThem: { justifyContent: 'flex-start' },
-  msgAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },
 
   /* Text Bubble */
-  bubble: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, maxWidth: '98%' },
-  bubbleMe: { backgroundColor: '#C2B5CD', borderBottomRightRadius: 4 },
-  bubbleThem: { backgroundColor: '#161622', borderTopLeftRadius: 4, borderWidth: 1, borderColor: '#2A2A3A' },
-  bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 4 },
-  bubbleSenderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  bubbleSenderName: { color: '#8E8E9B', fontSize: 13, fontWeight: '600' },
-  bubbleHostTag: { color: '#8E8E9B', fontSize: 12, fontWeight: '400' },
+  bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, maxWidth: '90%' },
+  bubbleMe: { backgroundColor: '#B2ABBA', borderBottomRightRadius: 2 },
+  bubbleThem: { backgroundColor: '#111111', borderTopLeftRadius: 2, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
+  bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 2 },
+  bubbleSenderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  bubbleSenderName: { color: '#8E8E9B', fontSize: 12, fontWeight: '600' },
+  bubbleHostTag: { color: '#D4B0EB', fontSize: 10, fontWeight: '400' },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: '#0e0d12' },
   bubbleTextThem: { color: '#FFFFFF' },
-  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 6 },
-  bubbleTime: { color: '#8E8E9B', fontSize: 10 },
-  bubbleTimeMe: { color: 'rgba(14, 13, 18, 0.6)' },
+  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 8 },
+  bubbleTime: { color: '#8E8E9B', fontSize: 11 },
+  bubbleTimeMe: { color: 'rgba(14, 13, 18, 0.5)' },
 
   /* Location Box */
   locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginTop: 12, marginBottom: 4, minWidth: 200 },
@@ -510,12 +503,12 @@ const styles = StyleSheet.create({
   attachLabel: { color: '#8E8E9B', fontSize: 12 },
 
   /* Input Bar */
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40, backgroundColor: '#0e0d12', gap: 12 },
-  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, minHeight: 48, borderWidth: 1, borderColor: '#2A2A3A' },
-  input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginLeft: 12, marginRight: 12 },
-  emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
-  fileBtn: { justifyContent: 'center', alignItems: 'center', width: 28 },
-  sendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#C2B5CD', justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
+  inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40, backgroundColor: '#0e0d12', gap: 10 },
+  inputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#161616', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8, minHeight: 48 },
+  input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginLeft: 10, marginRight: 10 },
+  emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 24 },
+  fileBtn: { justifyContent: 'center', alignItems: 'center', width: 24 },
+  sendBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#B2ABBA', justifyContent: 'center', alignItems: 'center' },
 
   /* Modal */
   modalOverlay: { flex: 1, backgroundColor: 'transparent' },
