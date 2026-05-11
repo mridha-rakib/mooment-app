@@ -16,6 +16,7 @@ import BackButton from '@/components/ui/BackButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from '@/hooks/useTheme';
+import { Cancel01Icon } from '@hugeicons/core-free-icons';
 
 export default function TicketDetailsScreen() {
   const router = useRouter();
@@ -83,7 +84,7 @@ export default function TicketDetailsScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <BackButton iconName="x" size={24} />
+        <BackButton iconName={Cancel01Icon} size={24} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Set Ticket Details</Text>
         <View style={{ width: 40 }} /> {/* Spacer */}
       </View>

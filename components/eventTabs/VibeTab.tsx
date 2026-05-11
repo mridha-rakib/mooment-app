@@ -1,9 +1,7 @@
-import { Feather } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
 import { useTheme } from "@/hooks/useTheme";
+import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Dimensions,
@@ -12,6 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import SegmentedControl from "../ui/SegmentedControl";
+import CinematicButton from "../ui/CinematicButton";
 const { width } = Dimensions.get("window");
 
 // Removed hardcoded COLORS to use useTheme hook
@@ -21,7 +21,8 @@ const ROOMS_DATA = [
     id: "1",
     title: "Pre-show chat with DJ Nova",
     host: "DJ Nova",
-    hostAvatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
+    hostAvatar:
+      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
     listeners: "412",
     isHost: true,
   },
@@ -29,7 +30,8 @@ const ROOMS_DATA = [
     id: "2",
     title: "Pre-show chat with DJ Nova",
     host: "DJ Nova",
-    hostAvatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
+    hostAvatar:
+      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
     listeners: "412",
     isHost: false,
   },
@@ -39,10 +41,12 @@ const MOOMENTS_DATA = [
   {
     id: "1",
     user: "Dj Koko",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop",
+    avatar:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop",
     time: "2 min ago",
     text: "Setting up for tonight. The view from up here is unreal",
-    image: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
     likes: 25,
     comments: 25,
     shares: 25,
@@ -51,7 +55,8 @@ const MOOMENTS_DATA = [
   {
     id: "2",
     user: "Ronald Richards",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
+    avatar:
+      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
     time: "2 min ago",
     text: "Behind the scenes at Saturday market",
     likes: 25,
@@ -62,10 +67,12 @@ const MOOMENTS_DATA = [
   {
     id: "3",
     user: "Giden Jao",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
+    avatar:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
     time: "2 min ago",
     text: "Setting up for tonight. The view from up here is unreal",
-    image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop",
     likes: 25,
     comments: 25,
     shares: 0,
@@ -80,63 +87,148 @@ const VibeTab = () => {
 
   const renderLive = () => (
     <View style={{ marginTop: 20 }}>
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>2 Active Rooms</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        2 Active Rooms
+      </Text>
       <View style={styles.roomsRow}>
         {ROOMS_DATA.map((room) => (
           <View key={room.id} style={styles.roomContainer}>
-            <View style={[styles.ovalCard, { backgroundColor: isDark ? 'rgba(142, 84, 233, 0.05)' : 'rgba(142, 84, 233, 0.02)', borderColor: isDark ? 'rgba(142, 84, 233, 0.3)' : 'rgba(142, 84, 233, 0.15)' }]}>
-              <TouchableOpacity 
+            <View
+              style={[
+                styles.ovalCard,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(142, 84, 233, 0.05)"
+                    : "rgba(142, 84, 233, 0.02)",
+                  borderColor: isDark
+                    ? "rgba(142, 84, 233, 0.3)"
+                    : "rgba(142, 84, 233, 0.15)",
+                },
+              ]}
+            >
+              <TouchableOpacity
                 style={styles.avatarContainer}
-                onPress={() => router.push('/profile-screen/user-profile')}
+                onPress={() => router.push("/profile-screen/user-profile")}
               >
-                <Image source={{ uri: room.hostAvatar }} style={[styles.roomAvatar, { borderColor: colors.primary }]} />
-                <View style={[styles.onlineIndicator, { borderColor: colors.background, backgroundColor: '#16D869' }]} />
+                <Image
+                  source={{ uri: room.hostAvatar }}
+                  style={[styles.roomAvatar, { borderColor: colors.primary }]}
+                />
+                <View
+                  style={[
+                    styles.onlineIndicator,
+                    {
+                      borderColor: colors.background,
+                      backgroundColor: "#16D869",
+                    },
+                  ]}
+                />
               </TouchableOpacity>
 
               {room.isHost && (
-                <View style={[styles.hostBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}>
-                  <Text style={[styles.hostBadgeText, { color: colors.text }]}>Host</Text>
+                <View
+                  style={[
+                    styles.hostBadge,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255, 255, 255, 0.1)"
+                        : "rgba(0, 0, 0, 0.05)",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.hostBadgeText, { color: colors.text }]}>
+                    Host
+                  </Text>
                 </View>
               )}
 
-              <TouchableOpacity
-                style={[styles.joinBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
-                onPress={() => router.push('/live-screen/live-room-screen')}
-              >
-                <Text style={[styles.joinBtnText, { color: colors.text }]}>Join</Text>
-              </TouchableOpacity>
+              <CinematicButton
+                text="Join"
+                width="100%"
+                height={32}
+                borderRadius={12}
+                onPress={() => router.push("/live-screen/live-room-screen")}
+                style={{ marginTop: 10 }}
+              />
             </View>
 
             <View style={styles.roomInfo}>
-              <Text style={[styles.roomTitle, { color: colors.text }]}>{room.title}</Text>
-              <Text style={[styles.speakingText, { color: colors.textSecondary }]}>
-                <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
-                  <Text style={[styles.hostNameHighlight, { color: colors.text }]}>{room.host}</Text>
-                </TouchableOpacity> is speaking
+              <Text style={[styles.roomTitle, { color: colors.text }]}>
+                {room.title}
+              </Text>
+              <Text
+                style={[styles.speakingText, { color: colors.textSecondary }]}
+              >
+                <TouchableOpacity
+                  onPress={() => router.push("/profile-screen/user-profile")}
+                >
+                  <Text
+                    style={[styles.hostNameHighlight, { color: colors.text }]}
+                  >
+                    {room.host}
+                  </Text>
+                </TouchableOpacity>{" "}
+                is speaking
               </Text>
 
               <View style={styles.listenerRow}>
                 <View style={styles.avatarCluster}>
-                  <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                  <TouchableOpacity
+                    onPress={() => router.push("/profile-screen/user-profile")}
+                  >
                     <Image
-                      source={{ uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop" }}
-                      style={[styles.avatarSmall, { zIndex: 3, borderColor: colors.background }]}
+                      source={{
+                        uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
+                      }}
+                      style={[
+                        styles.avatarSmall,
+                        { zIndex: 3, borderColor: colors.background },
+                      ]}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                  <TouchableOpacity
+                    onPress={() => router.push("/profile-screen/user-profile")}
+                  >
                     <Image
-                      source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop" }}
-                      style={[styles.avatarSmall, { zIndex: 2, marginLeft: -8, borderColor: colors.background }]}
+                      source={{
+                        uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop",
+                      }}
+                      style={[
+                        styles.avatarSmall,
+                        {
+                          zIndex: 2,
+                          marginLeft: -8,
+                          borderColor: colors.background,
+                        },
+                      ]}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
+                  <TouchableOpacity
+                    onPress={() => router.push("/profile-screen/user-profile")}
+                  >
                     <Image
-                      source={{ uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop" }}
-                      style={[styles.avatarSmall, { zIndex: 1, marginLeft: -8, borderColor: colors.background }]}
+                      source={{
+                        uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop",
+                      }}
+                      style={[
+                        styles.avatarSmall,
+                        {
+                          zIndex: 1,
+                          marginLeft: -8,
+                          borderColor: colors.background,
+                        },
+                      ]}
                     />
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.listenerCount, { color: colors.textSecondary }]}>{room.listeners} listening</Text>
+                <Text
+                  style={[
+                    styles.listenerCount,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {room.listeners} listening
+                </Text>
               </View>
             </View>
           </View>
@@ -148,52 +240,107 @@ const VibeTab = () => {
   const renderMooments = () => (
     <View style={{ marginTop: 20 }}>
       {/* Post Button */}
-      <TouchableOpacity style={[styles.postBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}>
+      <TouchableOpacity
+        style={[
+          styles.postBtn,
+          {
+            backgroundColor: isDark
+              ? "rgba(255, 255, 255, 0.1)"
+              : "rgba(0, 0, 0, 0.05)",
+          },
+        ]}
+      >
         <Feather name="plus" size={20} color={colors.textSecondary} />
-        <Text style={[styles.postBtnText, { color: colors.textSecondary }]}>Post Mooment</Text>
+        <Text style={[styles.postBtnText, { color: colors.textSecondary }]}>
+          Post Mooment
+        </Text>
       </TouchableOpacity>
 
       {/* Timer Banner */}
-      <View style={[styles.timerBanner, { backgroundColor: isDark ? 'rgba(255, 107, 61, 0.1)' : 'rgba(255, 107, 61, 0.05)' }]}>
+      <View
+        style={[
+          styles.timerBanner,
+          {
+            backgroundColor: isDark
+              ? "rgba(255, 107, 61, 0.1)"
+              : "rgba(255, 107, 61, 0.05)",
+          },
+        ]}
+      >
         <View style={styles.timerLeft}>
           <Feather name="info" size={16} color="#FF6B3D" />
-          <Text style={[styles.timerText, { color: "#FF6B3D" }]}>Next mooment available in</Text>
+          <Text style={[styles.timerText, { color: "#FF6B3D" }]}>
+            Next mooment available in
+          </Text>
         </View>
-        <Text style={[styles.timerCountdown, { color: "#FF6B3D" }]}>10 min</Text>
+        <Text style={[styles.timerCountdown, { color: "#FF6B3D" }]}>
+          10 min
+        </Text>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>24 Mooments</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        24 Mooments
+      </Text>
 
       {/* Feed */}
       {MOOMENTS_DATA.map((item) => (
-        <View key={item.id} style={[styles.postCard, { backgroundColor: colors.card }]}>
+        <View
+          key={item.id}
+          style={[styles.postCard, { backgroundColor: colors.card }]}
+        >
           <View style={styles.postHeader}>
             <Image source={{ uri: item.avatar }} style={styles.postAvatar} />
             <View style={styles.postUserInfo}>
-              <Text style={[styles.postUserName, { color: colors.text }]}>{item.user}</Text>
-              <Text style={[styles.postTime, { color: colors.textSecondary }]}>{item.time}</Text>
+              <Text style={[styles.postUserName, { color: colors.text }]}>
+                {item.user}
+              </Text>
+              <Text style={[styles.postTime, { color: colors.textSecondary }]}>
+                {item.time}
+              </Text>
             </View>
             <TouchableOpacity
               style={[
                 styles.followBtn,
-                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.border },
-                item.isFollowing && [styles.followBtnActive, { backgroundColor: 'transparent', borderColor: colors.border }]
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255, 255, 255, 0.1)"
+                    : "rgba(0, 0, 0, 0.05)",
+                  borderColor: colors.border,
+                },
+                item.isFollowing && [
+                  styles.followBtnActive,
+                  {
+                    backgroundColor: "transparent",
+                    borderColor: colors.border,
+                  },
+                ],
               ]}
             >
-              <Text style={[
-                styles.followBtnText,
-                { color: colors.text },
-                item.isFollowing && [styles.followBtnTextActive, { color: colors.textSecondary }]
-              ]}>
+              <Text
+                style={[
+                  styles.followBtnText,
+                  { color: colors.text },
+                  item.isFollowing && [
+                    styles.followBtnTextActive,
+                    { color: colors.textSecondary },
+                  ],
+                ]}
+              >
                 {item.isFollowing ? "Following" : "+ Follow"}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreBtn}>
-              <Feather name="more-horizontal" size={18} color={colors.textSecondary} />
+              <Feather
+                name="more-horizontal"
+                size={18}
+                color={colors.textSecondary}
+              />
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.postText, { color: colors.text }]}>{item.text}</Text>
+          <Text style={[styles.postText, { color: colors.text }]}>
+            {item.text}
+          </Text>
 
           {item.image && (
             <Image source={{ uri: item.image }} style={styles.postImage} />
@@ -202,16 +349,39 @@ const VibeTab = () => {
           <View style={styles.postFooter}>
             <View style={styles.footerStat}>
               <Feather name="heart" size={16} color={colors.textSecondary} />
-              <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>{item.likes}</Text>
+              <Text
+                style={[styles.footerStatText, { color: colors.textSecondary }]}
+              >
+                {item.likes}
+              </Text>
             </View>
             <View style={styles.footerStat}>
-              <Feather name="message-circle" size={16} color={colors.textSecondary} />
-              <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>{item.comments}</Text>
+              <Feather
+                name="message-circle"
+                size={16}
+                color={colors.textSecondary}
+              />
+              <Text
+                style={[styles.footerStatText, { color: colors.textSecondary }]}
+              >
+                {item.comments}
+              </Text>
             </View>
             {item.shares > 0 && (
               <View style={styles.footerStat}>
-                <Feather name="share-2" size={16} color={colors.textSecondary} />
-                <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>{item.shares}</Text>
+                <Feather
+                  name="share-2"
+                  size={16}
+                  color={colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.footerStatText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {item.shares}
+                </Text>
               </View>
             )}
           </View>
@@ -223,59 +393,12 @@ const VibeTab = () => {
   return (
     <View>
       {/* Sub-Tabs / Toggle */}
-      <View style={styles.tabWrapper}>
-        <LinearGradient
-          colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.border, colors.border, colors.border]}
-          start={{ x: 1, y: 1 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.subTabBorder}
-        >
-          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.subTabBg, { backgroundColor: isDark ? "#1c1b20" : colors.card }]}>
-            <TouchableOpacity
-              onPress={() => setVibeSubTab("Live")}
-              style={styles.subTabItem}
-            >
-              {vibeSubTab === "Live" ? (
-                <LinearGradient
-                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.activeBtnBorder}
-                >
-                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
-                    <Text style={[styles.subTabText, { color: colors.text }]}>
-                      Live
-                    </Text>
-                  </View>
-                </LinearGradient>
-              ) : (
-                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Live</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setVibeSubTab("Mooments")}
-              style={styles.subTabItem}
-            >
-              {vibeSubTab === "Mooments" ? (
-                <LinearGradient
-                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.activeBtnBorder}
-                >
-                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
-                    <Text style={[styles.subTabText, { color: colors.text }]}>
-                      Mooments
-                    </Text>
-                  </View>
-                </LinearGradient>
-              ) : (
-                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Mooments</Text>
-              )}
-            </TouchableOpacity>
-          </BlurView>
-        </LinearGradient>
-      </View>
+      <SegmentedControl
+        options={["Live", "Mooments"]}
+        selectedOption={vibeSubTab}
+        onSelect={setVibeSubTab}
+        containerStyle={{ marginTop: 10, marginBottom: 10 }}
+      />
 
       {vibeSubTab === "Live" ? renderLive() : renderMooments()}
     </View>
@@ -287,45 +410,8 @@ export default VibeTab;
 const styles = StyleSheet.create({
   tabWrapper: {
     borderRadius: 12,
-  },
-  subTabBorder: {
-    borderRadius: 12,
-    overflow: "hidden",
-    padding: 0.5,
-  },
-  subTabBg: {
-    flexDirection: "row",
-    backgroundColor: "#1c1b20",
-    borderRadius: 11,
-    padding: 6,
-    height: 50,
-    overflow: "hidden",
-    gap: 4,
-  },
-  subTabItem: {
-    flex: 1,
-    alignItems: "stretch",
-    justifyContent: "center",
-    borderRadius: 8,
-  },
-  activeBtnBorder: {
-    flex: 1,
-    borderRadius: 8,
-    padding: 0.5,
-  },
-  activeBtnInner: {
-    backgroundColor: "#38373a",
-    borderRadius: 7,
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  subTabText: {
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  subTabTextActive: {
+    marginTop: 10,
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -341,31 +427,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ovalCard: {
-    width: "80%",
-    aspectRatio: 0.65,
-    borderRadius: 100,
+    width: "65%",
+    aspectRatio: 0.55,
+    borderRadius: 50,
     borderWidth: 1,
-    borderColor: "rgba(142, 84, 233, 0.3)", // Soft purple border
-    backgroundColor: "rgba(142, 84, 233, 0.05)",
-    justifyContent: "center",
+    borderColor: "#AC86D4", 
+    backgroundColor: "rgba(172, 134, 212, 0.08)",
+    justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
     marginBottom: 16,
   },
   avatarContainer: {
     position: "relative",
-    marginBottom: 12,
   },
   roomAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     borderWidth: 2,
   },
   onlineIndicator: {
     position: "absolute",
-    bottom: 2,
-    right: 2,
+    bottom: 0,
+    right: 0,
     width: 14,
     height: 14,
     borderRadius: 7,
@@ -512,8 +598,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  followBtnTextActive: {
-  },
+  followBtnTextActive: {},
   moreBtn: {
     padding: 4,
   },

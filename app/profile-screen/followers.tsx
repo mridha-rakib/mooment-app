@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -24,7 +25,7 @@ export default function FollowersScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={styles.header}>
-        <BackButton iconName="x" size={18} />
+        <BackButton iconName={Cancel01Icon} size={18} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Followers</Text>
         <View style={{ width: 40 }} />
       </View>

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
+import SegmentedControl from "../ui/SegmentedControl";
 
 // Removed hardcoded COLORS to use useTheme hook
 
@@ -276,59 +277,12 @@ const AccessTab = () => {
   return (
     <View>
       {/* Sub-Tabs / Toggle */}
-      <View style={styles.tabWrapper}>
-        <LinearGradient
-          colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.border, colors.border, colors.border]}
-          start={{ x: 1, y: 1 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.subTabBorder}
-        >
-          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.subTabBg, { backgroundColor: isDark ? "#1c1b20" : colors.card }]}>
-            <TouchableOpacity
-              onPress={() => setAccessSubTab("Tickets")}
-              style={styles.subTabItem}
-            >
-              {accessSubTab === "Tickets" ? (
-                <LinearGradient
-                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.activeBtnBorder}
-                >
-                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
-                    <Text style={[styles.subTabText, { color: colors.text }]}>
-                      Tickets
-                    </Text>
-                  </View>
-                </LinearGradient>
-              ) : (
-                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Tickets</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setAccessSubTab("Rewards")}
-              style={styles.subTabItem}
-            >
-              {accessSubTab === "Rewards" ? (
-                <LinearGradient
-                  colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : [colors.primary, colors.primary, colors.primary]}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.activeBtnBorder}
-                >
-                  <View style={[styles.activeBtnInner, { backgroundColor: isDark ? "#38373a" : colors.background, elevation: isDark ? 0 : 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0 : 0.1, shadowRadius: 2 }]}>
-                    <Text style={[styles.subTabText, { color: colors.text }]}>
-                      Rewards
-                    </Text>
-                  </View>
-                </LinearGradient>
-              ) : (
-                <Text style={[styles.subTabText, { color: colors.textSecondary }]}>Rewards</Text>
-              )}
-            </TouchableOpacity>
-          </BlurView>
-        </LinearGradient>
-      </View>
+      <SegmentedControl
+        options={["Tickets", "Rewards"]}
+        selectedOption={accessSubTab}
+        onSelect={setAccessSubTab}
+        containerStyle={{ marginTop: 10, marginBottom: 10 }}
+      />
 
       {accessSubTab === "Tickets" ? renderTickets() : renderRewards()}
     </View>
@@ -340,45 +294,8 @@ export default AccessTab;
 const styles = StyleSheet.create({
   tabWrapper: {
     borderRadius: 12,
-  },
-  subTabBorder: {
-    borderRadius: 12,
-    overflow: "hidden",
-    padding: 0.5,
-  },
-  subTabBg: {
-    flexDirection: "row",
-    backgroundColor: "#1c1b20",
-    borderRadius: 11,
-    padding: 6,
-    height: 50,
-    overflow: "hidden",
-    gap: 4,
-  },
-  subTabItem: {
-    flex: 1,
-    alignItems: "stretch",
-    justifyContent: "center",
-    borderRadius: 8,
-  },
-  activeBtnBorder: {
-    flex: 1,
-    borderRadius: 8,
-    padding: 0.5,
-  },
-  activeBtnInner: {
-    backgroundColor: "#38373a",
-    borderRadius: 7,
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  subTabText: {
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  subTabTextActive: {
+    marginTop: 10,
+    marginBottom: 10,
   },
   alertBanner: {
     flexDirection: "row",

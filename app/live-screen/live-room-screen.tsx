@@ -1,4 +1,6 @@
 import BackButton from '@/components/ui/BackButton';
+import CinematicButton from '@/components/ui/CinematicButton';
+import { MoreHorizontalIcon } from '@hugeicons/core-free-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -209,13 +211,10 @@ export default function EventDetailsScreen() {
       <View style={styles.header}>
         <BackButton size={22} color={colors.text} />
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>Pre-show with {hostName}</Text>
-        <TouchableOpacity 
-          style={[styles.menuBtn, { backgroundColor: colors.card }]} 
-          activeOpacity={0.8}
+        <CinematicButton
+          icon={MoreHorizontalIcon}
           onPress={() => setShowMore(true)}
-        >
-          <Feather name="more-horizontal" size={20} color={colors.text} />
-        </TouchableOpacity>
+        />
       </View>
 
       {/* ── More Menu Modal ── */}

@@ -22,7 +22,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Comment02Icon, Share01Icon, FavouriteIcon } from "@hugeicons/core-free-icons";
+import { Comment02Icon, Share01Icon, FavouriteIcon, MoreHorizontalIcon, Flag01Icon, Bookmark01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get("window");
 
@@ -31,7 +31,9 @@ const EventScreen = () => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState("About");
+  const [accessTab, setAccessTab] = useState("Tickets");
   const [menuVisible, setMenuVisible] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
 
   const handleDelete = () => {
     setMenuVisible(false);
@@ -57,7 +59,7 @@ const EventScreen = () => {
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={colors.text} />
       <BackButton
-        iconName="more-horizontal"
+        iconName={MoreHorizontalIcon}
         onPress={() => setMenuVisible(true)}
         color={colors.text}
       />
@@ -121,8 +123,17 @@ const EventScreen = () => {
                   <Text style={[styles.privateText, { color: colors.textSecondary }]}> Private Event</Text>
                 </View>
               </View>
-              <TouchableOpacity style={[styles.followBtnSmall, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.05)" }]}>
-                <Text style={[styles.followBtnTextSmall, { color: colors.text }]}>Follow</Text>
+              <TouchableOpacity 
+                style={[
+                  styles.followBtnSmall, 
+                  { backgroundColor: isFollowing ? colors.primary : (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.05)") }
+                ]}
+                onPress={() => setIsFollowing(!isFollowing)}
+              >
+                {isFollowing && <Feather name="check" size={12} color="#FFF" style={{ marginRight: 4 }} />}
+                <Text style={[styles.followBtnTextSmall, { color: isFollowing ? "#FFF" : colors.text }]}>
+                  {isFollowing ? "Following" : "Follow"}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -254,14 +265,42 @@ const EventScreen = () => {
           activeOpacity={1} 
           onPress={() => setMenuVisible(false)}
         >
-          <View style={[styles.menuContent, { backgroundColor: colors.card, top: insets.top + 60 }]}>
+          <View style={[styles.menuContent, { backgroundColor: isDark ? "#4A4A4A" : colors.card, top: insets.top + 60 }]}>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => {
+                setMenuVisible(false);
+                console.log("Reported");
+              }}
+              activeOpacity={0.7}
+            >
+              <HugeiconsIcon icon={Flag01Icon} size={20} color="#FFF" />
+              <Text style={[styles.menuItemText, { color: "#FFF" }]}>Report</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.menuSeparator} />
+
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => {
+                setMenuVisible(false);
+                console.log("Saved");
+              }}
+              activeOpacity={0.7}
+            >
+              <HugeiconsIcon icon={Bookmark01Icon} size={20} color="#FFF" />
+              <Text style={[styles.menuItemText, { color: "#FFF" }]}>Save</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuSeparator} />
+
             <TouchableOpacity 
               style={styles.menuItem} 
               onPress={handleDelete}
               activeOpacity={0.7}
             >
-              <Feather name="trash-2" size={20} color={colors.text} />
-              <Text style={[styles.menuItemText, { color: colors.text }]}>Delete</Text>
+              <HugeiconsIcon icon={Delete02Icon} size={20} color="#FFF" />
+              <Text style={[styles.menuItemText, { color: "#FFF" }]}>Delete</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -419,18 +458,41 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: "row",
+    justifyContent: "space-between",
     borderBottomWidth: 1,
-    marginBottom: 16,
+    marginBottom: 0,
+    paddingHorizontal: 16,
   },
   tabItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 2,
+    paddingVertical: 14,
+    borderBottomWidth: 3,
     borderBottomColor: "transparent",
+    alignItems: 'center',
+    flex: 1,
   },
   tabLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
+  },
+  subTabWrapper: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 4,
+    borderWidth: 1,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  segmentLabel: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   footer: {
     position: "absolute",
@@ -473,25 +535,29 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
     width: 140,
-    borderRadius: 12,
+    borderRadius: 14,
+    paddingVertical: 4,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    justifyContent: 'center',
+    gap: 12,
   },
   menuItemText: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginLeft: 10,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  menuSeparator: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    marginHorizontal: 8,
   },
 });

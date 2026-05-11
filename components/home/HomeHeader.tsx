@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import FilterModal from './FilterModal';
 import { useTheme } from '@/hooks/useTheme';
+import CinematicButton from '../ui/CinematicButton';
 
 const { width } = Dimensions.get('window');
 
@@ -40,30 +41,16 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
         <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
 
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => router.push('/discover-screen/search')}>
-            <LinearGradient
-              colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={styles.headerBtnBorder}
-            >
-              <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
-                <HugeiconsIcon icon={Search01Icon} size={20} color={colors.text} />
-              </BlurView>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={() => setFilterVisible(true)}>
-            <LinearGradient
-              colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={styles.headerBtnBorder}
-            >
-              <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.headerBtnBg, { backgroundColor: isDark ? "#1e1d21" : "rgba(255,255,255,0.8)" }]}>
-                <HugeiconsIcon icon={FilterHorizontalIcon} size={20} color={colors.text} />
-              </BlurView>
-            </LinearGradient>
-          </TouchableOpacity>
+          <CinematicButton
+            icon={Search01Icon}
+            onPress={() => router.push('/discover-screen/search')}
+            style={styles.iconBtn}
+          />
+          <CinematicButton
+            icon={FilterHorizontalIcon}
+            onPress={() => setFilterVisible(true)}
+            style={styles.iconBtn}
+          />
         </View>
       </View>
 
@@ -163,19 +150,6 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 12,
-  },
-  headerBtnBorder: {
-    padding: 0.5,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  headerBtnBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: 'hidden',
   },
 
   dropdownOverlay: {
