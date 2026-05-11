@@ -1,7 +1,13 @@
 import { useTheme } from "@/hooks/useTheme";
-import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Canvas,
+  LinearGradient,
+  RoundedRect,
+  Shadow,
+  vec,
+} from "@shopify/react-native-skia";
+import React, { useState } from "react";
+import { LayoutChangeEvent, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface SegmentedControlProps {
   options: string[];
@@ -17,59 +23,86 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
   containerStyle,
 }) => {
   const { colors, isDark } = useTheme();
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+
+  const onLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setLayout({ width, height });
+  };
 
   return (
-    <View style={[styles.wrapper, containerStyle]}>
-      <LinearGradient
-        colors={
-          isDark
-            ? ["#2A2A30", "#4A4A52", "#2A2A30"]
-            : ["#D0D0D0", "#A0A0A0", "#D0D0D0"]
-        }
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradientBorder}
-      >
-        <View
-          style={[
-            styles.container,
-            { backgroundColor: isDark ? "#121217" : "#F5F5F5" },
-          ]}
-        >
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option}
-              activeOpacity={0.8}
+    <View style={[styles.wrapper, containerStyle]} onLayout={onLayout}>
+      {layout.width > 0 && (
+        <Canvas style={StyleSheet.absoluteFill}>
+          {/* Main Glass Background with Depth */}
+          <RoundedRect
+            x={1}
+            y={1}
+            width={layout.width - 2}
+            height={layout.height - 2}
+            r={16}
+            color="#6868681A"
+          >
+            <Shadow dx={0} dy={1} blur={4} color="rgba(0,0,0,0.5)" inner />
+          </RoundedRect>
+
+          {/* High-Performance Metallic Border Gradient */}
+          <RoundedRect
+            x={0.5}
+            y={0.5}
+            width={layout.width - 1}
+            height={layout.height - 1}
+            r={16}
+            style="stroke"
+            strokeWidth={1}
+          >
+            <LinearGradient
+              start={vec(0, 0)}
+              end={vec(layout.width, 0)}
+              colors={
+                isDark
+                  ? ["rgba(255,255,255,0.05)", "rgba(255,255,255,0.9)", "rgba(255,255,255,0.05)"]
+                  : ["rgba(0,0,0,0.1)", "rgba(255,255,255,1)", "rgba(0,0,0,0.1)"]
+              }
+            />
+          </RoundedRect>
+        </Canvas>
+      )}
+
+      <View style={styles.container}>
+        {options.map((option) => (
+          <TouchableOpacity
+            key={option}
+            activeOpacity={0.8}
+            style={[
+              styles.segmentItem,
+              selectedOption === option && {
+                backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "#FFF",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 2,
+              },
+            ]}
+            onPress={() => onSelect(option)}
+          >
+            <Text
               style={[
-                styles.segmentItem,
-                selectedOption === option && {
-                  backgroundColor: isDark ? "#2A2A32" : "#FFF",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 4,
-                  elevation: 3,
+                styles.segmentLabel,
+                {
+                  color:
+                    selectedOption === option
+                      ? colors.text
+                      : colors.textSecondary,
                 },
               ]}
-              onPress={() => onSelect(option)}
             >
-              <Text
-                style={[
-                  styles.segmentLabel,
-                  {
-                    color:
-                      selectedOption === option
-                        ? colors.text
-                        : colors.textSecondary,
-                  },
-                ]}
-              >
-                {option}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </LinearGradient>
+              {option}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 };
@@ -79,21 +112,17 @@ export default SegmentedControl;
 const styles = StyleSheet.create({
   wrapper: {
     borderRadius: 16,
-    overflow: "hidden",
-  },
-  gradientBorder: {
-    padding: 1,
-    borderRadius: 16,
+    position: "relative",
+    minHeight: 46,
+    justifyContent: "center",
   },
   container: {
     flexDirection: "row",
-    borderRadius: 15,
-    padding: 3,
-    overflow: "hidden",
+    padding: 4,
   },
   segmentItem: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     alignItems: "center",
     borderRadius: 12,
   },

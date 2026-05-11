@@ -20,6 +20,8 @@ import {
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/hooks/useTheme';
 
+import LiveRoomSetupModal from './LiveRoomSetupModal';
+
 interface AddOptionsModalProps {
   visible: boolean;
   onClose: () => void;
@@ -77,56 +79,68 @@ const OPTIONS = [
 export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const [liveSetupVisible, setLiveSetupVisible] = React.useState(false);
 
-  const handleOption = (route: string) => {
+  const handleOption = (id: string, route: string) => {
     onClose();
+    if (id === 'live') {
+      setTimeout(() => setLiveSetupVisible(true), 300); // Small delay to allow previous modal to close smoothly
+      return;
+    }
     router.push(route as any);
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity 
-        style={[styles.overlay, { backgroundColor: isDark ? '#000000CC' : 'rgba(0,0,0,0.4)' }]} 
-        activeOpacity={1} 
-        onPress={onClose}
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={onClose}
       >
-        <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-        
-        <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
-          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
+        <TouchableOpacity 
+          style={[styles.overlay, { backgroundColor: isDark ? '#000000CC' : 'rgba(0,0,0,0.4)' }]} 
+          activeOpacity={1} 
+          onPress={onClose}
+        >
+          <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          
+          <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
 
-          <View style={styles.optionsList}>
-            {OPTIONS.map((opt) => (
-              <TouchableOpacity
-                key={opt.id}
-                style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => handleOption(opt.route)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
-                  <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />
-                </View>
+            <View style={styles.optionsList}>
+              {OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => handleOption(opt.id, opt.route)}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
+                    <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />
+                  </View>
 
-                <View style={styles.optionText}>
-                  <Text style={[styles.optionLabel, { color: colors.text }]}>{opt.label}</Text>
-                  <Text style={[styles.optionDesc, { color: colors.textSecondary }]} numberOfLines={2}>{opt.description}</Text>
-                </View>
+                  <View style={styles.optionText}>
+                    <Text style={[styles.optionLabel, { color: colors.text }]}>{opt.label}</Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]} numberOfLines={2}>{opt.description}</Text>
+                  </View>
 
-                <HugeiconsIcon icon={ChevronRight} size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <HugeiconsIcon icon={ChevronRight} size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              ))}
+            </View>
 
-          <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
+            <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
+      </Modal>
+
+      <LiveRoomSetupModal 
+        visible={liveSetupVisible} 
+        onClose={() => setLiveSetupVisible(false)} 
+      />
+    </>
   );
 }
 

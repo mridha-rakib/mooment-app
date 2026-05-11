@@ -1,9 +1,9 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import React, { useRef, useState } from 'react';
-import { Dimensions, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
+import React, { useRef, useState, useEffect } from 'react';
+import { Dimensions, Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 
 const { height } = Dimensions.get('window');
@@ -79,6 +79,36 @@ export default function CommentsModal({
   const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
   const inputRef = useRef<TextInput>(null);
   const router = useRouter();
+
+  const keyboardHeight = useSharedValue(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        keyboardHeight.value = withTiming(e.endCoordinates.height, {
+          duration: 250,
+        });
+      }
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        keyboardHeight.value = withTiming(0, { duration: 250 });
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      paddingBottom: keyboardHeight.value > 0 ? keyboardHeight.value : 0,
+    };
+  });
 
   const toggleCommentLike = (commentId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -179,10 +209,7 @@ export default function CommentsModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView 
-        style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <Animated.View style={[styles.modalOverlay, animatedStyle]}>
         {/* Clickable background to dismiss */}
         <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
         
@@ -257,7 +284,7 @@ export default function CommentsModal({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
     </Modal>
   );
 }
