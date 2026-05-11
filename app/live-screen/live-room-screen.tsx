@@ -1,8 +1,9 @@
 import BackButton from '@/components/ui/BackButton';
 import CinematicButton from '@/components/ui/CinematicButton';
-import { MoreHorizontalIcon } from '@hugeicons/core-free-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
+import { Mic01Icon, MicOff01Icon, MoreHorizontalIcon, UnavailableIcon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -186,13 +187,6 @@ export default function EventDetailsScreen() {
     else setParticipants((prev) => prev.map((p) => ({ ...p, micMuted: true })));
   }, [allowAll]);
 
-  const deleteMessage = useCallback((id: string) => {
-    Alert.alert('Delete Message', 'Remove this message?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => setMessages((prev) => prev.filter((m) => m.id !== id)) },
-    ]);
-  }, []);
-
   const toggleBlock = (name: string) => {
     setBlockedUsers(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
     setSelectedMessage(null);
@@ -226,10 +220,10 @@ export default function EventDetailsScreen() {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowMore(false)}>
           <View style={[
-            styles.moreMenu, 
-            { 
-              top: insets.top + 55, 
-              right: 20, 
+            styles.moreMenu,
+            {
+              top: insets.top + 55,
+              right: 20,
               backgroundColor: isDark ? '#2D2D3D' : '#F2F2F2',
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 4 },
@@ -243,19 +237,19 @@ export default function EventDetailsScreen() {
               <Text style={[styles.menuText, { color: colors.text }]}>Report</Text>
             </TouchableOpacity>
             <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
-            
+
             <TouchableOpacity style={styles.menuItem} onPress={() => setShowMore(false)}>
               <Feather name="share-2" size={18} color={colors.text} />
               <Text style={[styles.menuText, { color: colors.text }]}>Share to</Text>
             </TouchableOpacity>
             <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
-            
+
             <TouchableOpacity style={styles.menuItem} onPress={() => setShowMore(false)}>
               <Feather name="slash" size={18} color={colors.text} />
               <Text style={[styles.menuText, { color: colors.text }]}>Block</Text>
             </TouchableOpacity>
             <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
-            
+
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMore(false); handleLeave(); }}>
               <Feather name="trash-2" size={18} color="#FF4D4D" />
               <Text style={[styles.menuText, { color: "#FF4D4D" }]}>Delete</Text>
@@ -273,9 +267,9 @@ export default function EventDetailsScreen() {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setSelectedMessage(null)}>
           <View style={[
-            styles.moreMenu, 
-            { 
-              top: '40%', // Fixed central positioning for simplicity
+            styles.moreMenu,
+            {
+              top: '40%',
               right: 40,
               backgroundColor: isDark ? '#2D2D3D' : '#F2F2F2',
               shadowColor: '#000',
@@ -292,7 +286,7 @@ export default function EventDetailsScreen() {
               </Text>
             </TouchableOpacity>
             <View style={[styles.menuSeparator, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} />
-            
+
             <TouchableOpacity style={styles.menuItem} onPress={() => toggleMute(selectedMessage?.name || '')}>
               <Feather name={mutedUsers.includes(selectedMessage?.name || '') ? 'mic' : 'mic-off'} size={18} color={colors.text} />
               <Text style={[styles.menuText, { color: colors.text }]}>
@@ -325,7 +319,7 @@ export default function EventDetailsScreen() {
         <View style={styles.speakerSection}>
           <View style={styles.avatarGlow}>
             <View style={[styles.avatarRingOuter, { backgroundColor: isDark ? 'rgba(155,89,182,0.15)' : 'rgba(155,89,182,0.05)' }]}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking, { borderColor: colors.border }]}
                 onPress={() => router.push('/profile-screen/user-profile')}
               >
@@ -406,11 +400,27 @@ export default function EventDetailsScreen() {
                   <Text style={[styles.participantName, { color: colors.text }]}>{p.name}</Text>
                 </TouchableOpacity>
                 <View style={styles.participantActions}>
-                  <TouchableOpacity style={[styles.pActionBtn, { backgroundColor: colors.card }, p.micMuted && { backgroundColor: colors.danger }]} activeOpacity={0.7} onPress={() => toggleMic(p.id)}>
-                    <Feather name={p.micMuted ? 'mic-off' : 'mic'} size={16} color={p.micMuted ? colors.background : colors.textSecondary} />
+                  <TouchableOpacity 
+                    style={[styles.pActionBtn, p.micMuted ? { backgroundColor: '#E14F4F' } : { backgroundColor: '#222222' }]} 
+                    activeOpacity={0.7} 
+                    onPress={() => toggleMic(p.id)}
+                  >
+                    <HugeiconsIcon 
+                      icon={p.micMuted ? MicOff01Icon : Mic01Icon} 
+                      size={18} 
+                      color="#FFFFFF" 
+                    />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.pActionBtn, { backgroundColor: colors.card }, p.hidden && { backgroundColor: colors.danger }]} activeOpacity={0.7} onPress={() => toggleHidden(p.id)}>
-                    <Feather name={p.hidden ? 'eye-off' : 'eye'} size={16} color={p.hidden ? colors.background : colors.textSecondary} />
+                  <TouchableOpacity 
+                    style={[styles.pActionBtn, p.hidden ? { backgroundColor: '#E14F4F' } : { backgroundColor: '#222222' }]} 
+                    activeOpacity={0.7} 
+                    onPress={() => toggleHidden(p.id)}
+                  >
+                    <HugeiconsIcon 
+                      icon={UnavailableIcon} 
+                      size={18} 
+                      color="#FFFFFF" 
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -542,7 +552,14 @@ const styles = StyleSheet.create({
   participantAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
   participantName: { fontSize: 14, fontWeight: '600', flex: 1 },
   participantActions: { flexDirection: 'row', gap: 10 },
-  pActionBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
+  pActionBtn: { 
+    width: 38, 
+    height: 38, 
+    borderRadius: 8, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginLeft: 10 
+  },
 
   /* Bottom Bar */
   bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, gap: 10 },
