@@ -97,12 +97,8 @@ const VibeTab = () => {
               style={[
                 styles.ovalCard,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(142, 84, 233, 0.05)"
-                    : "rgba(142, 84, 233, 0.02)",
-                  borderColor: isDark
-                    ? "rgba(142, 84, 233, 0.3)"
-                    : "rgba(142, 84, 233, 0.15)",
+                  backgroundColor:"#0D0D25",
+                  borderColor: "#AC86D4"
                 },
               ]}
             >
@@ -126,19 +122,8 @@ const VibeTab = () => {
               </TouchableOpacity>
 
               {room.isHost && (
-                <View
-                  style={[
-                    styles.hostBadge,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255, 255, 255, 0.1)"
-                        : "rgba(0, 0, 0, 0.05)",
-                    },
-                  ]}
-                >
-                  <Text style={[styles.hostBadgeText, { color: colors.text }]}>
-                    Host
-                  </Text>
+                <View style={styles.hostBadge}>
+                  <Text style={styles.hostBadgeText}>Host</Text>
                 </View>
               )}
 
@@ -431,9 +416,6 @@ const styles = StyleSheet.create({
     aspectRatio: 0.55,
     borderRadius: 50,
     borderWidth: 1,
-    borderColor: "#AC86D4", 
-    backgroundColor: "rgba(172, 134, 212, 0.08)",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 18,
     paddingHorizontal: 8,
@@ -459,22 +441,25 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   hostBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginBottom: 12,
+    paddingVertical: 2,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#AC86D4",
+    marginTop: 10,
+    alignSelf: "center",
   },
   hostBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#AC86D4",
   },
   joinBtn: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 12,
-    width: "100%",
+    width: 10,
     alignItems: "center",
   },
   joinBtnText: {
