@@ -385,8 +385,8 @@ export default function EventDetailsScreen() {
                 <Text style={[styles.allowAllTitle, { color: colors.text }]}>Allow all participants to speak</Text>
                 <Text style={[styles.allowAllSub, { color: colors.textSecondary }]}>You can manually mute individual person as you want</Text>
               </View>
-              <View style={[styles.checkbox, { borderColor: colors.border }, allowAll && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                {allowAll && <Feather name="check" size={14} color={colors.background} />}
+              <View style={[styles.checkbox, allowAll && styles.checkboxActive]}>
+                {allowAll && <Feather name="check" size={16} color="#000000" />}
               </View>
             </TouchableOpacity>
 
@@ -542,12 +542,28 @@ const styles = StyleSheet.create({
   chatMore: { paddingLeft: 8, paddingTop: 4 },
 
   /* Permission */
-  permissionContainer: { paddingHorizontal: 16, paddingTop: 12 },
-  allowAllRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  permissionContainer: { paddingHorizontal: 16, paddingTop: 16 },
+  allowAllRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#1C1C1E', 
+    borderRadius: 20, 
+    padding: 22, 
+    marginBottom: 32 
+  },
   allowAllTextCol: { flex: 1 },
-  allowAllTitle: { fontSize: 14, fontWeight: '600', marginBottom: 3 },
-  allowAllSub: { fontSize: 12, lineHeight: 17 },
-  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
+  allowAllTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  allowAllSub: { fontSize: 13, color: '#8E8E9B', lineHeight: 18 },
+  checkbox: { 
+    width: 26, 
+    height: 26, 
+    borderRadius: 6, 
+    backgroundColor: '#333333', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginLeft: 12 
+  },
+  checkboxActive: { backgroundColor: '#B2ABBA' },
   participantRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   participantAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
   participantName: { fontSize: 14, fontWeight: '600', flex: 1 },
