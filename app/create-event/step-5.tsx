@@ -140,7 +140,7 @@ export default function CreateEventStep5() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 10,
+    paddingTop: 20,
   },
   header: {
     flexDirection: 'row',

@@ -1,11 +1,13 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert, Platform, SafeAreaView, ScrollView, StatusBar,
+    Alert, Platform, ScrollView, StatusBar,
     StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/hooks/useTheme';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 /* ─── Fake Event / Friends Dropdown Data ─── */
 const EVENTS = ['Rooftop Session Vol 4', 'Summer Fest 2026', 'Underground Beats', 'Jazz Night'];
@@ -19,14 +21,52 @@ export default function CreatePlanScreen() {
   const isEdit = params.mode === 'edit';
 
   const [name, setName] = useState(params.planName || '');
-  const [date, setDate] = useState(params.planDate || 'Sep 9, 2026');
-  const [time, setTime] = useState(params.planTime || '10:00 AM');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(params.planEvent || '');
   const [selectedLocation, setSelectedLocation] = useState('123, Main Street NYC');
   const [selectedFriends, setSelectedFriends] = useState(params.planFriends || '');
   const [showEventDropdown, setShowEventDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showFriendsDropdown, setShowFriendsDropdown] = useState(false);
+
+  const onDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) {
+      const newDate = new Date(selectedDate);
+      newDate.setFullYear(date.getFullYear());
+      newDate.setMonth(date.getMonth());
+      newDate.setDate(date.getDate());
+      setSelectedDate(newDate);
+    }
+  };
+
+  const onTimeChange = (event: any, time?: Date) => {
+    setShowTimePicker(false);
+    if (time) {
+      const newDate = new Date(selectedDate);
+      newDate.setHours(time.getHours());
+      newDate.setMinutes(time.getMinutes());
+      setSelectedDate(newDate);
+    }
+  };
+
+  const formatDate = (d: Date) => {
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (d: Date) => {
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
 
   const handleDone = () => {
     if (!name.trim()) {
@@ -36,7 +76,14 @@ export default function CreatePlanScreen() {
     // Navigate to Map Selection screen
     router.push({
       pathname: '/plan-screen/map-selection' as any,
-      params: { planName: name, planDate: date, planTime: time, planEvent: selectedEvent, planFriends: selectedFriends, planLocation: selectedLocation },
+      params: { 
+        planName: name, 
+        planDate: formatDate(selectedDate), 
+        planTime: formatTime(selectedDate), 
+        planEvent: selectedEvent, 
+        planFriends: selectedFriends, 
+        planLocation: selectedLocation 
+      },
     });
   };
 
@@ -74,31 +121,50 @@ export default function CreatePlanScreen() {
         <View style={styles.dateTimeRow}>
           <View style={styles.dateCol}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
-            <TouchableOpacity style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
-              <Feather name="calendar" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
-              <TextInput
-                style={[styles.textInput, { color: colors.text, flex: 1 }]}
-                value={date}
-                onChangeText={setDate}
-                placeholderTextColor={colors.textSecondary}
-                placeholder="Date"
-              />
+            <TouchableOpacity 
+              style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} 
+              activeOpacity={0.8}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={{ color: colors.text, fontSize: 14 }}>
+                {formatDate(selectedDate)}
+              </Text>
             </TouchableOpacity>
           </View>
           <View style={styles.timeCol}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>TIME</Text>
-            <TouchableOpacity style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
-              <Feather name="clock" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
-              <TextInput
-                style={[styles.textInput, { color: colors.text, flex: 1 }]}
-                value={time}
-                onChangeText={setTime}
-                placeholderTextColor={colors.textSecondary}
-                placeholder="Time"
-              />
+            <TouchableOpacity 
+              style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} 
+              activeOpacity={0.8}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={{ color: colors.text, fontSize: 14 }}>
+                {formatTime(selectedDate)}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+          />
+        )}
+
+        {showTimePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour={false}
+            onChange={onTimeChange}
+          />
+        )}
 
         {/* ── Event Selector ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>EVENT</Text>

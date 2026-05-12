@@ -141,7 +141,7 @@ export default function CreateEventScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 70,
+    paddingTop: 20,
   },
   header: {
     flexDirection: 'row',

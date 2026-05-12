@@ -4,17 +4,18 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Platform,
   StatusBar,
   Modal,
   ScrollView,
   TouchableWithoutFeedback,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CreateEventStep2() {
   const router = useRouter();
@@ -22,6 +23,46 @@ export default function CreateEventStep2() {
   const [selectedAge, setSelectedAge] = useState('All Ages');
   const [isCategorySheetVisible, setIsCategorySheetVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const newDate = new Date(date);
+      newDate.setFullYear(selectedDate.getFullYear());
+      newDate.setMonth(selectedDate.getMonth());
+      newDate.setDate(selectedDate.getDate());
+      setDate(newDate);
+    }
+  };
+
+  const onTimeChange = (event: any, selectedTime?: Date) => {
+    setShowTimePicker(false);
+    if (selectedTime) {
+      const newDate = new Date(date);
+      newDate.setHours(selectedTime.getHours());
+      newDate.setMinutes(selectedTime.getMinutes());
+      setDate(newDate);
+    }
+  };
+
+  const formatDate = (d: Date) => {
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (d: Date) => {
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
 
   const ageOptions = ['All Ages', '18+', '21+'];
   const categories = [
@@ -103,20 +144,45 @@ export default function CreateEventStep2() {
         <View style={styles.row}>
           <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
-            <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card }]}>
+            <TouchableOpacity 
+              style={[styles.selector, { backgroundColor: colors.card }]}
+              onPress={() => setShowDatePicker(true)}
+            >
               <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>Sep 9, 2026</Text>
+              <Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(date)}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>TIME</Text>
-            <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card }]}>
+            <TouchableOpacity 
+              style={[styles.selector, { backgroundColor: colors.card }]}
+              onPress={() => setShowTimePicker(true)}
+            >
               <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>10:00 AM</Text>
+              <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(date)}</Text>
             </TouchableOpacity>
           </View>
         </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+          />
+        )}
+
+        {showTimePicker && (
+          <DateTimePicker
+            value={date}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour={false}
+            onChange={onTimeChange}
+          />
+        )}
       </View>
 
       {/* Spacer to push footer down */}
@@ -189,7 +255,7 @@ export default function CreateEventStep2() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 70,
+    paddingTop: 20,
   },
   header: {
     flexDirection: 'row',

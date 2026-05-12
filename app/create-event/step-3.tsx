@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   Platform,
   StatusBar,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CreateEventStep3() {
   const router = useRouter();
@@ -97,7 +97,7 @@ export default function CreateEventStep3() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 70,
+    paddingTop: 20,
   },
   header: {
     flexDirection: 'row',
