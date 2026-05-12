@@ -14,6 +14,7 @@ import { useTheme } from '@/hooks/useTheme';
 import BackButton from '@/components/ui/BackButton';
 import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DRAFT_EVENTS = [
   {
@@ -50,7 +51,7 @@ const DRAFT_EVENTS = [
 
 const DraftCard = ({ event, colors, onPress }: { event: any; colors: any; onPress: () => void }) => (
   <TouchableOpacity 
-    style={[styles.card, { backgroundColor: '#1A1A1A' }]} 
+    style={[styles.card, { backgroundColor: colors.card }]} 
     activeOpacity={0.7}
     onPress={onPress}
   >
@@ -69,10 +70,11 @@ const DraftCard = ({ event, colors, onPress }: { event: any; colors: any; onPres
 
 export default function EventDraftsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 10 }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       
       <View style={styles.header}>
@@ -94,14 +96,13 @@ export default function EventDraftsScreen() {
           />
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 40,
   },
   header: {
     flexDirection: 'row',
