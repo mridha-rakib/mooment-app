@@ -107,7 +107,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               colors={colors}
               onPress={() => {
                 onClose();
-                router.push('/event-screen/event');
+                router.push('/event-screen/event-drafts');
               }}
             />
             <MenuItem 

@@ -44,11 +44,11 @@ export default function LiveChatBanner({ contextBold, contextNormal, title, list
                   />
                 ))}
               </View>
-              <Text style={styles.listeningText}>{listeningCount} listening</Text>
+              <Text style={styles.listeningText}>{listeningCount}listening</Text>
             </View>
           </View>
-          <TouchableOpacity 
-            style={styles.joinBtn} 
+          <TouchableOpacity
+            style={styles.joinBtn}
             activeOpacity={0.8}
             onPress={() => router.push('/live-screen/live-room' as any)}
           >
