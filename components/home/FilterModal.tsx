@@ -1,3 +1,4 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import LocationSearchModal from '@/components/post/LocationSearchModal';
 import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
@@ -18,6 +19,9 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
   const [activeAge, setActiveAge] = useState('All Ages');
   const [activePrice, setActivePrice] = useState('Free');
   const [activeTime, setActiveTime] = useState('Morning');
+  
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [hashtags, setHashtags] = useState('#summer #party');
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
@@ -42,6 +46,24 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
       let percent = Math.max(0, Math.min(1, x / trackWidth));
       setRadius(Math.round(percent * 200));
     }
+  };
+
+  const handleDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) {
+      setSelectedDate(date);
+    }
+  };
+
+  const handleReset = () => {
+    setActiveAge('All Ages');
+    setActivePrice('Free');
+    setActiveTime('Morning');
+    setSelectedDate(null);
+    setHashtags('');
+    setUseCurrentLocation(true);
+    setSelectedLocation('Los Angeles, CA');
+    setRadius(75);
   };
 
   const renderPills = (options: string[], active: string, onSelect: (val: string) => void) => {
@@ -76,7 +98,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
               <Feather name="x" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Filter</Text>
-            <TouchableOpacity onPress={() => { }}>
+            <TouchableOpacity onPress={handleReset}>
               <Text style={[styles.resetText, { color: colors.primary }]}>Reset</Text>
             </TouchableOpacity>
           </View>
@@ -100,10 +122,25 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
               {renderPills(TIME_OPTIONS, activeTime, setActiveTime)}
 
-              <TouchableOpacity style={[styles.inputBox, { backgroundColor: colors.card }]} activeOpacity={0.8}>
+              <TouchableOpacity 
+                style={[styles.inputBox, { backgroundColor: colors.card }]} 
+                activeOpacity={0.8}
+                onPress={() => setShowDatePicker(true)}
+              >
                 <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>Pick a date range</Text>
+                <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
+                  {selectedDate ? selectedDate.toLocaleDateString() : 'Pick a date'}
+                </Text>
               </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={selectedDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleDateChange}
+                />
+              )}
             </View>
 
             {/* Hashtags */}
