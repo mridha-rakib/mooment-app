@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, SafeAreaView, Platform, ScrollView, Switch, PanResponder, StatusBar } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
 import LocationSearchModal from '@/components/post/LocationSearchModal';
 import { useTheme } from '@/hooks/useTheme';
+import { Feather } from '@expo/vector-icons';
+import React, { useRef, useState } from 'react';
+import { Modal, PanResponder, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export type FilterModalProps = {
   visible: boolean;
@@ -18,10 +18,10 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
   const [activeAge, setActiveAge] = useState('All Ages');
   const [activePrice, setActivePrice] = useState('Free');
   const [activeTime, setActiveTime] = useState('Morning');
-  
+
   const [hashtags, setHashtags] = useState('#summer #party');
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
-  
+
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState('Los Angeles, CA');
 
@@ -50,7 +50,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
         {options.map(opt => {
           const isActive = active === opt;
           return (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={opt}
               style={[styles.pill, { borderColor: colors.border }, isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               onPress={() => onSelect(opt)}
@@ -69,20 +69,20 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.container}>
-          
+
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.card }]}>
               <Feather name="x" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Filter</Text>
-            <TouchableOpacity onPress={() => {}}>
+            <TouchableOpacity onPress={() => { }}>
               <Text style={[styles.resetText, { color: colors.primary }]}>Reset</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            
+
             {/* Age Restrictions */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Age Restrictions</Text>
@@ -99,7 +99,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
               {renderPills(TIME_OPTIONS, activeTime, setActiveTime)}
-              
+
               <TouchableOpacity style={[styles.inputBox, { backgroundColor: colors.card }]} activeOpacity={0.8}>
                 <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
                 <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>Pick a date range</Text>
@@ -110,7 +110,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Hashtags</Text>
               <View style={[styles.inputBox, { backgroundColor: colors.card }]}>
-                <TextInput 
+                <TextInput
                   style={[styles.inputText, { color: colors.text }]}
                   value={hashtags}
                   onChangeText={setHashtags}
@@ -122,9 +122,9 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
             {/* Location */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
-              
-              <TouchableOpacity 
-                style={[styles.inputBox, styles.locationSearchBox, { borderColor: colors.border }]} 
+
+              <TouchableOpacity
+                style={[styles.inputBox, styles.locationSearchBox, { borderColor: colors.border }]}
                 activeOpacity={0.8}
                 onPress={() => setLocationSearchVisible(true)}
               >
@@ -142,8 +142,8 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
                   <Feather name="target" size={16} color={colors.textSecondary} style={styles.inputIcon} />
                   <Text style={[styles.inputText, { color: colors.text }]}>Current Location</Text>
                 </View>
-                <Switch 
-                  value={useCurrentLocation} 
+                <Switch
+                  value={useCurrentLocation}
                   onValueChange={setUseCurrentLocation}
                   trackColor={{ false: isDark ? '#3A3A44' : '#E0E0E0', true: colors.primary }}
                   thumbColor="#FFFFFF"
@@ -156,7 +156,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
                   <Text style={[styles.inputText, { color: colors.text }]}>Radius</Text>
                   <Text style={[styles.radiusValueText, { color: colors.primary }]}>{radius} miles</Text>
                 </View>
-                <View 
+                <View
                   style={[styles.sliderTrack, { backgroundColor: isDark ? '#3A3A44' : '#E0E0E0' }]}
                   onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
                   {...panResponder.panHandlers}
@@ -187,8 +187,8 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
         </View>
       </SafeAreaView>
 
-      <LocationSearchModal 
-        visible={locationSearchVisible} 
+      <LocationSearchModal
+        visible={locationSearchVisible}
         onClose={() => setLocationSearchVisible(false)}
         onSelectLocation={(loc) => setSelectedLocation(loc)}
       />
@@ -240,6 +240,7 @@ const styles = StyleSheet.create({
   pillContainer: {
     flexDirection: 'row',
     gap: 10,
+    paddingRight: 60,
   },
   pill: {
     paddingHorizontal: 16,
