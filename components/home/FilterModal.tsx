@@ -1,7 +1,7 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
 import LocationSearchModal from '@/components/post/LocationSearchModal';
 import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useRef, useState } from 'react';
 import { Modal, PanResponder, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -19,7 +19,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
   const [activeAge, setActiveAge] = useState('All Ages');
   const [activePrice, setActivePrice] = useState('Free');
   const [activeTime, setActiveTime] = useState('Morning');
-  
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -122,8 +122,8 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
               {renderPills(TIME_OPTIONS, activeTime, setActiveTime)}
 
-              <TouchableOpacity 
-                style={[styles.inputBox, { backgroundColor: colors.card }]} 
+              <TouchableOpacity
+                style={[styles.inputBox, { backgroundColor: colors.card }]}
                 activeOpacity={0.8}
                 onPress={() => setShowDatePicker(true)}
               >
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 50,
     height: 56,
     marginTop: 12,
   },
