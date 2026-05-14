@@ -8,32 +8,32 @@ const { width, height } = Dimensions.get('window');
 const HOME_MAP_MARKERS: MapMarkerData[] = [
   { 
     id: 'h1', 
-    top: height * 0.22, 
-    left: width * 0.15, 
+    latitude: 40.73061,
+    longitude: -73.935242,
     image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
     label: "Rooftop\nSession\nVol4.",
     glowColor: '#8E54E9'
   },
   { 
     id: 'h2', 
-    top: height * 0.32, 
-    right: width * 0.2, 
+    latitude: 40.748817,
+    longitude: -73.985428,
     image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
     label: "Rooftop\nSession\nVol4.",
     glowColor: '#16a34a'
   },
   { 
     id: 'h3', 
-    top: height * 0.48, 
-    left: width * 0.15, 
+    latitude: 40.712776,
+    longitude: -74.005974,
     image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
     label: "Rooftop\nSession\nVol4.",
     glowColor: '#8E54E9'
   },
   { 
     id: 'h4', 
-    top: height * 0.52, 
-    right: width * 0.1, 
+    latitude: 40.706086,
+    longitude: -73.996864,
     image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
     label: "Rooftop\nSession\nVol4.",
     glowColor: '#D44343'

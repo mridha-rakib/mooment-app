@@ -1,4 +1,5 @@
 import { useTheme } from "@/hooks/useTheme";
+import Mapbox from "@rnmapbox/maps";
 import React, { useState } from "react";
 import {
   Dimensions,
@@ -11,13 +12,18 @@ import {
 } from "react-native";
 import EventPreviewModal from "./EventPreviewModal";
 
+// Set Mapbox Access Token
+// Mapbox access token should match the account used for the download token
+const MAPBOX_PUBLIC_TOKEN = "***REMOVED***";
+const MOOMENT_MAPBOX_PUBLIC_TOKEN = "***REMOVED***";
+Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+
 const { width, height } = Dimensions.get("window");
 
 export type MapMarkerData = {
   id: string;
-  top: number;
-  left?: number;
-  right?: number;
+  latitude: number;
+  longitude: number;
   image: string;
   label: string;
   glowColor: string;
@@ -30,17 +36,13 @@ type MapScreenProps = {
 };
 
 const MapMarker = ({
-  top,
-  left,
-  right,
+  coordinate,
   image,
   label,
   glowColor = "#D4B0EB",
   onPress,
 }: {
-  top: number;
-  left?: number;
-  right?: number;
+  coordinate: [number, number];
   image: string;
   label: string;
   glowColor: string;
@@ -48,12 +50,12 @@ const MapMarker = ({
 }) => {
   const { colors } = useTheme();
   return (
-    <TouchableOpacity
-      style={[styles.markerContainer, { top, left, right }]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View style={styles.markerContent}>
+    <Mapbox.MarkerView coordinate={coordinate}>
+      <TouchableOpacity
+        style={styles.markerContent}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
         {/* Soft Gradient Glow Layers */}
         <View
           style={[
@@ -101,8 +103,8 @@ const MapMarker = ({
             </Text>
           </View>
         )}
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Mapbox.MarkerView>
   );
 };
 
@@ -114,6 +116,10 @@ export default function MapScreen({
   const { colors, isDark } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
+
+  React.useEffect(() => {
+    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+  }, []);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
   const categories = [
@@ -179,29 +185,35 @@ export default function MapScreen({
 
       {/* Map Content Area */}
       <View style={styles.mapArea}>
-        {/* Map Background */}
-        <Image source={MAP_BG} style={styles.mapImage} resizeMode="cover" />
-
-        {/* Markers */}
-        {markers.map((marker) => (
-          <MapMarker
-            key={marker.id}
-            {...marker}
-            onPress={() => handleMarkerPress(marker.glowColor)}
-          />
-        ))}
-
-        {/* Current Location Blue Dot */}
-        <View
-          style={[
-            styles.markerContainer,
-            { top: height * 0.43, left: width * 0.48 },
-          ]}
+        <Mapbox.MapView
+          style={styles.map}
+          styleURL={isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+          logoEnabled={false}
+          attributionEnabled={false}
         >
-          <View style={styles.currentLocationOuter}>
-            <View style={styles.currentLocationInner} />
-          </View>
-        </View>
+          <Mapbox.Camera
+            zoomLevel={12}
+            centerCoordinate={
+              markers.length > 0
+                ? [markers[0].longitude, markers[0].latitude]
+                : [-73.935242, 40.73061]
+            }
+          />
+
+          {/* Markers */}
+          {markers.map((marker) => (
+            <MapMarker
+              key={marker.id}
+              coordinate={[marker.longitude, marker.latitude]}
+              image={marker.image}
+              label={marker.label}
+              glowColor={marker.glowColor}
+              onPress={() => handleMarkerPress(marker.glowColor)}
+            />
+          ))}
+
+          <Mapbox.UserLocation visible={true} />
+        </Mapbox.MapView>
       </View>
 
       {/* Event Preview Modal */}
@@ -218,9 +230,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  mapImage: {
-    width: "100%",
-    height: "100%",
+  map: {
+    flex: 1,
   },
   markerContainer: {
     position: "absolute",
@@ -247,9 +258,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 2,
   },
-  markerImage: {
+  markerImageContainer: {
     width: "100%",
     height: "100%",
+  },
+  markerImage: {
+    width: 56,
+    height: 56,
   },
   labelContainer: {
     position: "absolute",
@@ -289,12 +304,13 @@ const styles = StyleSheet.create({
   topHeader: {
     width: "100%",
     zIndex: 10,
-    backgroundColor: "#0e0d12",
+    backgroundColor: "#000000",
     paddingBottom: 10,
   },
   mapArea: {
     flex: 1,
     overflow: "hidden",
+    backgroundColor: "#1a1a1a", // Fallback color to see if mapArea is rendering
   },
   headerRow: {
     flexDirection: "row",
