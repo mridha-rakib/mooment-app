@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, View, StatusBar } from "react-native";
+import { ScrollView, StyleSheet, View, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import type { MomentInteractionSummary } from "@/lib/moments";
 import CommentsModal from "../post/CommentsModal";
 import { PostData } from "../post/FeedPost";
 import ShareModal from "../post/ShareModal";
@@ -26,13 +28,25 @@ type ProfileViewProps = {
   user: UserProfileData;
   posts: PostData[];
   isOwnProfile?: boolean;
+  onRepost?: (post: PostData) => Promise<void> | void;
+  onDeletePost?: (post: PostData) => void;
+  onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
 };
 
-export default function ProfileView({ user, posts, isOwnProfile = true }: ProfileViewProps) {
+export default function ProfileView({
+  user,
+  posts,
+  isOwnProfile = true,
+  onRepost,
+  onDeletePost,
+  onInteractionChange,
+}: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
+  const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
+  const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [addProductVisible, setAddProductVisible] = useState(false);
 
@@ -59,16 +73,73 @@ export default function ProfileView({ user, posts, isOwnProfile = true }: Profil
         <ProfileContent 
           activeTab={activeTab} 
           posts={posts} 
-          onCommentPress={() => setCommentsVisible(true)}
-          onSharePress={() => setShareVisible(true)}
+          onCommentPress={(post) => {
+            setSelectedCommentPost(post);
+            setCommentsVisible(true);
+          }}
+          onSharePress={(post) => {
+            setSelectedSharePost(post);
+            setShareVisible(true);
+          }}
+          onDeletePost={onDeletePost}
+          onInteractionChange={(postId, summary) => {
+            onInteractionChange?.(postId, summary);
+            setSelectedCommentPost((currentPost) => (
+              currentPost?.id === postId
+                ? {
+                    ...currentPost,
+                    likesCount: summary.likesCount,
+                    commentsCount: summary.commentsCount,
+                    sharesCount: summary.sharesCount,
+                    isLiked: summary.isLiked,
+                  }
+                : currentPost
+            ));
+          }}
           isOwnProfile={isOwnProfile}
         />
         
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <CommentsModal visible={commentsVisible} onClose={() => setCommentsVisible(false)} />
-      <ShareModal visible={shareVisible} onClose={() => setShareVisible(false)} />
+      <CommentsModal
+        visible={commentsVisible}
+        onClose={() => {
+          setCommentsVisible(false);
+          setSelectedCommentPost(null);
+        }}
+        momentId={selectedCommentPost?.id}
+        likesCount={selectedCommentPost?.likesCount ?? 0}
+        sharesCount={selectedCommentPost?.sharesCount ?? 0}
+        onInteractionChange={(summary) => {
+          onInteractionChange?.(summary.momentId, summary);
+          setSelectedCommentPost((currentPost) => (
+            currentPost?.id === summary.momentId
+              ? {
+                  ...currentPost,
+                  likesCount: summary.likesCount,
+                  commentsCount: summary.commentsCount,
+                  sharesCount: summary.sharesCount,
+                  isLiked: summary.isLiked,
+                }
+              : currentPost
+          ));
+        }}
+      />
+      <ShareModal
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        onRepost={
+          selectedSharePost && onRepost
+            ? async () => {
+                await onRepost(selectedSharePost);
+                setShareVisible(false);
+                setSelectedSharePost(null);
+              }
+            : undefined
+        }
+        shareUrl={selectedSharePost ? `https://mooment.app/moments/${selectedSharePost.id}` : undefined}
+      />
       
       <ProfileMenuDrawer 
         visible={menuVisible} 

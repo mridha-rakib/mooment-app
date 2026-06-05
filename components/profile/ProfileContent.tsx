@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet, View, Text } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
+import type { MomentInteractionSummary } from "@/lib/moments";
 import FeedPost, { PostData } from "../post/FeedPost";
 import ProfileEvents from "./ProfileEvents";
 import ProfileShop from "./ProfileShop";
@@ -9,8 +10,10 @@ import { ProfileTabType } from "./ProfileTabs";
 type ProfileContentProps = {
   activeTab: ProfileTabType;
   posts: PostData[];
-  onCommentPress: () => void;
-  onSharePress: () => void;
+  onCommentPress: (post: PostData) => void;
+  onSharePress: (post: PostData) => void;
+  onDeletePost?: (post: PostData) => void;
+  onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   isOwnProfile?: boolean;
 };
 
@@ -19,6 +22,8 @@ export default function ProfileContent({
   posts, 
   onCommentPress, 
   onSharePress,
+  onDeletePost,
+  onInteractionChange,
   isOwnProfile = true 
 }: ProfileContentProps) {
   const { colors } = useTheme();
@@ -33,6 +38,8 @@ export default function ProfileContent({
               post={post} 
               onCommentPress={onCommentPress} 
               onSharePress={onSharePress} 
+              onDeletePress={onDeletePost}
+              onInteractionChange={onInteractionChange}
               isOwnPost={isOwnProfile}
             />
           ))
@@ -46,14 +53,16 @@ export default function ProfileContent({
       {activeTab === 'events' && (
         <ProfileEvents 
           onCommentPress={onCommentPress} 
-          onSharePress={onSharePress} 
+          onSharePress={onSharePress}
+          isOwnProfile={isOwnProfile}
         />
       )}
       
       {activeTab === 'shop' && (
         <ProfileShop 
           onCommentPress={onCommentPress} 
-          onSharePress={onSharePress} 
+          onSharePress={onSharePress}
+          isOwnProfile={isOwnProfile}
         />
       )}
     </View>

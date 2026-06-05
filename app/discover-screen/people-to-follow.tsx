@@ -1,8 +1,9 @@
-import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { followUser, getSuggestedUsers, unfollowUser } from '@/lib/users';
 import Svg, { Path } from 'react-native-svg';
 
 const CheckIcon = () => (
@@ -23,12 +24,85 @@ const INITIAL_USERS = [
   { id: '3', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop', isFollowing: false },
 ];
 
-export default function PeopleToFollowScreen() {
-  const router = useRouter();
-  const [users, setUsers] = useState(INITIAL_USERS);
+const FALLBACK_AVATARS = INITIAL_USERS.map((user) => user.avatar);
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
-  const toggleFollow = (id: string) => {
-    setUsers(users.map(u => u.id === id ? { ...u, isFollowing: !u.isFollowing } : u));
+export default function PeopleToFollowScreen() {
+  const [users, setUsers] = useState(INITIAL_USERS);
+  const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUsers = async () => {
+      try {
+        const suggestedUsers = await getSuggestedUsers(50);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setUsers(suggestedUsers.map((user, index) => ({
+          id: user.id,
+          name: user.name,
+          handle: user.username ? `@${user.username}` : '@xenog',
+          avatar: user.avatarUrl ?? FALLBACK_AVATARS[index % FALLBACK_AVATARS.length],
+          isFollowing: user.isFollowing,
+        })));
+      } catch {
+        if (isMounted) {
+          setUsers(INITIAL_USERS);
+        }
+      }
+    };
+
+    void loadUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const toggleFollow = async (id: string) => {
+    if (pendingUserIds.includes(id)) {
+      return;
+    }
+
+    const user = users.find((item) => item.id === id);
+
+    if (!user) {
+      return;
+    }
+
+    const wasFollowing = user.isFollowing;
+
+    setUsers((current) => current.map((item) => (
+      item.id === id ? { ...item, isFollowing: !wasFollowing } : item
+    )));
+
+    if (!MONGO_OBJECT_ID_PATTERN.test(id)) {
+      return;
+    }
+
+    setPendingUserIds((current) => [...current, id]);
+
+    try {
+      const follow = wasFollowing ? await unfollowUser(id) : await followUser(id);
+
+      setUsers((current) => current.map((item) => (
+        item.id === id ? { ...item, isFollowing: follow.isFollowing } : item
+      )));
+    } catch (error) {
+      setUsers((current) => current.map((item) => (
+        item.id === id ? { ...item, isFollowing: wasFollowing } : item
+      )));
+      Alert.alert(
+        wasFollowing ? 'Unable to unfollow' : 'Unable to follow',
+        getAuthErrorMessage(error, 'Please try again.'),
+      );
+    } finally {
+      setPendingUserIds((current) => current.filter((userId) => userId !== id));
+    }
   };
 
   return (
@@ -56,6 +130,7 @@ export default function PeopleToFollowScreen() {
                 <TouchableOpacity
                   style={[styles.followBtn, user.isFollowing && styles.followingBtn]}
                   activeOpacity={0.8}
+                  disabled={pendingUserIds.includes(user.id)}
                   onPress={() => toggleFollow(user.id)}
                 >
                   {user.isFollowing && <CheckIcon />}

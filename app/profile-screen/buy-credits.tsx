@@ -1,8 +1,8 @@
 import BackButton from "@/components/ui/BackButton";
+import { getMoomentCreditPackages } from "@/lib/moomentCredits";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 const CREDIT_PACKAGES = [
@@ -13,9 +13,35 @@ const CREDIT_PACKAGES = [
   { id: '5', credits: 500, price: '$525.00' },
 ];
 
+const formatCreditPrice = (priceUsd: number) => `$${priceUsd.toFixed(2)}`;
+
 export default function BuyCreditsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const [creditPackages, setCreditPackages] = useState(CREDIT_PACKAGES);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMoomentCreditPackages()
+      .then((packages) => {
+        if (!isMounted || packages.length === 0) {
+          return;
+        }
+
+        setCreditPackages(
+          packages.map((pkg) => ({
+            id: pkg.id,
+            credits: pkg.credits,
+            price: formatCreditPrice(pkg.priceUsd),
+          })),
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <View style={styles.safe}>
@@ -27,7 +53,7 @@ export default function BuyCreditsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {CREDIT_PACKAGES.map((pkg) => (
+        {creditPackages.map((pkg) => (
           <View key={pkg.id} style={styles.packageCard}>
             <Svg width="44" height="44" viewBox="0 0 44 44" fill="none" style={{ marginBottom: 16 }}>
               <Path d="M0 12C0 5.37258 5.37258 0 12 0H32C38.6274 0 44 5.37258 44 12V32C44 38.6274 38.6274 44 32 44H12C5.37258 44 0 38.6274 0 32V12Z" fill="#686868" fillOpacity={0.1} />
@@ -40,7 +66,10 @@ export default function BuyCreditsScreen() {
               <Text style={styles.priceText}>{pkg.price}</Text>
               <TouchableOpacity
                 style={styles.buyBtn}
-                onPress={() => router.push('/profile-screen/checkout')}
+                onPress={() => router.push({
+                  pathname: '/profile-screen/checkout',
+                  params: { packageId: pkg.id },
+                } as any)}
               >
                 <Text style={styles.buyBtnText}>Buy</Text>
               </TouchableOpacity>

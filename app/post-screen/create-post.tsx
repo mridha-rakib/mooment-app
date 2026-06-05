@@ -1,93 +1,225 @@
 import AudiencePickerModal from '@/components/post/AudiencePickerModal';
 import EventPickerModal from '@/components/post/EventPickerModal';
 import PeopleTagModal from '@/components/post/PeopleTagModal';
-import { Feather } from '@expo/vector-icons';
-import { AddTeamIcon, Image01Icon, MusicNote04Icon, Video02Icon } from '@hugeicons/core-free-icons';
+import {
+  Feather } from '@expo/vector-icons';
+import { AddTeamIcon,
+  Image01Icon,
+  MusicNote04Icon,
+  Video02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { BlurView } from 'expo-blur';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions } from 'expo-camera';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { VideoView,
+  useVideoPlayer } from 'expo-video';
+import React,
+  { useEffect,
+  useRef,
+  useState } from 'react';
 import {
-  Alert, Dimensions, Image, Modal, Platform,
-  SafeAreaView, ScrollView, StatusBar, StyleSheet,
-  Text, TextInput, TouchableOpacity, View,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path, Rect } from 'react-native-svg';
 
-import BackButton from '@/components/ui/BackButton';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { createMoment } from '@/lib/moments';
+import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
+import { getStorageDownloadUrl, uploadFileToStorage } from '@/lib/storage';
+import { useAuthStore } from '@/stores/authStore';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const MOCK_EVENT = 'Roofstope Series Vol1.';
-
-// Gallery images for the picker sheet
-const GALLERY_ITEMS = [
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=400&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?q=80&w=400&auto=format&fit=crop',
-];
+const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop';
+const FALLBACK_AUTHOR_NAME = 'Mooment User';
+const MAX_MEDIA_ITEMS = 10;
+const CREATE_MOMENT_COLORS = {
+  background: '#0E0D12',
+  text: '#FFFFFF',
+  bodyText: '#B3B3B3',
+  muted: '#8E8E9B',
+  primary: '#B2ABBA',
+  primaryText: '#111111',
+  surface: 'rgba(104,104,104,0.10)',
+  surfaceBorder: 'rgba(255,255,255,0.10)',
+};
 
 type MomentMode = 'feed' | 'event';
+type SelectedMediaType = 'image' | 'video' | 'audio';
+type SelectedImageItem = {
+  id: string;
+  uri: string;
+  source: MomentMediaSource;
+  contentType: string;
+  name?: string | null;
+};
 
-// ── Gallery Picker Sheet ──────────────────────────────────────────────────
-function GalleryPickerSheet({
-  visible,
-  onClose,
-  onSelect,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSelect: (uri: string) => void;
-}) {
-  const { colors, isDark } = useTheme();
-  const ITEM = (width - 6) / 3;
+const normalizeAudience = (value: string): MomentAudience => {
+  if (value === 'Friends') {
+    return 'friends';
+  }
+
+  if (value === 'Only Me') {
+    return 'only_me';
+  }
+
+  return 'public';
+};
+
+const isRemoteUri = (uri: string) => /^https?:\/\//i.test(uri);
+
+const getMediaContentType = (uri: string, mediaType: SelectedMediaType, providedContentType?: string | null) => {
+  if (providedContentType) {
+    return providedContentType;
+  }
+
+  if (mediaType === 'audio') {
+    const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
+
+    if (normalizedUri.endsWith(".m4a") || normalizedUri.endsWith(".mp4")) {
+      return "audio/mp4";
+    }
+
+    if (normalizedUri.endsWith(".aac")) {
+      return "audio/aac";
+    }
+
+    if (normalizedUri.endsWith(".wav")) {
+      return "audio/wav";
+    }
+
+    if (normalizedUri.endsWith(".webm")) {
+      return "audio/webm";
+    }
+
+    if (normalizedUri.endsWith(".3gp")) {
+      return "audio/3gpp";
+    }
+
+    return 'audio/mpeg';
+  }
+
+  if (mediaType === 'video') {
+    const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
+
+    if (normalizedUri.endsWith(".mov")) {
+      return "video/quicktime";
+    }
+
+    if (normalizedUri.endsWith(".m4v")) {
+      return "video/x-m4v";
+    }
+
+    if (normalizedUri.endsWith(".webm")) {
+      return "video/webm";
+    }
+
+    if (normalizedUri.endsWith(".3gp")) {
+      return "video/3gpp";
+    }
+
+    return 'video/mp4';
+  }
+
+  const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
+
+  if (normalizedUri.endsWith(".png")) {
+    return "image/png";
+  }
+
+  return "image/jpeg";
+};
+
+const getMediaExtension = (contentType: string) => {
+  if (contentType === "image/png") {
+    return "png";
+  }
+
+  if (contentType === "video/mp4") {
+    return "mp4";
+  }
+
+  if (contentType === "video/quicktime") {
+    return "mov";
+  }
+
+  if (contentType === "video/webm") {
+    return "webm";
+  }
+
+  if (contentType === "video/3gpp") {
+    return "3gp";
+  }
+
+  if (contentType.startsWith("video/")) {
+    return contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "video";
+  }
+
+  if (contentType === "audio/mp4" || contentType === "audio/x-m4a" || contentType === "audio/aac") {
+    return "m4a";
+  }
+
+  if (contentType === "audio/webm") {
+    return "webm";
+  }
+
+  if (contentType === "audio/wav" || contentType === "audio/x-wav") {
+    return "wav";
+  }
+
+  if (contentType === "audio/3gpp") {
+    return "3gp";
+  }
+
+  if (contentType === "audio/mpeg") {
+    return "mp3";
+  }
+
+  if (contentType === "audio/ogg") {
+    return "ogg";
+  }
+
+  if (contentType.startsWith("audio/")) {
+    return contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "audio";
+  }
+
+  return "jpg";
+};
+
+function VideoPreview({ uri, style }: { uri: string; style: object }) {
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.loop = true;
+    videoPlayer.muted = true;
+  });
+
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
-      <View style={gStyles.overlay}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={[gStyles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border, borderTopWidth: isDark ? 0 : 1 }]}>
-          <View style={[gStyles.handle, { backgroundColor: colors.border }]} />
-          <View style={gStyles.sheetHeader}>
-            <Text style={[gStyles.sheetTitle, { color: colors.text }]}>Choose from Gallery</Text>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.8}>
-              <Feather name="x" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-          <View style={gStyles.grid}>
-            {GALLERY_ITEMS.map((uri, i) => (
-              <TouchableOpacity
-                key={i}
-                style={{ width: ITEM, height: ITEM }}
-                onPress={() => { onSelect(uri); onClose(); }}
-                activeOpacity={0.8}
-              >
-                <Image source={{ uri }} style={{ width: '100%', height: '100%' }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
-        </View>
-      </View>
-    </Modal>
+    <VideoView
+      player={player}
+      style={style}
+      nativeControls={false}
+      contentFit="cover"
+    />
   );
 }
-
-const gStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  sheetTitle: { fontWeight: 'bold', fontSize: 16 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, paddingHorizontal: 3 },
-});
 
 // ── Camera Sheet ──────────────────────────────────────────────────────────
 function CameraSheet({
@@ -97,13 +229,41 @@ function CameraSheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  onCapture: (uri: string) => void;
+  onCapture: (uri: string, contentType: string, name: string) => void;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   if (!permission) return null;
+
+  const capturePhoto = async () => {
+    if (isCapturing) {
+      return;
+    }
+
+    setIsCapturing(true);
+
+    try {
+      const photo = await cameraRef.current?.takePictureAsync({
+        quality: 0.9,
+        skipProcessing: false,
+      });
+
+      if (!photo?.uri) {
+        Alert.alert('Camera', 'No photo was captured. Please try again.');
+        return;
+      }
+
+      onCapture(photo.uri, 'image/jpeg', `Photo ${Date.now()}.jpg`);
+      onClose();
+    } catch (error) {
+      Alert.alert('Camera failed', getAuthErrorMessage(error, 'Please try taking the photo again.'));
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
@@ -120,14 +280,10 @@ function CameraSheet({
             {/* Capture button */}
             <View style={camStyles.captureRow}>
               <TouchableOpacity
-                style={camStyles.captureOuter}
+                style={[camStyles.captureOuter, isCapturing && camStyles.captureOuterDisabled]}
                 activeOpacity={0.9}
-                onPress={() => {
-                  // Simulate capture with a mock image since actual capture requires native build
-                  const mockUri = GALLERY_ITEMS[Math.floor(Math.random() * GALLERY_ITEMS.length)];
-                  onCapture(mockUri);
-                  onClose();
-                }}
+                onPress={capturePhoto}
+                disabled={isCapturing}
               >
                 <View style={camStyles.captureInner} />
               </TouchableOpacity>
@@ -147,6 +303,234 @@ function CameraSheet({
         )}
       </View>
     </Modal>
+  );
+}
+
+function VideoPickerSheet({
+  visible,
+  onClose,
+  onRecordVideo,
+  onPickVideo,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onRecordVideo: () => void;
+  onPickVideo: () => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+      <View style={videoPickerStyles.overlay}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={videoPickerStyles.sheet}>
+          <View style={videoPickerStyles.handle} />
+          <View style={videoPickerStyles.header}>
+            <View>
+              <Text style={videoPickerStyles.title}>Video</Text>
+              <Text style={videoPickerStyles.subtitle}>Record live or upload a saved video</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.8} style={videoPickerStyles.closeBtn}>
+              <Feather name="x" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={videoPickerStyles.optionButton} activeOpacity={0.86} onPress={onRecordVideo}>
+            <View style={videoPickerStyles.optionIcon}>
+              <Feather name="video" size={20} color={CREATE_MOMENT_COLORS.primary} />
+            </View>
+            <View style={videoPickerStyles.optionCopy}>
+              <Text style={videoPickerStyles.optionTitle}>Record with camera</Text>
+              <Text style={videoPickerStyles.optionMeta}>Use the live camera and microphone</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color={CREATE_MOMENT_COLORS.bodyText} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={videoPickerStyles.optionButton} activeOpacity={0.86} onPress={onPickVideo}>
+            <View style={videoPickerStyles.optionIcon}>
+              <Feather name="folder" size={20} color={CREATE_MOMENT_COLORS.primary} />
+            </View>
+            <View style={videoPickerStyles.optionCopy}>
+              <Text style={videoPickerStyles.optionTitle}>Choose video file</Text>
+              <Text style={videoPickerStyles.optionMeta}>Select a recorded video from this device</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color={CREATE_MOMENT_COLORS.bodyText} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function VideoCameraSheet({
+  visible,
+  onClose,
+  onRecorded,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onRecorded: (uri: string, contentType: string, name: string, durationSeconds?: number | null) => void;
+}) {
+  const { colors } = useTheme();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
+  const cameraRef = useRef<CameraView>(null);
+  const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+
+  const hasPermissions = Boolean(cameraPermission?.granted && microphonePermission?.granted);
+
+  const requestPermissions = async () => {
+    const cameraStatus = cameraPermission?.granted ? cameraPermission : await requestCameraPermission();
+    const microphoneStatus = microphonePermission?.granted ? microphonePermission : await requestMicrophonePermission();
+
+    if (!cameraStatus.granted || !microphoneStatus.granted) {
+      Alert.alert('Camera access needed', 'Please allow camera and microphone access to record video.');
+    }
+  };
+
+  const startRecording = async () => {
+    if (isPreparing || isRecording) {
+      return;
+    }
+
+    if (!hasPermissions) {
+      await requestPermissions();
+      return;
+    }
+
+    setIsPreparing(true);
+
+    try {
+      const camera = cameraRef.current;
+
+      if (!camera) {
+        Alert.alert('Camera', 'Camera is not ready yet.');
+        return;
+      }
+
+      setIsRecording(true);
+      const recordingPromise = camera.recordAsync({
+        maxDuration: 120,
+        maxFileSize: 250 * 1024 * 1024,
+      });
+      recordingPromiseRef.current = recordingPromise;
+
+      recordingPromise
+        .then((video) => {
+          if (video?.uri) {
+            onRecorded(video.uri, 'video/mp4', `Video ${Date.now()}.mp4`);
+            onClose();
+          }
+        })
+        .catch((error) => {
+          Alert.alert('Video recording failed', getAuthErrorMessage(error, 'Please try recording again.'));
+        })
+        .finally(() => {
+          recordingPromiseRef.current = null;
+          setIsRecording(false);
+        });
+    } catch (error) {
+      setIsRecording(false);
+      Alert.alert('Video recording failed', getAuthErrorMessage(error, 'Please try recording again.'));
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!isRecording) {
+      return;
+    }
+
+    try {
+      cameraRef.current?.stopRecording();
+      await recordingPromiseRef.current;
+    } catch (error) {
+      Alert.alert('Video recording failed', getAuthErrorMessage(error, 'Please try stopping the recording again.'));
+    }
+  };
+
+  const closeCamera = async () => {
+    if (isRecording) {
+      try {
+        cameraRef.current?.stopRecording();
+        await recordingPromiseRef.current;
+      } catch {
+        recordingPromiseRef.current = null;
+        setIsRecording(false);
+      }
+      return;
+    }
+
+    onClose();
+  };
+
+  if (!cameraPermission || !microphonePermission) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+      <View style={camStyles.root}>
+        <StatusBar barStyle="light-content" />
+        {hasPermissions ? (
+          <CameraView
+            ref={cameraRef}
+            style={camStyles.camera}
+            facing="back"
+            mode="video"
+            mute={false}
+            videoQuality="720p"
+          >
+            <SafeAreaView style={camStyles.header}>
+              <TouchableOpacity onPress={closeCamera} style={camStyles.closeBtn} activeOpacity={0.8}>
+                <Feather name="x" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </SafeAreaView>
+            <View style={camStyles.captureRow}>
+              <TouchableOpacity
+                style={[
+                  camStyles.captureOuter,
+                  isRecording && camStyles.captureOuterRecording,
+                  isPreparing && camStyles.captureOuterDisabled,
+                ]}
+                activeOpacity={0.9}
+                onPress={isRecording ? stopRecording : startRecording}
+                disabled={isPreparing}
+              >
+                <View style={[camStyles.captureInner, isRecording && camStyles.videoStopInner]} />
+              </TouchableOpacity>
+            </View>
+          </CameraView>
+        ) : (
+          <View style={[camStyles.permissionView, { backgroundColor: colors.background }]}>
+            <Feather name="video-off" size={48} color={colors.textSecondary} />
+            <Text style={[camStyles.permissionText, { color: colors.textSecondary }]}>Camera and microphone access needed</Text>
+            <TouchableOpacity style={[camStyles.permissionBtn, { backgroundColor: colors.primary }]} onPress={requestPermissions} activeOpacity={0.8}>
+              <Text style={[camStyles.permissionBtnText, { color: colors.background }]}>Allow Access</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ marginTop: 12 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+function CreateMomentCloseButton({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.closeButton}>
+      <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
+        <Rect width={32} height={32} rx={12} fill="#686868" fillOpacity={0.16} />
+        <Path
+          d="M22 10L10.0008 21.9992M21.9992 22L10 10.0009"
+          stroke="#B3B3B3"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </TouchableOpacity>
   );
 }
 
@@ -218,10 +602,12 @@ function QRScannerModal({
   visible,
   onClose,
   onScan,
+  currentEventTitle,
 }: {
   visible: boolean;
   onClose: () => void;
-  onScan: (event: string) => void;
+  onScan: (event: string, eventCode?: string) => void;
+  currentEventTitle?: string;
 }) {
   const { colors, isDark } = useTheme();
   const [tab, setTab] = useState<'scan' | 'type'>('scan');
@@ -266,7 +652,7 @@ function QRScannerModal({
                   barcodeTypes: ['qr'],
                 }}
                 onBarcodeScanned={({ data }) => {
-                  if (data) onScan(data);
+                  if (data) onScan(currentEventTitle ?? data, data);
                 }}
               />
             ) : (
@@ -317,7 +703,12 @@ function QRScannerModal({
               </TouchableOpacity>
               <TouchableOpacity
                 style={[qsStyles.typeContinue, { backgroundColor: colors.primary }]}
-                onPress={() => onScan('Rooftop Session Vol. 4')}
+                onPress={() => {
+                  const typedCode = qrCode.trim();
+                  const eventTitle = currentEventTitle ?? (typedCode || 'Rooftop Session Vol. 4');
+
+                  onScan(eventTitle, typedCode || undefined);
+                }}
               >
                 <Text style={[qsStyles.typeContinueText, { color: colors.background }]}>Continue</Text>
               </TouchableOpacity>
@@ -416,55 +807,917 @@ const camStyles = StyleSheet.create({
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   captureRow: { position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center' },
   captureOuter: { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
+  captureOuterDisabled: { opacity: 0.45 },
+  captureOuterRecording: { borderColor: '#F2245C' },
   captureInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFFFFF' },
+  videoStopInner: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#F2245C' },
   permissionView: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingHorizontal: 32 },
   permissionText: { fontSize: 16, textAlign: 'center' },
   permissionBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16 },
   permissionBtnText: { fontWeight: 'bold', fontSize: 14 },
 });
 
+const videoPickerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.62)',
+  },
+  sheet: {
+    backgroundColor: CREATE_MOMENT_COLORS.background,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 22,
+    paddingTop: 12,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  title: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  subtitle: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CREATE_MOMENT_COLORS.surface,
+  },
+  optionButton: {
+    minHeight: 70,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CREATE_MOMENT_COLORS.surfaceBorder,
+    backgroundColor: CREATE_MOMENT_COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  optionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(178,171,186,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  optionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  optionTitle: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  optionMeta: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 12,
+    marginTop: 4,
+  },
+});
+
+const formatAudioDuration = (milliseconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+type RuntimeAudioRecorder = {
+  uri?: string | null;
+  getStatus?: () => { durationMillis?: number; isRecording?: boolean; url?: string | null };
+  prepareToRecordAsync: () => Promise<void>;
+  record: () => void;
+  stop: () => Promise<void>;
+};
+
+type RuntimeAudioRecordingPreset = {
+  extension: string;
+  sampleRate: number;
+  numberOfChannels: number;
+  bitRate: number;
+  isMeteringEnabled?: boolean;
+  android?: Record<string, unknown>;
+  ios?: Record<string, unknown>;
+  web?: Record<string, unknown>;
+};
+
+const getNativeRecordingOptions = (preset: RuntimeAudioRecordingPreset) => {
+  const commonOptions = {
+    extension: preset.extension,
+    sampleRate: preset.sampleRate,
+    numberOfChannels: preset.numberOfChannels,
+    bitRate: preset.bitRate,
+    isMeteringEnabled: preset.isMeteringEnabled ?? false,
+  };
+
+  if (Platform.OS === 'android') {
+    return {
+      ...commonOptions,
+      ...preset.android,
+    };
+  }
+
+  if (Platform.OS === 'ios') {
+    return {
+      ...commonOptions,
+      ...preset.ios,
+    };
+  }
+
+  return {
+    ...commonOptions,
+    ...preset.web,
+  };
+};
+
+const showAudioRebuildAlert = () => {
+  Alert.alert(
+    'Recording unavailable',
+    'Audio recording requires a rebuilt development client that includes expo-audio. You can still choose an audio file.',
+  );
+};
+
+function AudioPickerSheet({
+  visible,
+  onClose,
+  onPickAudio,
+  onRecorded,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onPickAudio: () => void;
+  onRecorded: (uri: string, contentType: string, name: string, durationSeconds?: number | null) => void;
+}) {
+  const recorderRef = useRef<RuntimeAudioRecorder | null>(null);
+  const audioModuleRef = useRef<{ setAudioModeAsync?: (mode: { allowsRecording?: boolean; playsInSilentMode?: boolean }) => Promise<void> } | null>(null);
+  const [isPreparingRecording, setIsPreparingRecording] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDurationMillis, setRecordingDurationMillis] = useState(0);
+
+  useEffect(() => {
+    if (!isRecording) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const status = recorderRef.current?.getStatus?.();
+      setRecordingDurationMillis(status?.durationMillis ?? 0);
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const stopNativeRecorder = async () => {
+    const recorder = recorderRef.current;
+
+    if (!recorder) {
+      return null;
+    }
+
+    let stopError: unknown = null;
+
+    try {
+      await recorder.stop();
+    } catch (error) {
+      stopError = error;
+    }
+
+    try {
+      await audioModuleRef.current?.setAudioModeAsync?.({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+    } catch {
+      // The native audio module may already be unavailable while tearing down.
+    }
+
+    const status = recorder.getStatus?.();
+    const uri = recorder.uri ?? status?.url ?? null;
+    const durationMillis = status?.durationMillis ?? recordingDurationMillis;
+    recorderRef.current = null;
+    setIsRecording(false);
+
+    if (stopError) {
+      throw stopError;
+    }
+
+    return {
+      uri,
+      durationMillis,
+    };
+  };
+
+  const startRecording = async () => {
+    if (isPreparingRecording || isRecording) {
+      return;
+    }
+
+    setIsPreparingRecording(true);
+
+    try {
+      let audio;
+
+      try {
+        audio = await import('expo-audio');
+      } catch {
+        showAudioRebuildAlert();
+        return;
+      }
+
+      const permission = await audio.requestRecordingPermissionsAsync();
+      audioModuleRef.current = audio;
+
+      if (!permission.granted) {
+        Alert.alert('Microphone access needed', 'Please allow microphone access to record audio.');
+        return;
+      }
+
+      await audio.setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+
+      const NativeAudioRecorder = audio.AudioModule?.AudioRecorder;
+
+      if (!NativeAudioRecorder) {
+        await audio.setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+        });
+        showAudioRebuildAlert();
+        return;
+      }
+
+      const recorder = new NativeAudioRecorder(
+        getNativeRecordingOptions(audio.RecordingPresets.HIGH_QUALITY),
+      ) as RuntimeAudioRecorder;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      recorderRef.current = recorder;
+      setRecordingDurationMillis(0);
+      setIsRecording(true);
+    } catch (error) {
+      try {
+        await audioModuleRef.current?.setAudioModeAsync?.({
+          allowsRecording: false,
+          playsInSilentMode: true,
+        });
+      } catch {
+        // Best-effort reset after a failed recording attempt.
+      }
+
+      Alert.alert('Recording failed', getAuthErrorMessage(error, 'Please try recording again.'));
+    } finally {
+      setIsPreparingRecording(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!isRecording) {
+      return;
+    }
+
+    try {
+      const recording = await stopNativeRecorder();
+      const uri = recording?.uri;
+
+      if (!uri) {
+        Alert.alert('Recording failed', 'No recorded audio file was created.');
+        return;
+      }
+
+      onRecorded(
+        uri,
+        'audio/mp4',
+        `Recording ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        recording.durationMillis ? recording.durationMillis / 1000 : null,
+      );
+      onClose();
+    } catch (error) {
+      Alert.alert('Recording failed', getAuthErrorMessage(error, 'Please try stopping the recording again.'));
+    }
+  };
+
+  const closeSheet = async () => {
+    if (isRecording) {
+      try {
+        await stopNativeRecorder();
+      } catch {
+        // Recording may already be stopped by the native module.
+        recorderRef.current = null;
+        setIsRecording(false);
+      }
+    }
+
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+      <View style={audioStyles.overlay}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeSheet} />
+        <View style={audioStyles.sheet}>
+          <View style={audioStyles.handle} />
+          <View style={audioStyles.header}>
+            <View>
+              <Text style={audioStyles.title}>Audio</Text>
+              <Text style={audioStyles.subtitle}>Record or choose audio for your moment</Text>
+            </View>
+            <TouchableOpacity onPress={closeSheet} activeOpacity={0.8} style={audioStyles.closeBtn}>
+              <Feather name="x" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={audioStyles.recordCard}>
+            <View style={[audioStyles.recordDot, isRecording && audioStyles.recordDotActive]} />
+            <View style={audioStyles.recordInfo}>
+              <Text style={audioStyles.recordTitle}>{isRecording ? 'Recording audio' : 'Ready to record'}</Text>
+              <Text style={audioStyles.recordTime}>{formatAudioDuration(recordingDurationMillis)}</Text>
+            </View>
+            <TouchableOpacity
+              style={[audioStyles.recordButton, isRecording && audioStyles.stopButton]}
+              activeOpacity={0.85}
+              onPress={isRecording ? stopRecording : startRecording}
+              disabled={isPreparingRecording}
+            >
+              <Feather name={isRecording ? 'square' : 'mic'} size={18} color="#111111" />
+              <Text style={audioStyles.recordButtonText}>
+                {isRecording ? 'Stop' : isPreparingRecording ? 'Wait' : 'Record'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[audioStyles.pickButton, isRecording && audioStyles.pickButtonDisabled]}
+            activeOpacity={0.85}
+            onPress={onPickAudio}
+            disabled={isRecording}
+          >
+            <Feather name="folder" size={18} color="#FFFFFF" />
+            <Text style={audioStyles.pickButtonText}>Choose audio file</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const audioStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.62)',
+  },
+  sheet: {
+    backgroundColor: CREATE_MOMENT_COLORS.background,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 22,
+    paddingTop: 12,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  title: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  subtitle: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CREATE_MOMENT_COLORS.surface,
+  },
+  recordCard: {
+    minHeight: 76,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CREATE_MOMENT_COLORS.surfaceBorder,
+    backgroundColor: CREATE_MOMENT_COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  recordDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: CREATE_MOMENT_COLORS.muted,
+    marginRight: 12,
+  },
+  recordDotActive: {
+    backgroundColor: '#F2245C',
+  },
+  recordInfo: {
+    flex: 1,
+  },
+  recordTitle: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recordTime: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  recordButton: {
+    minWidth: 96,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: CREATE_MOMENT_COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  stopButton: {
+    backgroundColor: '#FFFFFF',
+  },
+  recordButtonText: {
+    color: CREATE_MOMENT_COLORS.primaryText,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pickButton: {
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: CREATE_MOMENT_COLORS.surfaceBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pickButtonDisabled: {
+    opacity: 0.45,
+  },
+  pickButtonText: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
+
 // ── Main Screen ───────────────────────────────────────────────────────────
 export default function CreateMomentScreen() {
-  const { colors, isDark } = useTheme();
+  const screenColors = CREATE_MOMENT_COLORS;
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
 
-  const [mode, setMode] = useState<MomentMode>('feed');
+  const [publishToFeed, setPublishToFeed] = useState(true);
+  const [publishToEvent, setPublishToEvent] = useState(false);
   const [caption, setCaption] = useState('');
+  const [selectedImages, setSelectedImages] = useState<SelectedImageItem[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedMediaType, setSelectedMediaType] = useState<SelectedMediaType | null>(null);
+  const [selectedMediaSource, setSelectedMediaSource] = useState<MomentMediaSource | null>(null);
+  const [selectedMediaContentType, setSelectedMediaContentType] = useState<string | null>(null);
+  const [selectedMediaName, setSelectedMediaName] = useState<string | null>(null);
+  const [selectedMediaDurationSeconds, setSelectedMediaDurationSeconds] = useState<number | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<string>(MOCK_EVENT);
+  const [selectedEventCode, setSelectedEventCode] = useState<string | null>(null);
   const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
   const [audience, setAudience] = useState('Public');
   const [showConfetti, setShowConfetti] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Modal states
-  const [showGallery, setShowGallery] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [showVideoPicker, setShowVideoPicker] = useState(false);
+  const [showVideoCamera, setShowVideoCamera] = useState(false);
+  const [showAudioPicker, setShowAudioPicker] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [showAudienceModal, setShowAudienceModal] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [authorAvatar, setAuthorAvatar] = useState(DEFAULT_AVATAR);
+  const authorName = user?.name?.trim() || FALLBACK_AUTHOR_NAME;
 
-  const handleImageSelect = (uri: string) => {
-    setSelectedImage(uri);
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAuthorAvatar = async () => {
+      if (!user?.avatarKey) {
+        setAuthorAvatar(DEFAULT_AVATAR);
+        return;
+      }
+
+      try {
+        const url = await getStorageDownloadUrl(user.avatarKey);
+
+        if (isMounted) {
+          setAuthorAvatar(url);
+        }
+      } catch {
+        if (isMounted) {
+          setAuthorAvatar(DEFAULT_AVATAR);
+        }
+      }
+    };
+
+    void loadAuthorAvatar();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.avatarKey]);
+
+  const handleImageSelect = (
+    images: {
+      uri: string;
+      source?: MomentMediaSource;
+      contentType?: string | null;
+      name?: string | null;
+    }[],
+  ) => {
+    if (images.length === 0) {
+      return;
+    }
+
+    const existingImageCount = selectedMediaType === 'image' ? selectedImages.length : 0;
+    const availableSlots = Math.max(MAX_MEDIA_ITEMS - existingImageCount, 0);
+
+    if (availableSlots === 0) {
+      Alert.alert('Image limit reached', `You can attach up to ${MAX_MEDIA_ITEMS} images.`);
+      return;
+    }
+
+    const nextImages = images.slice(0, availableSlots).map((image) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      uri: image.uri,
+      source: image.source ?? 'gallery',
+      contentType: getMediaContentType(image.uri, 'image', image.contentType),
+      name: image.name ?? null,
+    }));
+
+    setSelectedImages((currentImages) => (
+      selectedMediaType === 'image'
+        ? [...currentImages, ...nextImages]
+        : nextImages
+    ));
+    setSelectedImage(null);
+    setSelectedMediaType('image');
+    setSelectedMediaSource(null);
+    setSelectedMediaContentType(null);
+    setSelectedMediaName(null);
+    setSelectedMediaDurationSeconds(null);
+
+    if (images.length > availableSlots) {
+      Alert.alert('Image limit reached', `Only ${MAX_MEDIA_ITEMS} images can be attached to a moment.`);
+    }
   };
 
-  const handleDone = () => {
-    if (mode === 'event') {
+  const handleVideoSelect = (
+    uri: string,
+    source: MomentMediaSource = 'upload',
+    contentType?: string | null,
+    name?: string | null,
+  ) => {
+    setSelectedImages([]);
+    setSelectedImage(uri);
+    setSelectedMediaType('video');
+    setSelectedMediaSource(source);
+    setSelectedMediaContentType(getMediaContentType(uri, 'video', contentType));
+    setSelectedMediaName(name ?? 'Video');
+    setSelectedMediaDurationSeconds(null);
+  };
+
+  const handleAudioSelect = (
+    uri: string,
+    source: MomentMediaSource = 'upload',
+    contentType?: string | null,
+    name?: string | null,
+    durationSeconds?: number | null,
+  ) => {
+    setSelectedImages([]);
+    setSelectedImage(uri);
+    setSelectedMediaType('audio');
+    setSelectedMediaSource(source);
+    setSelectedMediaContentType(getMediaContentType(uri, 'audio', contentType));
+    setSelectedMediaName(name ?? 'Audio');
+    setSelectedMediaDurationSeconds(durationSeconds ?? null);
+  };
+
+  const clearSelectedMedia = () => {
+    setSelectedImages([]);
+    setSelectedImage(null);
+    setSelectedMediaType(null);
+    setSelectedMediaSource(null);
+    setSelectedMediaContentType(null);
+    setSelectedMediaName(null);
+    setSelectedMediaDurationSeconds(null);
+  };
+
+  const removeSelectedImage = (id: string) => {
+    const nextImages = selectedImages.filter((image) => image.id !== id);
+
+    setSelectedImages(nextImages);
+
+    if (nextImages.length === 0) {
+      clearSelectedMedia();
+    }
+  };
+
+  const handlePickAudio = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        return;
+      }
+
+      const audio = result.assets[0];
+
+      handleAudioSelect(audio.uri, 'upload', audio.mimeType, audio.name);
+      setShowAudioPicker(false);
+    } catch (error) {
+      Alert.alert('Unable to choose audio', getAuthErrorMessage(error, 'Please choose another audio file.'));
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const selectedImageCount = selectedMediaType === 'image' ? selectedImages.length : 0;
+
+      if (selectedImageCount >= MAX_MEDIA_ITEMS) {
+        Alert.alert('Image limit reached', `You can attach up to ${MAX_MEDIA_ITEMS} images.`);
+        return;
+      }
+
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert('Photos access needed', 'Please allow photo library access to upload an image.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+        allowsMultipleSelection: true,
+        selectionLimit: MAX_MEDIA_ITEMS - selectedImageCount,
+        orderedSelection: true,
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        return;
+      }
+
+      handleImageSelect(
+        result.assets.map((image) => ({
+          uri: image.uri,
+          source: 'gallery',
+          contentType: image.mimeType,
+          name: image.fileName,
+        })),
+      );
+    } catch (error) {
+      Alert.alert('Unable to choose image', getAuthErrorMessage(error, 'Please choose another image.'));
+    }
+  };
+
+  const handlePickVideo = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert('Videos access needed', 'Please allow photo library access to upload a video.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsMultipleSelection: false,
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        return;
+      }
+
+      const video = result.assets[0];
+      handleVideoSelect(video.uri, 'gallery', video.mimeType, video.fileName);
+      setShowVideoPicker(false);
+    } catch (error) {
+      Alert.alert('Unable to choose video', getAuthErrorMessage(error, 'Please choose another video file.'));
+    }
+  };
+
+  const buildMediaItem = async ({
+    uri,
+    type,
+    source,
+    contentType,
+    durationSeconds,
+  }: {
+    uri: string;
+    type: SelectedMediaType;
+    source: MomentMediaSource;
+    contentType: string;
+    durationSeconds?: number | null;
+  }): Promise<MomentMediaItem> => {
+    const mediaSource = source ?? (isRemoteUri(uri) ? 'external' : 'upload');
+    const mediaDurationSeconds = type === 'audio' && durationSeconds != null && Number.isFinite(durationSeconds)
+      ? Math.max(0, durationSeconds)
+      : null;
+
+    if (isRemoteUri(uri)) {
+      return {
+        type,
+        source: mediaSource,
+        url: uri,
+        contentType,
+        durationSeconds: mediaDurationSeconds,
+      };
+    }
+
+    const extension = getMediaExtension(contentType);
+    const storageKey = await uploadFileToStorage({
+      uri,
+      key: `moments/${type}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
+      contentType,
+    });
+
+    return {
+      type,
+      source: mediaSource,
+      storageKey,
+      contentType,
+      durationSeconds: mediaDurationSeconds,
+    };
+  };
+
+  const buildMediaItems = async (): Promise<MomentMediaItem[]> => {
+    if (selectedMediaType === 'image') {
+      return Promise.all(
+        selectedImages.map((image) => buildMediaItem({
+          uri: image.uri,
+          type: 'image',
+          source: image.source,
+          contentType: image.contentType,
+        })),
+      );
+    }
+
+    if (!selectedImage || !selectedMediaType) {
+      return [];
+    }
+
+    return [
+      await buildMediaItem({
+        uri: selectedImage,
+        type: selectedMediaType,
+        source: selectedMediaSource ?? (isRemoteUri(selectedImage) ? 'external' : 'upload'),
+        contentType: getMediaContentType(selectedImage, selectedMediaType, selectedMediaContentType),
+        durationSeconds: selectedMediaDurationSeconds,
+      }),
+    ];
+  };
+
+  const togglePublishToFeed = () => {
+    setPublishToFeed((current) => (current ? publishToEvent : true));
+  };
+
+  const togglePublishToEvent = () => {
+    setPublishToEvent((current) => (current ? publishToFeed : true));
+  };
+
+  const publishMoment = async (eventTitleOverride?: string, eventCodeOverride?: string) => {
+    if (isSubmittingRef.current) {
+      return false;
+    }
+
+    const trimmedCaption = caption.trim();
+    const targetModes: MomentMode[] = [
+      ...(publishToFeed ? ['feed' as const] : []),
+      ...(publishToEvent ? ['event' as const] : []),
+    ];
+
+    if (!trimmedCaption && selectedImages.length === 0 && !selectedImage) {
+      Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
+      return false;
+    }
+
+    if (targetModes.length === 0) {
+      Alert.alert('Create Mooment', 'Choose Feed or Event before creating a moment.');
+      return false;
+    }
+
+    const eventTitle = publishToEvent ? (eventTitleOverride ?? selectedEvent).trim() : null;
+    const eventCode = publishToEvent ? eventCodeOverride?.trim() || selectedEventCode?.trim() || null : null;
+
+    if (publishToEvent && !eventTitle) {
+      Alert.alert('Create Mooment', 'Select or scan an event before creating an event moment.');
+      return false;
+    }
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+
+    try {
+      const mediaItems = await buildMediaItems();
+
+      await Promise.all(
+        targetModes.map((targetMode) => createMoment({
+          mode: targetMode,
+          caption: trimmedCaption || null,
+          audience: normalizeAudience(audience),
+          taggedPeople,
+          eventTitle: publishToEvent ? eventTitle : null,
+          eventCode: publishToEvent ? eventCode : null,
+          mediaItems,
+        })),
+      );
+
+      return true;
+    } catch (error) {
+      Alert.alert(
+        'Unable to create moment',
+        getAuthErrorMessage(error, 'Please check the moment details and try again.'),
+      );
+      return false;
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDone = async () => {
+    if (publishToEvent) {
+      if (!caption.trim() && selectedImages.length === 0 && !selectedImage) {
+        Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
+        return;
+      }
+
       setShowQRScanner(true);
     } else {
-      setShowConfetti(true);
-      // Simulate post creation delay
-      setTimeout(() => {
-        router.back();
-      }, 2500);
+      const created = await publishMoment();
+
+      if (created) {
+        setShowConfetti(true);
+        setTimeout(() => {
+          router.back();
+        }, 2500);
+      }
     }
   };
 
   const taggedLabel = taggedPeople.join(', ');
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={screenColors.background} />
 
       {/* Confetti Animation */}
       <ConfettiOverlay
@@ -474,67 +1727,67 @@ export default function CreateMomentScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Mooment</Text>
-        <TouchableOpacity style={[styles.doneBtn, { backgroundColor: colors.primary }]} onPress={handleDone} activeOpacity={0.8}>
-          <Text style={[styles.doneBtnText, { color: colors.background }]}>Done</Text>
+        <CreateMomentCloseButton onPress={() => router.back()} />
+        <Text style={styles.headerTitle}>Create Mooment</Text>
+        <TouchableOpacity style={[styles.doneBtn, isSubmitting && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isSubmitting}>
+          <Text style={styles.doneBtnText}>Done</Text>
         </TouchableOpacity>
       </View>
 
       {/* ── Mode Checkboxes ── */}
       <View style={styles.checkboxRow}>
-        <TouchableOpacity style={styles.checkboxItem} onPress={() => setMode('feed')} activeOpacity={0.8}>
-          <View style={[styles.checkbox, { borderColor: colors.border }, mode === 'feed' && [styles.checkboxActive, { backgroundColor: colors.text, borderColor: colors.text }]]}>
-            {mode === 'feed' && <Feather name="check" size={11} color={colors.background} />}
+        <TouchableOpacity style={styles.checkboxItem} onPress={togglePublishToFeed} activeOpacity={0.8}>
+          <View style={[styles.checkbox, publishToFeed ? styles.checkboxActive : styles.checkboxInactive]}>
+            {publishToFeed && <Feather name="check" size={12} color={screenColors.primaryText} />}
           </View>
-          <Text style={[styles.checkboxLabel, { color: colors.textSecondary }, mode === 'feed' && [styles.checkboxLabelActive, { color: colors.text }]]}>Feed</Text>
+          <Text style={[styles.checkboxLabel, publishToFeed && styles.checkboxLabelActive]}>Feed</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.checkboxItem, { marginLeft: 20 }]}
-          onPress={() => setMode('event')}
+          style={styles.checkboxItem}
+          onPress={togglePublishToEvent}
           activeOpacity={0.8}
         >
-          <View style={[styles.checkbox, { borderColor: colors.border }, mode === 'event' && [styles.checkboxActive, { backgroundColor: colors.text, borderColor: colors.text }]]}>
-            {mode === 'event' && <Feather name="check" size={11} color={colors.background} />}
+          <View style={[styles.checkbox, publishToEvent ? styles.checkboxActive : styles.checkboxInactive]}>
+            {publishToEvent && <Feather name="check" size={12} color={screenColors.primaryText} />}
           </View>
-          <Text style={[styles.checkboxLabel, { color: colors.textSecondary }, mode === 'event' && [styles.checkboxLabelActive, { color: colors.text }]]}>Event</Text>
+          <Text style={[styles.checkboxLabel, publishToEvent && styles.checkboxLabelActive]}>Event</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView
-        style={{ flex: 1 }}
+        style={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={styles.scrollContent}
       >
         {/* ── Author Row ── */}
         <View style={styles.authorRow}>
           <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop' }}
+            source={{ uri: authorAvatar }}
             style={styles.avatar}
           />
           <View style={styles.authorInfo}>
             <Text style={styles.authorNameFull} numberOfLines={2}>
-              <Text style={[styles.authorBold, { color: colors.text }]}>Tuval Mor</Text>
+              <Text style={styles.authorBold}>{authorName}</Text>
               {/* Tagged people visible in both modes */}
               {taggedPeople.length > 0 && (
                 <>
-                  <Text style={[styles.authorMuted, { color: colors.textSecondary }]}> with </Text>
-                  <Text style={[styles.authorBold, { color: colors.text }]}>{taggedLabel}</Text>
+                  <Text style={styles.authorMuted}> with </Text>
+                  <Text style={styles.authorBold}>{taggedLabel}</Text>
                 </>
               )}
               {/* Event link only in Event mode */}
-              {mode === 'event' && (
+              {publishToEvent && (
                 <>
-                  <Text style={[styles.authorMuted, { color: colors.textSecondary }]}> at </Text>
-                  <Text style={[styles.authorBold, { color: colors.text }]}>{selectedEvent}</Text>
+                  <Text style={styles.authorMuted}> at </Text>
+                  <Text style={styles.authorBold}>{selectedEvent}</Text>
                 </>
               )}
             </Text>
           </View>
 
-          {mode === 'event' && (
+          {publishToEvent && (
             <TouchableOpacity style={styles.eventPill} onPress={() => setShowEventModal(true)} activeOpacity={0.8}>
               <View style={styles.eventPillDot} />
               <Text style={styles.eventPillText}>Event</Text>
@@ -543,20 +1796,67 @@ export default function CreateMomentScreen() {
           )}
         </View>
 
-        {/* ── Content Section (Image + Caption) ── */}
-        {selectedImage ? (
+        {/* ── Content Section (Media + Caption) ── */}
+        {selectedImages.length > 0 && selectedMediaType === 'image' ? (
+          <View style={styles.imageCarousel}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.imageCarouselContent}
+            >
+              {selectedImages.map((image, index) => (
+                <View key={image.id} style={styles.imagePreviewCard}>
+                  <Image source={{ uri: image.uri }} style={styles.momentImage} resizeMode="cover" />
+                  {selectedImages.length > 1 ? (
+                    <View style={styles.imageCountBadge}>
+                      <Text style={styles.imageCountText}>{index + 1}/{selectedImages.length}</Text>
+                    </View>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.imageRemoveBtn}
+                    onPress={() => removeSelectedImage(image.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="x" size={13} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {selectedImage && selectedMediaType === 'video' ? (
           <View style={styles.imageWrapper}>
-            <Image source={{ uri: selectedImage }} style={styles.momentImage} resizeMode="cover" />
-            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setSelectedImage(null)} activeOpacity={0.8}>
+            <VideoPreview uri={selectedImage} style={styles.momentImage} />
+            <View style={styles.videoPreviewBadge}>
+              <Feather name="video" size={13} color="#FFFFFF" />
+              <Text style={styles.videoPreviewBadgeText} numberOfLines={1}>{selectedMediaName ?? 'Video'}</Text>
+            </View>
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
               <Feather name="x" size={13} color="#FFF" />
             </TouchableOpacity>
           </View>
         ) : null}
 
+        {selectedImage && selectedMediaType === 'audio' ? (
+          <View style={styles.audioAttachment}>
+            <View style={styles.audioAttachmentIcon}>
+              <HugeiconsIcon icon={MusicNote04Icon} size={22} color={screenColors.primary} />
+            </View>
+            <View style={styles.audioAttachmentInfo}>
+              <Text style={styles.audioAttachmentTitle} numberOfLines={1}>{selectedMediaName ?? 'Audio'}</Text>
+              <Text style={styles.audioAttachmentMeta}>{selectedMediaContentType ?? 'audio'}</Text>
+            </View>
+            <TouchableOpacity style={styles.audioRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
+              <Feather name="x" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <TextInput
-          style={[styles.stitchInput, { color: colors.text }]}
-          placeholder={mode === 'feed' ? "Write your stitch here. . ." : "Share what this moment means to you..."}
-          placeholderTextColor={colors.textSecondary}
+          style={styles.stitchInput}
+          placeholder={publishToEvent && !publishToFeed ? "Share what this moment means to you..." : "Write your stitch here. . ."}
+          placeholderTextColor={screenColors.bodyText}
           value={caption}
           onChangeText={setCaption}
           multiline
@@ -566,68 +1866,91 @@ export default function CreateMomentScreen() {
       </ScrollView>
 
       {/* ── Bottom Toolbar ── */}
-      <View style={[styles.toolbar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      <View style={styles.toolbar}>
         {/* People */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <HugeiconsIcon icon={AddTeamIcon} size={22} color={taggedPeople.length > 0 ? colors.primary : colors.textSecondary} />
+          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, taggedPeople.length > 0 && styles.toolbarIconBoxActive]}>
+            <HugeiconsIcon icon={AddTeamIcon} size={24} color={taggedPeople.length > 0 ? screenColors.primary : screenColors.bodyText} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }, taggedPeople.length > 0 && { color: colors.primary }]}>People</Text>
+          <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && styles.toolbarLabelActive]}>Friend</Text>
         </TouchableOpacity>
 
         {/* Image / Gallery */}
-        <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <HugeiconsIcon icon={Image01Icon} size={22} color={selectedImage ? colors.primary : colors.textSecondary} />
+        <TouchableOpacity style={styles.toolbarItem} onPress={handlePickImage} activeOpacity={0.8}>
+          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'image' && styles.toolbarIconBoxActive]}>
+            <HugeiconsIcon icon={Image01Icon} size={24} color={selectedMediaType === 'image' ? screenColors.primary : screenColors.bodyText} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }, selectedImage && { color: colors.primary }]}>Image</Text>
+          <Text style={[styles.toolbarLabel, selectedMediaType === 'image' && styles.toolbarLabelActive]}>Image</Text>
         </TouchableOpacity>
 
         {/* Camera */}
         <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowCamera(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <Feather name="camera" size={22} color={colors.textSecondary} />
+          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+            <Feather name="camera" size={24} color={screenColors.bodyText} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>Camera</Text>
+          <Text style={styles.toolbarLabel}>Camera</Text>
         </TouchableOpacity>
 
         {/* Video */}
-        <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowGallery(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <HugeiconsIcon icon={Video02Icon} size={22} color={colors.textSecondary} />
+        <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowVideoPicker(true)} activeOpacity={0.8}>
+          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'video' && styles.toolbarIconBoxActive]}>
+            <HugeiconsIcon icon={Video02Icon} size={24} color={selectedMediaType === 'video' ? screenColors.primary : screenColors.bodyText} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>Video</Text>
+          <Text style={[styles.toolbarLabel, selectedMediaType === 'video' && styles.toolbarLabelActive]}>Video</Text>
         </TouchableOpacity>
 
         {/* Audio */}
         <TouchableOpacity
           style={styles.toolbarItem}
-          onPress={() => Alert.alert('Audio', 'Record or choose audio for your moment')}
+          onPress={() => setShowAudioPicker(true)}
           activeOpacity={0.8}
         >
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.toolbarIconBox, { backgroundColor: isDark ? 'rgba(104, 104, 104, 0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <HugeiconsIcon icon={MusicNote04Icon} size={22} color={colors.textSecondary} />
+          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'audio' && styles.toolbarIconBoxActive]}>
+            <HugeiconsIcon icon={MusicNote04Icon} size={24} color={selectedMediaType === 'audio' ? screenColors.primary : screenColors.bodyText} />
           </BlurView>
-          <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>Audio</Text>
+          <Text style={[styles.toolbarLabel, selectedMediaType === 'audio' && styles.toolbarLabelActive]}>Audio</Text>
         </TouchableOpacity>
       </View>
 
       {/* ── Modals ── */}
-      <GalleryPickerSheet
-        visible={showGallery}
-        onClose={() => setShowGallery(false)}
-        onSelect={handleImageSelect}
-      />
       <CameraSheet
         visible={showCamera}
         onClose={() => setShowCamera(false)}
-        onCapture={handleImageSelect}
+        onCapture={(uri, contentType, name) => handleImageSelect([
+          {
+            uri,
+            source: 'camera',
+            contentType,
+            name,
+          },
+        ])}
+      />
+      <VideoPickerSheet
+        visible={showVideoPicker}
+        onClose={() => setShowVideoPicker(false)}
+        onRecordVideo={() => {
+          setShowVideoPicker(false);
+          setShowVideoCamera(true);
+        }}
+        onPickVideo={handlePickVideo}
+      />
+      <VideoCameraSheet
+        visible={showVideoCamera}
+        onClose={() => setShowVideoCamera(false)}
+        onRecorded={(uri, contentType, name) => handleVideoSelect(uri, 'camera', contentType, name)}
+      />
+      <AudioPickerSheet
+        visible={showAudioPicker}
+        onClose={() => setShowAudioPicker(false)}
+        onPickAudio={handlePickAudio}
+        onRecorded={(uri, contentType, name, durationSeconds) => handleAudioSelect(uri, 'upload', contentType, name, durationSeconds)}
       />
       <EventPickerModal
         visible={showEventModal}
         onClose={() => setShowEventModal(false)}
         onSelect={ev => {
           setSelectedEvent(ev);
+          setSelectedEventCode(null);
           setShowEventModal(false);
         }}
       />
@@ -647,13 +1970,21 @@ export default function CreateMomentScreen() {
       <QRScannerModal
         visible={showQRScanner}
         onClose={() => setShowQRScanner(false)}
-        onScan={ev => {
-          setSelectedEvent(ev);
+        currentEventTitle={selectedEvent}
+        onScan={async (ev, eventCode) => {
+          const eventTitle = ev || selectedEvent;
+
+          setSelectedEvent(eventTitle);
+          setSelectedEventCode(eventCode?.trim() || null);
           setShowQRScanner(false);
-          router.push({
-            pathname: '/live-screen/live-room-screen',
-            params: { title: ev || selectedEvent }
-          });
+          const created = await publishMoment(eventTitle, eventCode);
+
+          if (created) {
+            router.push({
+              pathname: '/live-screen/live-room-screen',
+              params: { title: eventTitle }
+            });
+          }
         }}
       />
     </SafeAreaView>
@@ -662,40 +1993,244 @@ export default function CreateMomentScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, paddingTop: Platform.OS === 'android' ? 56 : 24 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18 },
-  headerTitle: { flex: 1, fontWeight: '700', fontSize: 18, marginLeft: 20 },
-  doneBtn: { paddingHorizontal: 32, paddingVertical: 12, borderRadius: 14 },
-  doneBtnText: { fontWeight: '700', fontSize: 14 },
+  safe: {
+    flex: 1,
+    backgroundColor: CREATE_MOMENT_COLORS.background,
+    paddingTop: Platform.OS === 'android' ? 34 : 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    paddingBottom: 26,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+  },
+  headerTitle: {
+    flex: 1,
+    color: CREATE_MOMENT_COLORS.text,
+    fontWeight: '600',
+    fontSize: 18,
+    lineHeight: 21,
+    marginLeft: 12,
+  },
+  doneBtn: {
+    width: 97,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: CREATE_MOMENT_COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doneBtnDisabled: {
+    opacity: 0.55,
+  },
+  doneBtnText: {
+    color: CREATE_MOMENT_COLORS.primaryText,
+    fontWeight: '600',
+    fontSize: 16,
+    lineHeight: 24,
+  },
 
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
-  checkboxItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: {},
-  checkboxLabel: { fontSize: 14, fontWeight: '500' },
-  checkboxLabelActive: { fontWeight: '600' },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 27,
+    paddingHorizontal: 28,
+    paddingBottom: 20,
+  },
+  checkboxItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  checkbox: { justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: CREATE_MOMENT_COLORS.primary,
+  },
+  checkboxInactive: {
+    width: 16,
+    height: 16,
+    borderRadius: 2,
+    borderWidth: 2,
+    borderColor: '#D9D9D9',
+  },
+  checkboxLabel: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  checkboxLabelActive: { color: CREATE_MOMENT_COLORS.text },
 
-  authorRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 14 },
-  avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 116 },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    marginBottom: 20,
+  },
+  avatar: { width: 24, height: 24, borderRadius: 12, marginRight: 12 },
   authorInfo: { flex: 1 },
-  authorNameFull: { fontSize: 13, lineHeight: 19 },
-  authorBold: { fontWeight: '700' },
-  authorMuted: { fontWeight: '400' },
+  authorNameFull: { color: CREATE_MOMENT_COLORS.text, fontSize: 14, lineHeight: 18 },
+  authorBold: { color: CREATE_MOMENT_COLORS.text, fontWeight: '600' },
+  authorMuted: { color: CREATE_MOMENT_COLORS.bodyText, fontWeight: '400' },
 
   eventPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(22,216,105,0.12)', borderWidth: 1, borderColor: 'rgba(22,216,105,0.35)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 5 },
   eventPillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#16D869' },
   eventPillText: { color: '#16D869', fontSize: 12, fontWeight: '700' },
 
-  imageWrapper: { marginHorizontal: 16, marginBottom: 14, borderRadius: 12, overflow: 'hidden', position: 'relative' },
+  imageCarousel: {
+    marginBottom: 24,
+  },
+  imageCarouselContent: {
+    paddingHorizontal: 28,
+    gap: 12,
+  },
+  imagePreviewCard: {
+    width: width - 56,
+    height: 220,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imageWrapper: { marginHorizontal: 28, marginBottom: 24, borderRadius: 12, overflow: 'hidden', position: 'relative' },
   momentImage: { width: '100%', height: 220, borderRadius: 12 },
   imageRemoveBtn: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+  imageCountBadge: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    minWidth: 42,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+  },
+  imageCountText: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  videoPreviewBadge: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    maxWidth: '78%',
+    minHeight: 30,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  videoPreviewBadgeText: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  audioAttachment: {
+    marginHorizontal: 28,
+    marginBottom: 24,
+    minHeight: 72,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: CREATE_MOMENT_COLORS.surfaceBorder,
+    backgroundColor: CREATE_MOMENT_COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  audioAttachmentIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(178,171,186,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  audioAttachmentInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  audioAttachmentTitle: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  audioAttachmentMeta: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  audioRemoveBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    marginLeft: 10,
+  },
 
-  stitchInput: { fontSize: 15, paddingHorizontal: 16, lineHeight: 22, minHeight: 180 },
+  stitchInput: {
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 14,
+    lineHeight: 18,
+    paddingHorizontal: 28,
+    paddingTop: 0,
+    minHeight: 180,
+    textAlignVertical: 'top',
+  },
 
-  toolbar: { flexDirection: 'row', borderTopWidth: 1, paddingVertical: 18, paddingHorizontal: 24 },
-  toolbarItem: { flex: 1, alignItems: 'center', gap: 6 },
-  toolbarIconBox: { width: 54, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  toolbarLabel: { fontSize: 11 },
+  toolbar: {
+    position: 'absolute',
+    left: 28,
+    right: 28,
+    bottom: Platform.OS === 'ios' ? 28 : 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    backgroundColor: CREATE_MOMENT_COLORS.background,
+  },
+  toolbarItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  toolbarIconBox: {
+    width: '100%',
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    backgroundColor: CREATE_MOMENT_COLORS.surface,
+    borderWidth: 1,
+    borderColor: CREATE_MOMENT_COLORS.surfaceBorder,
+  },
+  toolbarIconBoxActive: {
+    borderColor: 'rgba(178,171,186,0.42)',
+  },
+  toolbarLabel: {
+    alignSelf: 'stretch',
+    color: CREATE_MOMENT_COLORS.text,
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  toolbarLabelActive: {
+    color: CREATE_MOMENT_COLORS.primary,
+  },
 });
 
 const rmStyles = StyleSheet.create({

@@ -19,10 +19,10 @@ import {
   Animated,
   Dimensions,
   Image, Modal, Platform,
-  Pressable, SafeAreaView, ScrollView,
+  Pressable, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from '@/hooks/useTheme';
 
 /* ─── Constants ─── */

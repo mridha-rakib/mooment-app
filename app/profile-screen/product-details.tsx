@@ -1,10 +1,22 @@
-import { Feather } from "@expo/vector-icons";
-import { PencilEdit02Icon, Delete02Icon } from "@hugeicons/core-free-icons";
+import {
+  Feather } from "@expo/vector-icons";
+import { PencilEdit02Icon,
+  Delete02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
-import { useRouter, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Dimensions } from "react-native";
+import { useRouter,
+  useLocalSearchParams } from "expo-router";
+import React,
+  { useState } from "react";
+import { Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Dimensions,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AddProductModal from "@/components/profile/AddProductModal";
 
 const { width } = Dimensions.get('window');

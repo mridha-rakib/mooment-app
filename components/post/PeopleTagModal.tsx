@@ -1,19 +1,27 @@
 import { Feather } from '@expo/vector-icons';
+import { getFriendUsers } from '@/lib/users';
 import React, { useState } from 'react';
 import {
   FlatList, Image, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
-const MOCK_PEOPLE = [
-  { id: '1', name: 'Brooklyn Simmons', handle: '@brooklyn_s', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' },
-  { id: '2', name: 'Ketty Perera', handle: '@kettyp', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop' },
-  { id: '3', name: 'Dj Koko', handle: '@djkoko', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop' },
-  { id: '4', name: 'Tuval Mor', handle: '@tuvalm', avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop' },
-  { id: '5', name: 'Giden Xenog', handle: '@gidenx', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
-  { id: '6', name: 'Mavrick Rick', handle: '@mavrick_r', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop' },
-  { id: '7', name: 'Luna Park', handle: '@lunapark', avatar: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=150&auto=format&fit=crop' },
+const FALLBACK_AVATARS = [
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=150&auto=format&fit=crop',
 ];
+
+type Friend = {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string;
+};
 
 type Props = {
   visible: boolean;
@@ -25,15 +33,50 @@ type Props = {
 export default function PeopleTagModal({ visible, onClose, onSelect, selected }: Props) {
   const [search, setSearch] = useState('');
   const [localSelected, setLocalSelected] = useState<string[]>(selected);
+  const [friends, setFriends] = useState<Friend[]>([]);
 
   // Sync if parent resets
   React.useEffect(() => {
     setLocalSelected(selected);
+  }, [visible, selected]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    if (!visible) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    getFriendUsers(undefined, 100)
+      .then((users) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setFriends(users.map((user, index) => ({
+          id: user.id,
+          name: user.name,
+          handle: user.username ? `@${user.username}` : '@xenog',
+          avatar: user.avatarUrl ?? FALLBACK_AVATARS[index % FALLBACK_AVATARS.length],
+        })));
+      })
+      .catch(() => {
+        if (isMounted) {
+          setFriends([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [visible]);
 
-  const filtered = MOCK_PEOPLE.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.handle.toLowerCase().includes(search.toLowerCase())
+  const normalizedSearch = search.trim().toLowerCase().replace(/^@/, '');
+  const filtered = friends.filter(p =>
+    p.name.toLowerCase().includes(normalizedSearch) ||
+    p.handle.toLowerCase().replace(/^@/, '').includes(normalizedSearch)
   );
 
   // Fire immediately so author row updates in real-time

@@ -1,14 +1,32 @@
 import { Feather } from "@expo/vector-icons";
 import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
+import { getMoomentCreditWallet } from "@/lib/moomentCredits";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function MoomentWalletScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [balance, setBalance] = useState("55.00");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMoomentCreditWallet()
+      .then((wallet) => {
+        if (isMounted) {
+          setBalance(wallet.balance.toFixed(2));
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <View style={styles.safe}>
@@ -21,7 +39,7 @@ export default function MoomentWalletScreen() {
 
       <View style={styles.content}>
         <Text style={styles.label}>MOOMENT CREDIT</Text>
-        <Text style={styles.amount}>55.00</Text>
+        <Text style={styles.amount}>{balance}</Text>
 
         <View style={styles.buttonRow}>
           <TouchableOpacity 

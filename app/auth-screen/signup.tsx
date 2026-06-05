@@ -1,10 +1,24 @@
 import { Feather } from "@expo/vector-icons";
-import { UserIcon, Building03Icon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react-native';
+import { Building03Icon, UserIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  StatusBar,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/stores/authStore";
+import { Spinner } from "@/components/ui/spinner";
 
 type AccountType = "personal" | "business";
 
@@ -19,15 +33,42 @@ export default function SignUp() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const register = useAuthStore((state) => state.register);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const authError = useAuthStore((state) => state.error);
+
+  const handleSignUp = async () => {
+    try {
+      const pendingEmail = await register({
+        name,
+        username,
+        email,
+        password,
+        accountType,
+      });
+
+      router.push({
+        pathname: '/auth-screen/verify-email',
+        params: { email: pendingEmail },
+      } as any);
+    } catch {
+      // The store exposes a user-friendly error below the form.
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <KeyboardAvoidingView 
-        style={styles.container} 
+        style={[styles.container, { backgroundColor: colors.background }]} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.content}>
+        <ScrollView
+          style={{ backgroundColor: colors.background }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Set up your username, and password to successfully sign up to the system</Text>
@@ -67,6 +108,8 @@ export default function SignUp() {
               placeholderTextColor={colors.textSecondary}
               value={name}
               onChangeText={setName}
+              editable={!isLoading}
+              disableFullscreenUI={Platform.OS === "android"}
             />
           </View>
 
@@ -79,6 +122,8 @@ export default function SignUp() {
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
+              editable={!isLoading}
+              disableFullscreenUI={Platform.OS === "android"}
             />
           </View>
 
@@ -92,6 +137,8 @@ export default function SignUp() {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={!isLoading}
+              disableFullscreenUI={Platform.OS === "android"}
             />
           </View>
 
@@ -104,6 +151,9 @@ export default function SignUp() {
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
+              editable={!isLoading}
+              onSubmitEditing={handleSignUp}
+              disableFullscreenUI={Platform.OS === "android"}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
               <Feather name={showPassword ? "eye" : "eye-off"} size={20} color={colors.textSecondary} />
@@ -123,12 +173,21 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
 
+          {authError && (
+            <Text style={[styles.errorText, { color: colors.danger }]}>{authError}</Text>
+          )}
+
           <TouchableOpacity 
-            style={[styles.signupButton, { backgroundColor: colors.primary }]} 
+            style={[styles.signupButton, { backgroundColor: colors.primary }, isLoading && styles.signupButtonDisabled]} 
             activeOpacity={0.8}
-            onPress={() => router.push('/auth-screen/verify-email')}
+            onPress={handleSignUp}
+            disabled={isLoading}
           >
-            <Text style={[styles.signupButtonText, { color: colors.background }]}>Sign Up</Text>
+            {isLoading ? (
+              <Spinner color={colors.background} />
+            ) : (
+              <Text style={[styles.signupButtonText, { color: colors.background }]}>Sign Up</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -137,7 +196,7 @@ export default function SignUp() {
               <Text style={[styles.loginText, { color: colors.primary }]}>Log In</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Post-Signup Success Modal */}
@@ -182,7 +241,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 28,
     justifyContent: "center",
   },
@@ -263,6 +322,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
+  },
+  signupButtonDisabled: {
+    opacity: 0.75,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
   },
   signupButtonText: {
     fontSize: 16,

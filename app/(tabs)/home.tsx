@@ -1,8 +1,21 @@
-import { useTheme } from "@/hooks/useTheme";
+import {
+  useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Dimensions, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { router,
+  useLocalSearchParams } from "expo-router";
+import React,
+  { useCallback,
+  useEffect,
+  useState } from "react";
+import { Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
 // Components
 import FeaturedProducts, { ProductData } from "@/components/home/FeaturedProducts";
@@ -14,17 +27,16 @@ import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
 import LiveChatBanner from "@/components/live/LiveChatBanner";
 import CommentsModal from "@/components/post/CommentsModal";
 import FeedPost, { PostData } from "@/components/post/FeedPost";
+import { deleteMoment, getFeedMoments, shareMoment } from "@/lib/moments";
+import type { MomentInteractionSummary } from "@/lib/moments";
 import ShareModal from "@/components/post/ShareModal";
-
-const { width } = Dimensions.get("window");
-
-// Dynamic Mock Data
-const MOCK_STORIES: StoryData[] = [
-  { id: '1', type: 'add' },
-  { id: '3', type: 'standard', title: 'Enjoying\nsummer', imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop' },
-  { id: '4', type: 'standard', title: 'First\nday @office', imageUri: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?q=80&w=200&auto=format&fit=crop' },
-  { id: '5', type: 'muted', imageUri: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200&auto=format&fit=crop' },
-];
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { mapMomentToPost } from "@/lib/momentPostMapper";
+import { getStorageFileUrl } from "@/lib/storage";
+import { getFeedStories } from "@/lib/stories";
+import type { Story } from "@/lib/stories";
+import { getSeenStoryIds } from "@/lib/storySeen";
+import { getSuggestedUsers } from "@/lib/users";
 
 const MOCK_SUGGESTED_USERS: SuggestedUser[] = [
   { id: '1', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop' },
@@ -36,6 +48,50 @@ const MOCK_SUGGESTED_USERS: SuggestedUser[] = [
   { id: '7', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
   { id: '8', name: 'Mavrick Rick', avatarUri: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop' },
 ];
+
+const SUGGESTED_USER_FALLBACK_AVATARS = MOCK_SUGGESTED_USERS.map((user) => user.avatarUri);
+const STORY_FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
+
+const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>()): StoryData[] => {
+  const groupedStories = new Map<string, Story[]>();
+
+  feedStories.forEach((story) => {
+    const authorId = story.author?.id ?? story.userId;
+    const authorStories = groupedStories.get(authorId) ?? [];
+
+    authorStories.push(story);
+    groupedStories.set(authorId, authorStories);
+  });
+
+  return Array.from(groupedStories.entries()).map(([authorId, authorStories]) => {
+    const sortedStories = [...authorStories].sort(
+      (firstStory, secondStory) =>
+        new Date(firstStory.createdAt).getTime() - new Date(secondStory.createdAt).getTime(),
+    );
+    const latestStory = sortedStories[sortedStories.length - 1];
+    const title = latestStory.author?.name ?? 'Story';
+    const storyItems = sortedStories
+      .filter((story) => Boolean(story.mediaUrl))
+      .map((story) => ({
+        id: story.id,
+        mediaUri: story.mediaUrl as string,
+        durationSeconds: story.durationSeconds || 15,
+        caption: story.caption,
+        createdAt: story.createdAt,
+      }));
+
+    return {
+      id: `story-group-${authorId}`,
+      type: 'standard' as const,
+      title,
+      authorName: title,
+      imageUri: latestStory.author?.avatarUrl ?? STORY_FALLBACK_AVATAR,
+      mediaUri: latestStory.mediaUrl,
+      seen: storyItems.length > 0 && storyItems.every((story) => seenStoryIds.has(story.id)),
+      storyItems,
+    };
+  });
+};
 
 const MOCK_HIGHLIGHTS: HighlightData[] = [
   { id: '1', title: 'Birthday\nParty', imageUri: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=200&auto=format&fit=crop', ringColor: '#B624A9' },
@@ -273,11 +329,16 @@ const MOCK_FEED: FeedItem[] = [
 ];
 
 export default function HomeFeed() {
-  const { theme, colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedType, setSelectedType] = useState('Feed');
+  const [stories, setStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
+  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>(MOCK_SUGGESTED_USERS);
+  const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
+  const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
+  const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const params = useLocalSearchParams();
 
   useEffect(() => {
@@ -292,13 +353,213 @@ export default function HomeFeed() {
     }
   }, [params.showSuccess, params.view]);
 
-  const handleCommentPress = () => {
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const loadStories = async () => {
+        try {
+          const [feedStories, seenStoryIds] = await Promise.all([
+            getFeedStories(),
+            getSeenStoryIds(),
+          ]);
+
+          if (!isActive) {
+            return;
+          }
+
+          setStories([
+            { id: 'add-story', type: 'add' },
+            ...groupStoriesByAuthor(feedStories, seenStoryIds),
+          ]);
+        } catch {
+          if (isActive) {
+            setStories([{ id: 'add-story', type: 'add' }]);
+          }
+        }
+      };
+
+      const loadFeedMoments = async () => {
+        try {
+          const moments = await getFeedMoments();
+
+          if (!isActive) {
+            return;
+          }
+
+          setFeedMomentPosts(
+            moments
+              .map((moment) => mapMomentToPost(moment, {
+                fallbackAvatar: STORY_FALLBACK_AVATAR,
+                storageUrlResolver: getStorageFileUrl,
+              }))
+              .filter((post): post is PostData => Boolean(post)),
+          );
+        } catch {
+          if (isActive) {
+            setFeedMomentPosts([]);
+          }
+        }
+      };
+
+      void loadStories();
+      void loadFeedMoments();
+
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStories = async () => {
+      try {
+        const [feedStories, seenStoryIds] = await Promise.all([
+          getFeedStories(),
+          getSeenStoryIds(),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setStories([
+          { id: 'add-story', type: 'add' },
+          ...groupStoriesByAuthor(feedStories, seenStoryIds),
+        ]);
+      } catch {
+        if (isMounted) {
+          setStories([{ id: 'add-story', type: 'add' }]);
+        }
+      }
+    };
+
+    const loadSuggestedUsers = async () => {
+      try {
+        const users = await getSuggestedUsers(10);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setSuggestedUsers(users.map((user, index) => ({
+          id: user.id,
+          name: user.name,
+          avatarUri: user.avatarUrl ?? SUGGESTED_USER_FALLBACK_AVATARS[index % SUGGESTED_USER_FALLBACK_AVATARS.length],
+          isFollowing: user.isFollowing,
+        })));
+      } catch {
+        if (isMounted) {
+          setSuggestedUsers(MOCK_SUGGESTED_USERS);
+        }
+      }
+    };
+
+    void loadStories();
+    void loadSuggestedUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const applyInteractionSummary = useCallback((postId: string, summary: MomentInteractionSummary) => {
+    const applyToPost = (post: PostData) => ({
+      ...post,
+      likesCount: summary.likesCount,
+      commentsCount: summary.commentsCount,
+      sharesCount: summary.sharesCount,
+      isLiked: summary.isLiked,
+    });
+
+    setFeedMomentPosts((currentPosts) => currentPosts.map((post) => (
+      post.id === postId ? applyToPost(post) : post
+    )));
+    setSelectedCommentPost((currentPost) => (
+      currentPost?.id === postId ? applyToPost(currentPost) : currentPost
+    ));
+    setSelectedSharePost((currentPost) => (
+      currentPost?.id === postId ? applyToPost(currentPost) : currentPost
+    ));
+  }, []);
+
+  const handleCommentPress = (post: PostData) => {
+    setSelectedCommentPost(post);
     setCommentModalVisible(true);
   };
 
-  const handleSharePress = () => {
+  const handleSharePress = (post: PostData) => {
+    setSelectedSharePost(post);
     setShareModalVisible(true);
   };
+
+  const handleRepost = useCallback(async () => {
+    if (!selectedSharePost) {
+      return;
+    }
+
+    try {
+      const share = await shareMoment(selectedSharePost.id);
+
+      applyInteractionSummary(selectedSharePost.id, {
+        momentId: selectedSharePost.id,
+        likesCount: share.moment.likesCount,
+        commentsCount: share.moment.commentsCount,
+        sharesCount: share.moment.sharesCount,
+        isLiked: share.moment.isLiked,
+      });
+      setShareModalVisible(false);
+      setSelectedSharePost(null);
+      Alert.alert('Reposted', 'This post now appears on your timeline.');
+    } catch (error) {
+      Alert.alert('Unable to repost', getAuthErrorMessage(error, 'Please try sharing this post again.'));
+    }
+  }, [applyInteractionSummary, selectedSharePost]);
+
+  const handleAuthorFollowChange = useCallback((authorId: string, isFollowing: boolean) => {
+    setFeedMomentPosts((currentPosts) => currentPosts.map((post) => (
+      post.authorId === authorId ? { ...post, isFollowing } : post
+    )));
+  }, []);
+
+  const handleDeletePost = useCallback((post: PostData) => {
+    Alert.alert(
+      'Delete post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteMoment(post.id);
+                setFeedMomentPosts((currentPosts) => currentPosts.filter((currentPost) => currentPost.id !== post.id));
+                setCommentModalVisible(false);
+                setShareModalVisible(false);
+                setSelectedCommentPost(null);
+                setSelectedSharePost(null);
+              } catch (error) {
+                Alert.alert('Unable to delete post', getAuthErrorMessage(error, 'Please try again.'));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, []);
+
+  const feedItems: FeedItem[] = [
+    ...feedMomentPosts.map((post) => ({
+      type: 'post' as const,
+      id: `moment-${post.id}`,
+      data: post,
+    })),
+    ...MOCK_FEED,
+  ];
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -309,10 +570,10 @@ export default function HomeFeed() {
         {selectedType === 'Feed' ? (
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Dynamic Stories Component */}
-            <StoryCarousel stories={MOCK_STORIES} />
+            <StoryCarousel stories={stories} />
 
             {/* Core Polymorphic Feed Engine */}
-            {MOCK_FEED.map((item) => {
+            {feedItems.map((item) => {
               if (item.type === 'post') {
                 return (
                   <FeedPost
@@ -321,6 +582,9 @@ export default function HomeFeed() {
                     onCommentPress={handleCommentPress}
                     onSharePress={handleSharePress}
                     onViewMapPress={() => setSelectedType('Map')}
+                    onAuthorFollowChange={handleAuthorFollowChange}
+                    onInteractionChange={applyInteractionSummary}
+                    onDeletePress={handleDeletePost}
                   />
                 );
               }
@@ -334,7 +598,7 @@ export default function HomeFeed() {
                 return <HighlightsCarousel key={item.id} highlights={item.data} />;
               }
               if (item.type === 'suggested_users') {
-                return <PeopleToFollow key={item.id} users={item.data} />;
+                return <PeopleToFollow key={item.id} users={suggestedUsers} />;
               }
               return null;
             })}
@@ -349,12 +613,24 @@ export default function HomeFeed() {
 
       <CommentsModal
         visible={commentModalVisible}
-        onClose={() => setCommentModalVisible(false)}
+        onClose={() => {
+          setCommentModalVisible(false);
+          setSelectedCommentPost(null);
+        }}
+        momentId={selectedCommentPost?.id}
+        likesCount={selectedCommentPost?.likesCount ?? 0}
+        sharesCount={selectedCommentPost?.sharesCount ?? 0}
+        onInteractionChange={(summary) => applyInteractionSummary(summary.momentId, summary)}
       />
 
       <ShareModal
         visible={shareModalVisible}
-        onClose={() => setShareModalVisible(false)}
+        onClose={() => {
+          setShareModalVisible(false);
+          setSelectedSharePost(null);
+        }}
+        onRepost={selectedSharePost ? handleRepost : undefined}
+        shareUrl={selectedSharePost ? `https://mooment.app/moments/${selectedSharePost.id}` : undefined}
       />
 
       {/* Post-Signup Success Modal */}

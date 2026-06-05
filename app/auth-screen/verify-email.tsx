@@ -1,12 +1,22 @@
 import React, { useState, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView, StatusBar } from "react-native";
-import { useRouter } from "expo-router";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/stores/authStore";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function VerifyEmail() {
   const [code, setCode] = useState(["", "", "", ""]);
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string }>();
+  const pendingVerificationEmail = useAuthStore((state) => state.pendingVerificationEmail);
+  const verifyEmail = useAuthStore((state) => state.verifyEmail);
+  const resendVerificationCode = useAuthStore((state) => state.resendVerificationCode);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const authError = useAuthStore((state) => state.error);
+  const email = params.email || pendingVerificationEmail || "";
   
   // Create refs for the 4 inputs
   const input1 = useRef<TextInput>(null);
@@ -14,22 +24,64 @@ export default function VerifyEmail() {
   const input3 = useRef<TextInput>(null);
   const input4 = useRef<TextInput>(null);
 
+  const getInputRef = (index: number) => {
+    if (index === 0) return input1;
+    if (index === 1) return input2;
+    if (index === 2) return input3;
+    return input4;
+  };
+
   const handleCodeChange = (text: string, index: number) => {
+    const digits = text.replace(/\D/g, "").slice(0, 4 - index);
+
+    if (digits.length > 1) {
+      const newCode = [...code];
+
+      digits.split("").forEach((digit, offset) => {
+        newCode[index + offset] = digit;
+      });
+
+      setCode(newCode);
+      getInputRef(Math.min(index + digits.length, 3)).current?.focus();
+      return;
+    }
+
+    const digit = digits;
     const newCode = [...code];
-    newCode[index] = text;
+    newCode[index] = digit;
     setCode(newCode);
 
     // Auto-advance
-    if (text.length === 1) {
+    if (digit.length === 1) {
       if (index === 0) input2.current?.focus();
       if (index === 1) input3.current?.focus();
       if (index === 2) input4.current?.focus();
     }
     
-    if (text.length === 0) {
+    if (digit.length === 0) {
       if (index === 3) input3.current?.focus();
       if (index === 2) input2.current?.focus();
       if (index === 1) input1.current?.focus();
+    }
+  };
+
+  const handleVerifyEmail = async () => {
+    try {
+      await verifyEmail({
+        email,
+        code: code.join(""),
+      });
+      router.push('/auth-screen/success-verified');
+    } catch {
+      // The store exposes a user-friendly error below the form.
+    }
+  };
+
+  const handleResendCode = async () => {
+    try {
+      await resendVerificationCode(email);
+    } catch {
+      // The store exposes a user-friendly error below the form.
     }
   };
 
@@ -44,7 +96,7 @@ export default function VerifyEmail() {
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Verify Email</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              We Sent OTP code to your email example@gmail.com. Enter the code below to verify.
+              We sent OTP code to your email {email || "your email"}. Enter the code below to verify.
             </Text>
           </View>
 
@@ -53,55 +105,76 @@ export default function VerifyEmail() {
               ref={input1}
               style={[styles.otpInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.primary }, code[0] ? { borderColor: colors.primary } : null]}
               keyboardType="number-pad"
-              maxLength={1}
+              maxLength={4}
               value={code[0]}
               onChangeText={(text) => handleCodeChange(text, 0)}
               placeholder="&#8226;"
               placeholderTextColor={colors.textSecondary}
+              editable={!isLoading}
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
             />
             <TextInput
               ref={input2}
               style={[styles.otpInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.primary }, code[1] ? { borderColor: colors.primary } : null]}
               keyboardType="number-pad"
-              maxLength={1}
+              maxLength={4}
               value={code[1]}
               onChangeText={(text) => handleCodeChange(text, 1)}
               placeholder="&#8226;"
               placeholderTextColor={colors.textSecondary}
+              editable={!isLoading}
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
             />
             <TextInput
               ref={input3}
               style={[styles.otpInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.primary }, code[2] ? { borderColor: colors.primary } : null]}
               keyboardType="number-pad"
-              maxLength={1}
+              maxLength={4}
               value={code[2]}
               onChangeText={(text) => handleCodeChange(text, 2)}
               placeholder="&#8226;"
               placeholderTextColor={colors.textSecondary}
+              editable={!isLoading}
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
             />
             <TextInput
               ref={input4}
               style={[styles.otpInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.primary }, code[3] ? { borderColor: colors.primary } : null]}
               keyboardType="number-pad"
-              maxLength={1}
+              maxLength={4}
               value={code[3]}
               onChangeText={(text) => handleCodeChange(text, 3)}
               placeholder="&#8226;"
               placeholderTextColor={colors.textSecondary}
+              editable={!isLoading}
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
             />
           </View>
 
+          {authError && (
+            <Text style={[styles.errorText, { color: colors.danger }]}>{authError}</Text>
+          )}
+
           <TouchableOpacity 
-            style={[styles.continueButton, { backgroundColor: colors.primary }]} 
+            style={[styles.continueButton, { backgroundColor: colors.primary }, isLoading && styles.continueButtonDisabled]} 
             activeOpacity={0.8}
-            onPress={() => router.push('/auth-screen/success-verified')}
+            onPress={handleVerifyEmail}
+            disabled={isLoading}
           >
-            <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+            {isLoading ? (
+              <Spinner color={colors.background} />
+            ) : (
+              <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>Did not receive code? </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleResendCode} disabled={isLoading}>
               <Text style={[styles.resendText, { color: colors.primary }]}>Resend again</Text>
             </TouchableOpacity>
           </View>
@@ -160,9 +233,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 32,
   },
+  continueButtonDisabled: {
+    opacity: 0.75,
+  },
   continueButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
   },
   footer: {
     flexDirection: "row",

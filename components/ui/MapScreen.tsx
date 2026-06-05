@@ -1,8 +1,15 @@
 import { useTheme } from "@/hooks/useTheme";
+import { EVENT_CATEGORIES } from "@/constants/eventCategories";
+import {
+  Add01Icon,
+  Remove01Icon,
+  SatelliteIcon,
+  Target01Icon,
+} from "@hugeicons/core-free-icons";
 import Mapbox from "@rnmapbox/maps";
 import React, { useState } from "react";
+import { useAuthStore } from "@/stores/authStore";
 import {
-  Dimensions,
   Image,
   ScrollView,
   StyleSheet,
@@ -10,15 +17,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import CinematicButton from "./CinematicButton";
 import EventPreviewModal from "./EventPreviewModal";
 
-// Set Mapbox Access Token
-// Mapbox access token should match the account used for the download token
-const MAPBOX_PUBLIC_TOKEN = "***REMOVED***";
-const MOOMENT_MAPBOX_PUBLIC_TOKEN = "***REMOVED***";
-Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+const MOOMENT_MAPBOX_PUBLIC_TOKEN =
+  "***REMOVED***";
+Mapbox.setAccessToken(MOOMENT_MAPBOX_PUBLIC_TOKEN);
 
-const { width, height } = Dimensions.get("window");
+const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
 
 export type MapMarkerData = {
   id: string;
@@ -27,113 +33,150 @@ export type MapMarkerData = {
   image: string;
   label: string;
   glowColor: string;
+  category?: string | null;
+  scheduledAt?: string | null;
+  hostName?: string | null;
+  distance?: string | null;
+  isLive?: boolean;
+  eventDate?: string | null;
+  eventTime?: string | null;
+  location?: string | null;
+  attendeesCount?: number;
+  ageLimit?: string | null;
+  price?: string | null;
 };
 
 type MapScreenProps = {
   markers: MapMarkerData[];
   onBack?: () => void;
   logoText?: string;
+  onUserLocationChange?: (coordinate: [number, number]) => void;
 };
 
 const MapMarker = ({
   coordinate,
   image,
   label,
-  glowColor = "#D4B0EB",
   onPress,
 }: {
   coordinate: [number, number];
   image: string;
   label: string;
-  glowColor: string;
   onPress: () => void;
 }) => {
-  const { colors } = useTheme();
   return (
-    <Mapbox.MarkerView coordinate={coordinate}>
+    <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
       <TouchableOpacity
-        style={styles.markerContent}
+        style={styles.eventMarkerButton}
         onPress={onPress}
-        activeOpacity={0.8}
+        activeOpacity={0.9}
+        accessibilityRole="button"
+        accessibilityLabel={label ? `${label} event` : "Event marker"}
       >
-        {/* Soft Gradient Glow Layers */}
-        <View
-          style={[
-            styles.glowLayer,
-            {
-              backgroundColor: glowColor,
-              opacity: 0.15,
-              transform: [{ scale: 1.4 }],
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.glowLayer,
-            {
-              backgroundColor: glowColor,
-              opacity: 0.2,
-              transform: [{ scale: 1.2 }],
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.glowLayer,
-            {
-              backgroundColor: glowColor,
-              opacity: 0.3,
-              transform: [{ scale: 1.1 }],
-            },
-          ]}
-        />
-
-        <View
-          style={[
-            styles.imageWrapper,
-            { borderColor: glowColor, backgroundColor: colors.background },
-          ]}
-        >
-          <Image source={{ uri: image }} style={styles.markerImage} />
+        <View style={styles.eventMarkerFrame}>
+          <Image source={{ uri: image }} style={styles.markerImage} resizeMode="cover" />
         </View>
-        {label && (
-          <View style={styles.labelContainer}>
-            <Text style={[styles.labelText, { color: "#FFFFFF" }]}>
-              {label}
-            </Text>
-          </View>
-        )}
       </TouchableOpacity>
     </Mapbox.MarkerView>
   );
 };
 
 export default function MapScreen({
-  markers,
-  onBack,
-  logoText = "Mooment",
+  markers = [],
+  onUserLocationChange,
 }: MapScreenProps) {
   const { colors, isDark } = useTheme();
+  const sharedLocation = useAuthStore((state) =>
+    state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
+  );
+  const sharedLongitude = sharedLocation?.longitude;
+  const sharedLatitude = sharedLocation?.latitude;
   const [modalVisible, setModalVisible] = useState(false);
+  const [selectedMarker, setSelectedMarker] = useState<MapMarkerData | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const cameraRef = React.useRef<Mapbox.Camera>(null);
+  const [zoomLevel, setZoomLevel] = useState(12);
+  const [currentMapStyle, setCurrentMapStyle] = useState<string>(
+    isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light,
+  );
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const isSatellite = currentMapStyle.includes("satellite");
+  const lastReportedLocationRef = React.useRef<string | null>(null);
+
+  const applyUserLocation = React.useCallback(
+    (coordinate: [number, number]) => {
+      setUserLocation(coordinate);
+
+      const reportKey = `${coordinate[0].toFixed(4)},${coordinate[1].toFixed(4)}`;
+
+      if (lastReportedLocationRef.current !== reportKey) {
+        lastReportedLocationRef.current = reportKey;
+        onUserLocationChange?.(coordinate);
+      }
+    },
+    [onUserLocationChange],
+  );
 
   React.useEffect(() => {
-    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+    setCurrentMapStyle((currentStyle) =>
+      currentStyle.includes("satellite")
+        ? currentStyle
+        : isDark
+          ? Mapbox.StyleURL.Dark
+          : Mapbox.StyleURL.Light,
+    );
+  }, [isDark]);
+
+  React.useEffect(() => {
+    if (typeof sharedLongitude === "number" && typeof sharedLatitude === "number") {
+      applyUserLocation([sharedLongitude, sharedLatitude]);
+    }
+  }, [applyUserLocation, sharedLatitude, sharedLongitude]);
+
+  React.useEffect(() => {
+    Mapbox.setAccessToken(MOOMENT_MAPBOX_PUBLIC_TOKEN);
   }, []);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
-  const categories = [
-    "All",
-    "Music",
-    "Nightlife",
-    "Shows & Entertainment",
-    "Sports",
-  ];
-  const MAP_BG = require("../../assets/images/Basemap image.png");
+  const categories = ["All", ...EVENT_CATEGORIES];
+  const visibleMarkers = React.useMemo(
+    () =>
+      selectedCategory === "All"
+        ? markers
+        : markers.filter((marker) => marker.category === selectedCategory),
+    [markers, selectedCategory],
+  );
 
-  const handleMarkerPress = (color: string) => {
-    setSelectedThemeColor(color);
+  const handleMarkerPress = (marker: MapMarkerData) => {
+    setSelectedMarker(marker);
+    setSelectedThemeColor(marker.glowColor);
     setModalVisible(true);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev + 1, 20));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev - 1, 1));
+  };
+
+  const toggleMapStyle = () => {
+    const satelliteStyle = "mapbox://styles/mapbox/satellite-streets-v11";
+    const normalStyle = isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light;
+    setCurrentMapStyle((prev) =>
+      prev === satelliteStyle ? normalStyle : satelliteStyle,
+    );
+  };
+
+  const handleMyLocation = () => {
+    if (userLocation) {
+      cameraRef.current?.setCamera({
+        centerCoordinate: userLocation,
+        zoomLevel: 14,
+        animationDuration: 1000,
+      });
+    }
   };
 
   return (
@@ -186,41 +229,105 @@ export default function MapScreen({
       {/* Map Content Area */}
       <View style={styles.mapArea}>
         <Mapbox.MapView
+          key={currentMapStyle}
           style={styles.map}
-          styleURL={isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+          styleURL={currentMapStyle}
           logoEnabled={false}
           attributionEnabled={false}
         >
           <Mapbox.Camera
-            zoomLevel={12}
+            ref={cameraRef}
+            zoomLevel={zoomLevel}
             centerCoordinate={
-              markers.length > 0
+              userLocation ??
+              (markers && markers.length > 0
                 ? [markers[0].longitude, markers[0].latitude]
-                : [-73.935242, 40.73061]
+                : [-73.935242, 40.73061])
             }
           />
 
           {/* Markers */}
-          {markers.map((marker) => (
+          {visibleMarkers.map((marker) => (
             <MapMarker
               key={marker.id}
               coordinate={[marker.longitude, marker.latitude]}
               image={marker.image}
               label={marker.label}
-              glowColor={marker.glowColor}
-              onPress={() => handleMarkerPress(marker.glowColor)}
+              onPress={() => handleMarkerPress(marker)}
             />
           ))}
 
-          <Mapbox.UserLocation visible={true} />
+          {/* Cinematic Dark Overlay for Satellite Mode (Natively under markers) */}
+          {isSatellite && (
+            <Mapbox.ShapeSource
+              id="dimSource"
+              shape={{
+                type: "Feature",
+                properties: {},
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [
+                    [
+                      [-180, -90],
+                      [180, -90],
+                      [180, 90],
+                      [-180, 90],
+                      [-180, -90],
+                    ],
+                  ],
+                },
+              }}
+            >
+              <Mapbox.FillLayer
+                id="dimLayer"
+                style={{ fillColor: "black", fillOpacity: 0.3 }}
+              />
+            </Mapbox.ShapeSource>
+          )}
+
+          <Mapbox.UserLocation
+            visible={true}
+            onUpdate={(location) => {
+              if (location.coords) {
+                applyUserLocation([
+                  location.coords.longitude,
+                  location.coords.latitude,
+                ]);
+              }
+            }}
+          />
         </Mapbox.MapView>
+
+        {/* Map Controls */}
+        <View style={styles.mapControlsLeft}>
+          <CinematicButton icon={Add01Icon} onPress={handleZoomIn} />
+          <CinematicButton icon={Remove01Icon} onPress={handleZoomOut} />
+        </View>
+
+        <View style={styles.mapControlsRight}>
+          <CinematicButton icon={SatelliteIcon} onPress={toggleMapStyle} />
+          <CinematicButton icon={Target01Icon} onPress={handleMyLocation} />
+        </View>
       </View>
 
       {/* Event Preview Modal */}
       <EventPreviewModal
         visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        themeColor={selectedThemeColor}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedMarker(null);
+        }}
+        themeColor={selectedMarker?.glowColor ?? selectedThemeColor}
+        eventTitle={selectedMarker?.label}
+        hostName={selectedMarker?.hostName ?? undefined}
+        distance={selectedMarker?.distance ?? undefined}
+        isLive={selectedMarker?.isLive}
+        eventDate={selectedMarker?.eventDate ?? undefined}
+        eventTime={selectedMarker?.eventTime ?? undefined}
+        location={selectedMarker?.location ?? undefined}
+        attendeesCount={selectedMarker?.attendeesCount}
+        ageLimit={selectedMarker?.ageLimit ?? undefined}
+        price={selectedMarker?.price ?? undefined}
       />
     </View>
   );
@@ -233,50 +340,30 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  markerContainer: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  markerContent: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glowLayer: {
-    position: "absolute",
+  eventMarkerButton: {
     width: 56,
     height: 56,
     borderRadius: 28,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
   },
-  imageWrapper: {
+  eventMarkerFrame: {
     width: 56,
     height: 56,
     borderRadius: 28,
     borderWidth: 3,
+    borderColor: EVENT_MARKER_BORDER_COLOR,
+    backgroundColor: "#111111",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 2,
-  },
-  markerImageContainer: {
-    width: "100%",
-    height: "100%",
   },
   markerImage: {
-    width: 56,
-    height: 56,
-  },
-  labelContainer: {
-    position: "absolute",
-    left: 64,
-    width: 100,
-  },
-  labelText: {
-    fontSize: 12,
-    fontWeight: "700",
-    textShadowColor: "rgba(0, 0, 0, 0.75)",
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    width: "100%",
+    height: "100%",
   },
   currentLocationOuter: {
     width: 28,
@@ -368,5 +455,17 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  mapControlsLeft: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    gap: 12,
+  },
+  mapControlsRight: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    gap: 12,
   },
 });

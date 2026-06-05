@@ -1,30 +1,135 @@
 import { OleoScript_400Regular, useFonts } from '@expo-google-fonts/oleo-script';
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { Provider } from 'react-redux';
+import { Provider, useDispatch } from 'react-redux';
+import { readThemePreference } from "@/lib/themePreference";
+import { setTheme } from "@/redux/slice/preference";
 import { store } from '../redux/store';
+import { useAuthStore } from '@/stores/authStore';
+import { useLocationSharingStore } from '@/stores/locationSharingStore';
+import { installLogBoxStackGuard } from '@/lib/installLogBoxStackGuard';
 
-SplashScreen.preventAutoHideAsync();
+installLogBoxStackGuard();
+
+function AuthSessionGate() {
+  const router = useRouter();
+  const segments = useSegments();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isRestoring = useAuthStore((state) => state.isRestoring);
+  const hasRestored = useAuthStore((state) => state.hasRestored);
+  const restoreAuthSession = useAuthStore((state) => state.restoreAuthSession);
+
+  useEffect(() => {
+    void restoreAuthSession();
+  }, [restoreAuthSession]);
+
+  useEffect(() => {
+    if (isRestoring || !hasRestored) {
+      return;
+    }
+
+    const firstSegment = segments[0];
+    const secondSegment = segments[1];
+    const isAuthRoute = firstSegment === 'auth-screen';
+    const isPostVerificationRoute = secondSegment === 'success-verified' || secondSegment === 'onboarding-settings';
+    const isPublicRoute = !firstSegment || isAuthRoute || firstSegment === 'error';
+
+    if (!isAuthenticated && !isPublicRoute) {
+      router.replace('/auth-screen/onboarding' as any);
+      return;
+    }
+
+    if (isAuthenticated && isAuthRoute && !isPostVerificationRoute) {
+      router.replace('/(tabs)/home' as any);
+    }
+  }, [hasRestored, isAuthenticated, isRestoring, router, segments]);
+
+  return null;
+}
+
+function ThemePreferenceGate() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    readThemePreference()
+      .then((storedTheme) => {
+        if (isMounted && storedTheme) {
+          dispatch(setTheme(storedTheme));
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [dispatch]);
+
+  return null;
+}
+
+function LocationSharingGate() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasRestored = useAuthStore((state) => state.hasRestored);
+  const locationSharingEnabled = useAuthStore((state) => Boolean(state.user?.currentLocationSharingEnabled));
+  const startWatching = useLocationSharingStore((state) => state.startWatching);
+  const stopWatching = useLocationSharingStore((state) => state.stopWatching);
+  const disableSharing = useLocationSharingStore((state) => state.disableSharing);
+
+  useEffect(() => {
+    if (!hasRestored) {
+      return;
+    }
+
+    if (!isAuthenticated || !locationSharingEnabled) {
+      stopWatching();
+      return;
+    }
+
+    let isMounted = true;
+
+    startWatching().catch(() => {
+      if (isMounted) {
+        void disableSharing().catch(() => undefined);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [disableSharing, hasRestored, isAuthenticated, locationSharingEnabled, startWatching, stopWatching]);
+
+  return null;
+}
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
+  useFonts({
     'OleoScript-Regular': OleoScript_400Regular,
   });
 
   useEffect(() => {
-    if (loaded || error) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded, error]);
+    const hideSplashScreen = () => {
+      SplashScreen.hide();
+    };
 
-  if (!loaded && !error) {
-    return null;
-  }
+    hideSplashScreen();
+    const timers = [250, 1000, 2000].map((delay) =>
+      setTimeout(hideSplashScreen, delay)
+    );
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, []);
 
   return (
     <Provider store={store}>
+      <ThemePreferenceGate />
+      <AuthSessionGate />
+      <LocationSharingGate />
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }} />
     </Provider>

@@ -16,7 +16,7 @@ const FRIENDS = ['Dj Koko', 'Tuval', 'Nosel', 'Alex', 'Maya', 'Jordan'];
 export default function CreatePlanScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ mode?: string; planName?: string; planDate?: string; planTime?: string; planEvent?: string; planFriends?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; planName?: string; planDate?: string; planDateIso?: string; planTime?: string; planEvent?: string; planFriends?: string }>();
 
   const isEdit = params.mode === 'edit';
 
@@ -79,6 +79,7 @@ export default function CreatePlanScreen() {
       params: { 
         planName: name, 
         planDate: formatDate(selectedDate), 
+        planDateIso: selectedDate.toISOString(),
         planTime: formatTime(selectedDate), 
         planEvent: selectedEvent, 
         planFriends: selectedFriends, 
@@ -199,7 +200,7 @@ export default function CreatePlanScreen() {
         <TouchableOpacity
           style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
-          onPress={() => router.push("/plan-screen/map-selection")}
+          onPress={() => { setShowLocationDropdown(!showLocationDropdown); setShowEventDropdown(false); setShowFriendsDropdown(false); }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Feather name="map-pin" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -266,7 +267,7 @@ export default function CreatePlanScreen() {
       {/* ── Bottom Buttons ── */}
       <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
         <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card }]} activeOpacity={0.8} onPress={handleCancel}>
-          <Text style={[styles.cancelText, { color: colors.text }]}>Canel</Text>
+          <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.doneBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleDone}>
           <Text style={[styles.doneText, { color: colors.background }]}>Done</Text>

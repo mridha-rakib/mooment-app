@@ -7,7 +7,33 @@ export type StoryData = {
   id: string;
   type: 'add' | 'live' | 'standard' | 'muted';
   imageUri?: string;
+  mediaUri?: string | null;
+  storyItems?: StorySequenceItem[];
   title?: string;
+  authorName?: string;
+  seen?: boolean;
+};
+
+export type StorySequenceItem = {
+  id: string;
+  mediaUri: string;
+  durationSeconds: number;
+  caption?: string | null;
+  createdAt?: string;
+};
+
+const getCompactStoryName = (fullName?: string) => {
+  const nameParts = fullName?.trim().split(/\s+/).filter(Boolean) ?? [];
+
+  if (nameParts.length === 0) {
+    return '';
+  }
+
+  if (nameParts.length === 1) {
+    return nameParts[0];
+  }
+
+  return `${nameParts[0]} ${nameParts[1].charAt(0).toUpperCase()}.`;
 };
 
 export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
@@ -31,16 +57,37 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
           }
 
           const ringStyle =
-            story.type === 'live' ? styles.storyRingLive :
-              story.type === 'standard' ? styles.storyRingStandard :
-                styles.storyRingMuted;
+            story.seen ? styles.storyRingSeen :
+              story.type === 'live' ? styles.storyRingLive :
+                story.type === 'standard' ? styles.storyRingStandard :
+                  styles.storyRingMuted;
+          const compactStoryName = getCompactStoryName(story.title ?? story.authorName);
 
           return (
             <TouchableOpacity
               key={story.id}
               style={styles.storyItem}
               activeOpacity={0.8}
-              onPress={() => router.push('/live-screen/live-video')}
+              onPress={() => {
+                if (story.storyItems?.length || story.mediaUri) {
+                  const storyItems = story.storyItems ?? (
+                    story.mediaUri
+                      ? [{ id: story.id, mediaUri: story.mediaUri, durationSeconds: 15 }]
+                      : []
+                  );
+
+                  router.push({
+                    pathname: '/post-screen/view-story',
+                    params: {
+                      stories: JSON.stringify(storyItems),
+                      title: story.title ?? story.authorName ?? 'Story',
+                    },
+                  });
+                  return;
+                }
+
+                router.push('/live-screen/live-video');
+              }}
             >
               <View style={[styles.storyRing, ringStyle]}>
                 {story.imageUri && (
@@ -54,9 +101,9 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
                   </View>
                 )}
 
-                {story.type === 'standard' && story.title && (
+                {story.type === 'standard' && compactStoryName && (
                   <View style={styles.storyOverlayTextContainer}>
-                    <Text style={styles.storyOverlayText} numberOfLines={2}>{story.title}</Text>
+                    <Text style={styles.storyOverlayText} numberOfLines={2}>{compactStoryName}</Text>
                   </View>
                 )}
               </View>
@@ -105,6 +152,9 @@ const styles = StyleSheet.create({
   },
   storyRingMuted: {
     backgroundColor: "transparent",
+  },
+  storyRingSeen: {
+    backgroundColor: "#4A4A55",
   },
   storyImage: {
     width: "100%",

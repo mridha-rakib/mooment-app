@@ -1,15 +1,18 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import React, { useRef, useState, useEffect } from 'react';
-import { Dimensions, Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { createMomentComment, getMomentComments, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
 
 const { height } = Dimensions.get('window');
 
 type CommentType = {
   id: string;
+  authorId?: string;
   authorName: string;
   authorAvatar: string;
   text: string;
@@ -67,18 +70,68 @@ const INITIAL_COMMENTS: CommentType[] = [
   }
 ];
 
+const DEFAULT_COMMENT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
+const formatCommentTimeAgo = (createdAt: string) => {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000));
+
+  if (elapsedSeconds < 60) {
+    return 'Just now';
+  }
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+
+  if (elapsedHours < 24) {
+    return `${elapsedHours}h`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+
+  return `${elapsedDays}d`;
+};
+
+const momentCommentToComment = (comment: MomentComment): CommentType => ({
+  id: comment.id,
+  authorId: comment.author?.id,
+  authorName: comment.author?.name ?? 'Mooment User',
+  authorAvatar: comment.author?.avatarUrl ?? DEFAULT_COMMENT_AVATAR,
+  text: comment.text,
+  timeAgo: formatCommentTimeAgo(comment.createdAt),
+  likesCount: 0,
+  replies: comment.replies.map(momentCommentToComment),
+});
+
 export default function CommentsModal({
   visible,
-  onClose
+  onClose,
+  momentId,
+  likesCount = 0,
+  sharesCount = 0,
+  onInteractionChange,
 }: {
   visible: boolean;
   onClose: () => void;
+  momentId?: string | null;
+  likesCount?: number;
+  sharesCount?: number;
+  onInteractionChange?: (summary: MomentInteractionSummary) => void;
 }) {
   const { colors, isDark } = useTheme();
   const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
   const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSendingComment, setIsSendingComment] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const router = useRouter();
+  const canUseCommentsApi = Boolean(momentId && MONGO_OBJECT_ID_PATTERN.test(momentId));
 
   const keyboardHeight = useSharedValue(0);
 
@@ -102,13 +155,40 @@ export default function CommentsModal({
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, []);
+  }, [keyboardHeight]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
       paddingBottom: keyboardHeight.value > 0 ? keyboardHeight.value : 0,
     };
   });
+
+  const loadComments = useCallback(async () => {
+    if (!momentId || !MONGO_OBJECT_ID_PATTERN.test(momentId)) {
+      setComments(INITIAL_COMMENTS);
+      return;
+    }
+
+    setIsLoadingComments(true);
+
+    try {
+      const momentComments = await getMomentComments(momentId);
+
+      setComments(momentComments.map(momentCommentToComment));
+    } catch (error) {
+      Alert.alert('Unable to load comments', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, [momentId]);
+
+  useEffect(() => {
+    if (visible) {
+      setReplyingTo(null);
+      setCommentText('');
+      void loadComments();
+    }
+  }, [loadComments, visible]);
 
   const toggleCommentLike = (commentId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -145,12 +225,38 @@ export default function CommentsModal({
       router.push({
         pathname: '/profile-screen/user-profile',
         params: {
-          userId: item.id,
+          userId: item.authorId ?? item.id,
           name: item.authorName,
           avatar: item.authorAvatar
         }
       } as any);
     }, 300);
+  };
+
+  const handleSendComment = async () => {
+    const trimmedText = commentText.trim();
+
+    if (!trimmedText || !momentId || !canUseCommentsApi || isSendingComment) {
+      return;
+    }
+
+    setIsSendingComment(true);
+
+    try {
+      const result = await createMomentComment(momentId, {
+        text: trimmedText,
+        parentCommentId: replyingTo?.id ?? null,
+      });
+
+      setCommentText('');
+      setReplyingTo(null);
+      onInteractionChange?.(result.summary);
+      await loadComments();
+    } catch (error) {
+      Alert.alert('Unable to post comment', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsSendingComment(false);
+    }
   };
 
   const renderComment = (item: CommentType, isChild = false, isLast = false) => {
@@ -228,32 +334,41 @@ export default function CommentsModal({
           <View style={styles.statsHeader}>
             <View style={styles.statsLeft}>
               <Ionicons name="heart" size={16} color="#F2245C" />
-              <Text style={[styles.statsText, { color: colors.textSecondary }]}>12.5K</Text>
+              <Text style={[styles.statsText, { color: colors.textSecondary }]}>{likesCount}</Text>
             </View>
-            <Text style={[styles.statsShares, { color: colors.textSecondary }]}>33 shares</Text>
+            <Text style={[styles.statsShares, { color: colors.textSecondary }]}>{sharesCount} shares</Text>
           </View>
 
           {/* Comments List */}
           <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
-            {/* Comment 1 */}
-            {renderComment(comments[0])}
-
-            {/* Comment 2 with View More */}
-            {renderComment(comments[1])}
-            <View style={styles.viewMoreRow}>
-              <View style={[styles.viewMoreLine, { borderColor: colors.border }]} />
-              <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>View 4 replies</Text>
-            </View>
-
-            {/* Comment 3 with deeply nested children */}
-            <View>
-               {renderComment(comments[2])}
-               <View style={styles.repliesContainer}>
-                  {comments[2].replies?.map((reply, index, arr) => 
-                    renderComment(reply, true, index === arr.length - 1)
-                  )}
-               </View>
-            </View>
+            {isLoadingComments ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : comments.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No comments yet</Text>
+            ) : (
+              comments.map((comment) => (
+                <View key={comment.id}>
+                  {renderComment(comment)}
+                  {comment.viewMoreReplies ? (
+                    <View style={styles.viewMoreRow}>
+                      <View style={[styles.viewMoreLine, { borderColor: colors.border }]} />
+                      <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>
+                        View {comment.viewMoreReplies} replies
+                      </Text>
+                    </View>
+                  ) : null}
+                  {comment.replies && comment.replies.length > 0 ? (
+                    <View style={styles.repliesContainer}>
+                      {comment.replies.map((reply, index, arr) =>
+                        renderComment(reply, true, index === arr.length - 1)
+                      )}
+                    </View>
+                  ) : null}
+                </View>
+              ))
+            )}
             <View style={{ height: 20 }} />
           </ScrollView>
 
@@ -276,10 +391,25 @@ export default function CommentsModal({
                   style={[styles.input, { color: colors.text }]}
                   placeholder={replyingTo ? `Reply to ${replyingTo.name}...` : "Add Comment"}
                   placeholderTextColor={colors.textSecondary}
+                  value={commentText}
+                  onChangeText={setCommentText}
                 />
               </View>
-              <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
-                <Feather name="send" size={18} color={colors.background} />
+              <TouchableOpacity
+                style={[
+                  styles.sendBtn,
+                  { backgroundColor: colors.primary },
+                  (!commentText.trim() || !canUseCommentsApi || isSendingComment) && styles.sendBtnDisabled,
+                ]}
+                activeOpacity={0.8}
+                disabled={!commentText.trim() || !canUseCommentsApi || isSendingComment}
+                onPress={handleSendComment}
+              >
+                {isSendingComment ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <Feather name="send" size={18} color={colors.background} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -342,6 +472,15 @@ const styles = StyleSheet.create({
   scrollList: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 13,
+    paddingVertical: 30,
   },
   commentRow: {
     flexDirection: 'row',
@@ -460,5 +599,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sendBtnDisabled: {
+    opacity: 0.5,
   }
 });

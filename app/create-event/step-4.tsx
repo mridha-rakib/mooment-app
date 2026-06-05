@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -13,11 +14,50 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DeleteModal from '../../components/ui/DeleteModal';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 export default function CreateEventStep4() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [isDeleteModalVisible, setIsDeleteModalVisible] = React.useState(false);
+  const tickets = useEventDraftStore((state) => state.tickets);
+  const deleteTicket = useEventDraftStore((state) => state.deleteTicket);
+  const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const primaryTicket = tickets[0] ?? null;
+
+  const formatTicketExpiry = (value?: string | null) => {
+    if (!value) {
+      return 'Expires in • Sat, Sep 9 • 4:00 PM';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return 'Expires in • Sat, Sep 9 • 4:00 PM';
+    }
+
+    const dateLabel = date.toLocaleDateString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      weekday: 'short',
+    });
+    const timeLabel = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      hour12: true,
+      minute: '2-digit',
+    });
+
+    return `Expires in • ${dateLabel} • ${timeLabel}`;
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      await saveDraft();
+    } catch (error) {
+      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -27,7 +67,7 @@ export default function CreateEventStep4() {
       <View style={styles.header}>
         <BackButton />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handleSaveDraft}>
           <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
@@ -49,33 +89,34 @@ export default function CreateEventStep4() {
           <Text style={[styles.createTicketText, { color: colors.background }]}>Create Ticket</Text>
         </TouchableOpacity>
 
-        {/* Ticket Card */}
-        <View style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.ticketHeader}>
-            <View style={styles.ticketTitleContainer}>
-              <Text style={[styles.ticketTitle, { color: colors.text }]}>General Ticket</Text>
-              <View style={[styles.badge, { backgroundColor: isDark ? '#3F3F46' : '#E5E5EA' }]}>
-                <Text style={[styles.badgeText, { color: colors.textSecondary }]}>42 left</Text>
+        {primaryTicket && (
+          <View style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.ticketHeader}>
+              <View style={styles.ticketTitleContainer}>
+                <Text style={[styles.ticketTitle, { color: colors.text }]}>{primaryTicket.name}</Text>
+                <View style={[styles.badge, { backgroundColor: isDark ? '#3F3F46' : '#E5E5EA' }]}>
+                  <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{primaryTicket.capacity} left</Text>
+                </View>
               </View>
+              <TouchableOpacity>
+                <Feather name="edit-3" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity>
-              <Feather name="edit-3" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
 
-          <Text style={[styles.ticketDescription, { color: colors.textSecondary }]}>Entry from 9pm. Standing only.</Text>
-          <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]}>Expires in • Sat, Sep 9 • 4:00 PM</Text>
+            <Text style={[styles.ticketDescription, { color: colors.textSecondary }]}>{primaryTicket.description || 'Entry from 9pm. Standing only.'}</Text>
+            <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]}>{formatTicketExpiry(primaryTicket.salesEndAt)}</Text>
 
-          <View style={styles.ticketFooter}>
-            <View>
-              <Text style={[styles.ticketPrice, { color: colors.text }]}>£45</Text>
-              <Text style={[styles.perTicket, { color: colors.textSecondary }]}>per ticket</Text>
+            <View style={styles.ticketFooter}>
+              <View>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>£{primaryTicket.price}</Text>
+                <Text style={[styles.perTicket, { color: colors.textSecondary }]}>per ticket</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsDeleteModalVisible(true)}>
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => setIsDeleteModalVisible(true)}>
-              <Ionicons name="trash-outline" size={18} color={colors.danger} />
-            </TouchableOpacity>
           </View>
-        </View>
+        )}
       </View>
 
       {/* Spacer */}
@@ -95,7 +136,9 @@ export default function CreateEventStep4() {
         onClose={() => setIsDeleteModalVisible(false)}
         onConfirm={() => {
           setIsDeleteModalVisible(false);
-          // Add deletion logic here if needed
+          if (primaryTicket) {
+            deleteTicket(primaryTicket.localId);
+          }
         }}
       />
     </SafeAreaView>

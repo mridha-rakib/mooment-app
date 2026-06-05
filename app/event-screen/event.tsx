@@ -6,7 +6,7 @@ import BackButton from "@/components/ui/BackButton";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Dimensions,
@@ -28,12 +28,14 @@ const { width } = Dimensions.get("window");
 
 const EventScreen = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState("About");
   const [accessTab, setAccessTab] = useState("Tickets");
   const [menuVisible, setMenuVisible] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const isHostMode = params.mode === "host";
 
   const handleDelete = () => {
     setMenuVisible(false);
@@ -84,11 +86,21 @@ const EventScreen = () => {
             contentFit="cover"
           />
           <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(0, 0, 0, 0.5)", "rgba(0, 0, 0, 0)"]}
+            locations={[0, 1]}
+            style={styles.topShade}
+          />
+          <LinearGradient
+            pointerEvents="none"
             colors={[
-              isDark ? "rgba(14, 13, 18, 0.8)" : "rgba(255, 255, 255, 0.5)",
-              "transparent",
-              colors.background,
+              "rgba(92, 48, 187, 0.1)",
+              "rgba(0, 0, 0, 0.72)",
+              "#000000",
             ]}
+            locations={[0, 0.48, 1]}
+            start={{ x: 0.95, y: 0 }}
+            end={{ x: 0.18, y: 1 }}
             style={styles.gradient}
           />
 
@@ -98,7 +110,7 @@ const EventScreen = () => {
               <View
                 style={[styles.tag, { backgroundColor: "#8E54E9" }]}
               >
-                <Text style={[styles.tagText, { color: "#FFFFFF" }]}>Music Part </Text>
+                <Text style={[styles.tagText, { color: "#FFFFFF" }]}>Music Party</Text>
               </View>
               <View
                 style={[styles.tag, { backgroundColor: "#FF6B3D" }]}
@@ -239,17 +251,29 @@ const EventScreen = () => {
 
       {/* Sticky Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        <View style={styles.priceContainer}>
-          <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>From</Text>
-          <Text style={[styles.priceValue, { color: colors.text }]}>£45</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.buyBtn, { backgroundColor: colors.primary }]}
-          activeOpacity={0.8}
-          onPress={() => router.push("/event-screen/checkout")}
-        >
-          <Text style={[styles.buyBtnText, { color: colors.background }]}>Buy Now</Text>
-        </TouchableOpacity>
+        {isHostMode ? (
+          <TouchableOpacity
+            style={[styles.startEventBtn, { backgroundColor: colors.primary }]}
+            activeOpacity={0.85}
+            onPress={() => router.push("/profile-screen/event-dashboard")}
+          >
+            <Text style={[styles.buyBtnText, { color: colors.background }]}>Start The Event</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <View style={styles.priceContainer}>
+              <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>From</Text>
+              <Text style={[styles.priceValue, { color: colors.text }]}>£45</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.buyBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+              onPress={() => router.push("/event-screen/checkout")}
+            >
+              <Text style={[styles.buyBtnText, { color: colors.background }]}>Buy Now</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* More Menu Modal */}
@@ -327,49 +351,57 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: width,
-    height: 480,
+    height: 302,
     position: "relative",
+    overflow: "hidden",
   },
   heroImage: {
     width: "100%",
     height: "100%",
   },
-  gradient: {
+  topShade: {
     position: "absolute",
     left: 0,
     right: 0,
     top: 0,
-    bottom: 0,
+    height: 130,
+  },
+  gradient: {
+    position: "absolute",
+    left: 0,
+    top: 62,
+    width: 440,
+    height: 240,
   },
   overlaidMeta: {
     position: "absolute",
-    bottom: 20,
-    left: 16,
-    right: 16,
+    bottom: 14,
+    left: 20,
+    right: 20,
   },
   tagsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
+    gap: 7,
+    marginBottom: 10,
   },
   tag: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   tagText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
   },
   hostRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   hostAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 2,
   },
   hostInfo: {
@@ -377,7 +409,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   hostName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
   },
   hostSubRow: {
@@ -395,8 +427,8 @@ const styles = StyleSheet.create({
   },
   followBtnSmall: {
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
   },
   followBtnTextSmall: {
     fontSize: 12,
@@ -405,7 +437,7 @@ const styles = StyleSheet.create({
   attendeesStatsRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   avatarCluster: {
     flexDirection: "row",
@@ -437,9 +469,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   eventTitle: {
-    fontSize: 24,
+    fontSize: 23,
     fontWeight: "bold",
-    marginTop: 20,
+    marginTop: 18,
     marginBottom: 8,
   },
   eventInfoRow: {
@@ -520,6 +552,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
+  },
+  startEventBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    flex: 1,
+    paddingVertical: 14,
   },
   buyBtnText: {
     fontSize: 16,

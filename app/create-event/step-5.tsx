@@ -6,44 +6,73 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
-import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { useEventDraftStore } from '@/stores/eventDraftStore';
+import type { EventPrivacy } from '@/lib/events';
 
 export default function CreateEventStep5() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const [privacy, setPrivacy] = useState('public'); // 'public' or 'private'
-  const [showConfetti, setShowConfetti] = useState(false);
+  const draftPrivacy = useEventDraftStore((state) => state.privacy);
+  const setDraftPrivacy = useEventDraftStore((state) => state.setPrivacy);
+  const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const publishEvent = useEventDraftStore((state) => state.publish);
+  const resetDraft = useEventDraftStore((state) => state.resetDraft);
+  const [privacy, setPrivacy] = useState<EventPrivacy>(draftPrivacy); // 'public' or 'private'
+  const [isPublishing, setIsPublishing] = useState(false);
 
-  const handlePublish = () => {
-    setShowConfetti(true);
-    // Simulate a delay before navigating back or to success screen
-    setTimeout(() => {
-      console.log('Event Published!');
-      // router.replace('/(tabs)/home'); 
-    }, 3000);
+  const handlePrivacyChange = (value: EventPrivacy) => {
+    setPrivacy(value);
+    setDraftPrivacy(value);
+  };
+
+  const handleSaveDraft = async () => {
+    setDraftPrivacy(privacy);
+
+    try {
+      await saveDraft();
+    } catch (error) {
+      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    }
+  };
+
+  const handlePublish = async () => {
+    if (isPublishing) {
+      return;
+    }
+
+    setDraftPrivacy(privacy);
+    setIsPublishing(true);
+
+    try {
+      const event = await publishEvent();
+      resetDraft();
+      router.replace({
+        pathname: '/event-screen/event',
+        params: { eventId: event.id, mode: 'host' },
+      });
+    } catch (error) {
+      setIsPublishing(false);
+      Alert.alert('Unable to publish event', getAuthErrorMessage(error, 'Please check the event details and try again.'));
+    }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
-      {/* Confetti Animation */}
-      <ConfettiOverlay 
-        visible={showConfetti} 
-        onFinish={() => setShowConfetti(false)} 
-      />
-      
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handleSaveDraft}>
           <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
@@ -68,7 +97,7 @@ export default function CreateEventStep5() {
             { backgroundColor: colors.card, borderColor: colors.border },
             privacy === 'public' && { borderColor: colors.primary }
           ]}
-          onPress={() => setPrivacy('public')}
+          onPress={() => handlePrivacyChange('public')}
           activeOpacity={0.8}
         >
           <View style={styles.optionHeader}>
@@ -95,7 +124,7 @@ export default function CreateEventStep5() {
             { backgroundColor: colors.card, borderColor: colors.border },
             privacy === 'private' && { borderColor: colors.primary }
           ]}
-          onPress={() => setPrivacy('private')}
+          onPress={() => handlePrivacyChange('private')}
           activeOpacity={0.8}
         >
           <View style={styles.optionHeader}>
@@ -129,8 +158,12 @@ export default function CreateEventStep5() {
         <TouchableOpacity 
           style={[styles.publishButton, { backgroundColor: colors.primary }]}
           onPress={handlePublish}
+          disabled={isPublishing}
+          activeOpacity={0.85}
         >
-          <Text style={[styles.publishButtonText, { color: colors.background }]}>Publish Event</Text>
+          <Text style={[styles.publishButtonText, { color: colors.background }]}>
+            {isPublishing ? 'Publishing...' : 'Publish Event'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -2,7 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import BackButton from "@/components/ui/BackButton";
 

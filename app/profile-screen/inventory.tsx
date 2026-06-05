@@ -1,9 +1,10 @@
-import { Feather } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
-import React from "react";
-import { FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "@/components/ui/BackButton";
+import { getMyProducts } from "@/lib/products";
+import { getStorageDownloadUrl } from "@/lib/storage";
 
 type InventoryItem = {
   id: string;
@@ -32,10 +33,46 @@ const MOCK_INVENTORY: InventoryItem[] = [
   }
 ];
 
+const FALLBACK_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=300';
 
+const formatProductPrice = (priceUsd: number) => `$${priceUsd.toFixed(2)}`;
 
 export default function InventoryScreen() {
   const router = useRouter();
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(MOCK_INVENTORY);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMyProducts()
+      .then(async (products) => {
+        const items = await Promise.all(
+          products.map(async (product) => {
+            const image = product.imageKeys[0]
+              ? await getStorageDownloadUrl(product.imageKeys[0]).catch(() => FALLBACK_PRODUCT_IMAGE)
+              : FALLBACK_PRODUCT_IMAGE;
+
+            return {
+              id: product.id,
+              name: product.name,
+              image,
+              stockCount: product.totalProduct,
+              price: formatProductPrice(product.priceUsd),
+              isOutOfStock: product.totalProduct === 0,
+            };
+          }),
+        );
+
+        if (isMounted) {
+          setInventoryItems(items);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const renderItem = ({ item }: { item: InventoryItem }) => (
     <View style={styles.card}>
@@ -77,7 +114,7 @@ export default function InventoryScreen() {
       </View>
 
       <FlatList
-        data={MOCK_INVENTORY}
+        data={inventoryItems}
         renderItem={renderItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}

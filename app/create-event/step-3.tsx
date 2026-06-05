@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,121 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
+import { reverseGeocodeLocation } from '@/lib/locationSearch';
+import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 export default function CreateEventStep3() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const [venue, setVenue] = useState('Rooftop Terace, NYC');
-  const [address, setAddress] = useState('123, Main Street NYC');
+  const draftLocation = useEventDraftStore((state) => state.location);
+  const setStepThree = useEventDraftStore((state) => state.setStepThree);
+  const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const [venue, setVenue] = useState(draftLocation.venue ?? '');
+  const [address, setAddress] = useState(draftLocation.address ?? '');
+  const searchLabel = draftLocation.searchLabel ?? address;
+
+  useEffect(() => {
+    setVenue(draftLocation.venue ?? '');
+  }, [draftLocation.venue]);
+
+  useEffect(() => {
+    setAddress(draftLocation.address ?? '');
+  }, [draftLocation.address]);
+
+  useEffect(() => {
+    const hasDraftLocation = Boolean(
+      draftLocation.searchLabel ||
+      draftLocation.address ||
+      typeof draftLocation.latitude === 'number' ||
+      typeof draftLocation.longitude === 'number',
+    );
+
+    if (hasDraftLocation) {
+      return;
+    }
+
+    let isMounted = true;
+
+    getCurrentLocationIfPermissionGranted()
+      .then(async (location) => {
+        if (!location || !isMounted) {
+          return;
+        }
+
+        const reverseLocation = await reverseGeocodeLocation(location.latitude, location.longitude).catch(() => null);
+        const label = reverseLocation?.label || reverseLocation?.address || 'Current Location';
+        const nextAddress = reverseLocation?.address || label;
+
+        if (!isMounted) {
+          return;
+        }
+
+        setStepThree({
+          location: {
+            address: nextAddress,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            searchLabel: label,
+            venue: '',
+          },
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    draftLocation.address,
+    draftLocation.latitude,
+    draftLocation.longitude,
+    draftLocation.searchLabel,
+    setStepThree,
+  ]);
+
+  const persistStepThree = () => {
+    const trimmedAddress = address.trim();
+    const trimmedVenue = venue.trim();
+    const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
+
+    setStepThree({
+      location: {
+        ...draftLocation,
+        address: trimmedAddress || null,
+        searchLabel: nextSearchLabel || null,
+        venue: trimmedVenue || null,
+      },
+    });
+  };
+
+  const handleSaveDraft = async () => {
+    persistStepThree();
+
+    try {
+      await saveDraft();
+    } catch (error) {
+      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    }
+  };
+
+  const handleNext = () => {
+    persistStepThree();
+    router.push('/create-event/step-4');
+  };
+
+  const handleOpenLocationPicker = () => {
+    persistStepThree();
+    router.push('/create-event/location-picker');
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -28,7 +131,7 @@ export default function CreateEventStep3() {
       <View style={styles.header}>
         <BackButton />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handleSaveDraft}>
           <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
         </TouchableOpacity>
       </View>
@@ -46,10 +149,12 @@ export default function CreateEventStep3() {
           <Text style={[styles.label, { color: colors.textSecondary }]}>LOCATION</Text>
           <TouchableOpacity 
             style={[styles.searchBox, { borderColor: colors.border }]}
-            onPress={() => router.push('/create-event/location-picker')}
+            onPress={handleOpenLocationPicker}
           >
             <Ionicons name="location-outline" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
-            <Text style={[styles.searchText, { color: colors.text }]}>123, Main Street NYC</Text>
+            <Text style={[styles.searchText, { color: searchLabel ? colors.text : colors.textSecondary }]}>
+              {searchLabel}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -85,7 +190,7 @@ export default function CreateEventStep3() {
       <View style={styles.footer}>
         <TouchableOpacity 
           style={[styles.nextButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/create-event/step-4')}
+          onPress={handleNext}
         >
           <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
         </TouchableOpacity>

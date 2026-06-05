@@ -1,4 +1,5 @@
-import { useTheme } from "@/hooks/useTheme";
+import {
+  useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import {
   Add01Icon,
@@ -21,7 +22,15 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Modal, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuthStore } from "@/stores/authStore";
 
 type MenuDrawerProps = {
   visible: boolean;
@@ -59,6 +68,13 @@ const SectionLabel = ({ label, colors }: { label: string, colors: any }) => (
 export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress, userName, userHandle }: MenuDrawerProps) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = async () => {
+    onClose();
+    await logout();
+    router.replace('/auth-screen/login');
+  };
 
   return (
     <Modal
@@ -217,10 +233,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               icon={Logout01Icon}
               label="Logout"
               colors={colors}
-              onPress={() => {
-                onClose();
-                router.replace('/auth-screen/login');
-              }}
+              onPress={handleLogout}
               isDestructive
               hideSeparator
             />

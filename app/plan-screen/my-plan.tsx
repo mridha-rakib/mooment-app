@@ -3,7 +3,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import {
   Calendar03Icon,
-  CheckmarkCircle02Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
@@ -14,16 +13,18 @@ import {
   UserGroupIcon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
   Image, Modal, Platform,
-  Pressable, SafeAreaView, ScrollView,
+  Pressable, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { usePlanStore } from '@/stores/planStore';
+import type { PlanEvent } from '@/stores/planStore';
 
 /* ─── Constants ─── */
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -33,46 +34,63 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
+function getTimeMinutes(time: string) {
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
 
-/* ─── Types ─── */
-type PlanEvent = { id: string; day: number; time: string; title: string; image: string; venue?: string };
+  if (!match) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const [, hourValue, minuteValue, periodValue] = match;
+  const hour = Number(hourValue);
+  const minute = Number(minuteValue);
+  const period = periodValue.toUpperCase();
+  const normalizedHour = period === 'PM' && hour !== 12 ? hour + 12 : period === 'AM' && hour === 12 ? 0 : hour;
+
+  return normalizedHour * 60 + minute;
+}
 
 /* ─── Time slots for the timeline ─── */
-const TIME_SLOTS = ['6:00 PM', '9:00 PM'];
+const TIME_SLOTS = ['6:00 PM', '7:00 PM'];
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const EVENT_CAPSULE_WIDTH = 146;
+const WIDE_CARD_WIDTH = Math.min(358, SCREEN_WIDTH - 34);
+const CENTERED_CAPSULE_TRANSLATE_X = Math.max(0, (SCREEN_WIDTH / 2) - 32 - (EVENT_CAPSULE_WIDTH / 2));
+const EVENT_CARD_ACTIVE = {
+  background: '#111111',
+  border: '#B3B3B3',
+  iconBorder: '#777777',
+  muted: '#9A9898',
+  text: '#FFFFFF',
+};
+const ATTENDEE_AVATARS = [
+  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=100',
+];
 
 export default function MyPlanScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ planName?: string; planDate?: string; planTime?: string; planEvent?: string; planFriends?: string }>();
-
-  // Determine if a plan was just created
-  const hasPlan = !!(params.planName && params.planName.trim());
+  const plans = usePlanStore((state) => state.plans);
+  const deletePlan = usePlanStore((state) => state.deletePlan);
+  const restorePlans = usePlanStore((state) => state.restorePlans);
 
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [selectedDay, setSelectedDay] = useState(now.getDate());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [events, setEvents] = useState<PlanEvent[]>([
-    {
-      id: '1', day: selectedDay, time: '6:00 PM',
-      title: 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-      venue: 'Rooftop Series Vol.4',
-    },
-    {
-      id: '2', day: selectedDay, time: '9:00 PM',
-      title: 'Party', image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop',
-      venue: 'Rooftop Series Vol.4',
-    }
-  ]);
+  const [events, setEvents] = useState<PlanEvent[]>([]);
+  const hasAppliedInitialPlanDateRef = useRef(false);
 
   const handleAddEvent = () => {
     setEvents([
       ...events,
       {
-        id: Math.random().toString(), day: selectedDay, time: '6:00 PM',
+        id: Math.random().toString(), day: selectedDay, month: calMonth, year: calYear, time: '6:00 PM',
         title: planName || 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
         venue: planLocation || 'Rooftop Series Vol.4',
       }
@@ -84,21 +102,55 @@ export default function MyPlanScreen() {
   const [isSelectEventModalVisible, setIsSelectEventModalVisible] = useState(false);
 
   const [planName, setPlanName] = useState('');
-  const [planDate, setPlanDate] = useState('Sep 9, 2026');
-  const [planTime, setPlanTime] = useState('10:00 AM');
+  const [planDate] = useState('Sep 9, 2026');
+  const [planTime] = useState('10:00 AM');
   const [selectedEventRadio, setSelectedEventRadio] = useState<string | null>(null);
-  const [planLocation, setPlanLocation] = useState('123, Main Street NYC');
-  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const [planLocation] = useState('123, Main Street NYC');
+  const [selectedFriends] = useState<string[]>([]);
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
   const [centeredEventId, setCenteredEventId] = useState<string | null>(null);
 
-  const highlightedDays = useMemo(() => new Set([4, 5]), []);
+  useEffect(() => {
+    void restorePlans();
+  }, [restorePlans]);
+
+  useEffect(() => {
+    setEvents(plans);
+  }, [plans]);
+
+  useEffect(() => {
+    if (events.length === 0) {
+      hasAppliedInitialPlanDateRef.current = false;
+      setCalendarOpen(false);
+      return;
+    }
+
+    if (hasAppliedInitialPlanDateRef.current) {
+      return;
+    }
+
+    const firstEvent = events[0];
+
+    if (!firstEvent) {
+      return;
+    }
+
+    setCalYear(firstEvent.year);
+    setCalMonth(firstEvent.month);
+    setSelectedDay(firstEvent.day);
+    setCalendarOpen(true);
+    hasAppliedInitialPlanDateRef.current = true;
+  }, [events]);
+
+  const highlightedDays = useMemo(
+    () => new Set(events.filter((event) => event.year === calYear && event.month === calMonth).map((event) => event.day)),
+    [calMonth, calYear, events],
+  );
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDay(calYear, calMonth);
 
   const selectedDate = new Date(calYear, calMonth, selectedDay);
   const fullDayLabel = `${DAY_NAMES[selectedDate.getDay()]}, ${SHORT_MONTHS[calMonth]} ${selectedDay}`;
-  const dayLabel = `${DAY_NAMES[selectedDate.getDay()]}, ${selectedDay}`;
 
   const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); setSelectedDay(1); };
   const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); setSelectedDay(1); };
@@ -109,11 +161,19 @@ export default function MyPlanScreen() {
     for (let d = 1; d <= daysInMonth; d++) { row.push(d); if (row.length === 7) { rows.push(row); row = []; } }
     if (row.length) { while (row.length < 7) row.push(null); rows.push(row); }
     return rows;
-  }, [calYear, calMonth, daysInMonth, firstDay]);
+  }, [daysInMonth, firstDay]);
 
-  const dayEvents = useMemo(() => events.filter(e => e.day === selectedDay), [events, selectedDay]);
+  const dayEvents = useMemo(
+    () => events.filter(e => e.year === calYear && e.month === calMonth && e.day === selectedDay),
+    [calMonth, calYear, events, selectedDay],
+  );
 
   const hasAnyEvents = events.length > 0;
+  const displayedTimeSlots = useMemo(() => {
+    const slots = new Set([...TIME_SLOTS, ...dayEvents.map((event) => event.time)]);
+
+    return [...slots].sort((a, b) => getTimeMinutes(a) - getTimeMinutes(b));
+  }, [dayEvents]);
 
   return (
     <View style={[s.safe, { backgroundColor: colors.background }]}>
@@ -176,9 +236,10 @@ export default function MyPlanScreen() {
         )}
 
         {/* ═══ Timeline ═══ */}
+        {hasAnyEvents && <Text style={[s.yourPlanLabel, { color: colors.text }]}>Your Plan</Text>}
         <View style={s.timelineContainer}>
           <View style={[s.timelineVerticalLine, { backgroundColor: colors.border }]} />
-          {TIME_SLOTS.map((slot) => {
+          {displayedTimeSlots.map((slot) => {
             const ev = dayEvents.find(e => e.time === slot);
             return (
               <TimelineSlot
@@ -187,7 +248,13 @@ export default function MyPlanScreen() {
                 ev={ev}
                 isCentered={centeredEventId === ev?.id}
                 onToggleCenter={() => setCenteredEventId(centeredEventId === ev?.id ? null : (ev?.id || null))}
-                onAddPress={() => setIsCreatePlanModalVisible(true)}
+                onAddPress={() => router.push('/plan-screen/create-plan' as any)}
+                onDelete={() => {
+                  if (ev) {
+                    void deletePlan(ev.id);
+                    setCenteredEventId(null);
+                  }
+                }}
                 colors={colors}
               />
             );
@@ -215,7 +282,7 @@ export default function MyPlanScreen() {
                 <TouchableOpacity style={s.moreMenuItem} activeOpacity={0.8} onPress={() => {
                   setIsMoreMenuVisible(false);
                   if (item.isCreate) {
-                    setIsCreatePlanModalVisible(true);
+                    router.push('/plan-screen/create-plan' as any);
                   } else if (item.route) {
                     router.push(item.route as any);
                   }
@@ -374,8 +441,8 @@ export default function MyPlanScreen() {
 }
 
 /* ─── Sub-Component for individual slot animation ─── */
-function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors }: {
-  slot: string, ev: any, isCentered: boolean, onToggleCenter: () => void, onAddPress: () => void, colors: any
+function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDelete, colors }: {
+  slot: string, ev?: PlanEvent, isCentered: boolean, onToggleCenter: () => void, onAddPress: () => void, onDelete: () => void, colors: any
 }) {
   const router = useRouter();
   const alignAnim = useRef(new Animated.Value(0)).current;
@@ -387,12 +454,36 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
       friction: 8,
       tension: 40
     }).start();
-  }, [isCentered]);
+  }, [alignAnim, isCentered]);
 
   const capsuleTranslateX = alignAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, (SCREEN_WIDTH - 200) / 2 - 50]
+    outputRange: [0, CENTERED_CAPSULE_TRANSLATE_X]
   });
+
+  const cardBackground = isCentered ? EVENT_CARD_ACTIVE.background : colors.background;
+  const cardBorder = isCentered ? EVENT_CARD_ACTIVE.border : colors.border;
+  const iconBackground = isCentered ? 'rgba(17, 17, 17, 0.8)' : colors.card;
+  const iconBorder = isCentered ? EVENT_CARD_ACTIVE.iconBorder : colors.border;
+  const iconColor = isCentered ? EVENT_CARD_ACTIVE.text : colors.primary;
+  const titleColor = isCentered ? EVENT_CARD_ACTIVE.text : colors.text;
+  const secondaryColor = isCentered ? EVENT_CARD_ACTIVE.muted : colors.textSecondary;
+  const avatarBorder = isCentered ? EVENT_CARD_ACTIVE.background : colors.background;
+  const wideVenue = ev?.location && ev.venue && ev.location !== ev.venue
+    ? `${ev.venue} at ${ev.location}`
+    : `${ev?.venue || 'Rooftop Series Vol.4'} at 123, Ave NYC`;
+
+  const renderAvatars = (borderColor: string) => (
+    <View style={s.avatarGroup}>
+      {ATTENDEE_AVATARS.map((avatar, index) => (
+        <Image
+          key={avatar}
+          source={{ uri: avatar }}
+          style={[s.capsuleAvatar, { borderColor, marginLeft: index === 0 ? 0 : -8 }]}
+        />
+      ))}
+    </View>
+  );
 
   return (
     <View style={s.timeSlotWrap}>
@@ -400,119 +491,86 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
       <View style={[s.dashedLine, { borderColor: colors.border }]} />
       <View style={s.slotContent}>
         {ev ? (
-          <View style={{ width: '100%', alignItems: isCentered ? 'center' : 'flex-start' }}>
-            {slot === '6:00 PM' ? (
-              /* 6:00 PM Slot: Capsule Card */
-              <View style={{ width: '100%', alignItems: isCentered ? 'center' : 'flex-start' }}>
-                <Animated.View style={{ transform: [{ translateX: capsuleTranslateX }] }}>
-                  <TouchableOpacity style={[s.eventCapsule, { backgroundColor: colors.background, borderColor: colors.border }]} activeOpacity={0.8} onPress={onToggleCenter}>
-                    <View style={[s.capsuleIconWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color={colors.primary} />
-                    </View>
-                    <Text style={[s.capsuleTitle, { color: colors.text }]}>{ev.title}</Text>
-                    <Text style={[s.capsuleVenue, { color: colors.textSecondary }]}>{ev.venue}</Text>
-                    <Text style={[s.capsuleTime, { color: colors.textSecondary }]}>{ev.time}</Text>
-                    <Image source={{ uri: ev.image }} style={s.capsuleImg} />
+          <View style={s.eventSlotContent}>
+            <Animated.View style={{ transform: [{ translateX: capsuleTranslateX }] }}>
+              <TouchableOpacity
+                style={[s.eventCapsule, { backgroundColor: cardBackground, borderColor: cardBorder }]}
+                activeOpacity={0.85}
+                onPress={onToggleCenter}
+              >
+                <View style={[s.capsuleIconWrap, { backgroundColor: iconBackground, borderColor: iconBorder }]}>
+                  <HugeiconsIcon icon={SpoonAndForkIcon} size={20} color={iconColor} />
+                </View>
+                <View style={s.capsuleTextBlock}>
+                  <Text style={[s.capsuleTitle, { color: titleColor }]} numberOfLines={1}>{ev.title}</Text>
+                  <Text style={[s.capsuleVenue, { color: secondaryColor }]} numberOfLines={1}>{ev.venue}</Text>
+                  <Text style={[s.capsuleTime, { color: secondaryColor }]}>{ev.time}</Text>
+                </View>
+                <Image source={{ uri: ev.image }} style={s.capsuleImg} />
 
-                    <View style={s.capsuleAvatarsRow}>
-                      <View style={s.avatarGroup}>
-                        <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.background, marginLeft: 0 }]} />
-                        <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.background }]} />
-                        <Image source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.background }]} />
-                      </View>
-                      <Text style={[s.capsuleMoreText, { color: colors.textSecondary }]}>+41</Text>
-                    </View>
-                  </TouchableOpacity>
-                </Animated.View>
+                <View style={s.capsuleAvatarsRow}>
+                  {renderAvatars(avatarBorder)}
+                  <Text style={[s.capsuleMoreText, { color: secondaryColor }]}>+41</Text>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
 
-                {/* Connector and Wide Card */}
-                {isCentered && (
-                  <View style={{ alignItems: 'center', width: '100%' }}>
-                    <View style={[s.nodeConnector, { backgroundColor: colors.border }]} />
-                    <TouchableOpacity style={[s.wideCard, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.9} onPress={onToggleCenter}>
-                      <View style={s.wideCardTop}>
-                        <View style={[s.wideCardIconWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                          <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color={colors.primary} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[s.wideCardTitle, { color: colors.text }]}>{ev.title}</Text>
-                          <Text style={[s.wideCardVenue, { color: colors.textSecondary }]}>{ev.venue} at 123, Ave NYC</Text>
-                        </View>
+            {isCentered && (
+              <View style={s.expandedDetailWrap}>
+                <View style={[s.nodeConnector, { backgroundColor: EVENT_CARD_ACTIVE.iconBorder }]} />
+                <TouchableOpacity
+                  style={[s.wideCard, { backgroundColor: EVENT_CARD_ACTIVE.background, borderColor: EVENT_CARD_ACTIVE.border }]}
+                  activeOpacity={0.9}
+                  onPress={onToggleCenter}
+                >
+                  <View style={[s.wideCardIconWrap, { backgroundColor: 'rgba(17, 17, 17, 0.8)', borderColor: EVENT_CARD_ACTIVE.iconBorder }]}>
+                    <HugeiconsIcon icon={SpoonAndForkIcon} size={20} color={EVENT_CARD_ACTIVE.text} />
+                  </View>
+                  <View style={s.wideCardContent}>
+                    <View style={s.wideCardInfo}>
+                      <View style={s.wideCardTextBlock}>
+                        <Text style={[s.wideCardTitle, { color: EVENT_CARD_ACTIVE.text }]} numberOfLines={1}>{ev.title}</Text>
+                        <Text style={[s.wideCardVenue, { color: EVENT_CARD_ACTIVE.text }]} numberOfLines={1}>{wideVenue}</Text>
                       </View>
                       <View style={s.wideCardMiddle}>
-                        <View style={s.avatarGroup}>
-                          <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.card, marginLeft: 0 }]} />
-                          <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.card }]} />
-                        </View>
-                        <Text style={[s.wideCardMoreText, { color: colors.textSecondary }]}>+41  •  6:00 PM</Text>
+                        {renderAvatars(EVENT_CARD_ACTIVE.background)}
+                        <Text style={[s.wideCardMoreText, { color: EVENT_CARD_ACTIVE.muted }]}>+41</Text>
+                        <View style={s.metaDot} />
+                        <Text style={[s.wideCardMoreText, { color: EVENT_CARD_ACTIVE.muted }]}>{ev.time}</Text>
                       </View>
-                      <View style={s.wideCardFooter}>
-                        <View style={s.footerIcons}>
-                          <TouchableOpacity
-                            style={s.footerIcon}
-                            onPress={() => router.push('/plan-screen/share-plan')}
-                          >
-                            <HugeiconsIcon icon={Share01Icon} size={18} color={colors.textSecondary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity style={s.footerIcon}><HugeiconsIcon icon={Delete02Icon} size={18} color={colors.primary} /></TouchableOpacity>
-                        </View>
-                        <View style={s.footerActions}>
-                          <TouchableOpacity
-                            style={[s.viewBtnSmall, { backgroundColor: colors.background }]}
-                            onPress={() => router.push('/event-screen/event')}
-                          >
-                            <Text style={[s.viewBtnTextSmall, { color: colors.text }]}>View</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[s.addedPillSmall, { backgroundColor: colors.primary }]}
-                            activeOpacity={0.8}
-                            onPress={() => router.push('/plan-screen/add-friend')}
-                          >
-                            <HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} color={colors.background} />
-                            <Text style={[s.addedTextSmall, { color: colors.background }]}>Added</Text>
-                          </TouchableOpacity>
-                        </View>
+                    </View>
+                    <View style={s.wideCardFooter}>
+                      <View style={s.footerIcons}>
+                        <TouchableOpacity
+                          style={s.footerIcon}
+                          hitSlop={8}
+                          onPress={() => router.push('/plan-screen/share-plan')}
+                        >
+                          <HugeiconsIcon icon={Share01Icon} size={20} color={EVENT_CARD_ACTIVE.border} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.footerIcon} hitSlop={8} onPress={onDelete}>
+                          <HugeiconsIcon icon={Delete02Icon} size={20} color={EVENT_CARD_ACTIVE.border} />
+                        </TouchableOpacity>
                       </View>
-                    </TouchableOpacity>
+                      <View style={s.footerActions}>
+                        <TouchableOpacity
+                          style={s.viewBtnSmall}
+                          onPress={() => router.push('/event-screen/event')}
+                        >
+                          <Text style={s.viewBtnTextSmall}>View</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={s.addedPillSmall}
+                          activeOpacity={0.8}
+                          onPress={() => router.push('/plan-screen/add-friend')}
+                        >
+                          <Feather name="check" size={14} color={EVENT_CARD_ACTIVE.background} />
+                          <Text style={s.addedTextSmall}>Added</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
-                )}
-              </View>
-            ) : (
-              /* Other Slots: Simple Capsule with animation */
-              <View style={{ width: '100%', alignItems: isCentered ? 'center' : 'flex-start' }}>
-                <Animated.View style={{ transform: [{ translateX: capsuleTranslateX }] }}>
-                  <TouchableOpacity style={[s.eventCapsule, { backgroundColor: colors.background, borderColor: colors.border }]} activeOpacity={0.8} onPress={onToggleCenter}>
-                    <View style={[s.capsuleIconWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <HugeiconsIcon icon={SpoonAndForkIcon} size={18} color={colors.primary} />
-                    </View>
-                    <Text style={[s.capsuleTitle, { color: colors.text }]}>{ev.title}</Text>
-                    <Text style={[s.capsuleVenue, { color: colors.textSecondary }]}>{ev.venue}</Text>
-                    <Text style={[s.capsuleTime, { color: colors.textSecondary }]}>{ev.time}</Text>
-                    <Image source={{ uri: ev.image }} style={s.capsuleImg} />
-
-                    <View style={s.capsuleAvatarsRow}>
-                      <View style={s.avatarGroup}>
-                        <Image source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.background, marginLeft: 0 }]} />
-                        <Image source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100' }} style={[s.capsuleAvatar, { borderColor: colors.background }]} />
-                      </View>
-                      <Text style={[s.capsuleMoreText, { color: colors.textSecondary }]}>+41</Text>
-                    </View>
-                  </TouchableOpacity>
-                </Animated.View>
-
-                {isCentered && (
-                  <TouchableOpacity
-                    style={[s.browseEventsRow, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12, width: SCREEN_WIDTH * 0.85 }]}
-                    onPress={() => router.push('/(tabs)/explore')}
-
-                  >
-                    <View style={[s.browseIconWrap, { backgroundColor: colors.background }]}>
-                      <HugeiconsIcon icon={Calendar03Icon} size={16} color={colors.primary} />
-                    </View>
-                    <Text style={[s.browseText, { color: colors.textSecondary }]}>Browse more events</Text>
-                    <Feather name="chevron-right" size={16} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                )}
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -602,14 +660,19 @@ const s = StyleSheet.create({
   dashedLine: { height: 1, borderTopWidth: 1, borderStyle: 'dashed', marginLeft: 24, marginRight: 20, position: 'absolute', top: 6, left: 0, right: 0 },
 
   slotContent: { paddingLeft: 32, marginTop: 10, paddingRight: 20 },
+  eventSlotContent: { width: '100%', alignItems: 'flex-start' },
+  expandedDetailWrap: { alignItems: 'center', width: '100%' },
 
   eventCapsule: {
-    width: 170,
+    width: EVENT_CAPSULE_WIDTH,
+    minHeight: 236,
     borderWidth: 1,
-    borderRadius: 85,
+    borderRadius: 999,
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingTop: 12,
+    paddingBottom: 32,
     paddingHorizontal: 16,
+    gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
@@ -617,22 +680,22 @@ const s = StyleSheet.create({
     elevation: 5,
   },
   capsuleIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 0.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20
   },
-  capsuleTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  capsuleVenue: { fontSize: 11, textAlign: 'center', marginBottom: 4 },
-  capsuleTime: { fontSize: 11, marginBottom: 20 },
-  capsuleImg: { width: 90, height: 40, borderRadius: 10, marginBottom: 16 },
-  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center' },
+  capsuleTextBlock: { alignItems: 'center', gap: 4, width: 114 },
+  capsuleTitle: { fontSize: 14, fontWeight: '600', lineHeight: 16, textAlign: 'center', width: '100%' },
+  capsuleVenue: { fontSize: 12, lineHeight: 16, textAlign: 'center', width: '100%' },
+  capsuleTime: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  capsuleImg: { width: 80, height: 40, borderRadius: 12 },
+  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 20 },
   avatarGroup: { flexDirection: 'row', alignItems: 'center' },
-  capsuleAvatar: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, marginLeft: -8 },
-  capsuleMoreText: { fontSize: 11, marginLeft: 6 },
+  capsuleAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.2 },
+  capsuleMoreText: { fontSize: 12, lineHeight: 16 },
 
   /* Node + Wide Card */
   nodeCircle: {
@@ -646,42 +709,54 @@ const s = StyleSheet.create({
   },
   nodeConnector: { width: 1, height: 32 },
   wideCard: {
-    width: SCREEN_WIDTH * 0.85,
-    borderWidth: 1,
-    borderRadius: 60,
-    padding: 24,
-    marginTop: -10,
-  },
-  wideCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  wideCardIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16
-  },
-  wideCardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  wideCardVenue: { fontSize: 12 },
-  wideCardMiddle: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingLeft: 60, marginBottom: 16 },
-  wideCardMoreText: { fontSize: 12, marginLeft: 8 },
-
-  wideCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-  footerIcons: { flexDirection: 'row', gap: 16 },
-  footerIcon: { padding: 4 },
-  footerActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  viewBtnSmall: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  viewBtnTextSmall: { fontSize: 13, fontWeight: '600' },
-  addedPillSmall: {
+    width: WIDE_CARD_WIDTH,
+    minHeight: 160,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 6
+    borderWidth: 1,
+    borderRadius: 200,
+    paddingTop: 20,
+    paddingRight: SCREEN_WIDTH < 380 ? 24 : 40,
+    paddingBottom: 20,
+    paddingLeft: 8,
+    gap: 20,
   },
-  addedTextSmall: { fontSize: 13, fontWeight: '700' },
+  wideCardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  wideCardContent: { flex: 1, minHeight: 120, justifyContent: 'space-between' },
+  wideCardInfo: { gap: 12 },
+  wideCardTextBlock: { gap: 4 },
+  wideCardTitle: { fontSize: 14, fontWeight: '600', lineHeight: 16 },
+  wideCardVenue: { fontSize: 12, lineHeight: 16 },
+  wideCardMiddle: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 20 },
+  wideCardMoreText: { fontSize: 12, lineHeight: 16 },
+  metaDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: EVENT_CARD_ACTIVE.border },
+
+  wideCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  footerIcons: { flexDirection: 'row', alignItems: 'center', gap: 20, width: 60 },
+  footerIcon: { padding: 4 },
+  footerActions: { flexDirection: 'row', gap: 20, alignItems: 'center' },
+  viewBtnSmall: { width: 49, height: 32, borderRadius: 8, backgroundColor: 'rgba(17, 17, 17, 0.8)', justifyContent: 'center', alignItems: 'center' },
+  viewBtnTextSmall: { color: EVENT_CARD_ACTIVE.text, fontSize: 14, lineHeight: 16, fontWeight: '500' },
+  addedPillSmall: {
+    width: 76,
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 4,
+    paddingRight: 8,
+    borderRadius: 8,
+    gap: 4,
+    backgroundColor: EVENT_CARD_ACTIVE.border,
+  },
+  addedTextSmall: { color: EVENT_CARD_ACTIVE.background, fontSize: 14, lineHeight: 16, fontWeight: '500' },
 
   /* Calendar Header Styles */
   calendarHeaderWrap: { marginBottom: 20, paddingHorizontal: 20 },

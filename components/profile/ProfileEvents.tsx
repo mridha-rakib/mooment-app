@@ -36,11 +36,12 @@ const MOCK_EVENTS: PostData[] = [
 ];
 
 type ProfileEventsProps = {
-  onCommentPress: () => void;
-  onSharePress: () => void;
+  onCommentPress: (post: PostData) => void;
+  onSharePress: (post: PostData) => void;
+  isOwnProfile?: boolean;
 };
 
-export default function ProfileEvents({ onCommentPress, onSharePress }: ProfileEventsProps) {
+export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfile = true }: ProfileEventsProps) {
   const [filter, setFilter] = useState<'active' | 'past'>('active');
 
   return (
@@ -73,6 +74,7 @@ export default function ProfileEvents({ onCommentPress, onSharePress }: ProfileE
             post={event} 
             onCommentPress={onCommentPress} 
             onSharePress={onSharePress} 
+            isOwnPost={isOwnProfile}
           />
         ))}
       </View>

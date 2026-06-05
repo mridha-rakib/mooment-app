@@ -24,6 +24,7 @@ export default function UserProfileScreen() {
     {
       id: 'p1',
       postType: 'standard',
+      authorId: userData.id,
       authorName: userData.name,
       authorAvatar: userData.avatar,
       timeAgo: '2 min ago',
@@ -36,6 +37,7 @@ export default function UserProfileScreen() {
     {
       id: 'p2',
       postType: 'standard',
+      authorId: userData.id,
       authorName: userData.name,
       authorAvatar: userData.avatar,
       timeAgo: '15 min ago',

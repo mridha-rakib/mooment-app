@@ -1,13 +1,22 @@
-import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
 import {
-  FlatList, Image, KeyboardAvoidingView,
+  Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React,
+  { useState } from 'react';
+import {
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
   Modal,
-  Platform, SafeAreaView,
+  Platform,
   StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import CinematicButton from '@/components/ui/CinematicButton';
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
@@ -80,7 +89,8 @@ export default function CreateGroupScreen() {
           size={20}
         />
         <Text style={styles.headerTitle}>Create Group</Text>
-        <View style={{ width: 36 }} /> {/* placeholder for centering */}
+        {/* Placeholder for centering */}
+        <View style={{ width: 36 }} />
       </View>
 
       {/* ── Search Bar ── */}

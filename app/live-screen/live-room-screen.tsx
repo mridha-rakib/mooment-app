@@ -1,13 +1,19 @@
 import BackButton from '@/components/ui/BackButton';
 import CinematicButton from '@/components/ui/CinematicButton';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getLiveRoomMessages, joinLiveRoom, leaveLiveRoom, updateLiveRoomPermissions } from '@/lib/liveRooms';
+import type { LiveRoom, LiveRoomMessage, LiveRoomParticipant, LiveRoomViewerPermissions } from '@/lib/liveRooms';
+import { createRealtimeSocket } from '@/lib/realtime';
+import type { LiveRealtimeMessage } from '@/lib/realtime';
+import { useAuthStore } from '@/stores/authStore';
 import { Feather } from '@expo/vector-icons';
 import { Mic01Icon, MicOff01Icon, MoreHorizontalIcon, UnavailableIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Animated, Dimensions, Image,
+  ActivityIndicator, Alert, Animated, Dimensions, Image,
   Modal, Pressable, ScrollView, StatusBar,
   StyleSheet, Text,
   TextInput, TouchableOpacity, View
@@ -18,8 +24,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width } = Dimensions.get('window');
 
 /* ─── Types ─── */
-type ChatMessage = { id: string; avatar: string; name: string; role: string | null; time: string; text: string };
-type Participant = { id: string; name: string; avatar: string; micMuted: boolean; hidden: boolean };
+type ChatMessage = { id: string; senderId?: string; avatar: string; name: string; role: string | null; time: string; text: string };
+type Participant = { id: string; userId: string; name: string; avatar: string; micMuted: boolean; hidden: boolean; canSpeak: boolean };
 
 /* ─── Initial Data ─── */
 const INITIAL_MESSAGES: ChatMessage[] = [
@@ -29,9 +35,9 @@ const INITIAL_MESSAGES: ChatMessage[] = [
 ];
 
 const INITIAL_PARTICIPANTS: Participant[] = [
-  { id: '1', name: 'Lister', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: false },
-  { id: '2', name: 'Kate', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop', micMuted: true, hidden: true },
-  { id: '3', name: 'Sona', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: true },
+  { id: '1', userId: '1', name: 'Lister', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: false, canSpeak: true },
+  { id: '2', userId: '2', name: 'Kate', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop', micMuted: true, hidden: true, canSpeak: false },
+  { id: '3', userId: '3', name: 'Sona', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: true, canSpeak: true },
 ];
 
 const SIMULATED_MSGS = [
@@ -43,6 +49,12 @@ const SIMULATED_MSGS = [
 ];
 
 const USER_AVATAR = 'https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop';
+const FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop';
+const DEFAULT_ROOM_PERMISSIONS: LiveRoomViewerPermissions = {
+  isHost: true,
+  canSpeak: true,
+  canManagePermissions: true,
+};
 
 /* ─── Helpers ─── */
 function getTimeNow() {
@@ -50,6 +62,78 @@ function getTimeNow() {
   const h = d.getHours();
   const m = d.getMinutes().toString().padStart(2, '0');
   return `${h > 12 ? h - 12 : h || 12}:${m}${h >= 12 ? 'pm' : 'am'}`;
+}
+
+function formatMessageTime(value?: string) {
+  if (!value) {
+    return getTimeNow();
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return getTimeNow();
+  }
+
+  const h = date.getHours();
+  const m = date.getMinutes().toString().padStart(2, '0');
+  return `${h > 12 ? h - 12 : h || 12}:${m}${h >= 12 ? 'pm' : 'am'}`;
+}
+
+function toLiveChatMessage(message: LiveRealtimeMessage, hostUserId?: string): ChatMessage {
+  return {
+    avatar: message.senderAvatarUrl || `https://i.pravatar.cc/100?u=${message.senderId}`,
+    id: message.id,
+    senderId: message.senderId,
+    name: message.senderName,
+    role: message.senderId === hostUserId ? 'Host' : null,
+    text: message.text,
+    time: formatMessageTime(message.createdAt),
+  };
+}
+
+function toApiChatMessage(message: LiveRoomMessage, hostUserId?: string): ChatMessage {
+  return {
+    avatar: message.senderAvatarUrl || `https://i.pravatar.cc/100?u=${message.senderId}`,
+    id: message.id,
+    senderId: message.senderId,
+    name: message.senderName,
+    role: message.senderId === hostUserId ? 'Host' : null,
+    text: message.text,
+    time: formatMessageTime(message.createdAt),
+  };
+}
+
+function toParticipant(participant: LiveRoomParticipant): Participant | null {
+  if (!participant.user) {
+    return null;
+  }
+
+  return {
+    id: participant.id,
+    userId: participant.user.id,
+    name: participant.user.name,
+    avatar: participant.user.avatarUrl || `https://i.pravatar.cc/100?u=${participant.user.id}`,
+    micMuted: !participant.canSpeak,
+    hidden: false,
+    canSpeak: participant.canSpeak,
+  };
+}
+
+function parseBooleanParam(value?: string) {
+  if (value === 'true') {
+    return true;
+  }
+
+  if (value === 'false') {
+    return false;
+  }
+
+  return undefined;
+}
+
+function isMongoObjectId(value?: string) {
+  return Boolean(value && /^[a-f\d]{24}$/i.test(value));
 }
 
 /* ─── Animated Audio Bars ─── */
@@ -108,27 +192,165 @@ export default function EventDetailsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; title?: string }>();
+  const params = useLocalSearchParams<{ id?: string; title?: string; allowAllParticipantsToSpeak?: string }>();
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const currentUser = useAuthStore((state) => state.user);
+  const initialAllowAll = parseBooleanParam(params.allowAllParticipantsToSpeak) ?? true;
+  const liveRoomId = params.id || params.title || 'general-live-room';
+  const hasPersistedLiveRoom = isMongoObjectId(params.id);
 
   const scrollRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'permission'>('chat');
-  const [allowAll, setAllowAll] = useState(true);
+  const [roomTitle, setRoomTitle] = useState(params.title?.trim() || 'DJ Nova');
+  const [hostUserId, setHostUserId] = useState<string | undefined>(undefined);
+  const [hostName, setHostName] = useState(params.title?.trim() || 'DJ Nova');
+  const [hostAvatar, setHostAvatar] = useState(FALLBACK_AVATAR);
+  const [roomStatus, setRoomStatus] = useState<'live' | 'ended'>('live');
+  const [allowAll, setAllowAll] = useState(initialAllowAll);
+  const [roomPermissions, setRoomPermissions] = useState<LiveRoomViewerPermissions>(DEFAULT_ROOM_PERMISSIONS);
+  const [speakerIds, setSpeakerIds] = useState<string[]>([]);
+  const [isLoadingRoom, setIsLoadingRoom] = useState(hasPersistedLiveRoom);
+  const [isUpdatingPermissions, setIsUpdatingPermissions] = useState(false);
   const [comment, setComment] = useState('');
   const [showMore, setShowMore] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
   const [mutedUsers, setMutedUsers] = useState<string[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
-  const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
-  const [listenerCount, setListenerCount] = useState(412);
+  const [messages, setMessages] = useState<ChatMessage[]>(hasPersistedLiveRoom ? [] : INITIAL_MESSAGES);
+  const [participants, setParticipants] = useState<Participant[]>(() =>
+    hasPersistedLiveRoom
+      ? []
+      : initialAllowAll ? INITIAL_PARTICIPANTS : INITIAL_PARTICIPANTS.map((participant) => ({ ...participant, micMuted: true, canSpeak: false })),
+  );
+  const [listenerCount, setListenerCount] = useState(hasPersistedLiveRoom ? 0 : 412);
   const [isSpeaking, setIsSpeaking] = useState(true);
   const nextId = useRef(10);
   const simIdx = useRef(0);
+  const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
 
-  const hostName = params.title || 'DJ Nova';
+  const applyLiveRoom = useCallback((liveRoom: LiveRoom) => {
+    setRoomTitle(liveRoom.title);
+    setHostUserId(liveRoom.hostUserId);
+    setHostName(liveRoom.host?.name ?? liveRoom.title);
+    setHostAvatar(liveRoom.host?.avatarUrl ?? FALLBACK_AVATAR);
+    setRoomStatus(liveRoom.status);
+    setAllowAll(liveRoom.allowAllParticipantsToSpeak);
+    setRoomPermissions(liveRoom.viewerPermissions);
+    setSpeakerIds(liveRoom.speakerIds);
+    setListenerCount(liveRoom.listenerCount);
+    setParticipants(liveRoom.participants.map(toParticipant).filter((participant): participant is Participant => Boolean(participant)));
+  }, []);
 
-  // Simulate incoming messages every 8s
+  const applyParticipantSpeakMode = useCallback((nextAllowAll: boolean) => {
+    setParticipants((prev) => prev.map((participant) => ({
+      ...participant,
+      canSpeak: nextAllowAll,
+      micMuted: !nextAllowAll,
+    })));
+  }, []);
+
   useEffect(() => {
+    if (params.title?.trim()) {
+      setRoomTitle(params.title.trim());
+    }
+  }, [params.title]);
+
+  useEffect(() => {
+    const persistedLiveRoomId = params.id;
+
+    if (!hasPersistedLiveRoom || !persistedLiveRoomId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadLiveRoom = async () => {
+      try {
+        const [liveRoom, history] = await Promise.all([
+          joinLiveRoom(persistedLiveRoomId),
+          getLiveRoomMessages(persistedLiveRoomId, { limit: 50 }),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        applyLiveRoom(liveRoom);
+        setMessages(history.map((message) => toApiChatMessage(message, liveRoom.hostUserId)));
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        Alert.alert(
+          'Unable to load room',
+          getAuthErrorMessage(error, 'The room details could not be loaded.'),
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoadingRoom(false);
+        }
+      }
+    };
+
+    void loadLiveRoom();
+
+    return () => {
+      isMounted = false;
+      void leaveLiveRoom(persistedLiveRoomId).catch(() => undefined);
+    };
+  }, [applyLiveRoom, hasPersistedLiveRoom, params.id]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    const realtime = createRealtimeSocket({
+      accessToken,
+      onLiveMessage: (roomId, realtimeMessage) => {
+        if (roomId !== liveRoomId || realtimeMessage.senderId === currentUser?.id) {
+          return;
+        }
+
+        setMessages((prev) => {
+          const alreadyExists = prev.some(
+            (message) =>
+              message.id === realtimeMessage.id ||
+              (Boolean(realtimeMessage.clientMessageId) &&
+                message.id === realtimeMessage.clientMessageId),
+          );
+
+          if (alreadyExists) {
+            return prev;
+          }
+
+          return [...prev, toLiveChatMessage(realtimeMessage, hostUserId)];
+        });
+      },
+      onReady: () => {
+        realtime.joinLiveRoom(liveRoomId);
+      },
+    });
+
+    realtimeRef.current = realtime;
+    realtime.joinLiveRoom(liveRoomId);
+
+    return () => {
+      realtime.leaveLiveRoom(liveRoomId);
+      realtime.close();
+      if (realtimeRef.current === realtime) {
+        realtimeRef.current = null;
+      }
+    };
+  }, [accessToken, currentUser?.id, hostUserId, liveRoomId]);
+
+  // Keep the legacy static room lively when opened without a persisted room id.
+  useEffect(() => {
+    if (hasPersistedLiveRoom) {
+      return;
+    }
+
     const iv = setInterval(() => {
       const msg = SIMULATED_MSGS[simIdx.current % SIMULATED_MSGS.length];
       simIdx.current++;
@@ -140,7 +362,7 @@ export default function EventDetailsScreen() {
       setListenerCount((c) => c + Math.floor(Math.random() * 5) - 1);
     }, 8000);
     return () => clearInterval(iv);
-  }, []);
+  }, [hasPersistedLiveRoom]);
 
   // Toggle speaking indicator
   useEffect(() => {
@@ -158,16 +380,62 @@ export default function EventDetailsScreen() {
   const handleSend = useCallback(() => {
     const trimmed = comment.trim();
     if (!trimmed) return;
+    const clientMessageId = `live-${Date.now()}`;
     setMessages((prev) => [...prev, {
-      id: String(nextId.current++),
-      avatar: USER_AVATAR, name: 'You', role: null, time: getTimeNow(), text: trimmed,
+      id: clientMessageId,
+      senderId: currentUser?.id,
+      avatar: currentUser?.avatarKey ? USER_AVATAR : USER_AVATAR,
+      name: 'You',
+      role: currentUser?.id === hostUserId ? 'Host' : null,
+      time: getTimeNow(),
+      text: trimmed,
     }]);
     setComment('');
-  }, [comment]);
+    realtimeRef.current?.sendLiveMessage(liveRoomId, trimmed, clientMessageId);
+  }, [comment, currentUser?.avatarKey, currentUser?.id, hostUserId, liveRoomId]);
 
-  const toggleMic = useCallback((id: string) => {
-    setParticipants((prev) => prev.map((p) => p.id === id ? { ...p, micMuted: !p.micMuted } : p));
-  }, []);
+  const toggleMic = useCallback(async (id: string) => {
+    const participant = participants.find((p) => p.id === id);
+
+    if (!participant) {
+      return;
+    }
+
+    if (!hasPersistedLiveRoom || allowAll) {
+      setParticipants((prev) => prev.map((p) => p.id === id ? { ...p, micMuted: !p.micMuted, canSpeak: p.micMuted } : p));
+      return;
+    }
+
+    if (!roomPermissions.canManagePermissions || !params.id) {
+      Alert.alert('Permission unavailable', 'Only the room host can update speakers.');
+      return;
+    }
+
+    const nextSpeakerIds = participant.canSpeak
+      ? speakerIds.filter((speakerId) => speakerId !== participant.userId)
+      : [...new Set([...speakerIds, participant.userId])];
+
+    try {
+      const liveRoom = await updateLiveRoomPermissions(params.id, {
+        speakerIds: nextSpeakerIds,
+      });
+
+      applyLiveRoom(liveRoom);
+    } catch (error) {
+      Alert.alert(
+        'Unable to update speaker',
+        getAuthErrorMessage(error, 'Please try changing this participant permission again.'),
+      );
+    }
+  }, [
+    allowAll,
+    applyLiveRoom,
+    hasPersistedLiveRoom,
+    params.id,
+    participants,
+    roomPermissions.canManagePermissions,
+    speakerIds,
+  ]);
 
   const toggleHidden = useCallback((id: string) => {
     setParticipants((prev) => prev.map((p) => p.id === id ? { ...p, hidden: !p.hidden } : p));
@@ -176,16 +444,77 @@ export default function EventDetailsScreen() {
   const handleLeave = useCallback(() => {
     Alert.alert('Leave Room', 'Are you sure you want to leave?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Leave', style: 'destructive', onPress: () => router.back() },
-    ]);
-  }, [router]);
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: () => {
+          if (hasPersistedLiveRoom && params.id) {
+            void leaveLiveRoom(params.id).finally(() => router.back());
+            return;
+          }
 
-  const handleAllowAll = useCallback(() => {
+          router.back();
+        },
+      },
+    ]);
+  }, [hasPersistedLiveRoom, params.id, router]);
+
+  const handleAllowAll = useCallback(async () => {
+    if (isUpdatingPermissions) {
+      return;
+    }
+
+    if (hasPersistedLiveRoom && !roomPermissions.canManagePermissions) {
+      Alert.alert('Permission unavailable', 'Only the room host can change speaking permissions.');
+      return;
+    }
+
     const next = !allowAll;
+    const previous = allowAll;
+
     setAllowAll(next);
-    if (next) setParticipants((prev) => prev.map((p) => ({ ...p, micMuted: false })));
-    else setParticipants((prev) => prev.map((p) => ({ ...p, micMuted: true })));
-  }, [allowAll]);
+    applyParticipantSpeakMode(next);
+
+    if (!hasPersistedLiveRoom || !params.id) {
+      return;
+    }
+
+    setIsUpdatingPermissions(true);
+
+    try {
+      const liveRoom = await updateLiveRoomPermissions(params.id, {
+        allowAllParticipantsToSpeak: next,
+      });
+
+      applyLiveRoom(liveRoom);
+    } catch (error) {
+      setAllowAll(previous);
+      applyParticipantSpeakMode(previous);
+      Alert.alert(
+        'Unable to update permission',
+        getAuthErrorMessage(error, 'Please try changing the room permission again.'),
+      );
+    } finally {
+      setIsUpdatingPermissions(false);
+    }
+  }, [
+    allowAll,
+    applyLiveRoom,
+    applyParticipantSpeakMode,
+    hasPersistedLiveRoom,
+    isUpdatingPermissions,
+    params.id,
+    roomPermissions.canManagePermissions,
+  ]);
+
+  const handleMicPress = useCallback(() => {
+    if (!roomPermissions.canSpeak) {
+      Alert.alert('Microphone unavailable', 'The host has not allowed participants to speak in this room.');
+      return;
+    }
+
+    setIsSpeaking((current) => !current);
+  }, [roomPermissions.canSpeak]);
 
   const toggleBlock = (name: string) => {
     setBlockedUsers(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
@@ -204,7 +533,7 @@ export default function EventDetailsScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <BackButton size={22} color={colors.text} />
-        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>Pre-show with {hostName}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>Pre-show with {roomTitle}</Text>
         <CinematicButton
           icon={MoreHorizontalIcon}
           onPress={() => setShowMore(true)}
@@ -303,7 +632,7 @@ export default function EventDetailsScreen() {
         <View style={styles.statusRow}>
           <View style={styles.liveBadge}>
             <PulsingDot />
-            <Text style={styles.liveText}>Live</Text>
+            <Text style={styles.liveText}>{roomStatus === 'live' ? 'Live' : 'Ended'}</Text>
           </View>
           <View style={styles.listenersRow}>
             <Feather name="headphones" size={13} color={colors.textSecondary} />
@@ -323,10 +652,10 @@ export default function EventDetailsScreen() {
                 style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking, { borderColor: colors.border }]}
                 onPress={() => router.push('/profile-screen/user-profile')}
               >
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop' }} style={styles.speakerAvatar} />
+                <Image source={{ uri: hostAvatar }} style={styles.speakerAvatar} />
               </TouchableOpacity>
             </View>
-            {isSpeaking && (
+            {roomStatus === 'live' && isSpeaking && (
               <View style={[styles.speakingBadge, { backgroundColor: colors.success }]}>
                 <View style={[styles.speakingDot, { backgroundColor: colors.background }]} />
                 <Text style={[styles.speakingText, { color: colors.background }]}>Speaking</Text>
@@ -337,7 +666,7 @@ export default function EventDetailsScreen() {
             <Text style={[styles.hostName, { color: colors.text }]}>{hostName}</Text>
             <View style={[styles.hostBadge, { backgroundColor: colors.card }]}><Text style={[styles.hostBadgeText, { color: colors.textSecondary }]}>Host</Text></View>
           </View>
-          {isSpeaking && <AudioBars />}
+          {roomStatus === 'live' && isSpeaking && <AudioBars />}
         </View>
 
 
@@ -355,7 +684,9 @@ export default function EventDetailsScreen() {
         {/* ── Tab Content ── */}
         {activeTab === 'chat' ? (
           <View style={styles.chatContainer}>
-            {messages.map((msg) => (
+            {isLoadingRoom ? (
+              <ActivityIndicator size="small" color={colors.textSecondary} style={styles.loadingIndicator} />
+            ) : messages.map((msg) => (
               <View key={msg.id} style={styles.chatRow}>
                 <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
                   <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
@@ -380,7 +711,11 @@ export default function EventDetailsScreen() {
           </View>
         ) : (
           <View style={styles.permissionContainer}>
-            <TouchableOpacity style={styles.allowAllRow} activeOpacity={0.7} onPress={handleAllowAll}>
+            <TouchableOpacity
+              style={[styles.allowAllRow, isUpdatingPermissions && styles.permissionUpdating]}
+              activeOpacity={0.7}
+              onPress={handleAllowAll}
+            >
               <View style={styles.allowAllTextCol}>
                 <Text style={[styles.allowAllTitle, { color: colors.text }]}>Allow all participants to speak</Text>
                 <Text style={[styles.allowAllSub, { color: colors.textSecondary }]}>You can manually mute individual person as you want</Text>
@@ -436,8 +771,12 @@ export default function EventDetailsScreen() {
         backgroundColor: colors.background,
         paddingBottom: Math.max(insets.bottom, 16)
       }]}>
-        <TouchableOpacity style={[styles.bellBtn, { backgroundColor: colors.card }]} activeOpacity={0.7}>
-          <Feather name="mic" size={20} color={colors.text} />
+        <TouchableOpacity
+          style={[styles.bellBtn, { backgroundColor: colors.card }, !roomPermissions.canSpeak && styles.micBtnDisabled]}
+          activeOpacity={0.7}
+          onPress={handleMicPress}
+        >
+          <Feather name={roomPermissions.canSpeak ? "mic" : "mic-off"} size={20} color={roomPermissions.canSpeak ? colors.text : colors.textSecondary} />
         </TouchableOpacity>
         <View style={[styles.commentInputWrap, { backgroundColor: colors.card }]}>
           <TouchableOpacity activeOpacity={0.7} style={styles.emojiBtn}>
@@ -530,6 +869,7 @@ const styles = StyleSheet.create({
 
   /* Chat */
   chatContainer: { paddingHorizontal: 16, paddingTop: 8 },
+  loadingIndicator: { marginTop: 24 },
   chatRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 },
   chatAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   chatContent: { flex: 1 },
@@ -551,6 +891,7 @@ const styles = StyleSheet.create({
     padding: 22, 
     marginBottom: 32 
   },
+  permissionUpdating: { opacity: 0.65 },
   allowAllTextCol: { flex: 1 },
   allowAllTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   allowAllSub: { fontSize: 13, color: '#8E8E9B', lineHeight: 18 },
@@ -580,6 +921,7 @@ const styles = StyleSheet.create({
   /* Bottom Bar */
   bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, gap: 10 },
   bellBtn: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  micBtnDisabled: { opacity: 0.55 },
   commentInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingHorizontal: 14, height: 46 },
   emojiBtn: { marginRight: 8 },
   commentInput: { flex: 1, fontSize: 14, padding: 0 },

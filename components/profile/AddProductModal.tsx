@@ -1,12 +1,31 @@
-import { Feather } from "@expo/vector-icons";
-import { UploadCircle01Icon, ViewIcon, Delete02Icon } from "@hugeicons/core-free-icons";
+import {
+  Feather } from "@expo/vector-icons";
+import { UploadCircle01Icon,
+  ViewIcon,
+  Delete02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, SafeAreaView, KeyboardAvoidingView, Platform, Image, ImageBackground, Alert, StatusBar } from "react-native";
+import React,
+  { useState } from "react";
+import { Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  KeyboardAvoidingView,
+  Platform,
+  ImageBackground,
+  Alert,
+  StatusBar,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { createProduct } from "@/lib/products";
+import { uploadFileToStorage } from "@/lib/storage";
 
 type AddProductModalProps = {
   visible: boolean;
@@ -29,6 +48,20 @@ const InputLabel = ({ label, sublabel, colors }: { label: string; sublabel?: str
   </View>
 );
 
+const getImageContentType = (uri: string) => {
+  const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
+
+  if (normalizedUri.endsWith(".png")) {
+    return "image/png";
+  }
+
+  return "image/jpeg";
+};
+
+const getImageExtension = (contentType: string) => (contentType === "image/png" ? "png" : "jpg");
+
+const parseNumberInput = (value: string) => Number(value.trim().replace(/,/g, ""));
+
 export default function AddProductModal({ visible, onClose, initialData }: AddProductModalProps) {
   const { colors, isDark } = useTheme();
   const [images, setImages] = useState<string[]>(initialData?.images || []);
@@ -38,6 +71,7 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
   const [discount, setDiscount] = useState(initialData?.discount || '');
   const [stock, setStock] = useState(initialData?.stock || '');
   const [tag, setTag] = useState(initialData?.tag || '');
+  const [isPublishing, setIsPublishing] = useState(false);
   
   const router = useRouter();
 
@@ -51,14 +85,80 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
       setDiscount(initialData?.discount || '');
       setStock(initialData?.stock || '');
       setTag(initialData?.tag || '');
+      setIsPublishing(false);
     }
   }, [visible, initialData]);
 
-  const handlePublish = () => {
-    // Logic for publishing/saving (mocked)
-    onClose();
-    if (!initialData) {
+  const handlePublish = async () => {
+    if (initialData) {
+      onClose();
+      return;
+    }
+
+    if (isPublishing) {
+      return;
+    }
+
+    const trimmedName = name.trim();
+    const priceUsd = parseNumberInput(price);
+    const discountPercent = discount.trim() ? parseNumberInput(discount) : 0;
+    const totalProduct = parseNumberInput(stock);
+
+    if (!trimmedName) {
+      Alert.alert("Add Product", "Product name is required.");
+      return;
+    }
+
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) {
+      Alert.alert("Add Product", "Enter a valid product price.");
+      return;
+    }
+
+    if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+      Alert.alert("Add Product", "Enter a valid discount between 0 and 100.");
+      return;
+    }
+
+    if (!Number.isInteger(totalProduct) || totalProduct < 0) {
+      Alert.alert("Add Product", "Enter a valid total product count.");
+      return;
+    }
+
+    setIsPublishing(true);
+
+    try {
+      const imageKeys = await Promise.all(
+        images.map((uri, index) => {
+          const contentType = getImageContentType(uri);
+          const extension = getImageExtension(contentType);
+
+          return uploadFileToStorage({
+            uri,
+            key: `products/${Date.now()}-${index}.${extension}`,
+            contentType,
+          });
+        }),
+      );
+
+      await createProduct({
+        name: trimmedName,
+        description: description.trim() || null,
+        tag: tag.trim() || null,
+        priceUsd,
+        discountPercent,
+        totalProduct,
+        imageKeys,
+      });
+
+      onClose();
       router.push('/profile-screen/inventory');
+    } catch (error) {
+      Alert.alert(
+        "Unable to create product",
+        getAuthErrorMessage(error, "Please check the product details and try again."),
+      );
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -238,7 +338,7 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
               <TouchableOpacity style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={onClose}>
                 <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: colors.primary }]} onPress={handlePublish}>
+              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: colors.primary }]} onPress={handlePublish} disabled={isPublishing}>
                 <Text style={[styles.publishText, { color: colors.background }]}>{initialData ? 'Save Changes' : 'Publish'}</Text>
               </TouchableOpacity>
             </View>

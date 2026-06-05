@@ -4,7 +4,8 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from 'expo-haptics';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 
 const INITIAL_REVIEWS = [
@@ -34,28 +35,64 @@ const INITIAL_REVIEWS = [
   },
 ];
 
+type Review = (typeof INITIAL_REVIEWS)[number];
+type ReviewCardProps = {
+  colors: ReturnType<typeof useTheme>["colors"];
+  onOpenProfile: () => void;
+  onToggleLike: (id: string) => void;
+  review: Review;
+};
+
+function ReviewCard({ colors, onOpenProfile, onToggleLike, review }: ReviewCardProps) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handleToggleLike = () => {
+    scale.value = withSequence(
+      withSpring(1.4, { damping: 10, stiffness: 100 }),
+      withSpring(1, { damping: 10, stiffness: 100 }),
+    );
+    onToggleLike(review.id);
+  };
+
+  return (
+    <View style={[styles.reviewCard, { backgroundColor: "#111112", borderColor: colors.border }]}>
+      <View style={styles.reviewHeader}>
+        <TouchableOpacity style={styles.userInfo} onPress={onOpenProfile} activeOpacity={0.7}>
+          <Image source={{ uri: review.avatar }} style={styles.avatar} />
+          <Text style={[styles.userName, { color: colors.text }]}>{review.name}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleToggleLike} activeOpacity={0.7}>
+          <Animated.View style={animatedStyle}>
+            <Feather
+              name={review.liked ? "thumbs-up" : "thumbs-down"}
+              size={16}
+              color={review.liked ? colors.primary : colors.text}
+            />
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7}>
+        <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
+      </TouchableOpacity>
+      <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{review.time}</Text>
+    </View>
+  );
+}
+
 export default function ReviewsScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [reviews, setReviews] = useState(INITIAL_REVIEWS);
 
-  // Animation values
-  const scaleValues = INITIAL_REVIEWS.reduce((acc, curr) => {
-    acc[curr.id] = useSharedValue(1);
-    return acc;
-  }, {} as any);
-
   const toggleLike = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    // Trigger animation
-    scaleValues[id].value = withSequence(
-      withSpring(1.4, { damping: 10, stiffness: 100 }),
-      withSpring(1, { damping: 10, stiffness: 100 })
-    );
-
     setReviews(prev => prev.map(r => r.id === id ? { ...r, liked: !r.liked } : r));
   };
+
+  const openProfile = () => router.push('/profile-screen/user-profile');
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -67,42 +104,15 @@ export default function ReviewsScreen() {
         <View style={{ width: 40 }} />
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {reviews.map((review) => {
-          const animatedStyle = useAnimatedStyle(() => ({
-            transform: [{ scale: scaleValues[review.id].value }]
-          }));
-
-          return (
-            <View key={review.id} style={[styles.reviewCard, { backgroundColor: "#111112", borderColor: colors.border }]}>
-              <View style={styles.reviewHeader}>
-                <TouchableOpacity 
-                  style={styles.userInfo}
-                  onPress={() => router.push('/profile-screen/user-profile')}
-                  activeOpacity={0.7}
-                >
-                  <Image source={{ uri: review.avatar }} style={styles.avatar} />
-                  <Text style={[styles.userName, { color: colors.text }]}>{review.name}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => toggleLike(review.id)} activeOpacity={0.7}>
-                  <Animated.View style={animatedStyle}>
-                    <Feather
-                      name={review.liked ? "thumbs-up" : "thumbs-down"}
-                      size={16}
-                      color={review.liked ? colors.primary : colors.text}
-                    />
-                  </Animated.View>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity 
-                onPress={() => router.push('/profile-screen/user-profile')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
-              </TouchableOpacity>
-              <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{review.time}</Text>
-            </View>
-          );
-        })}
+        {reviews.map((review) => (
+          <ReviewCard
+            colors={colors}
+            key={review.id}
+            onOpenProfile={openProfile}
+            onToggleLike={toggleLike}
+            review={review}
+          />
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

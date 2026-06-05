@@ -1,8 +1,21 @@
-import { Feather } from "@expo/vector-icons";
+import {
+  Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from "react-native";
+import React,
+  { useState } from "react";
+import { KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  StatusBar,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/stores/authStore";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -11,6 +24,25 @@ export default function Login() {
   const [keepSignedIn, setKeepSignedIn] = useState(false);
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const login = useAuthStore((state) => state.login);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const authError = useAuthStore((state) => state.error);
+
+  const handleLogin = async () => {
+    try {
+      await login({ email: email.trim(), password });
+      router.replace('/(tabs)/home' as any);
+    } catch {
+      const state = useAuthStore.getState();
+
+      if (state.authErrorCode === "EMAIL_NOT_VERIFIED" && state.pendingVerificationEmail) {
+        router.push({
+          pathname: '/auth-screen/verify-email',
+          params: { email: state.pendingVerificationEmail },
+        } as any);
+      }
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -34,6 +66,8 @@ export default function Login() {
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!isLoading}
             />
           </View>
 
@@ -46,6 +80,8 @@ export default function Login() {
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
+              editable={!isLoading}
+              onSubmitEditing={handleLogin}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
               <Feather name={showPassword ? "eye" : "eye-off"} size={20} color={colors.textSecondary} />
@@ -69,16 +105,25 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
+          {authError && (
+            <Text style={[styles.errorText, { color: colors.danger }]}>{authError}</Text>
+          )}
+
           <TouchableOpacity 
-            style={[styles.loginButton, { backgroundColor: colors.primary }]} 
+            style={[styles.loginButton, { backgroundColor: colors.primary }, isLoading && styles.loginButtonDisabled]} 
             activeOpacity={0.8}
-            onPress={() => router.push("/home")}
+            onPress={handleLogin}
+            disabled={isLoading}
           >
-            <Text style={[styles.loginButtonText, { color: colors.background }]}>Log In</Text>
+            {isLoading ? (
+              <Spinner color={colors.background} />
+            ) : (
+              <Text style={[styles.loginButtonText, { color: colors.background }]}>Log In</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={[styles.footerText, { color: colors.textSecondary }]}>Don't have an account? </Text>
+            <Text style={[styles.footerText, { color: colors.textSecondary }]}>{"Don't have an account? "}</Text>
             <TouchableOpacity onPress={() => router.push('/auth-screen/signup')}>
               <Text style={[styles.createOneText, { color: colors.primary }]}>Create One</Text>
             </TouchableOpacity>
@@ -159,12 +204,21 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     letterSpacing: 0.5,
   },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
+  },
   loginButton: {
     height: 56,
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
+  },
+  loginButtonDisabled: {
+    opacity: 0.75,
   },
   loginButtonText: {
     fontSize: 16,

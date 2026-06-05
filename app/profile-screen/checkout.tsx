@@ -1,15 +1,120 @@
 import { Feather, FontAwesome5 } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BackButton from "@/components/ui/BackButton";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import {
+  getMoomentCreditCheckout,
+  getMoomentCreditPackages,
+  purchaseMoomentCredits,
+  type MoomentCreditCheckout,
+  type MoomentCreditPaymentMethod,
+} from "@/lib/moomentCredits";
+
+const FALLBACK_CHECKOUT = {
+  credits: 25,
+  itemLabel: "25 Mooment Credits",
+  subtitle: "bought 25 Mooment Credit",
+  itemAmount: "$45",
+  subtotal: "$45",
+  platformFee: "$45",
+  taxLabel: "Tax 5%",
+  tax: "$45",
+  total: "$45",
+};
+
+const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
 
 export default function CheckoutScreen() {
   const router = useRouter();
+  const { packageId } = useLocalSearchParams<{ packageId?: string }>();
   const insets = useSafeAreaInsets();
-  const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'card' | 'apple'>('stripe');
+  const [checkout, setCheckout] = useState<MoomentCreditCheckout | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(packageId ?? null);
+  const [paymentMethod, setPaymentMethod] = useState<MoomentCreditPaymentMethod>('stripe');
   const [agreed, setAgreed] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCheckout = async () => {
+      try {
+        let creditPackageId = packageId;
+
+        if (!creditPackageId) {
+          const packages = await getMoomentCreditPackages();
+          creditPackageId = packages[0]?.id;
+        }
+
+        if (!creditPackageId) {
+          return;
+        }
+
+        const checkoutDetails = await getMoomentCreditCheckout(creditPackageId);
+
+        if (isMounted) {
+          setSelectedPackageId(creditPackageId);
+          setCheckout(checkoutDetails);
+        }
+      } catch {
+        if (isMounted) {
+          setCheckout(null);
+        }
+      }
+    };
+
+    void loadCheckout();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [packageId]);
+
+  const credits = checkout?.creditPackage.credits ?? FALLBACK_CHECKOUT.credits;
+  const itemLabel = checkout?.lineItems.itemLabel ?? FALLBACK_CHECKOUT.itemLabel;
+  const eventSubtitle = checkout ? `bought ${credits} Mooment Credit` : FALLBACK_CHECKOUT.subtitle;
+  const itemAmount = checkout ? formatCurrency(checkout.lineItems.itemAmountUsd) : FALLBACK_CHECKOUT.itemAmount;
+  const subtotal = checkout ? formatCurrency(checkout.lineItems.subtotalUsd) : FALLBACK_CHECKOUT.subtotal;
+  const platformFee = checkout ? formatCurrency(checkout.lineItems.platformFeeUsd) : FALLBACK_CHECKOUT.platformFee;
+  const taxLabel = checkout ? `Tax ${checkout.lineItems.taxPercent}%` : FALLBACK_CHECKOUT.taxLabel;
+  const tax = checkout ? formatCurrency(checkout.lineItems.taxUsd) : FALLBACK_CHECKOUT.tax;
+  const total = checkout ? formatCurrency(checkout.lineItems.totalUsd) : FALLBACK_CHECKOUT.total;
+
+  const handleContinue = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!selectedPackageId) {
+      Alert.alert("Unable to continue", "Please select a Mooment credit package and try again.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await purchaseMoomentCredits({
+        packageId: selectedPackageId,
+        paymentMethod,
+        acceptedTerms: agreed,
+      });
+
+      router.push({
+        pathname: '/profile-screen/payment-success',
+        params: { purchaseId: result.purchase.id },
+      } as any);
+    } catch (error) {
+      Alert.alert(
+        "Unable to complete payment",
+        getAuthErrorMessage(error, "Please try again."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <View style={styles.safe}>
@@ -29,7 +134,7 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.eventInfo}>
             <Text style={styles.eventTitle}>Mooment Credits</Text>
-            <Text style={styles.eventSubtitle}>bought 25 Mooment Credit</Text>
+            <Text style={styles.eventSubtitle}>{eventSubtitle}</Text>
           </View>
         </View>
 
@@ -37,30 +142,30 @@ export default function CheckoutScreen() {
         <Text style={styles.sectionTitle}>Order</Text>
         <View style={styles.orderCard}>
           <View style={styles.orderRow}>
-            <Text style={styles.orderLabel}>25 Mooment Credits</Text>
-            <Text style={styles.orderValue}>$45</Text>
+            <Text style={styles.orderLabel}>{itemLabel}</Text>
+            <Text style={styles.orderValue}>{itemAmount}</Text>
           </View>
           
           <View style={styles.separator} />
 
           <View style={styles.orderRow}>
             <Text style={styles.orderSubtext}>Subtotal</Text>
-            <Text style={styles.orderValue}>$45</Text>
+            <Text style={styles.orderValue}>{subtotal}</Text>
           </View>
           <View style={styles.orderRow}>
             <Text style={styles.orderSubtext}>Platform fee</Text>
-            <Text style={styles.orderValue}>$45</Text>
+            <Text style={styles.orderValue}>{platformFee}</Text>
           </View>
           <View style={styles.orderRow}>
-            <Text style={styles.orderSubtext}>Tax 5%</Text>
-            <Text style={styles.orderValue}>$45</Text>
+            <Text style={styles.orderSubtext}>{taxLabel}</Text>
+            <Text style={styles.orderValue}>{tax}</Text>
           </View>
 
           <View style={styles.separator} />
 
           <View style={styles.orderRow}>
             <Text style={styles.orderTotalLabel}>Total</Text>
-            <Text style={styles.orderTotalValue}>$45</Text>
+            <Text style={styles.orderTotalValue}>{total}</Text>
           </View>
         </View>
 
@@ -138,7 +243,8 @@ export default function CheckoutScreen() {
         {/* Continue Button */}
         <TouchableOpacity 
           style={styles.continueBtn}
-          onPress={() => router.push('/profile-screen/payment-success')}
+          onPress={handleContinue}
+          disabled={isSubmitting}
         >
           <Text style={styles.continueBtnText}>Continue to payment</Text>
         </TouchableOpacity>

@@ -3,31 +3,46 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+  Alert, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
+import { usePlanStore } from '@/stores/planStore';
 
 export default function MapSelectionScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const addPlan = usePlanStore((state) => state.addPlan);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleConfirm = () => {
-    setShowConfetti(true);
-    // Navigate to My Plan screen after a delay to show confetti
-    setTimeout(() => {
-      router.replace({
-        pathname: '/plan-screen/my-plan' as any,
-        params: { ...params },
+  const handleConfirm = async () => {
+    if (isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await addPlan({
+        date: String(params.planDate ?? ''),
+        dateIso: params.planDateIso ? String(params.planDateIso) : undefined,
+        event: params.planEvent ? String(params.planEvent) : undefined,
+        friends: params.planFriends ? String(params.planFriends) : undefined,
+        location: params.planLocation ? String(params.planLocation) : undefined,
+        name: String(params.planName ?? ''),
+        time: String(params.planTime ?? ''),
       });
-    }, 2500);
+      setShowConfetti(true);
+      setTimeout(() => {
+        router.replace({
+          pathname: '/plan-screen/my-plan' as any,
+        });
+      }, 2500);
+    } catch {
+      Alert.alert('Unable to save plan', 'Please try again.');
+      setIsSaving(false);
+    }
   };
 
   const handleBack = () => {
@@ -83,7 +98,7 @@ export default function MapSelectionScreen() {
         {/* Bottom Buttons */}
         <View style={styles.bottomBar}>
           <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8} onPress={handleBack}>
-            <Text style={[styles.cancelText, { color: colors.text }]}>Canel</Text>
+            <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleConfirm}>
             <Text style={[styles.confirmText, { color: colors.background }]}>Confirm</Text>

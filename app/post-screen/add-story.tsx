@@ -1,27 +1,233 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, StatusBar } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import BackButton from '@/components/ui/BackButton';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useTheme } from '@/hooks/useTheme';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import { createStory } from '@/lib/stories';
+import { uploadFileToStorage } from '@/lib/storage';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+
+const MAX_STORY_SECONDS = 15;
+
+const getVideoContentType = (uri: string, mimeType?: string | null) => {
+  if (mimeType) {
+    return mimeType;
+  }
+
+  const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
+
+  if (normalizedUri.endsWith(".mov")) {
+    return "video/quicktime";
+  }
+
+  return "video/mp4";
+};
+
+const getVideoExtension = (contentType: string) => {
+  if (contentType.includes("quicktime")) {
+    return "mov";
+  }
+
+  if (contentType.includes("webm")) {
+    return "webm";
+  }
+
+  return "mp4";
+};
 
 export default function AddStoryScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const router = useRouter();
+  const cameraRef = useRef<CameraView>(null);
+  const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
 
-  if (!permission) {
+  useEffect(() => {
+    if (!isRecording) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const startedAt = recordingStartedAtRef.current;
+
+      if (!startedAt) {
+        return;
+      }
+
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setElapsedSeconds(Math.min(elapsed, MAX_STORY_SECONDS));
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const publishVideo = async ({
+    uri,
+    durationSeconds,
+    contentType,
+    source,
+  }: {
+    uri: string;
+    durationSeconds: number;
+    contentType: string;
+    source: 'camera' | 'gallery';
+  }) => {
+    if (isPublishing) {
+      return;
+    }
+
+    if (durationSeconds > MAX_STORY_SECONDS) {
+      Alert.alert('Story too long', 'Stories can be up to 15 seconds long.');
+      return;
+    }
+
+    setIsPublishing(true);
+
+    try {
+      const extension = getVideoExtension(contentType);
+      const storageKey = await uploadFileToStorage({
+        uri,
+        key: `stories/${Date.now()}.${extension}`,
+        contentType,
+      });
+
+      await createStory({
+        mediaSource: source,
+        storageKey,
+        contentType,
+        durationSeconds: Math.max(0.1, durationSeconds),
+      });
+
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      Alert.alert(
+        'Unable to create story',
+        getAuthErrorMessage(error, 'Please check the video and try again.'),
+      );
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleRecordPress = async () => {
+    if (isPublishing) {
+      return;
+    }
+
+    if (isRecording) {
+      cameraRef.current?.stopRecording();
+      return;
+    }
+
+    if (!cameraPermission?.granted || !microphonePermission?.granted) {
+      const [nextCameraPermission, nextMicrophonePermission] = await Promise.all([
+        cameraPermission?.granted ? Promise.resolve(cameraPermission) : requestCameraPermission(),
+        microphonePermission?.granted ? Promise.resolve(microphonePermission) : requestMicrophonePermission(),
+      ]);
+
+      if (!nextCameraPermission.granted || !nextMicrophonePermission.granted) {
+        Alert.alert(
+          'Permission needed',
+          'Camera and microphone permissions are required to record a story video.',
+        );
+        return;
+      }
+    }
+
+    try {
+      setElapsedSeconds(0);
+      setIsRecording(true);
+      recordingStartedAtRef.current = Date.now();
+      recordingPromiseRef.current = cameraRef.current?.recordAsync({
+        maxDuration: MAX_STORY_SECONDS,
+      }) ?? null;
+
+      const video = await recordingPromiseRef.current;
+      setIsRecording(false);
+      recordingPromiseRef.current = null;
+
+      if (video?.uri) {
+        const durationSeconds = recordingStartedAtRef.current
+          ? Math.min(MAX_STORY_SECONDS, (Date.now() - recordingStartedAtRef.current) / 1000)
+          : MAX_STORY_SECONDS;
+
+        await publishVideo({
+          uri: video.uri,
+          durationSeconds,
+          contentType: 'video/mp4',
+          source: 'camera',
+        });
+      }
+
+      recordingStartedAtRef.current = null;
+    } catch (error) {
+      setIsRecording(false);
+      recordingPromiseRef.current = null;
+      recordingStartedAtRef.current = null;
+      Alert.alert('Recording failed', getAuthErrorMessage(error, 'Please try recording again.'));
+    }
+  };
+
+  const handlePickVideo = async () => {
+    if (isPublishing || isRecording) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow photo library access to choose a story video.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      quality: 0.9,
+      videoMaxDuration: MAX_STORY_SECONDS,
+    });
+
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const durationSeconds = asset.duration ? asset.duration / 1000 : MAX_STORY_SECONDS;
+
+    await publishVideo({
+      uri: asset.uri,
+      durationSeconds,
+      contentType: getVideoContentType(asset.uri, asset.mimeType),
+      source: 'gallery',
+    });
+  };
+
+  if (!cameraPermission || !microphonePermission) {
     return <View style={[styles.container, { backgroundColor: colors.background }]} />;
   }
 
-  if (!permission.granted) {
+  if (!cameraPermission.granted || !microphonePermission.granted) {
     return (
       <View style={[styles.permissionContainer, { backgroundColor: colors.background }]}>
-        <Text style={[styles.permissionText, { color: colors.text }]}>We need your permission to show the camera</Text>
-        <TouchableOpacity onPress={requestPermission} style={[styles.permissionBtn, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.permissionBtnText, { color: colors.background }]}>Grant Permission</Text>
+        <Text style={[styles.permissionText, { color: colors.text }]}>
+          Camera and microphone permissions are needed to record story videos.
+        </Text>
+        <TouchableOpacity
+          onPress={async () => {
+            await requestCameraPermission();
+            await requestMicrophonePermission();
+          }}
+          style={[styles.permissionBtn, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.permissionBtnText, { color: colors.background }]}>Grant Permissions</Text>
         </TouchableOpacity>
       </View>
     );
@@ -30,52 +236,51 @@ export default function AddStoryScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" hidden />
-      
-      <CameraView style={styles.cameraBackground} facing="back">
-        
-        {/* Gradient Overlay for Top Nav Visibility */}
-        <View style={styles.topGradient} />
 
-        <SafeAreaView style={styles.safeArea}>
-          
-          {/* Header Navigation & Progress */}
-          <View style={styles.header}>
-            <BackButton />
+      <CameraView ref={cameraRef} style={styles.cameraBackground} facing="back" mode="video" />
 
-            <View style={styles.progressContainer}>
-              <Text style={styles.progressText}>0</Text>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { backgroundColor: colors.primary, width: isRecording ? '40%' : '0%' }]} />
-              </View>
-              <Text style={styles.progressText}>15s</Text>
+      {/* Gradient Overlay for Top Nav Visibility */}
+      <View style={styles.topGradient} />
+
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header Navigation & Progress */}
+        <View style={styles.header}>
+          <BackButton />
+
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>{elapsedSeconds}s</Text>
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { backgroundColor: colors.primary, width: `${(elapsedSeconds / MAX_STORY_SECONDS) * 100}%` }]} />
             </View>
-
-            <View style={{ width: 32 }} /> {/* Placeholder for balance */}
+            <Text style={styles.progressText}>15s</Text>
           </View>
 
-          {/* Right Action Column */}
-          <View style={styles.rightActionsCol}>
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-              <Feather name="type" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-              <Feather name="music" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          {/* Placeholder for balance */}
+          <View style={{ width: 32 }} />
+        </View>
 
-          {/* Bottom Capture Button */}
-          <View style={styles.bottomControls}>
-            <TouchableOpacity 
-              style={[styles.captureBtnOuter, isRecording && styles.captureBtnOuterRecording]}
-              onPress={() => setIsRecording(!isRecording)}
-              activeOpacity={0.9}
-            >
-              <View style={[styles.captureBtnInner, isRecording && styles.captureBtnInnerRecording]} />
-            </TouchableOpacity>
-          </View>
+        {/* Right Action Column */}
+        <View style={styles.rightActionsCol}>
+          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handlePickVideo} disabled={isPublishing}>
+            <Feather name="film" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
 
-        </SafeAreaView>
-      </CameraView>
+        {/* Bottom Capture Button */}
+        <View style={styles.bottomControls}>
+          <TouchableOpacity 
+            style={[styles.captureBtnOuter, isRecording && styles.captureBtnOuterRecording]}
+            onPress={handleRecordPress}
+            activeOpacity={0.9}
+            disabled={isPublishing}
+          >
+            <View style={[styles.captureBtnInner, isRecording && styles.captureBtnInnerRecording]} />
+          </TouchableOpacity>
+          <Text style={styles.helperText}>
+            {isPublishing ? 'Publishing story...' : isRecording ? 'Tap to stop' : 'Hold your story to 15 seconds'}
+          </Text>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -105,9 +310,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   cameraBackground: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
   },
   topGradient: {
     position: 'absolute',
@@ -178,6 +381,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+  },
+  helperText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 14,
   },
   captureBtnOuter: {
     width: 80,

@@ -1,0 +1,28 @@
+
+> xenog@1.0.0 start:clean
+> expo start --dev-client --clear
+
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_APP_SCHEME EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN EXPO_PUBLIC_STRIPE_CONNECT_CALLBACK_PATH EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY RNMAPBOX_MAPS_DOWNLOAD_TOKEN
+Starting project at C:\Users\rakib\projects\spark-tech\xenog\xenog-app
+React Compiler enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android node_modules\expo-audio\build\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 1291ms node_modules\expo-audio\build\index.js (1 module)
+Android node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 14.3% (117/309)
+Android node_modules\expo-router\entry.js ▓▓▓▓░░░░░░░░░░░░ 25.6% (400/798)
+Android node_modules\expo-router\entry.js ▓▓▓▓░░░░░░░░░░░░ 28.6% (436/819)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 49.7% ( 730/1043)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 51.3% ( 814/6234)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 51.3% (1106/6477)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 51.3% (2180/6486)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 51.3% (3810/6486)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 72.8% (5535/6486)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.5% (6507/6835)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.6% (7034/7308)
+Android Bundled 41219ms node_modules\expo-router\entry.js (7690 modules)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (7687/7690)

@@ -47,7 +47,7 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
               />
 
               <Image 
-                source={require('@/assets/images/mooment.png')} 
+                source={require('@/assets/images/Mooment.png')}
                 style={[styles.logoImage, { tintColor: colors.text }]} 
                 resizeMode="contain" 
               />

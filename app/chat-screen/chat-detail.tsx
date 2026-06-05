@@ -1,16 +1,35 @@
 import BackButton from '@/components/ui/BackButton';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import {
+  Feather,
+  Ionicons } from '@expo/vector-icons';
 import { AttachmentIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { useLocalSearchParams,
+  useRouter } from 'expo-router';
+import React,
+  { useEffect,
+  useRef,
+  useState } from 'react';
 import {
-  Dimensions, FlatList, Image, KeyboardAvoidingView,
+  Dimensions,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
   Modal,
-  Platform, SafeAreaView,
+  Platform,
   StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { getDirectMessageHistory } from '@/lib/chat';
+import type { DirectChatMessageResponse } from '@/lib/chat';
+import { createRealtimeSocket } from '@/lib/realtime';
+import type { DirectRealtimeMessage } from '@/lib/realtime';
+import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
 
@@ -20,6 +39,7 @@ type MessageType = 'text' | 'image' | 'audio' | 'event';
 
 type Message = {
   id: string;
+  clientMessageId?: string | null;
   fromMe: boolean;
   type: MessageType;
   text?: string;
@@ -34,6 +54,7 @@ type Message = {
   time: string;
   delivered?: boolean;
   read?: boolean;
+  senderId?: string;
   senderName?: string;
   senderAvatar?: string;
   isHost?: boolean;
@@ -63,6 +84,33 @@ const MOCK_MESSAGES: Message[] = [
 ];
 
 const WAVEFORM_HEIGHTS = [8, 14, 20, 12, 28, 16, 24, 10, 18, 22, 14, 26, 8, 20, 16, 12, 24, 18, 10, 14];
+
+const formatRealtimeTime = (value: string) =>
+  new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const isObjectId = (value?: string) => /^[a-f\d]{24}$/i.test(value ?? '');
+
+const toRealtimeTextMessage = (message: DirectRealtimeMessage, currentUserId?: string): Message => ({
+  clientMessageId: message.clientMessageId ?? null,
+  delivered: message.senderId === currentUserId,
+  fromMe: message.senderId === currentUserId,
+  id: message.id,
+  senderId: message.senderId,
+  senderName: message.senderName,
+  text: message.text,
+  time: formatRealtimeTime(message.createdAt),
+  type: 'text',
+});
+
+const toApiTextMessage = (message: DirectChatMessageResponse, currentUserId?: string): Message => ({
+  delivered: message.senderId === currentUserId,
+  fromMe: message.senderId === currentUserId,
+  id: message.id,
+  senderId: message.senderId,
+  text: message.text,
+  time: formatRealtimeTime(message.createdAt),
+  type: 'text',
+});
 
 // ── Bubble Components ──────────────────────────────────────────────────────
 function TextBubble({ msg }: { msg: Message }) {
@@ -169,29 +217,219 @@ function EventBubble({ msg }: { msg: Message }) {
 export default function ChatDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string; name: string; avatar: string }>();
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const currentUser = useAuthStore((state) => state.user);
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const [showAttach, setShowAttach] = useState(false);
-  const [isTyping] = useState(true);
+  const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
+  const ownTypingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const friendTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSendingTypingRef = useRef(false);
 
   const name = params.name || 'Eleanor Pena';
   const avatar = params.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
+  const friendId = params.id;
+
+  const clearOwnTypingStopTimer = () => {
+    if (ownTypingStopTimerRef.current) {
+      clearTimeout(ownTypingStopTimerRef.current);
+      ownTypingStopTimerRef.current = null;
+    }
+  };
+
+  const sendOwnTypingState = (nextIsTyping: boolean) => {
+    if (!isObjectId(friendId) || isSendingTypingRef.current === nextIsTyping) {
+      return;
+    }
+
+    const realtime = realtimeRef.current;
+
+    if (!realtime) {
+      if (!nextIsTyping) {
+        isSendingTypingRef.current = false;
+      }
+
+      return;
+    }
+
+    isSendingTypingRef.current = nextIsTyping;
+    realtime.sendDirectTyping(friendId, nextIsTyping);
+  };
+
+  const stopOwnTyping = () => {
+    clearOwnTypingStopTimer();
+    sendOwnTypingState(false);
+  };
+
+  const handleInputTextChange = (value: string) => {
+    setInputText(value);
+
+    if (!isObjectId(friendId)) {
+      return;
+    }
+
+    if (!value.trim()) {
+      stopOwnTyping();
+      return;
+    }
+
+    sendOwnTypingState(true);
+    clearOwnTypingStopTimer();
+    ownTypingStopTimerRef.current = setTimeout(() => {
+      sendOwnTypingState(false);
+      ownTypingStopTimerRef.current = null;
+    }, 1500);
+  };
+
+  useEffect(() => {
+    setIsFriendTyping(false);
+    isSendingTypingRef.current = false;
+
+    if (ownTypingStopTimerRef.current) {
+      clearTimeout(ownTypingStopTimerRef.current);
+      ownTypingStopTimerRef.current = null;
+    }
+
+    if (friendTypingTimeoutRef.current) {
+      clearTimeout(friendTypingTimeoutRef.current);
+      friendTypingTimeoutRef.current = null;
+    }
+  }, [friendId]);
+
+  useEffect(() => {
+    if (!isObjectId(friendId)) {
+      setMessages(MOCK_MESSAGES);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadMessageHistory = async () => {
+      try {
+        const history = await getDirectMessageHistory(friendId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMessages(history.map((message) => toApiTextMessage(message, currentUser?.id)));
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
+      } catch {
+        if (isMounted) {
+          setMessages(MOCK_MESSAGES);
+        }
+      }
+    };
+
+    void loadMessageHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.id, friendId]);
+
+  useEffect(() => {
+    if (!accessToken || !isObjectId(friendId)) {
+      return;
+    }
+
+    const realtime = createRealtimeSocket({
+      accessToken,
+      onDirectMessage: (realtimeMessage) => {
+        const isCurrentConversation =
+          realtimeMessage.senderId === friendId || realtimeMessage.recipientId === friendId;
+
+        if (!isCurrentConversation) {
+          return;
+        }
+
+        setMessages((prev) => {
+          const alreadyExists = prev.some(
+            (message) =>
+              message.id === realtimeMessage.id ||
+              (Boolean(realtimeMessage.clientMessageId) &&
+                message.clientMessageId === realtimeMessage.clientMessageId),
+          );
+
+          if (alreadyExists) {
+            return prev;
+          }
+
+          return [...prev, toRealtimeTextMessage(realtimeMessage, currentUser?.id)];
+        });
+        if (realtimeMessage.senderId === friendId) {
+          if (friendTypingTimeoutRef.current) {
+            clearTimeout(friendTypingTimeoutRef.current);
+            friendTypingTimeoutRef.current = null;
+          }
+
+          setIsFriendTyping(false);
+        }
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      },
+      onDirectTyping: (typing) => {
+        const isCurrentConversation =
+          typing.senderId === friendId && (!currentUser?.id || typing.recipientId === currentUser.id);
+
+        if (!isCurrentConversation) {
+          return;
+        }
+
+        if (friendTypingTimeoutRef.current) {
+          clearTimeout(friendTypingTimeoutRef.current);
+          friendTypingTimeoutRef.current = null;
+        }
+
+        setIsFriendTyping(typing.isTyping);
+
+        if (typing.isTyping) {
+          friendTypingTimeoutRef.current = setTimeout(() => {
+            setIsFriendTyping(false);
+            friendTypingTimeoutRef.current = null;
+          }, 3500);
+        }
+      },
+    });
+
+    realtimeRef.current = realtime;
+
+    return () => {
+      clearOwnTypingStopTimer();
+      if (isObjectId(friendId) && isSendingTypingRef.current) {
+        realtime.sendDirectTyping(friendId, false);
+        isSendingTypingRef.current = false;
+      }
+      realtime.close();
+      if (realtimeRef.current === realtime) {
+        realtimeRef.current = null;
+      }
+    };
+  }, [accessToken, currentUser?.id, friendId]);
 
   const sendMessage = () => {
     if (!inputText.trim()) return;
+    const text = inputText.trim();
+    const clientMessageId = `dm-${Date.now()}`;
     const newMsg: Message = {
-      id: `m${Date.now()}`,
+      clientMessageId,
+      id: clientMessageId,
       fromMe: true,
       type: 'text',
-      text: inputText.trim(),
+      text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       delivered: true,
     };
     setMessages(prev => [...prev, newMsg]);
     setInputText('');
+    stopOwnTyping();
+    if (isObjectId(friendId)) {
+      realtimeRef.current?.sendDirectMessage(friendId, text, clientMessageId);
+    }
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
@@ -229,7 +467,7 @@ export default function ChatDetailScreen() {
           <Image source={{ uri: avatar }} style={styles.headerAvatar} />
           <View>
             <Text style={styles.headerName}>{name}</Text>
-            <Text style={styles.headerStatus}>{isTyping ? 'Typing...' : 'Online'}</Text>
+            <Text style={styles.headerStatus}>{isFriendTyping ? 'Typing...' : 'Online'}</Text>
           </View>
         </TouchableOpacity>
 
@@ -289,7 +527,7 @@ export default function ChatDetailScreen() {
             );
           }}
           ListFooterComponent={
-            isTyping ? (
+            isFriendTyping ? (
               <View style={styles.typingRow}>
                 <View style={styles.typingBubble}>
                   <View style={styles.typingDot} />
@@ -333,7 +571,7 @@ export default function ChatDetailScreen() {
               placeholder="Add Comment"
               placeholderTextColor="#8E8E9B"
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleInputTextChange}
               multiline
               maxLength={500}
             />
@@ -367,7 +605,14 @@ export default function ChatDetailScreen() {
 
               <View style={styles.moreMenuSeparator} />
 
-              <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setIsMoreMenuVisible(false);
+                  router.push('/plan-screen/my-plan' as any);
+                }}
+              >
                 <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
                 <Text style={styles.moreMenuText}>Create Plan</Text>
               </TouchableOpacity>

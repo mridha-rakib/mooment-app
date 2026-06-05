@@ -1,9 +1,11 @@
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { createSupportTicket } from '@/lib/support';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ContactSupportScreen() {
   const router = useRouter();
@@ -11,6 +13,31 @@ export default function ContactSupportScreen() {
   const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSend = async () => {
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim();
+
+    if (!trimmedTitle || !trimmedDescription) {
+      Alert.alert('Missing information', 'Please enter a title and description.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await createSupportTicket({
+        title: trimmedTitle,
+        description: trimmedDescription,
+      });
+      router.back();
+    } catch (error) {
+      Alert.alert('Unable to send message', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -62,10 +89,8 @@ export default function ContactSupportScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.sendBtn, { backgroundColor: isDark ? '#A399B2' : colors.primary }]}
-            onPress={() => {
-              // Handle send
-              router.back();
-            }}
+            disabled={isSubmitting}
+            onPress={handleSend}
           >
             <Text style={[styles.sendBtnText, { color: isDark ? '#1C1B1F' : colors.background }]}>Send</Text>
           </TouchableOpacity>

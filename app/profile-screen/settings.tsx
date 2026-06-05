@@ -3,12 +3,14 @@ import BackButton from "@/components/ui/BackButton";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useDispatch, useSelector } from "react-redux";
-import { RootState } from "@/redux/store";
+import { useDispatch } from "react-redux";
 import { setTheme } from "@/redux/slice/preference";
 import { useTheme } from "@/hooks/useTheme";
+import { writeThemePreference } from "@/lib/themePreference";
+import { useAuthStore } from "@/stores/authStore";
+import { useLocationSharingStore } from "@/stores/locationSharingStore";
 
 type SettingItemProps = {
   icon: string;
@@ -17,12 +19,14 @@ type SettingItemProps = {
   value?: boolean;
   onValueChange?: (val: boolean) => void;
   onPress?: () => void;
+  disabled?: boolean;
 };
 
-const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, colors }: SettingItemProps & { colors: any }) => (
+const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, disabled, colors }: SettingItemProps & { colors: any }) => (
   <TouchableOpacity 
-    style={[styles.settingItem, { backgroundColor: colors.card, borderColor: colors.border }]} 
+    style={[styles.settingItem, { backgroundColor: colors.card, borderColor: colors.border }, disabled && styles.settingItemDisabled]}
     onPress={onPress} 
+    disabled={disabled}
     activeOpacity={type === 'toggle' ? 1 : 0.7}
   >
     <View style={styles.settingItemLeft}>
@@ -37,6 +41,7 @@ const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPres
           trackColor={{ false: colors.border, true: colors.primary }}
           thumbColor={value ? (colors.isDark ? '#FFFFFF' : colors.background) : '#FFFFFF'}
           ios_backgroundColor={colors.border}
+          disabled={disabled}
           style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
         />
       )}
@@ -51,14 +56,48 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
   const { colors, isDark } = useTheme();
+  const user = useAuthStore((state) => state.user);
+  const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
+  const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
 
   // Settings states
-  const [locationEnabled, setLocationEnabled] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(true);
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
 
   // Bottom sheet states
   const [isAccountTypeModalVisible, setAccountTypeModalVisible] = useState(false);
   const [selectedAccountType, setSelectedAccountType] = useState<'personal' | 'business'>('personal');
+  const locationEnabled = Boolean(user?.currentLocationSharingEnabled);
+
+  const handleLocationSharingChange = async (nextValue: boolean) => {
+    if (isUpdatingLocation) {
+      return;
+    }
+
+    setIsUpdatingLocation(true);
+
+    try {
+      if (nextValue) {
+        await enableLocationSharing();
+      } else {
+        await disableLocationSharing();
+      }
+    } catch (error) {
+      Alert.alert(
+        "Current Location",
+        error instanceof Error ? error.message : "Unable to update current location sharing.",
+      );
+    } finally {
+      setIsUpdatingLocation(false);
+    }
+  };
+
+  const handleDarkModeChange = (nextValue: boolean) => {
+    const nextTheme = nextValue ? 'dark' : 'light';
+
+    dispatch(setTheme(nextTheme));
+    void writeThemePreference(nextTheme);
+  };
 
   return (
     <View style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -81,7 +120,8 @@ export default function SettingsScreen() {
             label="Current Location" 
             type="toggle" 
             value={locationEnabled}
-            onValueChange={setLocationEnabled}
+            onValueChange={handleLocationSharingChange}
+            disabled={isUpdatingLocation}
             colors={colors}
           />
           <SettingItem 
@@ -97,7 +137,7 @@ export default function SettingsScreen() {
             label="Dark Mode" 
             type="toggle" 
             value={isDark}
-            onValueChange={(val) => dispatch(setTheme(val ? 'dark' : 'light'))}
+            onValueChange={handleDarkModeChange}
             colors={colors}
           />
           <SettingItem 
@@ -240,6 +280,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 12,
     borderWidth: 1,
+  },
+  settingItemDisabled: {
+    opacity: 0.65,
   },
   settingItemLeft: {
     flexDirection: 'row',

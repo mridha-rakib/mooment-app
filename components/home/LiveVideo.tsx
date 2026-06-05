@@ -1,20 +1,16 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import React, { useState } from 'react';
+import { Image, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
 
-const { width, height } = Dimensions.get('window');
-
-const VIDEOS = {
-  Discover: require('../../assets/videos/live_bg.mp4'),
-  Friends: require('../../assets/videos/live_bg.mp4'),
-};
+const YOUTUBE_SHORTS_ID = '-3q9lRkLqhI';
+const YOUTUBE_SHORTS_URL = `https://www.youtube.com/shorts/${YOUTUBE_SHORTS_ID}`;
+const YOUTUBE_THUMBNAIL_URL = `https://img.youtube.com/vi/${YOUTUBE_SHORTS_ID}/maxresdefault.jpg`;
 
 export default function LiveVideo() {
   const router = useRouter();
@@ -22,45 +18,27 @@ export default function LiveVideo() {
   const [activeTab, setActiveTab] = useState<'Discover' | 'Friends'>('Discover');
   const [commentModalVisible, setCommentModalVisible] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(true);
 
-  const player = useVideoPlayer(VIDEOS[activeTab], (player) => {
-    player.loop = true;
-    player.muted = true;
-    player.play();
-  });
-
-  // Ensure playback starts/resumes on tab change
-  useEffect(() => {
-    player.play();
-    setIsPlaying(true);
-  }, [activeTab, player]);
-
-  const togglePlay = () => {
-    if (isPlaying) {
-      player.pause();
-    } else {
-      player.play();
-    }
-    setIsPlaying(!isPlaying);
+  const openYouTubeShort = async () => {
+    await Linking.openURL(YOUTUBE_SHORTS_URL);
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent />
       {/* Background Media */}
-      <VideoView
+      <Image
         style={styles.backgroundImage}
-        player={player}
-        contentFit="cover"
+        source={{ uri: YOUTUBE_THUMBNAIL_URL }}
+        resizeMode="cover"
       />
 
 
-      {/* Full screen tap to toggle */}
+      {/* Full screen tap opens the YouTube Short */}
       <TouchableOpacity
         style={StyleSheet.absoluteFill}
         activeOpacity={1}
-        onPress={togglePlay}
+        onPress={openYouTubeShort}
       />
 
       <View style={styles.safeArea} pointerEvents="box-none">
@@ -90,14 +68,11 @@ export default function LiveVideo() {
           </TouchableOpacity>
         </View>
 
-        {/* Center Play Button (only shown when paused) */}
-        {!isPlaying && (
-          <View style={styles.centerContainer} pointerEvents="none">
-            <View style={styles.playBtn}>
-              <Ionicons name="play" size={32} color="#FFFFFF" style={{ marginLeft: 4 }} />
-            </View>
+        <View style={styles.centerContainer} pointerEvents="none">
+          <View style={styles.playBtn}>
+            <Ionicons name="play" size={32} color="#FFFFFF" style={{ marginLeft: 4 }} />
           </View>
-        )}
+        </View>
 
         {/* Right Action Column */}
         <View style={styles.rightActionsCol}>

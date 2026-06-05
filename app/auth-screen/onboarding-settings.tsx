@@ -1,32 +1,42 @@
 import { Feather } from "@expo/vector-icons";
+import { getCurrentLocationForSharing } from "@/lib/locationSharing";
 import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  Alert, Animated, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/stores/authStore";
 
 /* 🔥 Types */
 type CustomSwitchProps = {
   value: boolean;
   onValueChange: (value: boolean) => void;
+  disabled?: boolean;
 };
 
 /* 🔥 Custom Switch */
 const CustomSwitch: React.FC<CustomSwitchProps> = ({
   value,
   onValueChange,
+  disabled,
 }) => {
   const { colors, isDark } = useTheme();
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: value ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [anim, value]);
+
   const toggle = () => {
+    if (disabled) {
+      return;
+    }
+
     Animated.timing(anim, {
       toValue: value ? 0 : 1,
       duration: 200,
@@ -42,12 +52,13 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
   });
 
   return (
-    <TouchableOpacity onPress={toggle} activeOpacity={0.8}>
+    <TouchableOpacity onPress={toggle} activeOpacity={0.8} disabled={disabled}>
       <Animated.View
         style={[
           styles.track,
           {
             backgroundColor: value ? colors.primary : (isDark ? "#2B2B36" : "#E0E0E0"),
+            opacity: disabled ? 0.65 : 1,
           },
         ]}
       >
@@ -67,9 +78,65 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
 
 export default function OnboardingSettings() {
   const { colors, isDark } = useTheme();
-  const [locationEnabled, setLocationEnabled] = useState<boolean>(true);
+  const userLocationSharingEnabled = useAuthStore((state) => Boolean(state.user?.currentLocationSharingEnabled));
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const [locationEnabled, setLocationEnabled] = useState<boolean>(userLocationSharingEnabled);
   const [notificationsEnabled, setNotificationsEnabled] =
     useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setLocationEnabled(userLocationSharingEnabled);
+  }, [userLocationSharingEnabled]);
+
+  const handleLocationToggle = async (nextValue: boolean) => {
+    if (!nextValue) {
+      setLocationEnabled(false);
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await getCurrentLocationForSharing();
+      setLocationEnabled(true);
+    } catch (error) {
+      Alert.alert(
+        "Current Location",
+        error instanceof Error ? error.message : "Unable to enable current location sharing.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDone = async () => {
+    setIsSaving(true);
+
+    try {
+      if (locationEnabled) {
+        const currentLocation = await getCurrentLocationForSharing();
+        await updateProfile({
+          currentLocationSharingEnabled: true,
+          currentLocation,
+        });
+      } else if (userLocationSharingEnabled) {
+        await updateProfile({
+          currentLocationSharingEnabled: false,
+          currentLocation: null,
+        });
+      }
+
+      router.replace('/(tabs)/home?showSuccess=true');
+    } catch (error) {
+      Alert.alert(
+        "Current Location",
+        error instanceof Error ? error.message : "Unable to save your location preference.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -98,7 +165,8 @@ export default function OnboardingSettings() {
 
               <CustomSwitch
                 value={locationEnabled}
-                onValueChange={setLocationEnabled}
+                onValueChange={handleLocationToggle}
+                disabled={isSaving}
               />
             </View>
           </View>
@@ -124,9 +192,10 @@ export default function OnboardingSettings() {
           </View>
 
           <TouchableOpacity
-            style={[styles.doneButton, { backgroundColor: colors.primary }]}
+            style={[styles.doneButton, { backgroundColor: colors.primary }, isSaving && styles.doneButtonDisabled]}
             activeOpacity={0.8}
-            onPress={() => router.replace('/(tabs)/home?showSuccess=true')}
+            disabled={isSaving}
+            onPress={handleDone}
           >
             <Text style={[styles.doneButtonText, { color: colors.background }]}>Done</Text>
           </TouchableOpacity>
@@ -221,6 +290,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 24,
     marginBottom: 20,
+  },
+  doneButtonDisabled: {
+    opacity: 0.65,
   },
   doneButtonText: {
     fontSize: 16,

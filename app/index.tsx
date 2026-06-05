@@ -1,24 +1,31 @@
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, Image, View } from "react-native";
-import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function Splash() {
+  const router = useRouter();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isRestoring = useAuthStore((state) => state.isRestoring);
+  const hasRestored = useAuthStore((state) => state.hasRestored);
+
   useEffect(() => {
+    if (isRestoring || !hasRestored) {
+      return;
+    }
+
     const timer = setTimeout(() => {
-      router.replace('/auth-screen/onboarding');
-    }, 2000);
+      router.replace(isAuthenticated ? '/(tabs)/home' as any : '/auth-screen/onboarding' as any);
+    }, 1200);
 
     return () => clearTimeout(timer);
-  }, []);
-
-  const { colors } = useTheme();
+  }, [hasRestored, isAuthenticated, isRestoring, router]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <Image 
         source={require("../assets/images/Splash-logo.png")}
-        style={[styles.logo, { tintColor: colors.text }]}
+        style={styles.logo}
         resizeMode="contain"
       />
     </View>
@@ -30,6 +37,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#0E0D12",
   },
   logo: {
     width: 240,

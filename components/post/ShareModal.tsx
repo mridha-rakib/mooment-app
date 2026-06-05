@@ -1,9 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ScrollView, Platform, Dimensions, KeyboardAvoidingView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ScrollView, Platform, KeyboardAvoidingView, Share } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
-
-const { height } = Dimensions.get('window');
 
 type ShareUser = {
   id: string;
@@ -69,12 +67,44 @@ const MOCK_APPS: ShareApp[] = [
 
 export default function ShareModal({ 
   visible, 
-  onClose 
+  onClose,
+  onRepost,
+  shareUrl,
 }: { 
   visible: boolean; 
   onClose: () => void;
+  onRepost?: () => Promise<void> | void;
+  shareUrl?: string;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const [isReposting, setIsReposting] = useState(false);
+
+  const handleAppPress = async (appId: string) => {
+    if (appId === 'repost') {
+      if (!onRepost || isReposting) {
+        return;
+      }
+
+      setIsReposting(true);
+
+      try {
+        await onRepost();
+      } finally {
+        setIsReposting(false);
+      }
+
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: shareUrl ?? 'https://mooment.app',
+        url: shareUrl,
+      });
+    } catch {
+      // The native share sheet reports cancellation and platform failures here.
+    }
+  };
 
   return (
     <Modal
@@ -133,11 +163,19 @@ export default function ShareModal({
               contentContainerStyle={styles.horizontalScrollContent}
             >
               {MOCK_APPS.map((app) => (
-                <TouchableOpacity key={app.id} style={styles.appItem} activeOpacity={0.8}>
+                <TouchableOpacity
+                  key={app.id}
+                  style={[styles.appItem, app.id === 'repost' && isReposting && styles.appItemDisabled]}
+                  activeOpacity={0.8}
+                  onPress={() => handleAppPress(app.id)}
+                  disabled={app.id === 'repost' && isReposting}
+                >
                   <View style={[styles.appIconContainer, { borderColor: colors.border }]}>
                     {app.iconFn(colors)}
                   </View>
-                  <Text style={[styles.appName, { color: colors.text }]} numberOfLines={1}>{app.name}</Text>
+                  <Text style={[styles.appName, { color: colors.text }]} numberOfLines={1}>
+                    {app.id === 'repost' && isReposting ? 'Posting...' : app.name}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -231,6 +269,9 @@ const styles = StyleSheet.create({
   appItem: {
     alignItems: 'center',
     width: 72,
+  },
+  appItemDisabled: {
+    opacity: 0.55,
   },
   appIconContainer: {
     width: 56,

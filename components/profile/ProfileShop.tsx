@@ -19,11 +19,12 @@ const MOCK_PRODUCTS: PostData[] = [
 ];
 
 type ProfileShopProps = {
-  onCommentPress: () => void;
-  onSharePress: () => void;
+  onCommentPress: (post: PostData) => void;
+  onSharePress: (post: PostData) => void;
+  isOwnProfile?: boolean;
 };
 
-export default function ProfileShop({ onCommentPress, onSharePress }: ProfileShopProps) {
+export default function ProfileShop({ onCommentPress, onSharePress, isOwnProfile = true }: ProfileShopProps) {
   return (
     <View style={styles.container}>
       <View style={styles.list}>
@@ -33,6 +34,7 @@ export default function ProfileShop({ onCommentPress, onSharePress }: ProfileSho
             post={product} 
             onCommentPress={onCommentPress} 
             onSharePress={onSharePress} 
+            isOwnPost={isOwnProfile}
           />
         ))}
       </View>

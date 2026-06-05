@@ -1,12 +1,21 @@
-import { Feather } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
 import {
-  Dimensions, Platform, SafeAreaView,
-  StatusBar, StyleSheet, Text,
-  TouchableOpacity, View,
+  Feather } from '@expo/vector-icons';
+import { CameraView,
+  useCameraPermissions } from 'expo-camera';
+import { useRouter } from 'expo-router';
+import React,
+  { useRef,
+  useState } from 'react';
+import {
+  Dimensions,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '@/components/ui/CinematicButton';
 import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-icons";

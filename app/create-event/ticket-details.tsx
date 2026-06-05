@@ -17,17 +17,32 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from '@/hooks/useTheme';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
+import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 export default function TicketDetailsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const upsertTicket = useEventDraftStore((state) => state.upsertTicket);
+  const currentTicket = useEventDraftStore((state) => state.tickets[0]);
   const [ticketType, setTicketType] = useState('Free'); // 'Free' or 'Pay'
+  const [ticketName, setTicketName] = useState('');
+  const [ticketDescription, setTicketDescription] = useState('');
+  const [capacity, setCapacity] = useState('185');
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
   const handleConfirm = () => {
+    upsertTicket({
+      capacity: Number.parseInt(capacity, 10) || 0,
+      description: ticketDescription.trim() || currentTicket?.description || 'Entry from 9pm. Standing only.',
+      localId: currentTicket?.localId,
+      name: ticketName.trim() || currentTicket?.name || 'General Ticket',
+      price: ticketType === 'Free' ? 0 : currentTicket?.price ?? 45,
+      salesEndAt: date.toISOString(),
+      type: ticketType === 'Free' ? 'free' : 'pay',
+    });
     setShowConfetti(true);
     // Navigate back after the animation
     setTimeout(() => {
@@ -97,6 +112,7 @@ export default function TicketDetailsScreen() {
             style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Name"
             placeholderTextColor={colors.textSecondary}
+            onChangeText={setTicketName}
           />
         </View>
 
@@ -107,6 +123,7 @@ export default function TicketDetailsScreen() {
             style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Detail about ticket"
             placeholderTextColor={colors.textSecondary}
+            onChangeText={setTicketDescription}
           />
         </View>
 
@@ -186,6 +203,7 @@ export default function TicketDetailsScreen() {
             placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             defaultValue="185"
+            onChangeText={setCapacity}
           />
         </View>
       </ScrollView>

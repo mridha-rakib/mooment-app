@@ -1,22 +1,74 @@
-import { useTheme } from '@/hooks/useTheme';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
 import {
+  useTheme } from '@/hooks/useTheme';
+import { Feather,
+  Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React,
+  { useEffect,
+  useState } from 'react';
+import {
+  ActivityIndicator,
   Dimensions,
-  FlatList, Image,
-  SafeAreaView,
+  FlatList,
+  Image,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import SegmentedControl from '@/components/ui/SegmentedControl';
 import CinematicButton from '@/components/ui/CinematicButton';
+import { getDirectMessageConversations } from '@/lib/chat';
+import type { DirectMessageConversationResponse } from '@/lib/chat';
 
 const { width } = Dimensions.get('window');
+const DEFAULT_DM_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
+
+const formatConversationTime = (value?: string | null) => {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (diffMinutes < 1) {
+    return 'now';
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+
+  if (diffHours < 24) {
+    return `${diffHours}h`;
+  }
+
+  return `${Math.floor(diffHours / 24)}d`;
+};
+
+const toConversationData = (dm: DirectMessageConversationResponse): ConversationData => ({
+  id: dm.friendId || dm.id,
+  name: dm.name,
+  avatar: dm.avatarUrl ?? DEFAULT_DM_AVATAR,
+  lastMessage: dm.lastMessage ?? 'Start a conversation',
+  time: formatConversationTime(dm.lastMessageAt),
+  unread: dm.unreadCount ?? 0,
+  isOnline: dm.isOnline ?? false,
+  isGroup: false,
+  isBlocked: dm.isBlocked ?? false,
+});
 
 export type ConversationData = {
   id: string;
@@ -30,6 +82,7 @@ export type ConversationData = {
   groupAvatars?: string[];
   isTyping?: boolean;
   messageType?: 'text' | 'image' | 'audio' | 'event';
+  isBlocked?: boolean;
   isMuted?: boolean;
 };
 
@@ -113,18 +166,49 @@ export default function MessagesScreen() {
   const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Blocked'>('All');
   const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
   const [roomTab, setRoomTab] = useState<'Event Rooms' | 'General Rooms'>('Event Rooms');
+  const [dmConversations, setDmConversations] = useState<ConversationData[]>([]);
+  const [isDmsLoading, setIsDmsLoading] = useState(false);
+  const [dmsError, setDmsError] = useState<string | null>(null);
 
-  const filtered = CONVERSATIONS.filter(c => {
-    let match = true;
-    if (topTab === 'Unread') match = c.unread > 0;
-    if (topTab === 'Blocked') match = c.isGroup;
+  useEffect(() => {
+    let isMounted = true;
 
-    if (match) {
-      if (subTab === 'DMs') return !c.isGroup;
-      if (subTab === 'Groups') return c.isGroup;
-      return false;
-    }
-    return false;
+    const loadDirectMessages = async () => {
+      setIsDmsLoading(true);
+      setDmsError(null);
+
+      try {
+        const dms = await getDirectMessageConversations();
+
+        if (isMounted) {
+          setDmConversations(dms.map(toConversationData));
+        }
+      } catch {
+        if (isMounted) {
+          setDmsError('Unable to load DMs.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsDmsLoading(false);
+        }
+      }
+    };
+
+    void loadDirectMessages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const sourceConversations = subTab === 'DMs'
+    ? dmConversations
+    : CONVERSATIONS.filter((conversation) => conversation.isGroup);
+
+  const filtered = sourceConversations.filter(c => {
+    if (topTab === 'Unread') return c.unread > 0;
+    if (topTab === 'Blocked') return subTab === 'DMs' ? Boolean(c.isBlocked) : c.isGroup;
+    return true;
   });
 
   const renderAvatar = (item: ConversationData) => {
@@ -155,18 +239,18 @@ export default function MessagesScreen() {
 
   const renderConvoItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
-      style={[styles.convoCard, { backgroundColor: '#111111' }]}
+      style={styles.convoCard}
       onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
       activeOpacity={0.85}
     >
       {renderAvatar(item)}
       <View style={styles.convoMeta}>
         <View style={styles.convoTopRow}>
-          <Text style={[styles.convoName, { color: colors.text }]} numberOfLines={1}>
+          <Text style={styles.convoName} numberOfLines={1}>
             {item.name}
-            {item.isMuted && <Feather name="bell-off" size={12} color={colors.textSecondary} style={{ marginLeft: 6 }} />}
+            {item.isMuted && <Feather name="bell-off" size={12} color="#B3B3B3" style={{ marginLeft: 6 }} />}
           </Text>
-          <Text style={[styles.convoTime, { color: colors.textSecondary }]}>{item.time}</Text>
+          {item.time ? <Text style={styles.convoTime}>{item.time}</Text> : null}
         </View>
         <View style={styles.convoBottomRow}>
           <View style={styles.msgContent}>
@@ -361,8 +445,18 @@ export default function MessagesScreen() {
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No conversations found</Text>
+              {subTab === 'DMs' && isDmsLoading ? (
+                <ActivityIndicator color={colors.textSecondary} />
+              ) : (
+                <>
+                  <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    {subTab === 'DMs'
+                      ? dmsError ?? (topTab === 'Unread' ? 'No unread DMs' : 'No friends found')
+                      : 'No conversations found'}
+                  </Text>
+                </>
+              )}
             </View>
           }
           renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}
@@ -408,28 +502,30 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#FFFFFF' },
 
   convoCard: {
+    backgroundColor: 'rgba(17, 17, 17, 0.8)',
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 12,
     marginHorizontal: 16,
     marginBottom: 10,
-    borderRadius: 16
+    minHeight: 68,
   },
   avatarWrap: { position: 'relative', marginRight: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 24 },
+  avatar: { width: 40, height: 40, borderRadius: 20 },
   groupAvatarWrap: { width: 48, height: 48, marginRight: 12, position: 'relative' },
   groupAv1: { width: 34, height: 34, borderRadius: 17, position: 'absolute', top: 0, left: 0, borderWidth: 2, borderColor: '#0e0d12' },
   groupAv2: { width: 28, height: 28, borderRadius: 14, position: 'absolute', bottom: 0, right: 0, borderWidth: 2, borderColor: '#0e0d12' },
   onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#111111' },
 
-  convoMeta: { flex: 1 },
-  convoTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  convoName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, flex: 1 },
-  convoTime: { color: '#8E8E9B', fontSize: 11 },
+  convoMeta: { flex: 1, gap: 4 },
+  convoTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  convoName: { color: '#FFFFFF', fontWeight: '600', fontSize: 16, flex: 1, lineHeight: 20 },
+  convoTime: { color: '#B3B3B3', fontSize: 10, lineHeight: 16, marginLeft: 8 },
   convoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   msgContent: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  lastMsg: { color: '#8E8E9B', fontSize: 13, flex: 1 },
+  lastMsg: { color: '#B3B3B3', fontSize: 14, flex: 1, lineHeight: 16 },
   lastMsgUnread: { color: '#FFFFFF', fontWeight: '500' },
   typingText: { color: '#D4B0EB', fontStyle: 'italic' },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F2245C', marginLeft: 8 },

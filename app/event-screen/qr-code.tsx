@@ -1,11 +1,21 @@
-import { Feather } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Feather } from '@expo/vector-icons';
+import { useLocalSearchParams,
+  useRouter } from 'expo-router';
 import React from 'react';
 import {
-  Alert, Dimensions, Image, Platform, SafeAreaView,
-  ScrollView, StatusBar, StyleSheet, Text,
-  TouchableOpacity, View,
+  Alert,
+  Dimensions,
+  Image,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '@/components/ui/CinematicButton';

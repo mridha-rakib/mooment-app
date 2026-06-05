@@ -1,20 +1,72 @@
-import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useRouter } from 'expo-router';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { followUser, unfollowUser } from '@/lib/users';
 
 export type SuggestedUser = {
   id: string;
   name: string;
   avatarUri: string;
+  isFollowing?: boolean;
 };
 
 type PeopleToFollowProps = {
   users: SuggestedUser[];
 };
 
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
 export default function PeopleToFollow({ users }: PeopleToFollowProps) {
   const router = useRouter();
+  const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
+  const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setFollowedUserIds(users.filter((user) => user.isFollowing).map((user) => user.id));
+  }, [users]);
+
+  const handleFollowPress = async (user: SuggestedUser) => {
+    if (pendingUserIds.includes(user.id)) {
+      return;
+    }
+
+    const wasFollowing = followedUserIds.includes(user.id);
+    const nextFollowedUserIds = wasFollowing
+      ? followedUserIds.filter((id) => id !== user.id)
+      : [...followedUserIds, user.id];
+
+    setFollowedUserIds(nextFollowedUserIds);
+
+    if (!MONGO_OBJECT_ID_PATTERN.test(user.id)) {
+      return;
+    }
+
+    setPendingUserIds((current) => [...current, user.id]);
+
+    try {
+      const follow = wasFollowing ? await unfollowUser(user.id) : await followUser(user.id);
+
+      setFollowedUserIds((current) => (
+        follow.isFollowing
+          ? Array.from(new Set([...current, user.id]))
+          : current.filter((id) => id !== user.id)
+      ));
+    } catch (error) {
+      setFollowedUserIds((current) => (
+        wasFollowing
+          ? Array.from(new Set([...current, user.id]))
+          : current.filter((id) => id !== user.id)
+      ));
+      Alert.alert(
+        wasFollowing ? 'Unable to unfollow' : 'Unable to follow',
+        getAuthErrorMessage(error, 'Please try again.'),
+      );
+    } finally {
+      setPendingUserIds((current) => current.filter((id) => id !== user.id));
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -67,8 +119,15 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.followBtn} activeOpacity={0.8}>
-              <Text style={styles.followBtnText}>Follow</Text>
+            <TouchableOpacity
+              style={styles.followBtn}
+              activeOpacity={0.8}
+              disabled={pendingUserIds.includes(user.id)}
+              onPress={() => handleFollowPress(user)}
+            >
+              <Text style={styles.followBtnText}>
+                {followedUserIds.includes(user.id) ? 'Following' : 'Follow'}
+              </Text>
             </TouchableOpacity>
           </View>
         ))}

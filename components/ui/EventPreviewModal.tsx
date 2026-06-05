@@ -1,10 +1,8 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import React from 'react';
-import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-
-const { width } = Dimensions.get('window');
 
 type EventPreviewModalProps = {
   visible: boolean;
@@ -27,19 +25,20 @@ export default function EventPreviewModal({
   visible,
   onClose,
   themeColor = '#F2245C',
-  eventTitle = "Rooftop Session Vol 4",
-  hostName = "vinly_nova",
-  distance = "0.3 mi",
-  isLive = true,
-  eventDate = "Sat, Sep 9",
-  eventTime = "9:00 - 4:00 PM",
-  location = "SparkTech Terace, New York",
-  attendeesCount = 412,
+  eventTitle = "Event",
+  hostName = "host",
+  distance = "nearby",
+  isLive = false,
+  eventDate = "Date TBA",
+  eventTime = "Time TBA",
+  location = "Location TBA",
+  attendeesCount = 0,
   ageLimit = "All Ages",
-  price = "£45",
+  price = "Free",
   onViewEvent
 }: EventPreviewModalProps) {
   const { colors, isDark } = useTheme();
+  const distanceLabel = distance === "nearby" ? "nearby" : `${distance} away`;
 
   return (
     <Modal
@@ -63,9 +62,9 @@ export default function EventPreviewModal({
             </View>
             
             <View style={styles.headerInfo}>
-              <Text style={[styles.title, { color: colors.text }]}>{eventTitle}</Text>
+              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{eventTitle}</Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                @{hostName} • {distance} away
+                @{hostName} • {distanceLabel}
               </Text>
             </View>
 
@@ -98,7 +97,7 @@ export default function EventPreviewModal({
 
             <View style={styles.detailItem}>
               <Feather name="map-pin" size={16} color={colors.textSecondary} />
-              <Text style={[styles.detailText, { color: colors.text }]}>{location}</Text>
+              <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{location}</Text>
             </View>
           </View>
 

@@ -1,19 +1,28 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Comment02Icon, Share01Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { VideoView,
+  useVideoPlayer } from 'expo-video';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import React, { useRef, useState } from 'react';
-import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { toggleMomentReaction, type MomentInteractionSummary } from '@/lib/moments';
+import { followUser, unfollowUser } from '@/lib/users';
+import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
+import MoreMenuModal from "./MoreMenuModal";
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
 const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38, 22, 16, 32, 24, 14, 28, 36, 18, 12, 30, 42, 24, 16, 38, 28, 14, 45, 20, 12, 32, 24, 18, 10, 26, 14, 10];
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 export type PostContextNode = {
   text: string;
@@ -21,6 +30,7 @@ export type PostContextNode = {
 };
 
 export type AudioDetails = {
+  uri?: string;
   duration: string;
   currentTime: string;
 };
@@ -42,9 +52,15 @@ export type ProductDetails = {
   buttonText: string;
 };
 
+export type PostMediaItem = {
+  uri: string;
+  type: 'image' | 'video';
+};
+
 export type PostData = {
   id: string;
   postType: 'standard' | 'audio' | 'event' | 'product';
+  authorId?: string;
   authorName: string;
   authorContextNodes?: PostContextNode[];
   authorAvatar: string;
@@ -52,6 +68,7 @@ export type PostData = {
   timeAgo: string;
   caption?: string;
   mediaUris?: string[];
+  mediaItems?: PostMediaItem[];
   ticketsCount?: number;
   likedBy?: string;
   headerLabel?: string;
@@ -66,35 +83,219 @@ export type PostData = {
   isLiked?: boolean;
 };
 
-import MoreMenuModal from "./MoreMenuModal";
+function VideoFeedMedia({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.loop = true;
+    videoPlayer.muted = true;
+  });
+
+  return (
+    <View style={styles.videoMediaFrame}>
+      <VideoView
+        player={player}
+        style={styles.postImage}
+        nativeControls
+        contentFit="cover"
+      />
+      <View style={styles.videoBadge}>
+        <Feather name="play" size={12} color="#FFFFFF" />
+      </View>
+    </View>
+  );
+}
+
+const formatAudioSeconds = (seconds?: number) => {
+  if (!seconds || !Number.isFinite(seconds) || seconds < 0) {
+    return '0:00';
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+function AudioFeedPlayer({ details }: { details: AudioDetails }) {
+  const { colors, isDark } = useTheme();
+  const [hasRequestedPlayback, setHasRequestedPlayback] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const audioSource = useMemo(() => {
+    if (!details.uri) {
+      return null;
+    }
+
+    return {
+      uri: details.uri,
+      headers: details.uri.includes('.ngrok-free.')
+        ? { 'ngrok-skip-browser-warning': 'true' }
+        : undefined,
+    };
+  }, [details.uri]);
+  const player = useAudioPlayer(audioSource, {
+    downloadFirst: false,
+    updateInterval: 250,
+  });
+  const status = useAudioPlayerStatus(player);
+  const duration = status.duration > 0 ? status.duration : 0;
+  const currentTime = duration > 0 ? Math.min(status.currentTime, duration) : status.currentTime;
+  const progress = duration > 0 ? currentTime / duration : 0;
+  const activeBars = details.uri ? Math.max(1, Math.round(progress * WAVEFORM_HEIGHTS.length)) : 0;
+  const isLoading = Boolean(
+    details.uri &&
+    hasRequestedPlayback &&
+    !loadFailed &&
+    !status.playing &&
+    (status.isBuffering || !status.isLoaded)
+  );
+  const displayedCurrentTime = status.isLoaded ? formatAudioSeconds(currentTime) : details.currentTime;
+  const displayedDuration = status.duration > 0 ? formatAudioSeconds(status.duration) : details.duration;
+
+  useEffect(() => {
+    setHasRequestedPlayback(false);
+    setLoadFailed(false);
+  }, [details.uri]);
+
+  useEffect(() => {
+    if (!hasRequestedPlayback || status.isLoaded || status.playing || !details.uri) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setHasRequestedPlayback(false);
+      setLoadFailed(true);
+      Alert.alert('Unable to play audio', 'The audio file could not be loaded. Please try again.');
+    }, 8000);
+
+    return () => clearTimeout(timeoutId);
+  }, [details.uri, hasRequestedPlayback, status.isLoaded, status.playing]);
+
+  const handleTogglePlayback = async () => {
+    if (!details.uri) {
+      return;
+    }
+
+    try {
+      if (status.playing) {
+        player.pause();
+        return;
+      }
+
+      setLoadFailed(false);
+      setHasRequestedPlayback(true);
+
+      if (duration > 0 && currentTime >= duration - 0.25) {
+        await player.seekTo(0);
+      }
+
+      player.play();
+    } catch (error) {
+      setHasRequestedPlayback(false);
+      setLoadFailed(true);
+      Alert.alert('Unable to play audio', getAuthErrorMessage(error, 'Please try again.'));
+    }
+  };
+
+  return (
+    <View style={styles.audioContainer}>
+      <View style={styles.waveformRow}>
+        {WAVEFORM_HEIGHTS.map((h, i) => (
+          <View
+            key={i}
+            style={[
+              styles.waveBar,
+              {
+                height: h,
+                backgroundColor: i < activeBars ? colors.primary : (isDark ? '#464646' : '#D9D9DF'),
+                opacity: details.uri ? 1 : 0.45,
+              },
+            ]}
+          />
+        ))}
+      </View>
+      <View style={styles.audioControlsRow}>
+        <TouchableOpacity
+          style={[
+            styles.playBtn,
+            { backgroundColor: details.uri ? colors.primary : colors.border },
+          ]}
+          activeOpacity={0.8}
+          disabled={!details.uri}
+          onPress={handleTogglePlayback}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color={colors.background} />
+          ) : (
+            <Ionicons
+              name={status.playing ? 'pause' : 'play'}
+              size={16}
+              color={colors.background}
+              style={status.playing ? undefined : { marginLeft: 2 }}
+            />
+          )}
+        </TouchableOpacity>
+        <Text style={[styles.audioTimeText, { color: colors.text }]}>
+          {displayedCurrentTime} / {displayedDuration}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export default function FeedPost({
   post,
   onCommentPress,
   onSharePress,
   onViewMapPress,
+  onAuthorFollowChange,
+  onInteractionChange,
+  onDeletePress,
   isOwnPost = false
 }: {
   post: PostData;
-  onCommentPress?: () => void;
-  onSharePress?: () => void;
+  onCommentPress?: (post: PostData) => void;
+  onSharePress?: (post: PostData) => void;
   onViewMapPress?: () => void;
+  onAuthorFollowChange?: (authorId: string, isFollowing: boolean) => void;
+  onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
+  onDeletePress?: (post: PostData) => void;
   isOwnPost?: boolean;
 }) {
-  const { theme, colors, isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
   const [showFullScreenMedia, setShowFullScreenMedia] = useState(false);
   const router = useRouter();
-  const [isFollowing, setIsFollowing] = useState(post.isFollowing);
+  const [isFollowing, setIsFollowing] = useState(Boolean(post.isFollowing));
+  const [isFollowPending, setIsFollowPending] = useState(false);
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const moreBtnRef = useRef<View>(null);
   const [menuTop, setMenuTop] = useState(0);
+  const canCompareAuthorId = Boolean(post.authorId && currentUserId);
+  const isPostByCurrentUser = canCompareAuthorId ? post.authorId === currentUserId : isOwnPost;
+  const canDeletePost = isPostByCurrentUser && Boolean(onDeletePress);
+  const hasMoreMenuActions = !isPostByCurrentUser || canDeletePost;
 
   // Dynamic Interaction State
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
+  const [commentsCount, setCommentsCount] = useState(post.commentsCount || 0);
+  const [sharesCount, setSharesCount] = useState(post.sharesCount || 0);
+  const [isLikePending, setIsLikePending] = useState(false);
+  const mediaItems = post.mediaItems ?? post.mediaUris?.map((uri) => ({ uri, type: 'image' as const })) ?? [];
+
+  useEffect(() => {
+    setIsFollowing(Boolean(post.isFollowing));
+  }, [post.id, post.isFollowing]);
+
+  useEffect(() => {
+    setIsLiked(Boolean(post.isLiked));
+    setLikesCount(post.likesCount || 0);
+    setCommentsCount(post.commentsCount || 0);
+    setSharesCount(post.sharesCount || 0);
+  }, [post.id, post.isLiked, post.likesCount, post.commentsCount, post.sharesCount]);
 
   // Reanimated Shared Values
   const heartScale = useSharedValue(1);
@@ -103,26 +304,54 @@ export default function FeedPost({
     transform: [{ scale: heartScale.value }]
   }));
 
-  const handleLike = () => {
+  const handleLike = async () => {
+    if (isLikePending) {
+      return;
+    }
+
     // Haptic Feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Toggle State
-    if (isLiked) {
-      setLikesCount(prev => prev - 1);
-    } else {
-      setLikesCount(prev => prev + 1);
-    }
-    setIsLiked(!isLiked);
+    const wasLiked = isLiked;
+    const previousLikesCount = likesCount;
+
+    setIsLiked(!wasLiked);
+    setLikesCount((currentCount) => Math.max(0, currentCount + (wasLiked ? -1 : 1)));
 
     // Animation: Scale up then back to normal
     heartScale.value = withSequence(
       withSpring(1.3, { damping: 10, stiffness: 100 }),
       withSpring(1, { damping: 10, stiffness: 100 })
     );
+
+    if (!MONGO_OBJECT_ID_PATTERN.test(post.id)) {
+      return;
+    }
+
+    setIsLikePending(true);
+
+    try {
+      const summary = await toggleMomentReaction(post.id);
+
+      setIsLiked(summary.isLiked);
+      setLikesCount(summary.likesCount);
+      setCommentsCount(summary.commentsCount);
+      setSharesCount(summary.sharesCount);
+      onInteractionChange?.(post.id, summary);
+    } catch (error) {
+      setIsLiked(wasLiked);
+      setLikesCount(previousLikesCount);
+      Alert.alert('Unable to update reaction', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsLikePending(false);
+    }
   };
 
   const handleMorePress = () => {
+    if (!hasMoreMenuActions) {
+      return;
+    }
+
     moreBtnRef.current?.measureInWindow((x, y, width, height) => {
       setMenuTop(y + height + 5);
       setShowMoreMenu(true);
@@ -138,8 +367,40 @@ export default function FeedPost({
     }
   };
 
-  const toggleFollow = () => {
-    setIsFollowing(!isFollowing);
+  const toggleFollow = async () => {
+    if (isPostByCurrentUser || isFollowPending) {
+      return;
+    }
+
+    const authorId = post.authorId;
+    const wasFollowing = isFollowing;
+
+    setIsFollowing(!wasFollowing);
+    if (authorId) {
+      onAuthorFollowChange?.(authorId, !wasFollowing);
+    }
+
+    if (!authorId || !MONGO_OBJECT_ID_PATTERN.test(authorId)) {
+      return;
+    }
+
+    setIsFollowPending(true);
+
+    try {
+      const follow = wasFollowing ? await unfollowUser(authorId) : await followUser(authorId);
+
+      setIsFollowing(follow.isFollowing);
+      onAuthorFollowChange?.(authorId, follow.isFollowing);
+    } catch (error) {
+      setIsFollowing(wasFollowing);
+      onAuthorFollowChange?.(authorId, wasFollowing);
+      Alert.alert(
+        wasFollowing ? 'Unable to unfollow' : 'Unable to follow',
+        getAuthErrorMessage(error, 'Please try again.'),
+      );
+    } finally {
+      setIsFollowPending(false);
+    }
   };
 
   return (
@@ -173,7 +434,7 @@ export default function FeedPost({
             onPress={() => router.push({
               pathname: '/profile-screen/user-profile',
               params: {
-                userId: post.id,
+                userId: post.authorId ?? post.id,
                 name: post.authorName,
                 avatar: post.authorAvatar
               }
@@ -202,23 +463,27 @@ export default function FeedPost({
             </View>
           </TouchableOpacity>
           <View style={styles.postHeaderActions}>
-            {isFollowing ? (
-              <TouchableOpacity
-                style={[styles.followingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
-                activeOpacity={0.8}
-                onPress={toggleFollow}
-              >
-                <Text style={[styles.followingBtnText, { color: colors.textSecondary }]}>Following</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.followBtn, { borderColor: colors.primary }]}
-                activeOpacity={0.8}
-                onPress={toggleFollow}
-              >
-                <Feather name="plus" size={12} color={colors.primary} />
-                <Text style={[styles.followBtnText, { color: colors.primary }]}>Follow</Text>
-              </TouchableOpacity>
+            {!isPostByCurrentUser && (
+              isFollowing ? (
+                <TouchableOpacity
+                  style={[styles.followingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+                  activeOpacity={0.8}
+                  disabled={isFollowPending}
+                  onPress={toggleFollow}
+                >
+                  <Text style={[styles.followingBtnText, { color: colors.textSecondary }]}>Following</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.followBtn, { borderColor: colors.primary }]}
+                  activeOpacity={0.8}
+                  disabled={isFollowPending}
+                  onPress={toggleFollow}
+                >
+                  <Feather name="plus" size={12} color={colors.primary} />
+                  <Text style={[styles.followBtnText, { color: colors.primary }]}>Follow</Text>
+                </TouchableOpacity>
+              )
             )}
             <TouchableOpacity
               ref={moreBtnRef}
@@ -237,28 +502,10 @@ export default function FeedPost({
 
         {/* Dynamic Media Section based on Post Type */}
         {post.postType === 'audio' && post.audioDetails && (
-          <View style={styles.audioContainer}>
-            <View style={styles.waveformRow}>
-              {WAVEFORM_HEIGHTS.map((h, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.waveBar,
-                    { height: h, backgroundColor: i < 15 ? colors.primary : colors.border }
-                  ]}
-                />
-              ))}
-            </View>
-            <View style={styles.audioControlsRow}>
-              <TouchableOpacity style={[styles.playBtn, { backgroundColor: colors.textSecondary }]} activeOpacity={0.8}>
-                <Ionicons name="play" size={16} color={colors.background} style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
-              <Text style={[styles.audioTimeText, { color: colors.text }]}>{post.audioDetails.currentTime} / {post.audioDetails.duration}</Text>
-            </View>
-          </View>
+          <AudioFeedPlayer details={post.audioDetails} />
         )}
 
-        {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && post.mediaUris && post.mediaUris.length > 0 && (
+        {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && mediaItems.length > 0 && (
           <TouchableOpacity
             activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
             onPress={() => {
@@ -275,12 +522,16 @@ export default function FeedPost({
               onMomentumScrollEnd={handleScroll}
               scrollEventThrottle={16}
             >
-              {post.mediaUris.map((uri, index) => (
-                <Image
-                  key={index}
-                  source={{ uri }}
-                  style={styles.postImage}
-                />
+              {mediaItems.map((item, index) => (
+                item.type === 'video' ? (
+                  <VideoFeedMedia key={`${item.uri}-${index}`} uri={item.uri} />
+                ) : (
+                  <Image
+                    key={`${item.uri}-${index}`}
+                    source={{ uri: item.uri }}
+                    style={styles.postImage}
+                  />
+                )
               ))}
             </ScrollView>
 
@@ -362,10 +613,10 @@ export default function FeedPost({
             ) : (post.postType === 'standard' || post.postType === 'product') && (
               <>
                 {/* Media Counters & Badges (Standard & Product) */}
-                {post.mediaUris.length > 1 && (
+                {mediaItems.length > 1 && (
                   <View style={[styles.imageCounter, post.isExpandable && styles.imageCounterBottom]}>
                     <Text style={styles.imageCounterText}>
-                      {currentMediaIndex + 1}/{post.mediaUris.length}
+                      {currentMediaIndex + 1}/{mediaItems.length}
                     </Text>
                   </View>
                 )}
@@ -431,15 +682,15 @@ export default function FeedPost({
                 </TouchableOpacity>
               )}
               {post.commentsCount !== undefined && (
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onCommentPress}>
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => onCommentPress?.(post)}>
                   <HugeiconsIcon icon={Comment02Icon} size={20} color={colors.textSecondary} />
-                  <Text style={[styles.actionText, { color: colors.text }]}>{post.commentsCount}</Text>
+                  <Text style={[styles.actionText, { color: colors.text }]}>{commentsCount}</Text>
                 </TouchableOpacity>
               )}
               {post.sharesCount !== undefined && (
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={onSharePress}>
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => onSharePress?.(post)}>
                   <HugeiconsIcon icon={Share01Icon} size={20} color={colors.textSecondary} />
-                  <Text style={[styles.actionText, { color: colors.text }]}>{post.sharesCount}</Text>
+                  <Text style={[styles.actionText, { color: colors.text }]}>{sharesCount}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -449,10 +700,10 @@ export default function FeedPost({
         <MoreMenuModal
           visible={showMoreMenu}
           onClose={() => setShowMoreMenu(false)}
-          showDelete={isOwnPost}
-          onReport={!isOwnPost ? () => setShowReportModal(true) : undefined}
-          onSave={!isOwnPost ? () => console.log('Saved post') : undefined}
-          onDelete={() => console.log('Delete post')}
+          showDelete={canDeletePost}
+          onReport={!isPostByCurrentUser ? () => setShowReportModal(true) : undefined}
+          onSave={!isPostByCurrentUser ? () => console.log('Saved post') : undefined}
+          onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
           top={menuTop}
         />
 
@@ -617,21 +868,40 @@ const styles = StyleSheet.create({
     width: width - 64,
     height: "100%",
   },
+  videoMediaFrame: {
+    width: width - 64,
+    height: "100%",
+    position: "relative",
+    backgroundColor: "#000000",
+  },
+  videoBadge: {
+    position: "absolute",
+    left: 12,
+    bottom: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(0,0,0,0.52)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   /* Audio Post Styles */
   audioContainer: {
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 0,
+    marginBottom: 0,
   },
   waveformRow: {
     flexDirection: "row",
     alignItems: "center",
-    height: 60,
-    marginBottom: 16,
+    justifyContent: "space-between",
+    width: "100%",
+    height: 56,
+    marginBottom: 12,
+    overflow: "hidden",
   },
   waveBar: {
     width: 3,
     borderRadius: 2,
-    marginRight: 4,
   },
   audioControlsRow: {
     flexDirection: "row",
@@ -639,16 +909,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   playBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#D0D0D8",
     justifyContent: "center",
     alignItems: "center",
   },
   audioTimeText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 17,
     fontWeight: "600",
     fontVariant: ["tabular-nums"],
   },

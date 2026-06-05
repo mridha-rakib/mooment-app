@@ -1,9 +1,24 @@
 import LocationSearchModal from '@/components/post/LocationSearchModal';
-import { useTheme } from '@/hooks/useTheme';
+import {
+  useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useRef, useState } from 'react';
-import { Modal, PanResponder, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React,
+  { useRef,
+  useState } from 'react';
+import { Modal,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export type FilterModalProps = {
   visible: boolean;
