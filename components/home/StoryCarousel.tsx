@@ -1,7 +1,10 @@
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useVideoPlayer } from 'expo-video';
+import { getCachedStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSource } from '@/lib/storyThumbnails';
 
 export type StoryData = {
   id: string;
@@ -35,6 +38,82 @@ const getCompactStoryName = (fullName?: string) => {
 
   return `${nameParts[0]} ${nameParts[1].charAt(0).toUpperCase()}.`;
 };
+
+function StoryThumbnail({
+  storyId,
+  mediaUri,
+  fallbackUri,
+}: {
+  storyId: string;
+  mediaUri?: string | null;
+  fallbackUri?: string;
+}) {
+  const player = useVideoPlayer(mediaUri ? { uri: mediaUri, useCaching: true } : null, (videoPlayer) => {
+    videoPlayer.loop = false;
+    videoPlayer.muted = true;
+    videoPlayer.timeUpdateEventInterval = 0;
+  });
+  const [thumbnailSource, setThumbnailSource] = useState<StoryThumbnailSource>(
+    getCachedStoryThumbnail(storyId) ?? (fallbackUri ? { uri: fallbackUri } : null),
+  );
+  const generatedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    generatedForRef.current = null;
+    setThumbnailSource(getCachedStoryThumbnail(storyId) ?? (fallbackUri ? { uri: fallbackUri } : null));
+  }, [fallbackUri, mediaUri, storyId]);
+
+  useEffect(() => {
+    if (!mediaUri || generatedForRef.current === mediaUri) {
+      return;
+    }
+
+    generatedForRef.current = mediaUri;
+    let isActive = true;
+
+    void (async () => {
+      try {
+        const startedAt = Date.now();
+
+        while (
+          isActive &&
+          player.status !== 'readyToPlay' &&
+          player.status !== 'error' &&
+          Date.now() - startedAt < 10000
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        if (!isActive || player.status !== 'readyToPlay') {
+          return;
+        }
+
+        const thumbnails = await player.generateThumbnailsAsync(0.5);
+
+        if (isActive && thumbnails[0]) {
+          setCachedStoryThumbnail(storyId, thumbnails[0]);
+          setThumbnailSource(thumbnails[0]);
+        }
+      } catch {
+        if (isActive && fallbackUri) {
+          setThumbnailSource({ uri: fallbackUri });
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [fallbackUri, mediaUri, player, storyId]);
+
+  return (
+    <Image
+      source={thumbnailSource ?? undefined}
+      style={styles.storyImage}
+      contentFit="cover"
+    />
+  );
+}
 
 export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
   const router = useRouter();
@@ -90,9 +169,7 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
               }}
             >
               <View style={[styles.storyRing, ringStyle]}>
-                {story.imageUri && (
-                  <Image source={{ uri: story.imageUri }} style={styles.storyImage} />
-                )}
+                <StoryThumbnail storyId={story.id} mediaUri={story.mediaUri} fallbackUri={story.imageUri} />
 
                 {story.type === 'live' && (
                   <View style={styles.liveBadge}>

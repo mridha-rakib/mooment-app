@@ -1,5 +1,17 @@
-import React, { useState } from 'react';
-import { Alert, View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, StatusBar, Image } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  Alert,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Platform,
+  StatusBar,
+  Image,
+  KeyboardAvoidingView,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -28,18 +40,34 @@ const createEventStepOneSchema = z.object({
 
 type CreateEventStepOneValues = z.infer<typeof createEventStepOneSchema>;
 type CreateEventStepOneErrors = Partial<Record<keyof CreateEventStepOneValues, string>>;
+type FocusableField = 'name' | 'description';
+
+const getAndroidOriginalImageUri = (asset: ImagePicker.ImagePickerAsset) => {
+  if (Platform.OS !== 'android' || !asset.assetId || !/^\d+$/.test(asset.assetId)) {
+    return null;
+  }
+
+  return `content://media/external/images/media/${asset.assetId}`;
+};
 
 export default function CreateEventScreen() {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const formPosition = useRef(0);
+  const fieldPositions = useRef<Partial<Record<FocusableField, number>>>({});
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const draftName = useEventDraftStore((state) => state.name);
   const draftDescription = useEventDraftStore((state) => state.description);
   const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
+  const draftBannerOriginalImageUri = useEventDraftStore((state) => state.bannerOriginalImageUri);
   const setStepOne = useEventDraftStore((state) => state.setStepOne);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const [name, setName] = useState(draftName);
   const [description, setDescription] = useState(draftDescription);
   const [bannerImage, setBannerImage] = useState<string | null>(draftBannerImageUri);
+  const [bannerOriginalImage, setBannerOriginalImage] = useState<string | null>(
+    draftBannerOriginalImageUri ?? draftBannerImageUri,
+  );
   const [errors, setErrors] = useState<CreateEventStepOneErrors>({});
 
   const clearFieldError = (field: keyof CreateEventStepOneErrors) => {
@@ -64,22 +92,36 @@ export default function CreateEventScreen() {
     clearFieldError('description');
   };
 
+  const scrollToField = (field: FocusableField) => {
+    setTimeout(() => {
+      const fieldPosition = fieldPositions.current[field] ?? 0;
+
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(formPosition.current + fieldPosition - 24, 0),
+        animated: true,
+      });
+    }, Platform.OS === 'android' ? 250 : 100);
+  };
+
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [16, 9],
       quality: 1,
     });
 
     if (!result.canceled) {
-      setBannerImage(result.assets[0].uri);
+      const [asset] = result.assets;
+
+      setBannerImage(asset.uri);
+      setBannerOriginalImage(getAndroidOriginalImageUri(asset) ?? asset.uri);
       clearFieldError('bannerImageUri');
     }
   };
 
   const removeImage = () => {
     setBannerImage(null);
+    setBannerOriginalImage(null);
   };
 
   const persistStepOne = (values?: CreateEventStepOneValues) => {
@@ -87,6 +129,7 @@ export default function CreateEventScreen() {
       name: values?.name ?? name,
       description: values?.description ?? description,
       bannerImageUri: values?.bannerImageUri ?? bannerImage,
+      bannerOriginalImageUri: bannerOriginalImage,
     });
   };
 
@@ -137,103 +180,135 @@ export default function CreateEventScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Steps */}
-      <View style={styles.stepContainer}>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 1</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>1 out of 6</Text>
-      </View>
-
-      {/* Form Content */}
-      <View style={styles.formContainer}>
-        {/* Event Name */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>EVENT NAME</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: colors.card, color: colors.text },
-              errors.name ? [styles.fieldError, { borderColor: colors.danger }] : null,
-            ]}
-            placeholder="Name"
-            placeholderTextColor={colors.textSecondary}
-            value={name}
-            onChangeText={handleNameChange}
-          />
-          {errors.name ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.name}</Text> : null}
-        </View>
-
-        {/* Description */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.textArea,
-              { backgroundColor: colors.card, color: colors.text },
-              errors.description ? [styles.fieldError, { borderColor: colors.danger }] : null,
-            ]}
-            placeholder="Event main highlights"
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            textAlignVertical="top"
-            value={description}
-            onChangeText={handleDescriptionChange}
-          />
-          {errors.description ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.description}</Text> : null}
-        </View>
-
-        {/* Banner */}
-        <View style={styles.inputGroup}>
-          <View style={styles.labelRow}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>BANNER</Text>
-            {bannerImage && (
-              <TouchableOpacity onPress={removeImage} activeOpacity={0.7}>
-                <Ionicons name="trash-outline" size={18} color={colors.danger} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity 
-            style={[
-              styles.uploadBox,
-              { borderColor: errors.bannerImageUri ? colors.danger : colors.border },
-              bannerImage ? { padding: 0, borderWidth: 0 } : {},
-            ]}
-            activeOpacity={0.8}
-            onPress={bannerImage ? undefined : pickImage}
-          >
-            {bannerImage ? (
-              <View style={styles.imagePreviewContainer}>
-                <Image source={{ uri: bannerImage }} style={styles.bannerImagePreview} />
-              </View>
-            ) : (
-              <>
-                <Text style={[styles.uploadText, { color: colors.textSecondary }]}>You can only upload one image for the banner</Text>
-                
-                <View style={[styles.uploadButton, { backgroundColor: isDark ? "#D1D1D6" : colors.card }]}>
-                  <Feather name="arrow-up-circle" size={16} color={isDark ? "#1A1A22" : colors.text} />
-                  <Text style={[styles.uploadButtonText, { color: isDark ? "#1A1A22" : colors.text }]}>Upload Image</Text>
-                </View>
-                
-                <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          {errors.bannerImageUri ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.bannerImageUri}</Text> : null}
-        </View>
-      </View>
-
-      {/* Spacer to push footer down */}
-      <View style={{ flex: 1 }} />
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.nextButton, { backgroundColor: colors.primary }]}
-          onPress={handleNext}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
-        </TouchableOpacity>
-      </View>
+          {/* Steps */}
+          <View style={styles.stepContainer}>
+            <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 1</Text>
+            <Text style={[styles.stepText, { color: colors.textSecondary }]}>1 out of 6</Text>
+          </View>
+
+          {/* Form Content */}
+          <View
+            style={styles.formContainer}
+            onLayout={(event) => {
+              formPosition.current = event.nativeEvent.layout.y;
+            }}
+          >
+            {/* Event Name */}
+            <View
+              style={styles.inputGroup}
+              onLayout={(event) => {
+                fieldPositions.current.name = event.nativeEvent.layout.y;
+              }}
+            >
+              <Text style={[styles.label, { color: colors.textSecondary }]}>EVENT NAME</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: colors.card, color: colors.text },
+                  errors.name ? [styles.fieldError, { borderColor: colors.danger }] : null,
+                ]}
+                placeholder="Name"
+                placeholderTextColor={colors.textSecondary}
+                value={name}
+                onChangeText={handleNameChange}
+                onFocus={() => scrollToField('name')}
+                disableFullscreenUI={Platform.OS === 'android'}
+              />
+              {errors.name ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.name}</Text> : null}
+            </View>
+
+            {/* Description */}
+            <View
+              style={styles.inputGroup}
+              onLayout={(event) => {
+                fieldPositions.current.description = event.nativeEvent.layout.y;
+              }}
+            >
+              <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.textArea,
+                  { backgroundColor: colors.card, color: colors.text },
+                  errors.description ? [styles.fieldError, { borderColor: colors.danger }] : null,
+                ]}
+                placeholder="Event main highlights"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                textAlignVertical="top"
+                value={description}
+                onChangeText={handleDescriptionChange}
+                onFocus={() => scrollToField('description')}
+                disableFullscreenUI={Platform.OS === 'android'}
+              />
+              {errors.description ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.description}</Text> : null}
+            </View>
+
+            {/* Banner */}
+            <View style={styles.inputGroup}>
+              <View style={styles.labelRow}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>BANNER</Text>
+                {bannerImage && (
+                  <TouchableOpacity onPress={removeImage} activeOpacity={0.7}>
+                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.uploadBox,
+                  { borderColor: errors.bannerImageUri ? colors.danger : colors.border },
+                  bannerImage ? { padding: 0, borderWidth: 0 } : {},
+                ]}
+                activeOpacity={0.8}
+                onPress={bannerImage ? undefined : pickImage}
+              >
+                {bannerImage ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image source={{ uri: bannerImage }} style={styles.bannerImagePreview} />
+                  </View>
+                ) : (
+                  <>
+                    <Text style={[styles.uploadText, { color: colors.textSecondary }]}>You can only upload one image for the banner</Text>
+
+                    <View style={[styles.uploadButton, { backgroundColor: isDark ? "#D1D1D6" : colors.card }]}>
+                      <Feather name="arrow-up-circle" size={16} color={isDark ? "#1A1A22" : colors.text} />
+                      <Text style={[styles.uploadButtonText, { color: isDark ? "#1A1A22" : colors.text }]}>Upload Image</Text>
+                    </View>
+
+                    <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {errors.bannerImageUri ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.bannerImageUri}</Text> : null}
+            </View>
+          </View>
+
+          <View style={styles.footerSpacer} />
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.nextButton, { backgroundColor: colors.primary }]}
+              onPress={handleNext}
+            >
+              <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
     </SafeAreaView>
   );
 }
@@ -289,6 +364,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
   },
   fieldError: {
     borderWidth: 1,
@@ -351,6 +433,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === 'ios' ? 16 : 24,
     paddingTop: 16,
+  },
+  footerSpacer: {
+    flexGrow: 1,
   },
   nextButton: {
     paddingVertical: 18,

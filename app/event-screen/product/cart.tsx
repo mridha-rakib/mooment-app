@@ -30,7 +30,6 @@ const CART_ITEMS = [
     id: "1",
     title: "Medusa Skin Whitening Cream",
     seller: "@df_koko",
-    category: "Skincare",
     price: "£28",
     image: "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=200&auto=format&fit=crop",
     quantity: 1,
@@ -39,7 +38,6 @@ const CART_ITEMS = [
     id: "2",
     title: "Medusa Skin Whitening Cream",
     seller: "@df_koko",
-    category: "Skincare",
     price: "£28",
     image: "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=200&auto=format&fit=crop",
     quantity: 1,
@@ -69,9 +67,7 @@ const CartScreen = () => {
             <Image source={{ uri: item.image }} style={styles.itemImage} />
             <View style={styles.itemInfo}>
               <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.itemSeller}>
-                {item.seller} <Text style={styles.dot}>•</Text> {item.category}
-              </Text>
+              <Text style={styles.itemSeller}>{item.seller}</Text>
               <Text style={styles.itemPrice}>{item.price}</Text>
               <TouchableOpacity>
                 <Text style={styles.removeText}>Remove</Text>
@@ -194,9 +190,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 12,
     marginBottom: 8,
-  },
-  dot: {
-    fontSize: 14,
   },
   itemPrice: {
     color: COLORS.text,

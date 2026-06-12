@@ -1,15 +1,26 @@
 import { create } from "zustand";
 import type { EventCategory } from "@/constants/eventCategories";
-import { publishEvent, saveEventDraft } from "@/lib/events";
+import {
+  createDraftTicket,
+  createEventTicket,
+  deleteDraftTicket,
+  deleteEventTicket,
+  publishEvent,
+  saveEventDraft,
+  updateDraftTicket,
+  updateEvent,
+  updateEventTicket,
+} from "@/lib/events";
 import type {
   EventAgeRestriction,
   EventLocation,
+  EventImageDisplay,
   EventPayload,
   EventPrivacy,
   EventResponse,
   EventTicketPayload,
 } from "@/lib/events";
-import { uploadFileToStorage } from "@/lib/storage";
+import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 
 export type EventDraftTicket = EventTicketPayload & {
   localId: string;
@@ -17,24 +28,37 @@ export type EventDraftTicket = EventTicketPayload & {
 
 type EventDraftState = {
   draftId: string | null;
+  isEditingPublishedEvent: boolean;
   name: string;
   description: string;
   bannerImageUri: string | null;
   bannerImageKey: string | null;
+  bannerOriginalImageUri: string | null;
+  bannerOriginalImageKey: string | null;
+  bannerImageDisplay: EventImageDisplay | null;
   ageRestriction: EventAgeRestriction;
   category: EventCategory | null;
   scheduledAt: string;
   location: EventLocation;
   tickets: EventDraftTicket[];
   privacy: EventPrivacy;
-  setStepOne: (payload: { name: string; description: string; bannerImageUri: string | null }) => void;
+  setStepOne: (payload: {
+    name: string;
+    description: string;
+    bannerImageUri: string | null;
+    bannerOriginalImageUri?: string | null;
+    bannerImageDisplay?: EventImageDisplay | null;
+  }) => void;
   setStepTwo: (payload: { ageRestriction: EventAgeRestriction; category: EventCategory | null; scheduledAt: string }) => void;
   setStepThree: (payload: { location: EventLocation }) => void;
   setPrivacy: (privacy: EventPrivacy) => void;
   upsertTicket: (ticket: Partial<EventDraftTicket>) => void;
   deleteTicket: (localId: string) => void;
+  saveTicket: (ticket: Partial<EventDraftTicket>) => Promise<EventResponse>;
+  removeTicket: (localId: string) => Promise<EventResponse | null>;
   saveDraft: () => Promise<EventResponse>;
   publish: () => Promise<EventResponse>;
+  loadFromEvent: (event: EventResponse) => void;
   resetDraft: () => void;
 };
 
@@ -46,16 +70,20 @@ const createDefaultTicket = (): EventDraftTicket => ({
   localId: DEFAULT_TICKET_ID,
   name: "General Ticket",
   price: 45,
-  salesEndAt: new Date("2023-09-09T16:00:00").toISOString(),
+  salesEndAt: new Date().toISOString(),
   type: "pay",
 });
 
 const createInitialState = () => ({
   draftId: null,
+  isEditingPublishedEvent: false,
   name: "",
   description: "",
   bannerImageUri: null,
   bannerImageKey: null,
+  bannerOriginalImageUri: null,
+  bannerOriginalImageKey: null,
+  bannerImageDisplay: null,
   ageRestriction: "all_ages" as EventAgeRestriction,
   category: null,
   scheduledAt: new Date().toISOString(),
@@ -103,7 +131,41 @@ export const fromAgeRestriction = (value: EventAgeRestriction) => {
 };
 
 const stripLocalTicketFields = (tickets: EventDraftTicket[]): EventTicketPayload[] =>
-  tickets.map(({ localId: _localId, ...ticket }) => ticket);
+  tickets.map(stripLocalTicketField);
+
+const stripLocalTicketField = ({ localId: _localId, ...ticket }: EventDraftTicket): EventTicketPayload => ticket;
+
+const stripTicketIdentity = ({ id: _id, ...ticket }: EventTicketPayload): Omit<EventTicketPayload, "id"> => ticket;
+
+const createTicketLocalId = (index: number) => `ticket-${Date.now()}-${index}`;
+
+const mergeTicketsFromEvent = (
+  eventTickets: EventTicketPayload[],
+  currentTickets: EventDraftTicket[],
+): EventDraftTicket[] =>
+  eventTickets.map((ticket, index) => {
+    const currentTicket = currentTickets.find((item) => {
+      if (ticket.id && item.id === ticket.id) {
+        return true;
+      }
+
+      return ticket.id ? item.localId === ticket.id : false;
+    });
+
+    return {
+      ...ticket,
+      localId: currentTicket?.localId ?? ticket.id ?? createTicketLocalId(index),
+    };
+  });
+
+const getEventSyncState = (event: EventResponse, currentTickets: EventDraftTicket[]) => ({
+  draftId: event.id,
+  isEditingPublishedEvent: event.status === "published",
+  bannerImageKey: event.bannerImageKey ?? null,
+  bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+  bannerImageDisplay: event.bannerImageDisplay ?? null,
+  tickets: mergeTicketsFromEvent(event.tickets, currentTickets),
+});
 
 const isDraftNotFoundError = (error: unknown) => {
   const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response;
@@ -115,12 +177,16 @@ const isDraftNotFoundError = (error: unknown) => {
 export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   ...createInitialState(),
 
-  setStepOne: ({ name, description, bannerImageUri }) => {
+  setStepOne: ({ name, description, bannerImageUri, bannerOriginalImageUri, bannerImageDisplay }) => {
     set((state) => ({
       name,
       description,
       bannerImageUri,
       bannerImageKey: bannerImageUri === state.bannerImageUri ? state.bannerImageKey : null,
+      bannerOriginalImageUri: bannerOriginalImageUri ?? bannerImageUri,
+      bannerOriginalImageKey:
+        (bannerOriginalImageUri ?? bannerImageUri) === state.bannerOriginalImageUri ? state.bannerOriginalImageKey : null,
+      bannerImageDisplay: bannerImageDisplay ?? null,
     }));
   },
 
@@ -158,11 +224,108 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     set({ tickets: get().tickets.filter((ticket) => ticket.localId !== localId) });
   },
 
+  saveTicket: async (ticket) => {
+    const state = get();
+    const previousTickets = state.tickets;
+    const localId = ticket.localId ?? DEFAULT_TICKET_ID;
+    const existingTicket = previousTickets.find((item) => item.localId === localId);
+    const nextTicket: EventDraftTicket = {
+      ...createDefaultTicket(),
+      ...(existingTicket ?? {}),
+      ...ticket,
+      localId,
+    };
+    const nextTickets = existingTicket
+      ? previousTickets.map((item) => (item.localId === localId ? nextTicket : item))
+      : [...previousTickets, nextTicket];
+
+    set({ tickets: nextTickets });
+
+    try {
+      const currentState = get();
+
+      if (!currentState.draftId) {
+        return await currentState.saveDraft();
+      }
+
+      if (currentState.isEditingPublishedEvent) {
+        const ticketPayload = stripLocalTicketField(nextTicket);
+        const event = nextTicket.id
+          ? await updateEventTicket(currentState.draftId, nextTicket.id, stripTicketIdentity(ticketPayload))
+          : await createEventTicket(currentState.draftId, ticketPayload);
+
+        set(getEventSyncState(event, nextTickets));
+
+        return event;
+      }
+
+      const ticketPayload = stripLocalTicketField(nextTicket);
+      const event = nextTicket.id
+        ? await updateDraftTicket(currentState.draftId, nextTicket.id, stripTicketIdentity(ticketPayload))
+        : await createDraftTicket(currentState.draftId, ticketPayload);
+
+      set(getEventSyncState(event, nextTickets));
+
+      return event;
+    } catch (error) {
+      set({ tickets: previousTickets });
+      throw error;
+    }
+  },
+
+  removeTicket: async (localId) => {
+    const state = get();
+    const previousTickets = state.tickets;
+    const ticket = previousTickets.find((item) => item.localId === localId);
+    const nextTickets = previousTickets.filter((item) => item.localId !== localId);
+
+    set({ tickets: nextTickets });
+
+    if (!ticket) {
+      return null;
+    }
+
+    try {
+      if (!state.draftId || !ticket.id) {
+        return state.draftId ? await get().saveDraft() : null;
+      }
+
+      if (state.isEditingPublishedEvent) {
+        if (!ticket.id) {
+          return await get().saveDraft();
+        }
+
+        const event = await deleteEventTicket(state.draftId, ticket.id);
+
+        set(getEventSyncState(event, nextTickets));
+
+        return event;
+      }
+
+      const event = await deleteDraftTicket(state.draftId, ticket.id);
+
+      set(getEventSyncState(event, nextTickets));
+
+      return event;
+    } catch (error) {
+      set({ tickets: previousTickets });
+      throw error;
+    }
+  },
+
   saveDraft: async () => {
     const payload = await buildEventPayload(get());
-    const event = await saveEventDraft(payload, get().draftId);
+    const state = get();
+    const event = state.isEditingPublishedEvent && state.draftId
+      ? await updateEvent(state.draftId, payload)
+      : await saveEventDraft(payload, state.draftId);
 
-    set({ draftId: event.id, bannerImageKey: event.bannerImageKey ?? get().bannerImageKey });
+    set({
+      ...getEventSyncState(event, get().tickets),
+      bannerImageKey: event.bannerImageKey ?? get().bannerImageKey,
+      bannerOriginalImageKey: event.bannerOriginalImageKey ?? get().bannerOriginalImageKey,
+      bannerImageDisplay: event.bannerImageDisplay ?? get().bannerImageDisplay,
+    });
 
     return event;
   },
@@ -183,9 +346,11 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     let event: EventResponse;
 
     try {
-      event = await publishEvent(publishedPayload, state.draftId);
+      event = state.isEditingPublishedEvent && state.draftId
+        ? await updateEvent(state.draftId, publishedPayload)
+        : await publishEvent(publishedPayload, state.draftId);
     } catch (error) {
-      if (!state.draftId || !isDraftNotFoundError(error)) {
+      if (state.isEditingPublishedEvent || !state.draftId || !isDraftNotFoundError(error)) {
         throw error;
       }
 
@@ -193,9 +358,39 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       event = await publishEvent(publishedPayload);
     }
 
-    set({ draftId: event.id, bannerImageKey: event.bannerImageKey ?? state.bannerImageKey });
+    set({
+      ...getEventSyncState(event, state.tickets),
+      bannerImageKey: event.bannerImageKey ?? state.bannerImageKey,
+      bannerOriginalImageKey: event.bannerOriginalImageKey ?? state.bannerOriginalImageKey,
+      bannerImageDisplay: event.bannerImageDisplay ?? state.bannerImageDisplay,
+    });
 
     return event;
+  },
+
+  loadFromEvent: (event) => {
+    const bannerImageUri = event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null;
+    const bannerOriginalImageUri = event.bannerOriginalImageKey
+      ? getStorageFileUrl(event.bannerOriginalImageKey)
+      : bannerImageUri;
+
+    set({
+      draftId: event.id,
+      isEditingPublishedEvent: event.status === "published",
+      name: event.name ?? "",
+      description: event.description ?? "",
+      bannerImageUri,
+      bannerImageKey: event.bannerImageKey ?? null,
+      bannerOriginalImageUri,
+      bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+      bannerImageDisplay: event.bannerImageDisplay ?? null,
+      ageRestriction: event.ageRestriction ?? "all_ages",
+      category: event.category ?? null,
+      scheduledAt: event.scheduledAt ?? new Date().toISOString(),
+      location: event.location ?? {},
+      tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [createDefaultTicket()],
+      privacy: event.privacy,
+    });
   },
 
   resetDraft: () => {
@@ -205,6 +400,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
 
 const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> => {
   let bannerImageKey = state.bannerImageKey;
+  let bannerOriginalImageKey = state.bannerOriginalImageKey;
 
   if (state.bannerImageUri && !isRemoteUri(state.bannerImageUri) && !bannerImageKey) {
     const contentType = getImageContentType(state.bannerImageUri);
@@ -217,9 +413,26 @@ const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> 
     });
   }
 
+  if (state.bannerOriginalImageUri && !isRemoteUri(state.bannerOriginalImageUri) && !bannerOriginalImageKey) {
+    const contentType = getImageContentType(state.bannerOriginalImageUri);
+    const extension = getImageExtension(contentType);
+
+    try {
+      bannerOriginalImageKey = await uploadFileToStorage({
+        contentType,
+        key: `events/banners/originals/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
+        uri: state.bannerOriginalImageUri,
+      });
+    } catch {
+      bannerOriginalImageKey = bannerImageKey;
+    }
+  }
+
   return {
     ageRestriction: state.ageRestriction,
     bannerImageKey,
+    bannerOriginalImageKey: bannerOriginalImageKey ?? bannerImageKey,
+    bannerImageDisplay: state.bannerImageDisplay,
     category: state.category,
     description: state.description.trim() || null,
     location: state.location,

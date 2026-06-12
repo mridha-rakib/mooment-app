@@ -79,7 +79,7 @@ export default function EventDraftsScreen() {
       <View style={styles.header}>
         <BackButton color={colors.text} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Event Drafts</Text>
-        <View style={{ width: 40 }} /> {/* Spacer to center the title */}
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView 

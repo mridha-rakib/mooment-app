@@ -52,13 +52,27 @@ export type ProductDetails = {
   buttonText: string;
 };
 
+export type MediaDisplayCrop = {
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+};
+
 export type PostMediaItem = {
   uri: string;
+  fullUri?: string | null;
   type: 'image' | 'video';
+  displayCrop?: MediaDisplayCrop | null;
 };
 
 export type PostData = {
   id: string;
+  eventId?: string;
   postType: 'standard' | 'audio' | 'event' | 'product';
   authorId?: string;
   authorName: string;
@@ -104,6 +118,75 @@ function VideoFeedMedia({ uri }: { uri: string }) {
   );
 }
 
+function CroppedFeedImage({ item }: { item: PostMediaItem }) {
+  const [imageSize, setImageSize] = useState(() => ({
+    width: item.displayCrop?.imageWidth ?? 0,
+    height: item.displayCrop?.imageHeight ?? 0,
+  }));
+  const crop = item.displayCrop?.crop;
+
+  useEffect(() => {
+    if (imageSize.width > 0 && imageSize.height > 0) {
+      return;
+    }
+
+    Image.getSize(
+      item.uri,
+      (resolvedWidth, resolvedHeight) => {
+        setImageSize({ width: resolvedWidth, height: resolvedHeight });
+      },
+      () => {
+        setImageSize({ width: 0, height: 0 });
+      },
+    );
+  }, [imageSize.height, imageSize.width, item.uri]);
+
+  useEffect(() => {
+    setImageSize({
+      width: item.displayCrop?.imageWidth ?? 0,
+      height: item.displayCrop?.imageHeight ?? 0,
+    });
+  }, [item.displayCrop?.imageHeight, item.displayCrop?.imageWidth, item.uri]);
+
+  if (!crop || !imageSize.width || !imageSize.height) {
+    return (
+      <Image
+        source={{ uri: item.uri }}
+        style={styles.postImage}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  const frameWidth = width - 64;
+  const frameHeight = 340;
+  const cropPixelWidth = Math.max(crop.width * imageSize.width, 1);
+  const cropPixelHeight = Math.max(crop.height * imageSize.height, 1);
+  const scale = Math.min(frameWidth / cropPixelWidth, frameHeight / cropPixelHeight);
+  const renderedWidth = imageSize.width * scale;
+  const renderedHeight = imageSize.height * scale;
+  const left = (frameWidth - cropPixelWidth * scale) / 2 - crop.x * imageSize.width * scale;
+  const top = (frameHeight - cropPixelHeight * scale) / 2 - crop.y * imageSize.height * scale;
+
+  return (
+    <View style={styles.croppedImageFrame}>
+      <Image
+        source={{ uri: item.uri }}
+        style={[
+          styles.croppedImage,
+          {
+            width: renderedWidth,
+            height: renderedHeight,
+            left,
+            top,
+          },
+        ]}
+        resizeMode="stretch"
+      />
+    </View>
+  );
+}
+
 const formatAudioSeconds = (seconds?: number) => {
   if (!seconds || !Number.isFinite(seconds) || seconds < 0) {
     return '0:00';
@@ -127,7 +210,7 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
 
     return {
       uri: details.uri,
-      headers: details.uri.includes('.ngrok-free.')
+      headers: details.uri.includes('ngrok-free')
         ? { 'ngrok-skip-browser-warning': 'true' }
         : undefined,
     };
@@ -284,7 +367,23 @@ export default function FeedPost({
   const [commentsCount, setCommentsCount] = useState(post.commentsCount || 0);
   const [sharesCount, setSharesCount] = useState(post.sharesCount || 0);
   const [isLikePending, setIsLikePending] = useState(false);
-  const mediaItems = post.mediaItems ?? post.mediaUris?.map((uri) => ({ uri, type: 'image' as const })) ?? [];
+  const mediaItems = post.mediaItems ?? post.mediaUris?.map((uri) => ({ uri, type: 'image' as const, fullUri: uri })) ?? [];
+  const fullScreenMediaUris = post.mediaUris || mediaItems.map((item) => item.fullUri || item.uri);
+  const resolvedEventId = useMemo(() => {
+    const explicitEventId = post.eventId?.trim();
+
+    if (explicitEventId) {
+      return explicitEventId;
+    }
+
+    if (post.id.startsWith('event-')) {
+      const eventIdFromPostId = post.id.slice('event-'.length).trim();
+
+      return eventIdFromPostId || null;
+    }
+
+    return MONGO_OBJECT_ID_PATTERN.test(post.id) ? post.id : null;
+  }, [post.eventId, post.id]);
 
   useEffect(() => {
     setIsFollowing(Boolean(post.isFollowing));
@@ -403,6 +502,18 @@ export default function FeedPost({
     }
   };
 
+  const handleEventPress = () => {
+    if (!resolvedEventId) {
+      Alert.alert('Unable to load event', 'This event is missing its event id.');
+      return;
+    }
+
+    router.push({
+      pathname: '/event-screen/event',
+      params: { eventId: resolvedEventId },
+    });
+  };
+
   return (
     <View style={styles.postWrapper}>
       {/* Header Context Labels */}
@@ -510,7 +621,7 @@ export default function FeedPost({
             activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
             onPress={() => {
               if (post.postType === 'event') {
-                router.push('/event-screen/event');
+                handleEventPress();
               }
             }}
             style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
@@ -526,10 +637,9 @@ export default function FeedPost({
                 item.type === 'video' ? (
                   <VideoFeedMedia key={`${item.uri}-${index}`} uri={item.uri} />
                 ) : (
-                  <Image
+                  <CroppedFeedImage
                     key={`${item.uri}-${index}`}
-                    source={{ uri: item.uri }}
-                    style={styles.postImage}
+                    item={item}
                   />
                 )
               ))}
@@ -730,7 +840,7 @@ export default function FeedPost({
         <FullScreenMediaModal
           visible={showFullScreenMedia}
           onClose={() => setShowFullScreenMedia(false)}
-          mediaUris={post.mediaUris || []}
+          mediaUris={fullScreenMediaUris}
           initialIndex={currentMediaIndex}
         />
       </View>
@@ -867,6 +977,16 @@ const styles = StyleSheet.create({
   postImage: {
     width: width - 64,
     height: "100%",
+  },
+  croppedImageFrame: {
+    width: width - 64,
+    height: "100%",
+    backgroundColor: "#000000",
+    overflow: "hidden",
+    position: "relative",
+  },
+  croppedImage: {
+    position: "absolute",
   },
   videoMediaFrame: {
     width: width - 64,

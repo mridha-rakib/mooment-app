@@ -78,6 +78,7 @@ export default function ViewStoryScreen() {
   const [sourceReady, setSourceReady] = useState(false);
   const advanceLockRef = useRef(false);
   const loadRequestIdRef = useRef(0);
+  const autoPlayRequestedRef = useRef(false);
   const holdActivatedRef = useRef(false);
   const ignoreNextPressRef = useRef(false);
   const resumeAfterHoldRef = useRef(false);
@@ -92,8 +93,9 @@ export default function ViewStoryScreen() {
     player.loop = false;
     player.timeUpdateEventInterval = 0.1;
     player.bufferOptions = {
-      minBufferForPlayback: 0.25,
-      preferredForwardBufferDuration: 4,
+      minBufferForPlayback: 1,
+      preferredForwardBufferDuration: 6,
+      prioritizeTimeOverSizeThreshold: true,
     };
   });
   const timeUpdate = useEvent(player, "timeUpdate", {
@@ -102,7 +104,7 @@ export default function ViewStoryScreen() {
     currentOffsetFromLive: null,
     currentTime: 0,
   });
-  const playingChange = useEvent(player, "playingChange", { isPlaying: true });
+  const playingChange = useEvent(player, "playingChange", { isPlaying: player.playing });
   const statusChange = useEvent(player, "statusChange", { status: player.status });
   const isPlaying = playingChange?.isPlaying ?? true;
   const isLoadingStory = isLoadingCurrentStory || statusChange?.status === "loading";
@@ -180,6 +182,7 @@ export default function ViewStoryScreen() {
     }
 
     setIsLoadingCurrentStory(true);
+    autoPlayRequestedRef.current = true;
 
     void player.replaceAsync(getStoryVideoSource(currentStory.mediaUri))
       .then(() => {
@@ -192,11 +195,11 @@ export default function ViewStoryScreen() {
         visibleStartedAtRef.current = Date.now();
         sourceReadyRef.current = true;
         setSourceReady(true);
-        player.play();
       })
       .catch(() => {
         if (loadRequestIdRef.current === loadRequestId) {
           setLoadFailed(true);
+          autoPlayRequestedRef.current = false;
         }
       })
       .finally(() => {
@@ -226,6 +229,29 @@ export default function ViewStoryScreen() {
     setSourceReady(true);
   });
 
+  useEffect(() => {
+    if (
+      !currentStory?.mediaUri ||
+      loadFailed ||
+      isLoadingStory ||
+      !sourceReady ||
+      statusChange?.status !== "readyToPlay" ||
+      !autoPlayRequestedRef.current
+    ) {
+      return;
+    }
+
+    autoPlayRequestedRef.current = false;
+
+    try {
+      player.currentTime = 0;
+      visibleStartedAtRef.current = Date.now();
+      player.play();
+    } catch {
+      player.pause();
+    }
+  }, [currentStory?.mediaUri, isLoadingStory, loadFailed, player, sourceReady, statusChange?.status]);
+
   useEventListener(player, "playToEnd", () => {
     if (!sourceReadyRef.current || Date.now() - visibleStartedAtRef.current < MIN_AUTO_ADVANCE_VISIBLE_MS) {
       return;
@@ -237,20 +263,6 @@ export default function ViewStoryScreen() {
 
     goToNextStory();
   });
-
-  useEffect(() => {
-    if (!isPlaying || isLoadingStory || !sourceReady || !currentStory) {
-      return;
-    }
-
-    if (Date.now() - visibleStartedAtRef.current < MIN_AUTO_ADVANCE_VISIBLE_MS) {
-      return;
-    }
-
-    if (currentTime >= currentDuration - 0.15) {
-      goToNextStory();
-    }
-  }, [currentDuration, currentStory, currentTime, goToNextStory, isLoadingStory, isPlaying, sourceReady]);
 
   const togglePlay = useCallback(() => {
     if (isLoadingStory || !currentStory?.mediaUri) {
@@ -313,6 +325,7 @@ export default function ViewStoryScreen() {
           contentFit="cover"
           nativeControls={false}
           useExoShutter={false}
+          surfaceType={Platform.OS === "android" ? "textureView" : undefined}
         />
       ) : (
         <View style={styles.emptyState}>

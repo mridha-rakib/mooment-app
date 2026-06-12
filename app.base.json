@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0E0D12",
         "foregroundImage": "./assets/images/logo.png"
       },
       "permissions": [
@@ -83,10 +83,9 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "fdb4ff17-6f2b-4a49-a124-82bbf65bc2c7"
+        "eas": {
+          "projectId": "96741709-c195-41c9-bd5b-95e1a9755b79"
+        }
       }
-    }
   }
 }

@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ScrollView,
@@ -19,16 +19,64 @@ import {
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
 
+const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(source ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parsePrice = (value: string | string[] | undefined) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseFloat(source ?? "");
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
+const getParam = (value: string | string[] | undefined, fallback: string) => {
+  const source = Array.isArray(value) ? value[0] : value;
+
+  return source?.trim() || fallback;
+};
+
+const formatCurrency = (value: number) => {
+  if (value <= 0) {
+    return "£0";
+  }
+
+  return `£${value.toLocaleString("en-GB", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  })}`;
+};
+
 const EventCheckoutScreen = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    eventName?: string;
+    eventDateTime?: string;
+    ticketName?: string;
+    ticketPrice?: string;
+    ticketType?: string;
+    quantity?: string;
+  }>();
   const { colors, isDark } = useTheme();
   const [paymentType, setPaymentType] = useState("Online");
   const [payWith, setPayWith] = useState("Credits");
   const [agreed, setAgreed] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
 
+  const eventName = getParam(params.eventName, "Event");
+  const eventDateTime = getParam(params.eventDateTime, "Date TBA");
+  const ticketName = getParam(params.ticketName, "Ticket");
+  const quantity = parsePositiveInteger(params.quantity);
+  const ticketPrice = parsePrice(params.ticketPrice);
+  const isFreeTicket = params.ticketType === "free" || ticketPrice <= 0;
+  const subtotalValue = isFreeTicket ? 0 : ticketPrice * quantity;
+  const subtotal = isFreeTicket ? "Free" : formatCurrency(subtotalValue);
+
   const orderItems = [
-    { name: "Ticket x 1", price: "£45" },
+    { name: `${ticketName} x ${quantity}`, price: subtotal },
   ];
 
   return (
@@ -41,17 +89,17 @@ const EventCheckoutScreen = () => {
         contentContainerStyle={styles.scrollContent}
       >
         <EventCard 
-          title="Sky Terrace, Floor 7"
-          dateTime="Sat, Sep 9 • 9PM • DJ Nova"
+          title={eventName}
+          dateTime={eventDateTime}
         />
 
         <OrderSummary 
           items={orderItems}
-          subtotal="£45"
+          subtotal={subtotal}
           reward="£0"
           fee="£0"
           tax="£0"
-          total="£45"
+          total={subtotal}
         />
 
         <AnonymousBuy 

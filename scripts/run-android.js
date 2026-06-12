@@ -1,4 +1,4 @@
-const { existsSync } = require("fs");
+const { existsSync, readFileSync } = require("fs");
 const { join } = require("path");
 const { spawnSync } = require("child_process");
 
@@ -39,6 +39,68 @@ if (androidHome) {
   prependPath(join(androidHome, "platform-tools"));
   prependPath(join(androidHome, "emulator"));
 }
+
+function reverseAndroidPorts() {
+  const adbExecutable = process.platform === "win32" ? "adb.exe" : "adb";
+  const adbPath = firstExisting([
+    androidHome ? join(androidHome, "platform-tools", adbExecutable) : undefined,
+    adbExecutable,
+  ]);
+
+  if (!adbPath) {
+    return;
+  }
+
+  const devicesResult = spawnSync(adbPath, ["devices"], {
+    encoding: "utf8",
+  });
+
+  if (devicesResult.status !== 0) {
+    return;
+  }
+
+  const devices = devicesResult.stdout
+    .split(/\r?\n/)
+    .slice(1)
+    .map((line) => line.trim().split(/\s+/))
+    .filter(([serial, state]) => serial && state === "device")
+    .map(([serial]) => serial);
+  let packageName;
+
+  packageName = getAndroidPackageName();
+
+  for (const serial of devices) {
+    if (packageName) {
+      spawnSync(adbPath, ["-s", serial, "shell", "am", "force-stop", packageName]);
+    }
+
+    spawnSync(adbPath, ["-s", serial, "reverse", "tcp:8081", "tcp:8081"]);
+    spawnSync(adbPath, ["-s", serial, "reverse", "tcp:4000", "tcp:4000"]);
+  }
+}
+
+function getAndroidPackageName() {
+  try {
+    const appConfig = JSON.parse(readFileSync(join(process.cwd(), "app.json"), "utf8"));
+    return appConfig?.expo?.android?.package;
+  } catch {
+    // This project uses app.config.js.
+  }
+
+  try {
+    const appConfigFactory = require(join(process.cwd(), "app.config.js"));
+    const appConfig =
+      typeof appConfigFactory === "function"
+        ? appConfigFactory({ config: {} })
+        : appConfigFactory;
+
+    return appConfig?.expo?.android?.package;
+  } catch {
+    return undefined;
+  }
+}
+
+reverseAndroidPorts();
 
 const expoCli = require.resolve("expo/bin/cli");
 const result = spawnSync(process.execPath, [expoCli, "run:android"], {

@@ -28,6 +28,7 @@ export type AuthUser = {
     accuracy?: number | null;
     updatedAt?: string;
   } | null;
+  notificationsEnabled?: boolean;
   role: "user" | "admin";
   isActive: boolean;
   emailVerified: boolean;
@@ -75,6 +76,7 @@ export type UpdateProfilePayload = {
     longitude: number;
     accuracy?: number | null;
   } | null;
+  notificationsEnabled?: boolean;
 };
 
 type AuthState = {
@@ -219,6 +221,9 @@ const getSessionPayload = (response: unknown) => {
   };
 };
 
+const normalizeRegistrationUsername = (username: string) => username.trim().replace(/^@+/, "").toLowerCase();
+const normalizeRegistrationEmail = (email: string) => email.trim().toLowerCase();
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   accessToken: null,
@@ -282,12 +287,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null, authErrorCode: null });
 
     try {
+      const normalizedEmail = normalizeRegistrationEmail(email);
+      const normalizedUsername = normalizeRegistrationUsername(username);
       const response = await api.post(
         "/auth/register",
         {
           name: name.trim(),
-          username: username.trim(),
-          email: email.trim(),
+          username: normalizedUsername,
+          email: normalizedEmail,
           password,
           accountType,
         },
@@ -297,7 +304,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           skipAuthRefresh: true,
         },
       );
-      const pendingEmail = response.data?.data?.email ?? email.trim();
+      const pendingEmail = response.data?.data?.email ?? normalizedEmail;
 
       await setStoredPendingVerificationEmail(pendingEmail);
       set({
@@ -310,7 +317,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return pendingEmail;
     } catch (error) {
       const message = getAuthErrorMessage(error, "Unable to create your account. Please try again.");
-      set({ isLoading: false, error: message });
+      set({ isLoading: false, error: message, authErrorCode: null });
       throw new Error(message);
     }
   },

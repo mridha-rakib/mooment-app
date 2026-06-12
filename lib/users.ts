@@ -22,6 +22,45 @@ export type FollowStatusResponse = {
   isFollowing: boolean;
 };
 
+export type ProfileStatsResponse = {
+  reviews: number;
+  followers: number;
+  following: number;
+};
+
+export type ProfileFollowUserResponse = {
+  id: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
+  isFollowing: boolean;
+};
+
+export type UserReviewResponse = {
+  id: string;
+  author: {
+    id: string;
+    name: string;
+    username?: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  text: string;
+  liked: boolean;
+  createdAt: string;
+};
+
+export type UserResponse = {
+  _id?: string;
+  id?: string;
+  name: string;
+  username?: string;
+  email?: string;
+  avatarKey?: string | null;
+  bio?: string | null;
+};
+
 const parseFollowStatus = (payload: unknown, fallbackUserId: string): FollowStatusResponse => {
   const follow = payload as Partial<FollowStatusResponse> | undefined;
 
@@ -57,6 +96,67 @@ export const getFriendUsers = async (search?: string, limit = 100): Promise<Frie
   const friends = response.data?.data?.friends;
 
   return Array.isArray(friends) ? (friends as FriendUserResponse[]) : [];
+};
+
+export const getUserById = async (userId: string): Promise<UserResponse> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}`);
+  const user = response.data?.data as UserResponse | undefined;
+
+  if (!user) {
+    throw new Error("The user response was incomplete.");
+  }
+
+  return user;
+};
+
+export const getUserProfileStats = async (userId: string): Promise<ProfileStatsResponse> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}/profile-stats`);
+  const stats = response.data?.data?.stats as Partial<ProfileStatsResponse> | undefined;
+
+  return {
+    reviews: typeof stats?.reviews === "number" ? stats.reviews : 0,
+    followers: typeof stats?.followers === "number" ? stats.followers : 0,
+    following: typeof stats?.following === "number" ? stats.following : 0,
+  };
+};
+
+export const getUserFollowers = async (
+  userId: string,
+  search?: string,
+  limit = 100,
+): Promise<ProfileFollowUserResponse[]> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}/followers`, {
+    params: {
+      search,
+      limit,
+    },
+  });
+  const users = response.data?.data?.users;
+
+  return Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [];
+};
+
+export const getUserFollowing = async (
+  userId: string,
+  search?: string,
+  limit = 100,
+): Promise<ProfileFollowUserResponse[]> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}/following`, {
+    params: {
+      search,
+      limit,
+    },
+  });
+  const users = response.data?.data?.users;
+
+  return Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [];
+};
+
+export const getUserReviews = async (userId: string): Promise<UserReviewResponse[]> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}/reviews`);
+  const reviews = response.data?.data?.reviews;
+
+  return Array.isArray(reviews) ? (reviews as UserReviewResponse[]) : [];
 };
 
 export const followUser = async (userId: string): Promise<FollowStatusResponse> => {

@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/useTheme';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { createStory } from '@/lib/stories';
+import { generateStoryThumbnail, setCachedStoryThumbnail } from '@/lib/storyThumbnails';
 import { uploadFileToStorage } from '@/lib/storage';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 
@@ -45,29 +46,46 @@ export default function AddStoryScreen() {
   const cameraRef = useRef<CameraView>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
+  const recordingFrameRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [isPublishing, setIsPublishing] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
 
   useEffect(() => {
+    if (recordingFrameRef.current !== null) {
+      cancelAnimationFrame(recordingFrameRef.current);
+      recordingFrameRef.current = null;
+    }
+
     if (!isRecording) {
       return;
     }
 
-    const interval = setInterval(() => {
+    const tick = () => {
       const startedAt = recordingStartedAtRef.current;
 
       if (!startedAt) {
         return;
       }
 
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-      setElapsedSeconds(Math.min(elapsed, MAX_STORY_SECONDS));
-    }, 250);
+      const elapsed = Math.min(Date.now() - startedAt, MAX_STORY_SECONDS * 1000);
+      setElapsedMs(elapsed);
 
-    return () => clearInterval(interval);
+      if (elapsed < MAX_STORY_SECONDS * 1000) {
+        recordingFrameRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    recordingFrameRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (recordingFrameRef.current !== null) {
+        cancelAnimationFrame(recordingFrameRef.current);
+        recordingFrameRef.current = null;
+      }
+    };
   }, [isRecording]);
 
   const publishVideo = async ({
@@ -93,6 +111,7 @@ export default function AddStoryScreen() {
     setIsPublishing(true);
 
     try {
+      const thumbnailPromise = generateStoryThumbnail(uri);
       const extension = getVideoExtension(contentType);
       const storageKey = await uploadFileToStorage({
         uri,
@@ -100,12 +119,18 @@ export default function AddStoryScreen() {
         contentType,
       });
 
-      await createStory({
+      const story = await createStory({
         mediaSource: source,
         storageKey,
         contentType,
         durationSeconds: Math.max(0.1, durationSeconds),
       });
+
+      const thumbnail = await thumbnailPromise;
+
+      if (thumbnail) {
+        setCachedStoryThumbnail(story.id, thumbnail);
+      }
 
       router.replace('/(tabs)/home');
     } catch (error) {
@@ -144,7 +169,7 @@ export default function AddStoryScreen() {
     }
 
     try {
-      setElapsedSeconds(0);
+      setElapsedMs(0);
       setIsRecording(true);
       recordingStartedAtRef.current = Date.now();
       recordingPromiseRef.current = cameraRef.current?.recordAsync({
@@ -247,10 +272,18 @@ export default function AddStoryScreen() {
         <View style={styles.header}>
           <BackButton />
 
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressText}>{elapsedSeconds}s</Text>
+        <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>{Math.floor(elapsedMs / 1000)}s</Text>
             <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { backgroundColor: colors.primary, width: `${(elapsedSeconds / MAX_STORY_SECONDS) * 100}%` }]} />
+              <View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    backgroundColor: colors.primary,
+                    width: `${(elapsedMs / (MAX_STORY_SECONDS * 1000)) * 100}%`,
+                  },
+                ]}
+              />
             </View>
             <Text style={styles.progressText}>15s</Text>
           </View>

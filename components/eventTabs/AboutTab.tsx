@@ -1,79 +1,312 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
-import {
-  Dimensions,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useRouter } from "expo-router";
+import Mapbox from "@rnmapbox/maps";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { getStorageFileUrl } from "@/lib/storage";
+import { followUser, unfollowUser } from "@/lib/users";
+import type { EventAgeRestriction, EventHost, EventLocation } from "@/lib/events";
+import { useAuthStore } from "@/stores/authStore";
 import FullScreen from "../event/FullScreen";
 import SegmentedControl from "../ui/SegmentedControl";
 
 const { width } = Dimensions.get("window");
+Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-// Removed hardcoded COLORS to use useTheme hook
+const DEFAULT_HOST_AVATAR =
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop";
+const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
 
-const AboutTab = () => {
+type AboutTabProps = {
+  description?: string | null;
+  ageRestriction?: EventAgeRestriction | null;
+  location?: EventLocation | null;
+  host?: EventHost | null;
+  eventImageUris?: string[];
+  isHostMode?: boolean;
+  onHostFollowChange?: (isFollowing: boolean) => void;
+};
+
+const GALLERY_IMAGES = [
+  {
+    id: "1",
+    uri: "https://images.unsplash.com/photo-1531050171669-01912ad4110b?q=80&w=600&auto=format&fit=crop",
+    type: "image",
+  },
+  {
+    id: "2",
+    uri: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
+    type: "image",
+  },
+  {
+    id: "3",
+    uri: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop",
+    type: "image",
+  },
+  {
+    id: "4",
+    uri: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    type: "carousel",
+  },
+  {
+    id: "5",
+    uri: "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?q=80&w=600&auto=format&fit=crop",
+    type: "video",
+  },
+  {
+    id: "6",
+    uri: "https://images.unsplash.com/photo-1506157786151-b8491531f063?q=80&w=600&auto=format&fit=crop",
+    type: "video",
+  },
+  {
+    id: "7",
+    uri: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=600&auto=format&fit=crop",
+    type: "carousel",
+  },
+  {
+    id: "8",
+    uri: "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?q=80&w=600&auto=format&fit=crop",
+    type: "video",
+  },
+  {
+    id: "9",
+    uri: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?q=80&w=600&auto=format&fit=crop",
+    type: "image",
+  },
+];
+
+const formatAgeLabel = (ageRestriction?: EventAgeRestriction | null) => {
+  if (ageRestriction === "18_plus") {
+    return "18+ only";
+  }
+
+  if (ageRestriction === "21_plus") {
+    return "21+ only";
+  }
+
+  return "All ages";
+};
+
+const formatCompactCount = (value?: number | null) =>
+  new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Math.max(0, value ?? 0));
+
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const isNonEmptyString = (value: string | null): value is string => Boolean(value);
+
+const resolveHostAvatar = (host?: EventHost | null) => {
+  if (host?.avatarUrl) {
+    return host.avatarUrl;
+  }
+
+  if (host?.avatarKey) {
+    try {
+      return getStorageFileUrl(host.avatarKey);
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+};
+
+type LocationLineProps = {
+  label: string;
+  value?: string | null;
+  labelColor: string;
+  valueColor: string;
+};
+
+const LocationLine = ({ label, value, labelColor, valueColor }: LocationLineProps) => {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <Text style={[styles.detailLabel, { color: labelColor }]}>
+      {label}: <Text style={[styles.detailValue, { color: valueColor }]}>{value}</Text>
+    </Text>
+  );
+};
+
+type EventLocationMapProps = {
+  location?: EventLocation | null;
+  markerImage: string;
+  markerLabel: string;
+  isDark: boolean;
+  fallbackColor: string;
+  onExpand: () => void;
+};
+
+const EventLocationMap = ({
+  location,
+  markerImage,
+  markerLabel,
+  isDark,
+  fallbackColor,
+  onExpand,
+}: EventLocationMapProps) => {
+  const cameraRef = useRef<Mapbox.Camera>(null);
+  const latitude = location?.latitude;
+  const longitude = location?.longitude;
+  const hasCoordinates = isFiniteCoordinate(latitude) && isFiniteCoordinate(longitude);
+  const coordinate: [number, number] | null = hasCoordinates ? [longitude, latitude] : null;
+
+  useEffect(() => {
+    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+  }, []);
+
+  if (!coordinate) {
+    return (
+      <View style={[styles.mapContainer, styles.mapFallback, { backgroundColor: fallbackColor }]}>
+        <Ionicons name="map-outline" size={22} color="#B3B3B3" />
+        <Text style={styles.mapFallbackText}>Map unavailable</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.mapContainer}>
+      <Mapbox.MapView
+        style={styles.map}
+        styleURL={isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+        logoEnabled={false}
+        attributionEnabled={false}
+        scrollEnabled={false}
+        pitchEnabled={false}
+        rotateEnabled={false}
+      >
+        <Mapbox.Camera
+          ref={cameraRef}
+          animationDuration={0}
+          centerCoordinate={coordinate}
+          zoomLevel={14.5}
+        />
+        <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
+          <View style={styles.eventMarkerButton} accessibilityLabel={`${markerLabel} location`}>
+            {markerImage ? (
+              <Image source={{ uri: markerImage }} style={styles.eventMarkerImage} contentFit="cover" />
+            ) : (
+              <View style={styles.eventMarkerDot} />
+            )}
+          </View>
+        </Mapbox.MarkerView>
+      </Mapbox.MapView>
+      <TouchableOpacity style={styles.expandMapBtn} activeOpacity={0.85} onPress={onExpand}>
+        <Feather name="maximize" size={16} color="#B3B3B3" />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const AboutTab = ({
+  description,
+  ageRestriction,
+  location,
+  host,
+  eventImageUris = [],
+  isHostMode = false,
+  onHostFollowChange,
+}: AboutTabProps) => {
+  const router = useRouter();
   const { colors, isDark } = useTheme();
+  const sharedLocation = useAuthStore((state) =>
+    state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
+  );
   const [subTab, setSubTab] = useState("Description");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isHostFollowing, setIsHostFollowing] = useState(Boolean(host?.isFollowing));
+  const [isFollowPending, setIsFollowPending] = useState(false);
+  const [hostFollowerDelta, setHostFollowerDelta] = useState(0);
 
-  const GALLERY_IMAGES = [
-    {
-      id: "1",
-      uri: "https://images.unsplash.com/photo-1531050171669-01912ad4110b?q=80&w=600&auto=format&fit=crop",
-      type: "image",
-    },
-    {
-      id: "2",
-      uri: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
-      type: "image",
-    },
-    {
-      id: "3",
-      uri: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop",
-      type: "image",
-    },
-    {
-      id: "4",
-      uri: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
-      type: "carousel",
-    },
-    {
-      id: "5",
-      uri: "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?q=80&w=600&auto=format&fit=crop",
-      type: "video",
-    },
-    {
-      id: "6",
-      uri: "https://images.unsplash.com/photo-1506157786151-b8491531f063?q=80&w=600&auto=format&fit=crop",
-      type: "video",
-    },
-    {
-      id: "7",
-      uri: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=600&auto=format&fit=crop",
-      type: "carousel",
-    },
-    {
-      id: "8",
-      uri: "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?q=80&w=600&auto=format&fit=crop",
-      type: "video",
-    },
-    {
-      id: "9",
-      uri: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?q=80&w=600&auto=format&fit=crop",
-      type: "image",
-    },
-  ];
+  const hostAvatar = useMemo(() => resolveHostAvatar(host), [host]);
+  const hostFollowers = useMemo(() => {
+    const baseFollowers = typeof host?.followersCount === "number" ? host.followersCount : 0;
+
+    return formatCompactCount(baseFollowers + hostFollowerDelta);
+  }, [host?.followersCount, hostFollowerDelta]);
+
+  const hostEvents = useMemo(() => formatCompactCount(host?.eventsCount), [host?.eventsCount]);
+
+  const locationLabel = location?.searchLabel || location?.venue || location?.address || "Location";
+  const primaryEventImage = eventImageUris[0] ?? "";
+  const hasEventCoordinates = isFiniteCoordinate(location?.latitude) && isFiniteCoordinate(location?.longitude);
+  const hasSharedCoordinates =
+    isFiniteCoordinate(sharedLocation?.latitude) && isFiniteCoordinate(sharedLocation?.longitude);
+  const galleryImages = eventImageUris.length > 0
+    ? eventImageUris.map((uri, index) => ({ id: `event-banner-${index}`, uri, type: "image" }))
+    : GALLERY_IMAGES;
+  const cardBackground = isDark ? "rgba(17, 17, 17, 0.8)" : colors.card;
+  const mutedCardBackground = isDark ? "rgba(17, 17, 17, 0.8)" : "rgba(0, 0, 0, 0.03)";
+  const isAgeRestricted = ageRestriction === "18_plus" || ageRestriction === "21_plus";
+
+  const openEventMap = () => {
+    if (!hasEventCoordinates) {
+      return;
+    }
+
+    router.push({
+      pathname: "/event-screen/map",
+      params: {
+        eventLatitude: String(location.latitude),
+        eventLongitude: String(location.longitude),
+        eventTitle: locationLabel,
+        eventVenue: location?.venue ?? "",
+        eventAddress: location?.address ?? "",
+        markerImage: primaryEventImage,
+        ...(hasSharedCoordinates
+          ? {
+              userLatitude: String(sharedLocation.latitude),
+              userLongitude: String(sharedLocation.longitude),
+            }
+          : {}),
+      },
+    });
+  };
+
+  useEffect(() => {
+    setIsHostFollowing(Boolean(host?.isFollowing));
+    setHostFollowerDelta(0);
+  }, [host?.id, host?.isFollowing]);
+
+  const toggleHostFollow = async () => {
+    if (!host?.id || isHostMode || isFollowPending) {
+      return;
+    }
+
+    const wasFollowing = isHostFollowing;
+    setIsHostFollowing(!wasFollowing);
+    setHostFollowerDelta((current) => current + (wasFollowing ? -1 : 1));
+    setIsFollowPending(true);
+
+    try {
+      const follow = wasFollowing ? await unfollowUser(host.id) : await followUser(host.id);
+      setIsHostFollowing(follow.isFollowing);
+      setHostFollowerDelta(follow.isFollowing === Boolean(host?.isFollowing) ? 0 : follow.isFollowing ? 1 : -1);
+      onHostFollowChange?.(follow.isFollowing);
+    } catch (error) {
+      setIsHostFollowing(wasFollowing);
+      setHostFollowerDelta((current) => current + (wasFollowing ? 1 : -1));
+      Alert.alert(
+        wasFollowing ? "Unable to unfollow" : "Unable to follow",
+        getAuthErrorMessage(error, "Please try again."),
+      );
+    } finally {
+      setIsFollowPending(false);
+    }
+  };
 
   const renderGallery = () => (
     <View style={styles.galleryGrid}>
-      {GALLERY_IMAGES.map((item) => (
+      {galleryImages.map((item) => (
         <TouchableOpacity
           key={item.id}
           style={[styles.galleryItemContainer, { backgroundColor: colors.card }]}
@@ -104,110 +337,115 @@ const AboutTab = () => {
         onClose={() => setSelectedImage(null)}
       />
 
-      {/* Sub-Tabs / Toggle */}
       <SegmentedControl
         options={["Description", "Gallery"]}
         selectedOption={subTab}
         onSelect={setSubTab}
-        containerStyle={{ marginTop: 10, marginBottom: 10 }}
+        containerStyle={{ marginTop: 16, marginBottom: 0 }}
       />
 
-      <View style={{ marginTop: 20 }}>
+      <View style={styles.contentStack}>
         {subTab === "Description" ? (
           <>
             <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
-              An unforgettable rooftop experience featuring the best in house
-              and techno. Doors open at 8pm. Dress code: smart casual.
+              {description?.trim() || "Description unavailable"}
             </Text>
-            <View style={[styles.ageTag, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" }]}>
-              <Text style={[styles.ageTagText, { color: colors.text }]}>18+ only</Text>
+            <View style={[styles.ageTag, { backgroundColor: isAgeRestricted ? "#FFFFFF" : "rgba(255, 255, 255, 0.08)" }]}>
+              <Text style={[styles.ageTagText, { color: isAgeRestricted ? "#E83030" : colors.text }]}>
+                {formatAgeLabel(ageRestriction)}
+              </Text>
             </View>
 
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
-            <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.locationHeader}>
-                <View style={[styles.locationIconBg, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}>
-                  <Ionicons name="location" size={18} color={colors.text} />
-                </View>
-                <Text style={[styles.locationCity, { color: colors.text }]}>New York City</Text>
-              </View>
-              <View style={styles.locationDetails}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                  Venue:{" "}
-                  <Text style={[styles.detailValue, { color: colors.text }]}>The Rooftop Lounge</Text>
-                </Text>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                  Address:{" "}
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
-                    123 Main Street, New York, NY 1001
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Location</Text>
+              <View style={[styles.locationCard, { backgroundColor: cardBackground }]}>
+                <View style={styles.locationHeader}>
+                  <Ionicons name="location-outline" size={20} color={colors.textSecondary} />
+                  <Text style={[styles.locationCity, { color: colors.text }]} numberOfLines={1}>
+                    {locationLabel}
                   </Text>
-                </Text>
+                </View>
+                <View style={styles.locationDetails}>
+                  <LocationLine label="Venue" value={location?.venue} labelColor={colors.text} valueColor={colors.textSecondary} />
+                  <LocationLine label="Address" value={location?.address} labelColor={colors.text} valueColor={colors.textSecondary} />
+                </View>
               </View>
 
-              {/* Map Preview */}
-              <View style={styles.mapContainer}>
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop",
-                  }}
-                  style={styles.mapImage}
-                />
-                <View style={[styles.mapOverlayAvatar, { borderColor: colors.text, backgroundColor: colors.card }]}>
-                  <Image
-                    source={{
-                      uri: "https://images.unsplash.com/photo-1514525253361-bee1a31f440a?q=80&w=200&auto=format&fit=crop",
-                    }}
-                    style={styles.mapAvatar}
-                  />
-                </View>
-                <TouchableOpacity style={styles.expandMapBtn}>
-                  <Feather name="maximize" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+              <EventLocationMap
+                location={location}
+                markerImage={primaryEventImage}
+                markerLabel={locationLabel}
+                isDark={isDark}
+                fallbackColor={cardBackground}
+                onExpand={openEventMap}
+              />
             </View>
 
-            <View style={[styles.additionalInfoCard, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)" }]}>
+            <View style={[styles.additionalInfoCard, { backgroundColor: mutedCardBackground }]}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>Additional Info</Text>
-              <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
-                • Use back entrance after 10PM
-              </Text>
-              <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
-                • Parking available at adjacent garage - $20 flat rate
-              </Text>
-              <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
-                • Nearest subway 7th Ave Station
-              </Text>
+              {[
+                location?.venue ? `Venue: ${location.venue}` : null,
+                location?.address ? `Address: ${location.address}` : null,
+                formatAgeLabel(ageRestriction),
+              ].filter(isNonEmptyString).map((item) => (
+                <Text key={item} style={[styles.bulletItem, { color: colors.textSecondary }]}>
+                  -{item}
+                </Text>
+              ))}
             </View>
 
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Host</Text>
-            <View style={[styles.hostCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.hostCardHeader}>
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop",
-                  }}
-                  style={styles.hostCardAvatar}
-                />
-                <View style={styles.hostCardInfo}>
-                  <Text style={[styles.hostCardName, { color: colors.text }]}>Dj Koko</Text>
-                  <Text style={[styles.hostCardUser, { color: colors.textSecondary }]}>@scfc_t</Text>
+            {!isHostMode && (
+              <>
+                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Host</Text>
+                <View style={[styles.hostCard, { backgroundColor: cardBackground }]}>
+                  <View style={styles.hostCardHeader}>
+                    <Image
+                      source={{ uri: hostAvatar || DEFAULT_HOST_AVATAR }}
+                      style={styles.hostCardAvatar}
+                    />
+                    <View style={styles.hostCardInfo}>
+                      <Text style={[styles.hostCardName, { color: colors.text }]}>{host?.name ?? "Host"}</Text>
+                      {!!host?.username && (
+                        <Text style={[styles.hostCardUser, { color: colors.textSecondary }]}>
+                          @{host.username.replace(/^@+/, "")}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.followBtnLarge,
+                        isHostFollowing && styles.followingBtnLarge,
+                      ]}
+                      activeOpacity={0.8}
+                      disabled={isFollowPending}
+                      onPress={toggleHostFollow}
+                    >
+                      <Text style={[styles.followBtnTextLarge, isHostFollowing && styles.followingBtnTextLarge]}>
+                        {isHostFollowing ? "Following" : "Follow"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.hostStatsRow}>
+                    <Text style={[styles.hostStatItem, { color: colors.textSecondary }]}>
+                      <Text style={[styles.hostStatValue, { color: colors.textSecondary }]}>{hostFollowers}</Text> Followers
+                    </Text>
+                    <Text style={[styles.hostStatItem, { color: colors.textSecondary }]}>
+                      <Text style={[styles.hostStatValue, { color: colors.textSecondary }]}>{hostEvents}</Text> Events
+                    </Text>
+                  </View>
+                  <Text style={[styles.hostBio, { color: colors.textSecondary }]}>
+                    {host?.bio?.trim() || "Bio unavailable"}
+                  </Text>
                 </View>
-                <TouchableOpacity style={[styles.followBtnLarge, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" }]}>
-                  <Text style={[styles.followBtnTextLarge, { color: colors.text }]}>Follow</Text>
-                </TouchableOpacity>
+              </>
+            )}
+
+            {isHostMode && (
+              <View style={styles.withdrawalCard}>
+                <Feather name="shield" size={20} color="#1D9E75" />
+                <Text style={styles.withdrawalText}>Withdrawal will be available 72 hours after event completion</Text>
               </View>
-              <View style={styles.hostStatsRow}>
-                <Text style={[styles.hostStatItem, { color: colors.textSecondary }]}>
-                  <Text style={[styles.hostStatValue, { color: colors.text }]}>12.4K</Text> Followers
-                </Text>
-                <Text style={[styles.hostStatItem, { color: colors.textSecondary }]}>
-                  <Text style={[styles.hostStatValue, { color: colors.text }]}>48</Text> Events
-                </Text>
-              </View>
-              <Text style={[styles.hostBio, { color: colors.textSecondary }]}>
-                House & techno DJ. Resident at Fabric. 10+ years on the decks.
-              </Text>
-            </View>
+            )}
           </>
         ) : (
           renderGallery()
@@ -220,170 +458,212 @@ const AboutTab = () => {
 export default AboutTab;
 
 const styles = StyleSheet.create({
-  tabWrapper: {
-    borderRadius: 12,
-    marginTop: 10,
-    marginBottom: 10,
+  contentStack: {
+    gap: 16,
+    marginTop: 24,
   },
   descriptionText: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 22,
-    marginBottom: 16,
   },
   ageTag: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 8,
-    marginBottom: 24,
   },
   ageTagText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  sectionBlock: {
+    gap: 12,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 16,
-    marginTop: 8,
+    fontWeight: "700",
   },
   locationCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
+    borderRadius: 12,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   locationHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-  },
-  locationIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
+    gap: 12,
   },
   locationCity: {
-    fontSize: 16,
-    fontWeight: "bold",
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   locationDetails: {
-    marginBottom: 16,
+    gap: 8,
+    paddingLeft: 32,
   },
   detailLabel: {
-    fontSize: 13,
-    marginBottom: 4,
+    fontSize: 14,
+    lineHeight: 22,
   },
   detailValue: {
-    fontWeight: "500",
+    fontWeight: "700",
   },
   mapContainer: {
-    height: 150,
+    height: 250,
     borderRadius: 12,
     overflow: "hidden",
     position: "relative",
   },
-  mapImage: {
-    width: "100%",
-    height: "100%",
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
-  mapOverlayAvatar: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: [{ translateX: -20 }, { translateY: -20 }],
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
+  mapFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  mapFallbackText: {
+    color: "#B3B3B3",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  eventMarkerButton: {
+    alignItems: "center",
+    backgroundColor: "#111111",
+    borderColor: EVENT_MARKER_BORDER_COLOR,
+    borderRadius: 28,
+    borderWidth: 3,
+    height: 56,
+    justifyContent: "center",
     overflow: "hidden",
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    width: 56,
   },
-  mapAvatar: {
-    width: "100%",
+  eventMarkerImage: {
     height: "100%",
+    width: "100%",
+  },
+  eventMarkerDot: {
+    backgroundColor: EVENT_MARKER_BORDER_COLOR,
+    borderRadius: 8,
+    height: 16,
+    width: 16,
   },
   expandMapBtn: {
     position: "absolute",
-    bottom: 12,
+    top: 12,
     right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(17, 17, 17, 0.7)",
     justifyContent: "center",
     alignItems: "center",
   },
   additionalInfoCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
+    borderRadius: 12,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   bulletItem: {
-    fontSize: 13,
-    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 24,
   },
   hostCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
+    borderRadius: 12,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   hostCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    justifyContent: "space-between",
+    gap: 12,
   },
   hostCardAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderColor: "#C05178",
+    borderWidth: 2,
   },
   hostCardInfo: {
     flex: 1,
   },
   hostCardName: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   hostCardUser: {
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
   },
   followBtnLarge: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
+    alignItems: "center",
+    borderColor: "#AC86D4",
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  followingBtnLarge: {
+    backgroundColor: "rgba(172, 134, 212, 0.18)",
   },
   followBtnTextLarge: {
-    fontSize: 13,
+    color: "#AC86D4",
+    fontSize: 12,
     fontWeight: "600",
+    lineHeight: 16,
+  },
+  followingBtnTextLarge: {
+    color: "#FFFFFF",
   },
   hostStatsRow: {
     flexDirection: "row",
-    gap: 20,
-    marginBottom: 12,
+    gap: 25,
   },
   hostStatItem: {
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 22,
   },
   hostStatValue: {
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   hostBio: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  withdrawalCard: {
+    alignItems: "center",
+    backgroundColor: "rgba(14, 198, 23, 0.1)",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+  },
+  withdrawalText: {
+    color: "#1D9E75",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 22,
   },
   galleryGrid: {
     flexDirection: "row",
@@ -393,8 +673,8 @@ const styles = StyleSheet.create({
   },
   galleryItemContainer: {
     width: (width - 48) / 3,
-    aspectRatio: 0.75, // Oval shape
-    borderRadius: 60, // High border radius for oval look
+    aspectRatio: 0.75,
+    borderRadius: 60,
     overflow: "hidden",
     marginBottom: 16,
     position: "relative",

@@ -507,7 +507,7 @@ export default function ChatDetailScreen() {
                 )}
 
                 <View style={[styles.msgRow, item.fromMe ? styles.msgRowMe : styles.msgRowThem, !isSameGroup && { marginTop: 12 }]}>
-                  <View style={{ maxWidth: width * 0.72 }}>
+                  <View style={styles.messageColumn}>
                     {renderBubble(item)}
 
                     {/* Reactions */}
@@ -676,9 +676,10 @@ const styles = StyleSheet.create({
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
   msgRowMe: { justifyContent: 'flex-end' },
   msgRowThem: { justifyContent: 'flex-start' },
+  messageColumn: { maxWidth: '84%' },
 
   /* Text Bubble */
-  bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, maxWidth: '90%' },
+  bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' },
   bubbleMe: { backgroundColor: '#B2ABBA', borderBottomRightRadius: 2 },
   bubbleThem: { backgroundColor: '#111111', borderTopLeftRadius: 2, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
   bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 2 },

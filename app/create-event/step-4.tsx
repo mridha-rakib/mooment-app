@@ -21,10 +21,11 @@ export default function CreateEventStep4() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [isDeleteModalVisible, setIsDeleteModalVisible] = React.useState(false);
+  const [isDeletingTicket, setIsDeletingTicket] = React.useState(false);
+  const [ticketToDeleteId, setTicketToDeleteId] = React.useState<string | null>(null);
   const tickets = useEventDraftStore((state) => state.tickets);
-  const deleteTicket = useEventDraftStore((state) => state.deleteTicket);
+  const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
-  const primaryTicket = tickets[0] ?? null;
 
   const formatTicketExpiry = (value?: string | null) => {
     if (!value) {
@@ -59,6 +60,26 @@ export default function CreateEventStep4() {
     }
   };
 
+  const handleDeleteTicket = async () => {
+    const ticketId = ticketToDeleteId;
+
+    if (!ticketId || isDeletingTicket) {
+      return;
+    }
+
+    setIsDeleteModalVisible(false);
+    setIsDeletingTicket(true);
+
+    try {
+      await removeTicket(ticketId);
+    } catch (error) {
+      Alert.alert('Unable to delete ticket', getAuthErrorMessage(error, 'Please try deleting the ticket again.'));
+    } finally {
+      setIsDeletingTicket(false);
+      setTicketToDeleteId(null);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -89,34 +110,45 @@ export default function CreateEventStep4() {
           <Text style={[styles.createTicketText, { color: colors.background }]}>Create Ticket</Text>
         </TouchableOpacity>
 
-        {primaryTicket && (
-          <View style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {tickets.map((ticket) => {
+          const isFreeTicket = ticket.type === 'free' || ticket.price <= 0;
+          const ticketPriceLabel = isFreeTicket ? 'Free' : `£${ticket.price}`;
+
+          return (
+          <View key={ticket.localId} style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.ticketHeader}>
               <View style={styles.ticketTitleContainer}>
-                <Text style={[styles.ticketTitle, { color: colors.text }]}>{primaryTicket.name}</Text>
+                <Text style={[styles.ticketTitle, { color: colors.text }]}>{ticket.name}</Text>
                 <View style={[styles.badge, { backgroundColor: isDark ? '#3F3F46' : '#E5E5EA' }]}>
-                  <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{primaryTicket.capacity} left</Text>
+                  <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{ticket.capacity} left</Text>
                 </View>
               </View>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/create-event/ticket-details', params: { localId: ticket.localId } })}>
                 <Feather name="edit-3" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.ticketDescription, { color: colors.textSecondary }]}>{primaryTicket.description || 'Entry from 9pm. Standing only.'}</Text>
-            <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]}>{formatTicketExpiry(primaryTicket.salesEndAt)}</Text>
+            <Text style={[styles.ticketDescription, { color: colors.textSecondary }]}>{ticket.description || 'Entry from 9pm. Standing only.'}</Text>
+            <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]}>{formatTicketExpiry(ticket.salesEndAt)}</Text>
 
             <View style={styles.ticketFooter}>
               <View>
-                <Text style={[styles.ticketPrice, { color: colors.text }]}>£{primaryTicket.price}</Text>
-                <Text style={[styles.perTicket, { color: colors.textSecondary }]}>per ticket</Text>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>{ticketPriceLabel}</Text>
+                {!isFreeTicket && <Text style={[styles.perTicket, { color: colors.textSecondary }]}>per ticket</Text>}
               </View>
-              <TouchableOpacity onPress={() => setIsDeleteModalVisible(true)}>
+              <TouchableOpacity
+                disabled={isDeletingTicket}
+                onPress={() => {
+                  setTicketToDeleteId(ticket.localId);
+                  setIsDeleteModalVisible(true);
+                }}
+              >
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
               </TouchableOpacity>
             </View>
           </View>
-        )}
+          );
+        })}
       </View>
 
       {/* Spacer */}
@@ -133,13 +165,11 @@ export default function CreateEventStep4() {
       </View>
       <DeleteModal
         visible={isDeleteModalVisible}
-        onClose={() => setIsDeleteModalVisible(false)}
-        onConfirm={() => {
+        onClose={() => {
           setIsDeleteModalVisible(false);
-          if (primaryTicket) {
-            deleteTicket(primaryTicket.localId);
-          }
+          setTicketToDeleteId(null);
         }}
+        onConfirm={handleDeleteTicket}
       />
     </SafeAreaView>
   );

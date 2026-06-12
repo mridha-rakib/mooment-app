@@ -55,6 +55,7 @@ export default function ProfileView({
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView showsVerticalScrollIndicator={false}>
         <ProfileHeader 
+          userId={user.id}
           avatar={user.avatar} 
           stats={user.stats} 
           isOwnProfile={isOwnProfile} 

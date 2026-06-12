@@ -27,6 +27,7 @@ import {
   Image,
   Modal,
   Platform,
+  KeyboardAvoidingView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -593,129 +594,6 @@ function RoomSetupModal({
           </View>
         </BlurView>
       </View>
-    </Modal>
-  );
-}
-
-// ── QR Scanner Modal ─────────────────────────────────────────────────────
-function QRScannerModal({
-  visible,
-  onClose,
-  onScan,
-  currentEventTitle,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onScan: (event: string, eventCode?: string) => void;
-  currentEventTitle?: string;
-}) {
-  const { colors, isDark } = useTheme();
-  const [tab, setTab] = useState<'scan' | 'type'>('scan');
-  const [qrCode, setQrCode] = useState('');
-  const [permission, requestPermission] = useCameraPermissions();
-
-  if (!permission) return null;
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <SafeAreaView style={[qsStyles.root, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-
-        {/* Header */}
-        <View style={qsStyles.header}>
-          <TouchableOpacity onPress={onClose} style={[qsStyles.backBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
-            <Feather name="chevron-left" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <View style={[qsStyles.tabRow, { backgroundColor: colors.card }]}>
-            <TouchableOpacity
-              style={[qsStyles.tab, tab === 'scan' && [qsStyles.tabActive, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]]}
-              onPress={() => setTab('scan')}
-            >
-              <Text style={[qsStyles.tabText, { color: colors.textSecondary }, tab === 'scan' && [qsStyles.tabTextActive, { color: colors.text }]]}>Scan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[qsStyles.tab, tab === 'type' && [qsStyles.tabActive, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]]}
-              onPress={() => setTab('type')}
-            >
-              <Text style={[qsStyles.tabText, { color: colors.textSecondary }, tab === 'type' && [qsStyles.tabTextActive, { color: colors.text }]]}>Type QR Code</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {tab === 'scan' ? (
-          <View style={qsStyles.scanBody}>
-            {permission.granted ? (
-              <CameraView
-                style={StyleSheet.absoluteFillObject}
-                facing="back"
-                barcodeScannerSettings={{
-                  barcodeTypes: ['qr'],
-                }}
-                onBarcodeScanned={({ data }) => {
-                  if (data) onScan(currentEventTitle ?? data, data);
-                }}
-              />
-            ) : (
-              <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }]}>
-                <TouchableOpacity onPress={requestPermission} style={camStyles.permissionBtn}>
-                  <Text style={camStyles.permissionBtnText}>Allow Camera Access</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Scanner Overlay */}
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-              {/* This creates a "hole" in the overlay */}
-              <View style={{ flex: 1 }} />
-              <View style={{ flexDirection: 'row' }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
-                <View style={qsStyles.scannerBox}>
-                  <View style={[qsStyles.corner, qsStyles.topLeft]} />
-                  <View style={[qsStyles.corner, qsStyles.topRight]} />
-                  <View style={[qsStyles.corner, qsStyles.bottomLeft]} />
-                  <View style={[qsStyles.corner, qsStyles.bottomRight]} />
-                </View>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
-              </View>
-              <View style={{ flex: 1.5, alignItems: 'center' }}>
-                <TouchableOpacity
-                  style={qsStyles.captureBtn}
-                  onPress={() => onScan('Rooftop Session Vol. 4')}
-                />
-                <Text style={{ color: '#FFFFFF', marginTop: 20, fontSize: 14 }}>Align QR code within the frame</Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={qsStyles.typeBody}>
-            <Text style={[qsStyles.scanTitle, { color: colors.text }]}>Scan QR CODE</Text>
-            <TextInput
-              style={[qsStyles.typeInput, { backgroundColor: colors.card, color: colors.text }]}
-              placeholder="Type QR Code"
-              placeholderTextColor={colors.textSecondary}
-              value={qrCode}
-              onChangeText={setQrCode}
-            />
-            <View style={{ flex: 1 }} />
-            <View style={qsStyles.typeFooter}>
-              <TouchableOpacity style={[qsStyles.typeCancel, { backgroundColor: colors.card }]} onPress={onClose}>
-                <Text style={[qsStyles.typeCancelText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[qsStyles.typeContinue, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  const typedCode = qrCode.trim();
-                  const eventTitle = currentEventTitle ?? (typedCode || 'Rooftop Session Vol. 4');
-
-                  onScan(eventTitle, typedCode || undefined);
-                }}
-              >
-                <Text style={[qsStyles.typeContinueText, { color: colors.background }]}>Continue</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </SafeAreaView>
     </Modal>
   );
 }
@@ -1310,6 +1188,8 @@ export default function CreateMomentScreen() {
   const screenColors = CREATE_MOMENT_COLORS;
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const captionPosition = useRef(0);
 
   const [publishToFeed, setPublishToFeed] = useState(true);
   const [publishToEvent, setPublishToEvent] = useState(false);
@@ -1337,7 +1217,6 @@ export default function CreateMomentScreen() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [showAudienceModal, setShowAudienceModal] = useState(false);
-  const [showQRScanner, setShowQRScanner] = useState(false);
   const [authorAvatar, setAuthorAvatar] = useState(DEFAULT_AVATAR);
   const authorName = user?.name?.trim() || FALLBACK_AUTHOR_NAME;
 
@@ -1626,11 +1505,20 @@ export default function CreateMomentScreen() {
   };
 
   const togglePublishToFeed = () => {
-    setPublishToFeed((current) => (current ? publishToEvent : true));
+    setPublishToFeed((current) => (current && !publishToEvent ? true : !current));
   };
 
   const togglePublishToEvent = () => {
-    setPublishToEvent((current) => (current ? publishToFeed : true));
+    setPublishToEvent((current) => (current && !publishToFeed ? true : !current));
+  };
+
+  const scrollToCaption = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(captionPosition.current - 12, 0),
+        animated: true,
+      });
+    }, Platform.OS === 'android' ? 300 : 120);
   };
 
   const publishMoment = async (eventTitleOverride?: string, eventCodeOverride?: string) => {
@@ -1639,17 +1527,16 @@ export default function CreateMomentScreen() {
     }
 
     const trimmedCaption = caption.trim();
-    const targetModes: MomentMode[] = [
-      ...(publishToFeed ? ['feed' as const] : []),
-      ...(publishToEvent ? ['event' as const] : []),
-    ];
+    const targetModes: MomentMode[] = publishToEvent
+      ? ['feed', 'event']
+      : ['feed'];
 
     if (!trimmedCaption && selectedImages.length === 0 && !selectedImage) {
       Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
       return false;
     }
 
-    if (targetModes.length === 0) {
+    if (!publishToFeed && !publishToEvent) {
       Alert.alert('Create Mooment', 'Choose Feed or Event before creating a moment.');
       return false;
     }
@@ -1694,22 +1581,13 @@ export default function CreateMomentScreen() {
   };
 
   const handleDone = async () => {
-    if (publishToEvent) {
-      if (!caption.trim() && selectedImages.length === 0 && !selectedImage) {
-        Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
-        return;
-      }
+    const created = await publishMoment();
 
-      setShowQRScanner(true);
-    } else {
-      const created = await publishMoment();
-
-      if (created) {
-        setShowConfetti(true);
-        setTimeout(() => {
-          router.back();
-        }, 2500);
-      }
+    if (created) {
+      setShowConfetti(true);
+      setTimeout(() => {
+        router.back();
+      }, 2500);
     }
   };
 
@@ -1755,162 +1633,175 @@ export default function CreateMomentScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
-        {/* ── Author Row ── */}
-        <View style={styles.authorRow}>
-          <Image
-            source={{ uri: authorAvatar }}
-            style={styles.avatar}
-          />
-          <View style={styles.authorInfo}>
-            <Text style={styles.authorNameFull} numberOfLines={2}>
-              <Text style={styles.authorBold}>{authorName}</Text>
-              {/* Tagged people visible in both modes */}
-              {taggedPeople.length > 0 && (
-                <>
-                  <Text style={styles.authorMuted}> with </Text>
-                  <Text style={styles.authorBold}>{taggedLabel}</Text>
-                </>
-              )}
-              {/* Event link only in Event mode */}
-              {publishToEvent && (
-                <>
-                  <Text style={styles.authorMuted}> at </Text>
-                  <Text style={styles.authorBold}>{selectedEvent}</Text>
-                </>
-              )}
-            </Text>
-          </View>
-
-          {publishToEvent && (
-            <TouchableOpacity style={styles.eventPill} onPress={() => setShowEventModal(true)} activeOpacity={0.8}>
-              <View style={styles.eventPillDot} />
-              <Text style={styles.eventPillText}>Event</Text>
-              <Feather name="chevron-down" size={12} color="#16D869" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ── Content Section (Media + Caption) ── */}
-        {selectedImages.length > 0 && selectedMediaType === 'image' ? (
-          <View style={styles.imageCarousel}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imageCarouselContent}
-            >
-              {selectedImages.map((image, index) => (
-                <View key={image.id} style={styles.imagePreviewCard}>
-                  <Image source={{ uri: image.uri }} style={styles.momentImage} resizeMode="cover" />
-                  {selectedImages.length > 1 ? (
-                    <View style={styles.imageCountBadge}>
-                      <Text style={styles.imageCountText}>{index + 1}/{selectedImages.length}</Text>
-                    </View>
-                  ) : null}
-                  <TouchableOpacity
-                    style={styles.imageRemoveBtn}
-                    onPress={() => removeSelectedImage(image.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Feather name="x" size={13} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        {selectedImage && selectedMediaType === 'video' ? (
-          <View style={styles.imageWrapper}>
-            <VideoPreview uri={selectedImage} style={styles.momentImage} />
-            <View style={styles.videoPreviewBadge}>
-              <Feather name="video" size={13} color="#FFFFFF" />
-              <Text style={styles.videoPreviewBadgeText} numberOfLines={1}>{selectedMediaName ?? 'Video'}</Text>
-            </View>
-            <TouchableOpacity style={styles.imageRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
-              <Feather name="x" size={13} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        {selectedImage && selectedMediaType === 'audio' ? (
-          <View style={styles.audioAttachment}>
-            <View style={styles.audioAttachmentIcon}>
-              <HugeiconsIcon icon={MusicNote04Icon} size={22} color={screenColors.primary} />
-            </View>
-            <View style={styles.audioAttachmentInfo}>
-              <Text style={styles.audioAttachmentTitle} numberOfLines={1}>{selectedMediaName ?? 'Audio'}</Text>
-              <Text style={styles.audioAttachmentMeta}>{selectedMediaContentType ?? 'audio'}</Text>
-            </View>
-            <TouchableOpacity style={styles.audioRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
-              <Feather name="x" size={14} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        <TextInput
-          style={styles.stitchInput}
-          placeholder={publishToEvent && !publishToFeed ? "Share what this moment means to you..." : "Write your stitch here. . ."}
-          placeholderTextColor={screenColors.bodyText}
-          value={caption}
-          onChangeText={setCaption}
-          multiline
-        />
-
-        <View style={{ minHeight: 120 }} />
-      </ScrollView>
-
-      {/* ── Bottom Toolbar ── */}
-      <View style={styles.toolbar}>
-        {/* People */}
-        <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, taggedPeople.length > 0 && styles.toolbarIconBoxActive]}>
-            <HugeiconsIcon icon={AddTeamIcon} size={24} color={taggedPeople.length > 0 ? screenColors.primary : screenColors.bodyText} />
-          </BlurView>
-          <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && styles.toolbarLabelActive]}>Friend</Text>
-        </TouchableOpacity>
-
-        {/* Image / Gallery */}
-        <TouchableOpacity style={styles.toolbarItem} onPress={handlePickImage} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'image' && styles.toolbarIconBoxActive]}>
-            <HugeiconsIcon icon={Image01Icon} size={24} color={selectedMediaType === 'image' ? screenColors.primary : screenColors.bodyText} />
-          </BlurView>
-          <Text style={[styles.toolbarLabel, selectedMediaType === 'image' && styles.toolbarLabelActive]}>Image</Text>
-        </TouchableOpacity>
-
-        {/* Camera */}
-        <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowCamera(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
-            <Feather name="camera" size={24} color={screenColors.bodyText} />
-          </BlurView>
-          <Text style={styles.toolbarLabel}>Camera</Text>
-        </TouchableOpacity>
-
-        {/* Video */}
-        <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowVideoPicker(true)} activeOpacity={0.8}>
-          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'video' && styles.toolbarIconBoxActive]}>
-            <HugeiconsIcon icon={Video02Icon} size={24} color={selectedMediaType === 'video' ? screenColors.primary : screenColors.bodyText} />
-          </BlurView>
-          <Text style={[styles.toolbarLabel, selectedMediaType === 'video' && styles.toolbarLabelActive]}>Video</Text>
-        </TouchableOpacity>
-
-        {/* Audio */}
-        <TouchableOpacity
-          style={styles.toolbarItem}
-          onPress={() => setShowAudioPicker(true)}
-          activeOpacity={0.8}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          contentContainerStyle={styles.scrollContent}
         >
-          <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'audio' && styles.toolbarIconBoxActive]}>
-            <HugeiconsIcon icon={MusicNote04Icon} size={24} color={selectedMediaType === 'audio' ? screenColors.primary : screenColors.bodyText} />
-          </BlurView>
-          <Text style={[styles.toolbarLabel, selectedMediaType === 'audio' && styles.toolbarLabelActive]}>Audio</Text>
-        </TouchableOpacity>
-      </View>
+          {/* ── Author Row ── */}
+          <View style={styles.authorRow}>
+            <Image
+              source={{ uri: authorAvatar }}
+              style={styles.avatar}
+            />
+            <View style={styles.authorInfo}>
+              <Text style={styles.authorNameFull} numberOfLines={2}>
+                <Text style={styles.authorBold}>{authorName}</Text>
+                {/* Tagged people visible in both modes */}
+                {taggedPeople.length > 0 && (
+                  <>
+                    <Text style={styles.authorMuted}> with </Text>
+                    <Text style={styles.authorBold}>{taggedLabel}</Text>
+                  </>
+                )}
+                {/* Event link only in Event mode */}
+                {publishToEvent && (
+                  <>
+                    <Text style={styles.authorMuted}> at </Text>
+                    <Text style={styles.authorBold}>{selectedEvent}</Text>
+                  </>
+                )}
+              </Text>
+            </View>
+
+            {publishToEvent && (
+              <TouchableOpacity style={styles.eventPill} onPress={() => setShowEventModal(true)} activeOpacity={0.8}>
+                <View style={styles.eventPillDot} />
+                <Text style={styles.eventPillText}>Event</Text>
+                <Feather name="chevron-down" size={12} color="#16D869" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* ── Content Section (Media + Caption) ── */}
+          {selectedImages.length > 0 && selectedMediaType === 'image' ? (
+            <View style={styles.imageCarousel}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imageCarouselContent}
+              >
+                {selectedImages.map((image, index) => (
+                  <View key={image.id} style={styles.imagePreviewCard}>
+                    <Image source={{ uri: image.uri }} style={styles.momentImage} resizeMode="cover" />
+                    {selectedImages.length > 1 ? (
+                      <View style={styles.imageCountBadge}>
+                        <Text style={styles.imageCountText}>{index + 1}/{selectedImages.length}</Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.imageRemoveBtn}
+                      onPress={() => removeSelectedImage(image.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Feather name="x" size={13} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {selectedImage && selectedMediaType === 'video' ? (
+            <View style={styles.imageWrapper}>
+              <VideoPreview uri={selectedImage} style={styles.momentImage} />
+              <View style={styles.videoPreviewBadge}>
+                <Feather name="video" size={13} color="#FFFFFF" />
+                <Text style={styles.videoPreviewBadgeText} numberOfLines={1}>{selectedMediaName ?? 'Video'}</Text>
+              </View>
+              <TouchableOpacity style={styles.imageRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
+                <Feather name="x" size={13} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {selectedImage && selectedMediaType === 'audio' ? (
+            <View style={styles.audioAttachment}>
+              <View style={styles.audioAttachmentIcon}>
+                <HugeiconsIcon icon={MusicNote04Icon} size={22} color={screenColors.primary} />
+              </View>
+              <View style={styles.audioAttachmentInfo}>
+                <Text style={styles.audioAttachmentTitle} numberOfLines={1}>{selectedMediaName ?? 'Audio'}</Text>
+                <Text style={styles.audioAttachmentMeta}>{selectedMediaContentType ?? 'audio'}</Text>
+              </View>
+              <TouchableOpacity style={styles.audioRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
+                <Feather name="x" size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          <TextInput
+            style={styles.stitchInput}
+            placeholder={publishToEvent && !publishToFeed ? "Share what this moment means to you..." : "Write your stitch here. . ."}
+            placeholderTextColor={screenColors.bodyText}
+            value={caption}
+            onChangeText={setCaption}
+            multiline
+            onFocus={scrollToCaption}
+            onLayout={(event) => {
+              captionPosition.current = event.nativeEvent.layout.y;
+            }}
+            disableFullscreenUI={Platform.OS === 'android'}
+          />
+
+          <View style={styles.keyboardSpacer} />
+        </ScrollView>
+
+        {/* ── Bottom Toolbar ── */}
+        <View style={styles.toolbar}>
+          {/* People */}
+          <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
+            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, taggedPeople.length > 0 && styles.toolbarIconBoxActive]}>
+              <HugeiconsIcon icon={AddTeamIcon} size={24} color={taggedPeople.length > 0 ? screenColors.primary : screenColors.bodyText} />
+            </BlurView>
+            <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && styles.toolbarLabelActive]}>Friend</Text>
+          </TouchableOpacity>
+
+          {/* Image / Gallery */}
+          <TouchableOpacity style={styles.toolbarItem} onPress={handlePickImage} activeOpacity={0.8}>
+            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'image' && styles.toolbarIconBoxActive]}>
+              <HugeiconsIcon icon={Image01Icon} size={24} color={selectedMediaType === 'image' ? screenColors.primary : screenColors.bodyText} />
+            </BlurView>
+            <Text style={[styles.toolbarLabel, selectedMediaType === 'image' && styles.toolbarLabelActive]}>Image</Text>
+          </TouchableOpacity>
+
+          {/* Camera */}
+          <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowCamera(true)} activeOpacity={0.8}>
+            <BlurView intensity={20} tint="dark" style={styles.toolbarIconBox}>
+              <Feather name="camera" size={24} color={screenColors.bodyText} />
+            </BlurView>
+            <Text style={styles.toolbarLabel}>Camera</Text>
+          </TouchableOpacity>
+
+          {/* Video */}
+          <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowVideoPicker(true)} activeOpacity={0.8}>
+            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'video' && styles.toolbarIconBoxActive]}>
+              <HugeiconsIcon icon={Video02Icon} size={24} color={selectedMediaType === 'video' ? screenColors.primary : screenColors.bodyText} />
+            </BlurView>
+            <Text style={[styles.toolbarLabel, selectedMediaType === 'video' && styles.toolbarLabelActive]}>Video</Text>
+          </TouchableOpacity>
+
+          {/* Audio */}
+          <TouchableOpacity
+            style={styles.toolbarItem}
+            onPress={() => setShowAudioPicker(true)}
+            activeOpacity={0.8}
+          >
+            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'audio' && styles.toolbarIconBoxActive]}>
+              <HugeiconsIcon icon={MusicNote04Icon} size={24} color={selectedMediaType === 'audio' ? screenColors.primary : screenColors.bodyText} />
+            </BlurView>
+            <Text style={[styles.toolbarLabel, selectedMediaType === 'audio' && styles.toolbarLabelActive]}>Audio</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
 
       {/* ── Modals ── */}
       <CameraSheet
@@ -1967,26 +1858,6 @@ export default function CreateMomentScreen() {
         current={audience}
       />
 
-      <QRScannerModal
-        visible={showQRScanner}
-        onClose={() => setShowQRScanner(false)}
-        currentEventTitle={selectedEvent}
-        onScan={async (ev, eventCode) => {
-          const eventTitle = ev || selectedEvent;
-
-          setSelectedEvent(eventTitle);
-          setSelectedEventCode(eventCode?.trim() || null);
-          setShowQRScanner(false);
-          const created = await publishMoment(eventTitle, eventCode);
-
-          if (created) {
-            router.push({
-              pathname: '/live-screen/live-room-screen',
-              params: { title: eventTitle }
-            });
-          }
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -2065,6 +1936,9 @@ const styles = StyleSheet.create({
   },
   checkboxLabelActive: { color: CREATE_MOMENT_COLORS.text },
 
+  keyboardView: {
+    flex: 1,
+  },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 116 },
   authorRow: {
@@ -2190,6 +2064,10 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
 
+  keyboardSpacer: {
+    minHeight: 160,
+  },
+
   toolbar: {
     position: 'absolute',
     left: 28,
@@ -2251,33 +2129,6 @@ const rmStyles = StyleSheet.create({
   cancelBtnText: { fontSize: 16, fontWeight: 'bold' },
   continueBtn: { flex: 1.5, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   continueBtnText: { fontSize: 16, fontWeight: 'bold' },
-});
-
-const qsStyles = StyleSheet.create({
-  root: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  tabRow: { flexDirection: 'row', borderRadius: 25, padding: 5, marginHorizontal: 20 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
-  tabActive: {},
-  tabText: { fontSize: 13, fontWeight: '600' },
-  tabTextActive: {},
-  scanBody: { flex: 1, position: 'relative' },
-  scanTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 40, textAlign: 'center' },
-  scannerBox: { width: width * 0.7, height: width * 0.7, position: 'relative', backgroundColor: 'transparent' },
-  corner: { position: 'absolute', width: 40, height: 40, borderColor: '#3090F1', borderWidth: 2 },
-  topLeft: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 12 },
-  topRight: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 12 },
-  bottomLeft: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 12 },
-  bottomRight: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 12 },
-  captureBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FFFFFF', marginTop: 80 },
-  typeBody: { flex: 1, paddingHorizontal: 24, paddingTop: 30 },
-  typeInput: { borderRadius: 16, paddingHorizontal: 20, height: 58, fontSize: 15, marginTop: 20 },
-  typeFooter: { flexDirection: 'row', paddingBottom: 40, gap: 16, paddingHorizontal: 4 },
-  typeCancel: { flex: 1, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  typeCancelText: { fontWeight: 'bold' },
-  typeContinue: { flex: 1.5, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  typeContinueText: { fontWeight: 'bold' },
 });
 
 const qdStyles = StyleSheet.create({

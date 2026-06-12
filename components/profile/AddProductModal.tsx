@@ -24,13 +24,20 @@ import { Modal,
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { createProduct } from "@/lib/products";
-import { uploadFileToStorage } from "@/lib/storage";
+import { createProduct, updateProduct, type Product } from "@/lib/products";
+import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
+
+type ProductImageItem = {
+  uri: string;
+  key?: string;
+};
 
 type AddProductModalProps = {
   visible: boolean;
   onClose: () => void;
+  onSaved?: (product: Product) => void;
   initialData?: {
+    id?: string;
     name: string;
     description: string;
     price: string;
@@ -38,6 +45,7 @@ type AddProductModalProps = {
     stock: string;
     tag: string;
     images: string[];
+    imageKeys?: string[];
   };
 };
 
@@ -62,9 +70,29 @@ const getImageExtension = (contentType: string) => (contentType === "image/png" 
 
 const parseNumberInput = (value: string) => Number(value.trim().replace(/,/g, ""));
 
-export default function AddProductModal({ visible, onClose, initialData }: AddProductModalProps) {
+const getInitialImageItems = (initialData?: AddProductModalProps["initialData"]): ProductImageItem[] => {
+  if (initialData?.imageKeys?.length) {
+    return initialData.imageKeys.map((key, index) => {
+      try {
+        return {
+          key,
+          uri: getStorageFileUrl(key),
+        };
+      } catch {
+        return {
+          key,
+          uri: initialData.images[index] ?? "",
+        };
+      }
+    }).filter((image) => Boolean(image.uri));
+  }
+
+  return initialData?.images.map((uri) => ({ uri })) ?? [];
+};
+
+export default function AddProductModal({ visible, onClose, onSaved, initialData }: AddProductModalProps) {
   const { colors, isDark } = useTheme();
-  const [images, setImages] = useState<string[]>(initialData?.images || []);
+  const [images, setImages] = useState<ProductImageItem[]>(getInitialImageItems(initialData));
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [price, setPrice] = useState(initialData?.price || '');
@@ -78,7 +106,7 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
   // Reset state when modal opens with new data
   React.useEffect(() => {
     if (visible) {
-      setImages(initialData?.images || []);
+      setImages(getInitialImageItems(initialData));
       setName(initialData?.name || '');
       setDescription(initialData?.description || '');
       setPrice(initialData?.price || '');
@@ -90,11 +118,6 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
   }, [visible, initialData]);
 
   const handlePublish = async () => {
-    if (initialData) {
-      onClose();
-      return;
-    }
-
     if (isPublishing) {
       return;
     }
@@ -128,19 +151,23 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
 
     try {
       const imageKeys = await Promise.all(
-        images.map((uri, index) => {
-          const contentType = getImageContentType(uri);
+        images.map((image, index) => {
+          if (image.key) {
+            return image.key;
+          }
+
+          const contentType = getImageContentType(image.uri);
           const extension = getImageExtension(contentType);
 
           return uploadFileToStorage({
-            uri,
+            uri: image.uri,
             key: `products/${Date.now()}-${index}.${extension}`,
             contentType,
           });
         }),
       );
 
-      await createProduct({
+      const payload = {
         name: trimmedName,
         description: description.trim() || null,
         tag: tag.trim() || null,
@@ -148,13 +175,21 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
         discountPercent,
         totalProduct,
         imageKeys,
-      });
+      };
+
+      const product = initialData?.id
+        ? await updateProduct(initialData.id, payload)
+        : await createProduct(payload);
+
+      onSaved?.(product);
 
       onClose();
-      router.push('/profile-screen/inventory');
+      if (!initialData?.id) {
+        router.push('/profile-screen/inventory');
+      }
     } catch (error) {
       Alert.alert(
-        "Unable to create product",
+        initialData?.id ? "Unable to update product" : "Unable to create product",
         getAuthErrorMessage(error, "Please check the product details and try again."),
       );
     } finally {
@@ -176,7 +211,7 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
     });
 
     if (!result.canceled) {
-      const newUris = result.assets.map(asset => asset.uri);
+      const newUris = result.assets.map((asset) => ({ uri: asset.uri }));
       setImages([...images, ...newUris]);
     }
   };
@@ -218,10 +253,10 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
             {images.length > 0 ? (
               <View style={styles.galleryContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScroll}>
-                  {images.map((uri, index) => (
+                  {images.map((image, index) => (
                     <ImageBackground 
-                      key={index} 
-                      source={{ uri }} 
+                      key={`${image.key ?? image.uri}-${index}`} 
+                      source={{ uri: image.uri }} 
                       style={styles.thumbnail}
                       imageStyle={{ borderRadius: 12 }}
                     >
@@ -251,13 +286,6 @@ export default function AddProductModal({ visible, onClose, initialData }: AddPr
                 <Text style={[styles.fileHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
               </TouchableOpacity>
             )}
-
-            {/* Category */}
-            <InputLabel label="CATEGORY" colors={colors} />
-            <TouchableOpacity style={[styles.dropdown, { backgroundColor: colors.card }]} activeOpacity={0.8}>
-              <Text style={[styles.dropdownText, { color: colors.textSecondary }]}>Select Category</Text>
-              <Feather name="chevron-down" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
 
             {/* Product Name */}
             <InputLabel label="PRODUCT NAME" colors={colors} />
@@ -454,16 +482,6 @@ const styles = StyleSheet.create({
   fileHint: {
     fontSize: 11,
     marginTop: 10,
-  },
-  dropdown: {
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dropdownText: {
-    fontSize: 15,
   },
   input: {
     borderRadius: 12,

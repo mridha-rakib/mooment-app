@@ -414,28 +414,6 @@ export default function HomeFeed() {
   useEffect(() => {
     let isMounted = true;
 
-    const loadStories = async () => {
-      try {
-        const [feedStories, seenStoryIds] = await Promise.all([
-          getFeedStories(),
-          getSeenStoryIds(),
-        ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setStories([
-          { id: 'add-story', type: 'add' },
-          ...groupStoriesByAuthor(feedStories, seenStoryIds),
-        ]);
-      } catch {
-        if (isMounted) {
-          setStories([{ id: 'add-story', type: 'add' }]);
-        }
-      }
-    };
-
     const loadSuggestedUsers = async () => {
       try {
         const users = await getSuggestedUsers(10);
@@ -457,7 +435,6 @@ export default function HomeFeed() {
       }
     };
 
-    void loadStories();
     void loadSuggestedUsers();
 
     return () => {

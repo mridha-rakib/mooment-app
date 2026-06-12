@@ -44,11 +44,27 @@ function runAdb(adbPath, args, options = {}) {
 }
 
 function getAndroidPackageName() {
-  const appConfig = JSON.parse(readFileSync(join(process.cwd(), "app.json"), "utf8"));
-  const packageName = appConfig?.expo?.android?.package;
+  let packageName;
+
+  try {
+    const appConfig = JSON.parse(readFileSync(join(process.cwd(), "app.json"), "utf8"));
+    packageName = appConfig?.expo?.android?.package;
+  } catch {
+    // This project uses app.config.js.
+  }
 
   if (!packageName) {
-    throw new Error("Missing expo.android.package in app.json.");
+    const appConfigFactory = require(join(process.cwd(), "app.config.js"));
+    const appConfig =
+      typeof appConfigFactory === "function"
+        ? appConfigFactory({ config: {} })
+        : appConfigFactory;
+
+    packageName = appConfig?.expo?.android?.package;
+  }
+
+  if (!packageName) {
+    throw new Error("Missing expo.android.package in app config.");
   }
 
   return packageName;
@@ -85,9 +101,28 @@ const reloadAction = `${packageName}.RELOAD_APP_ACTION`;
 let failed = false;
 
 for (const serial of devices) {
+  runAdb(adbPath, ["-s", serial, "shell", "am", "force-stop", packageName]);
   runAdb(adbPath, ["-s", serial, "reverse", "tcp:8081", "tcp:8081"]);
+  runAdb(adbPath, ["-s", serial, "reverse", "tcp:4000", "tcp:4000"]);
 
   const result = runAdb(adbPath, [
+    "-s",
+    serial,
+    "shell",
+    "monkey",
+    "-p",
+    packageName,
+    "-c",
+    "android.intent.category.LAUNCHER",
+    "1",
+  ]);
+
+  if (result.status === 0) {
+    console.log(`App restarted on ${serial}.`);
+    continue;
+  }
+
+  const fallbackResult = runAdb(adbPath, [
     "-s",
     serial,
     "shell",
@@ -99,14 +134,14 @@ for (const serial of devices) {
     packageName,
   ]);
 
-  if (result.status === 0) {
+  if (fallbackResult.status === 0) {
     console.log(`Reload signal sent to ${serial}.`);
     continue;
   }
 
   failed = true;
-  console.error(`Failed to reload ${serial}.`);
-  console.error(result.stderr || result.stdout);
+  console.error(`Failed to restart ${serial}.`);
+  console.error(fallbackResult.stderr || fallbackResult.stdout || result.stderr || result.stdout);
 }
 
 process.exit(failed ? 1 : 0);

@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { Building03Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -22,7 +22,48 @@ import { Spinner } from "@/components/ui/spinner";
 
 type AccountType = "personal" | "business";
 
+const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeUsername = (value: string) => value.trim().replace(/^@+/, "").toLowerCase();
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const getSignUpValidationError = ({
+  name,
+  username,
+  email,
+  password,
+}: {
+  name: string;
+  username: string;
+  email: string;
+  password: string;
+}) => {
+  if (name.trim().length < 2) {
+    return "Enter your full name or business name.";
+  }
+
+  if (username.length < 3) {
+    return "Username must be at least 3 characters.";
+  }
+
+  if (!USERNAME_PATTERN.test(username)) {
+    return "Username can only contain letters, numbers, and underscores.";
+  }
+
+  if (!EMAIL_PATTERN.test(email)) {
+    return "Enter a valid email address.";
+  }
+
+  if (password.length < 8) {
+    return "Password must be at least 8 characters.";
+  }
+
+  return null;
+};
+
 export default function SignUp() {
+  const scrollViewRef = useRef<ScrollView>(null);
   const [accountType, setAccountType] = useState<AccountType>("personal");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -31,18 +72,45 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const register = useAuthStore((state) => state.register);
   const isLoading = useAuthStore((state) => state.isLoading);
   const authError = useAuthStore((state) => state.error);
+  const visibleError = formError ?? authError;
+
+  const scrollToFormBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 250);
+  };
 
   const handleSignUp = async () => {
+    const normalizedUsername = normalizeUsername(username);
+    const normalizedEmail = normalizeEmail(email);
+    const validationError = getSignUpValidationError({
+      name,
+      username: normalizedUsername,
+      email: normalizedEmail,
+      password,
+    });
+
+    setUsername(normalizedUsername);
+    setEmail(normalizedEmail);
+
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    setFormError(null);
+
     try {
       const pendingEmail = await register({
         name,
-        username,
-        email,
+        username: normalizedUsername,
+        email: normalizedEmail,
         password,
         accountType,
       });
@@ -61,9 +129,11 @@ export default function SignUp() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <KeyboardAvoidingView 
         style={[styles.container, { backgroundColor: colors.background }]} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
+          ref={scrollViewRef}
           style={{ backgroundColor: colors.background }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -107,7 +177,10 @@ export default function SignUp() {
               placeholder={accountType === "personal" ? "Fullname" : "Business Name"}
               placeholderTextColor={colors.textSecondary}
               value={name}
-              onChangeText={setName}
+              onChangeText={(value) => {
+                setName(value);
+                setFormError(null);
+              }}
               editable={!isLoading}
               disableFullscreenUI={Platform.OS === "android"}
             />
@@ -120,8 +193,12 @@ export default function SignUp() {
               placeholder="username"
               placeholderTextColor={colors.textSecondary}
               value={username}
-              onChangeText={setUsername}
+              onChangeText={(value) => {
+                setUsername(value);
+                setFormError(null);
+              }}
               autoCapitalize="none"
+              autoCorrect={false}
               editable={!isLoading}
               disableFullscreenUI={Platform.OS === "android"}
             />
@@ -134,9 +211,13 @@ export default function SignUp() {
               placeholder="name@nocturnal.com"
               placeholderTextColor={colors.textSecondary}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(value) => {
+                setEmail(value);
+                setFormError(null);
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
               editable={!isLoading}
               disableFullscreenUI={Platform.OS === "android"}
             />
@@ -150,9 +231,13 @@ export default function SignUp() {
               placeholderTextColor={colors.textSecondary}
               secureTextEntry={!showPassword}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(value) => {
+                setPassword(value);
+                setFormError(null);
+              }}
               editable={!isLoading}
               onSubmitEditing={handleSignUp}
+              onFocus={scrollToFormBottom}
               disableFullscreenUI={Platform.OS === "android"}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
@@ -173,8 +258,8 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
 
-          {authError && (
-            <Text style={[styles.errorText, { color: colors.danger }]}>{authError}</Text>
+          {visibleError && (
+            <Text style={[styles.errorText, { color: colors.danger }]}>{visibleError}</Text>
           )}
 
           <TouchableOpacity 
@@ -243,6 +328,8 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingHorizontal: 28,
+    paddingVertical: 24,
+    paddingBottom: 96,
     justifyContent: "center",
   },
   header: {

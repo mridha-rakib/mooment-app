@@ -1,5 +1,6 @@
 import { create, isAxiosError } from "axios";
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 declare module "axios" {
   export interface AxiosRequestConfig {
@@ -17,10 +18,95 @@ declare module "axios" {
   }
 }
 
-const baseURL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined);
-const isNgrokUrl = baseURL?.includes(".ngrok-free.") ?? false;
+type ExpoConstantsWithDevHost = typeof Constants & {
+  expoConfig?: {
+    extra?: Record<string, unknown>;
+    hostUri?: string;
+  };
+  manifest?: {
+    debuggerHost?: string;
+    hostUri?: string;
+  };
+  manifest2?: {
+    extra?: {
+      expoClient?: {
+        hostUri?: string;
+      };
+    };
+  };
+};
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
+
+const getHostFromUri = (uri: string | undefined) => {
+  if (!uri) {
+    return null;
+  }
+
+  const normalizedUri = uri.includes("://") ? uri : `http://${uri}`;
+
+  try {
+    return new URL(normalizedUri).hostname;
+  } catch {
+    return null;
+  }
+};
+
+const getExpoDevServerHost = () => {
+  const constants = Constants as ExpoConstantsWithDevHost;
+  const hostCandidates = [
+    constants.expoConfig?.hostUri,
+    constants.manifest2?.extra?.expoClient?.hostUri,
+    constants.manifest?.debuggerHost,
+    constants.manifest?.hostUri,
+  ];
+
+  for (const candidate of hostCandidates) {
+    const host = getHostFromUri(candidate);
+
+    if (host && !LOCAL_HOSTS.has(host)) {
+      return host;
+    }
+  }
+
+  return null;
+};
+
+const resolveApiBaseUrl = () => {
+  const configuredUrl =
+    process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
+    (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined)?.trim();
+
+  if (!configuredUrl) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(configuredUrl);
+
+    if (Platform.OS === "android" && LOCAL_HOSTS.has(url.hostname)) {
+      url.hostname = getExpoDevServerHost() ?? "10.0.2.2";
+    }
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return configuredUrl.replace(/\/$/, "");
+  }
+};
+
+const baseURL = resolveApiBaseUrl();
+
+const isNgrokUrl = (url: string | undefined) => {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    return new URL(url).hostname.includes("ngrok-free");
+  } catch {
+    return url.includes("ngrok-free");
+  }
+};
 
 let getAccessToken = () => null as string | null;
 let handleUnauthorized = () => {};
@@ -55,7 +141,7 @@ export const api = create({
   baseURL,
   headers: {
     "Content-Type": "application/json",
-    ...(isNgrokUrl ? { "ngrok-skip-browser-warning": "true" } : {}),
+    ...(isNgrokUrl(baseURL) ? { "ngrok-skip-browser-warning": "true" } : {}),
   },
   timeout: 15000,
 });

@@ -38,11 +38,13 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
           <Feather name="chevron-down" size={14} color={colors.text} />
         </TouchableOpacity>
 
-        <Image 
-          source={require('@/assets/images/Mooment.png')}
-          style={[styles.logoImage, { tintColor: colors.text }]} 
-          resizeMode="contain" 
-        />
+        <View pointerEvents="none" style={styles.logoSlot}>
+          <Image
+            source={require('@/assets/images/image.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        </View>
 
         <View style={styles.headerIcons}>
           <CinematicButton
@@ -105,6 +107,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 15,
+    position: "relative",
   },
   mapHeaderLeft: {
     flexDirection: 'row',
@@ -144,6 +147,11 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 120,
     height: 28,
+  },
+  logoSlot: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerIcons: {
     flexDirection: "row",

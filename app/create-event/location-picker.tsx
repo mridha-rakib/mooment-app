@@ -57,6 +57,7 @@ export default function LocationPickerScreen() {
   const setStepThree = useEventDraftStore((state) => state.setStepThree);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const searchRequestId = useRef(0);
+  const searchAbortRef = useRef<AbortController | null>(null);
   const initialLocation: LocationSearchResult = {
     ...DEFAULT_LOCATION,
     address: currentLocation.address || currentLocation.searchLabel || DEFAULT_LOCATION.address,
@@ -189,22 +190,26 @@ export default function LocationPickerScreen() {
     if (trimmedQuery.length < 2 || trimmedQuery === selectedLocation.label) {
       setResults([]);
       setIsSearching(false);
+      searchAbortRef.current?.abort();
       return;
     }
 
     const timeoutId = setTimeout(() => {
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
       const requestId = searchRequestId.current + 1;
       searchRequestId.current = requestId;
       setIsSearching(true);
 
-      searchLocations(trimmedQuery, getSelectedSearchContext())
+      searchLocations(trimmedQuery, getSelectedSearchContext(), { signal: controller.signal })
         .then((locations) => {
           if (requestId === searchRequestId.current) {
             setResults(locations);
           }
         })
         .catch(() => {
-          if (requestId === searchRequestId.current) {
+          if (requestId === searchRequestId.current && !controller.signal.aborted) {
             setResults([]);
           }
         })
@@ -213,10 +218,11 @@ export default function LocationPickerScreen() {
             setIsSearching(false);
           }
         });
-    }, 300);
+    }, 180);
 
     return () => {
       clearTimeout(timeoutId);
+      searchAbortRef.current?.abort();
     };
   }, [query, selectedLocation.label, selectedLocation.latitude, selectedLocation.longitude]);
 

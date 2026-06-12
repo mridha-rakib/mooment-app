@@ -5,6 +5,7 @@ export type EventStatus = "draft" | "published";
 export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
 export type EventPrivacy = "public" | "private";
 export type EventTicketType = "free" | "pay";
+export type EventRewardType = "ticket" | "product";
 
 export type EventLocation = {
   searchLabel?: string | null;
@@ -15,6 +16,7 @@ export type EventLocation = {
 };
 
 export type EventTicketPayload = {
+  id?: string;
   name: string;
   description?: string | null;
   salesEndAt?: string | null;
@@ -23,17 +25,51 @@ export type EventTicketPayload = {
   capacity: number;
 };
 
+export type EventRewardPayload = {
+  id?: string;
+  rewardType: EventRewardType;
+  ticketId?: string | null;
+  productId?: string | null;
+  targetName?: string | null;
+  imageKeys?: string[];
+  name: string;
+  description?: string | null;
+  expiresAt?: string | null;
+  discountPercent: number;
+  buyQuantity: number;
+  freeQuantity: number;
+  capacity: number;
+};
+
 export type EventHost = {
   id: string;
   name: string;
   username?: string;
   avatarKey?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  followersCount?: number;
+  eventsCount?: number;
+  isFollowing?: boolean;
+};
+
+export type EventImageDisplay = {
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 };
 
 export type EventPayload = {
   name?: string | null;
   description?: string | null;
   bannerImageKey?: string | null;
+  bannerOriginalImageKey?: string | null;
+  bannerImageDisplay?: EventImageDisplay | null;
   ageRestriction?: EventAgeRestriction | null;
   category?: EventCategory | null;
   scheduledAt?: string | null;
@@ -60,11 +96,14 @@ export type EventResponse = {
   name?: string | null;
   description?: string | null;
   bannerImageKey?: string | null;
+  bannerOriginalImageKey?: string | null;
+  bannerImageDisplay?: EventImageDisplay | null;
   ageRestriction?: EventAgeRestriction | null;
   category?: EventCategory | null;
   scheduledAt?: string | null;
   location?: EventLocation | null;
   tickets: EventTicketPayload[];
+  rewards: EventRewardPayload[];
   privacy: EventPrivacy;
   publishedAt?: string | null;
   createdAt: string;
@@ -78,6 +117,20 @@ export type EventMapQuery = {
   limit?: number;
 };
 
+export type RewardClaim = {
+  id: string;
+  userId: string;
+  eventId: string;
+  rewardId: string;
+  claimedAt: string;
+  createdAt: string;
+};
+
+export type ProfileEventGroups = {
+  active: EventResponse[];
+  past: EventResponse[];
+};
+
 const getEventFromResponse = (response: unknown): EventResponse => {
   const event = (response as { data?: { data?: { event?: EventResponse } } })?.data?.data?.event;
 
@@ -86,6 +139,12 @@ const getEventFromResponse = (response: unknown): EventResponse => {
   }
 
   return event;
+};
+
+const getEventsFromResponse = (response: unknown): EventResponse[] => {
+  const events = (response as { data?: { data?: { events?: EventResponse[] } } })?.data?.data?.events;
+
+  return Array.isArray(events) ? events : [];
 };
 
 export const saveEventDraft = async (payload: EventPayload, eventId?: string | null): Promise<EventResponse> => {
@@ -104,11 +163,175 @@ export const publishEvent = async (payload: PublishedEventPayload, eventId?: str
   return getEventFromResponse(response);
 };
 
+export const updateEvent = async (eventId: string, payload: EventPayload): Promise<EventResponse> => {
+  const response = await api.patch(`/events/${encodeURIComponent(eventId)}`, payload);
+
+  return getEventFromResponse(response);
+};
+
+export const deleteEvent = async (eventId: string): Promise<EventResponse> => {
+  const response = await api.delete(`/events/${encodeURIComponent(eventId)}`);
+
+  return getEventFromResponse(response);
+};
+
+export const getEventTicket = async (eventId: string, ticketId: string): Promise<EventResponse> => {
+  const response = await api.get(
+    `/events/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const createEventTicket = async (
+  eventId: string,
+  payload: EventTicketPayload,
+): Promise<EventResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/tickets`, payload);
+
+  return getEventFromResponse(response);
+};
+
+export const updateEventTicket = async (
+  eventId: string,
+  ticketId: string,
+  payload: Partial<Omit<EventTicketPayload, "id">>,
+): Promise<EventResponse> => {
+  const response = await api.patch(
+    `/events/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
+    payload,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const deleteEventTicket = async (eventId: string, ticketId: string): Promise<EventResponse> => {
+  const response = await api.delete(
+    `/events/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const createEventReward = async (
+  eventId: string,
+  payload: EventRewardPayload,
+): Promise<EventResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/rewards`, payload);
+
+  return getEventFromResponse(response);
+};
+
+export const updateEventReward = async (
+  eventId: string,
+  rewardId: string,
+  payload: Partial<Omit<EventRewardPayload, "id">>,
+): Promise<EventResponse> => {
+  const response = await api.patch(
+    `/events/${encodeURIComponent(eventId)}/rewards/${encodeURIComponent(rewardId)}`,
+    payload,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const deleteEventReward = async (eventId: string, rewardId: string): Promise<EventResponse> => {
+  const response = await api.delete(
+    `/events/${encodeURIComponent(eventId)}/rewards/${encodeURIComponent(rewardId)}`,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const createDraftTicket = async (
+  eventId: string,
+  payload: EventTicketPayload,
+): Promise<EventResponse> => {
+  const response = await api.post(`/events/drafts/${encodeURIComponent(eventId)}/tickets`, payload);
+
+  return getEventFromResponse(response);
+};
+
+export const updateDraftTicket = async (
+  eventId: string,
+  ticketId: string,
+  payload: Partial<Omit<EventTicketPayload, "id">>,
+): Promise<EventResponse> => {
+  const response = await api.patch(
+    `/events/drafts/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
+    payload,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const deleteDraftTicket = async (eventId: string, ticketId: string): Promise<EventResponse> => {
+  const response = await api.delete(
+    `/events/drafts/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const createDraftReward = async (
+  eventId: string,
+  payload: EventRewardPayload,
+): Promise<EventResponse> => {
+  const response = await api.post(`/events/drafts/${encodeURIComponent(eventId)}/rewards`, payload);
+
+  return getEventFromResponse(response);
+};
+
+export const updateDraftReward = async (
+  eventId: string,
+  rewardId: string,
+  payload: Partial<Omit<EventRewardPayload, "id">>,
+): Promise<EventResponse> => {
+  const response = await api.patch(
+    `/events/drafts/${encodeURIComponent(eventId)}/rewards/${encodeURIComponent(rewardId)}`,
+    payload,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const deleteDraftReward = async (eventId: string, rewardId: string): Promise<EventResponse> => {
+  const response = await api.delete(
+    `/events/drafts/${encodeURIComponent(eventId)}/rewards/${encodeURIComponent(rewardId)}`,
+  );
+
+  return getEventFromResponse(response);
+};
+
+export const getEventById = async (eventId: string): Promise<EventResponse> => {
+  const response = await api.get(`/events/${encodeURIComponent(eventId)}`);
+
+  return getEventFromResponse(response);
+};
+
 export const getMyEvents = async (): Promise<EventResponse[]> => {
   const response = await api.get("/events/mine");
+  return getEventsFromResponse(response);
+};
+
+export const getMyProfileEvents = async (): Promise<ProfileEventGroups> => {
+  const response = await api.get("/events/mine/profile");
   const events = response.data?.data?.events;
 
-  return Array.isArray(events) ? (events as EventResponse[]) : [];
+  return {
+    active: Array.isArray(events?.active) ? (events.active as EventResponse[]) : [],
+    past: Array.isArray(events?.past) ? (events.past as EventResponse[]) : [],
+  };
+};
+
+export const getProfileEvents = async (userId: string): Promise<ProfileEventGroups> => {
+  const response = await api.get(`/events/profile/${encodeURIComponent(userId)}`);
+  const events = response.data?.data?.events;
+
+  return {
+    active: Array.isArray(events?.active) ? (events.active as EventResponse[]) : [],
+    past: Array.isArray(events?.past) ? (events.past as EventResponse[]) : [],
+  };
 };
 
 export const getMapEvents = async (params: EventMapQuery = {}): Promise<EventResponse[]> => {
@@ -116,4 +339,24 @@ export const getMapEvents = async (params: EventMapQuery = {}): Promise<EventRes
   const events = response.data?.data?.events;
 
   return Array.isArray(events) ? (events as EventResponse[]) : [];
+};
+
+export const claimEventReward = async (eventId: string, rewardId: string): Promise<RewardClaim> => {
+  const response = await api.post(
+    `/events/${encodeURIComponent(eventId)}/rewards/${encodeURIComponent(rewardId)}/claim`,
+  );
+  const claim = (response as { data?: { data?: { claim?: RewardClaim } } })?.data?.data?.claim;
+
+  if (!claim) {
+    throw new Error("The claim response was incomplete.");
+  }
+
+  return claim;
+};
+
+export const getMyEventRewardClaims = async (eventId: string): Promise<RewardClaim[]> => {
+  const response = await api.get(`/events/${encodeURIComponent(eventId)}/rewards/claims`);
+  const claims = (response as { data?: { data?: { claims?: RewardClaim[] } } })?.data?.data?.claims;
+
+  return Array.isArray(claims) ? claims : [];
 };

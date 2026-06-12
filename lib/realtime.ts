@@ -1,8 +1,4 @@
-import Constants from "expo-constants";
-
-const apiBaseUrl =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined);
+import { api } from "@/lib/api";
 
 export type DirectRealtimeMessage = {
   clientMessageId?: string | null;
@@ -52,6 +48,8 @@ type RealtimeSocketOptions = {
 };
 
 const buildRealtimeUrl = (accessToken: string) => {
+  const apiBaseUrl = api.defaults.baseURL;
+
   if (!apiBaseUrl) {
     throw new Error("Missing EXPO_PUBLIC_API_BASE_URL.");
   }

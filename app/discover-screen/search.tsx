@@ -1,52 +1,291 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Image } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { ActivityIndicator, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
+import { getMapEvents, type EventResponse } from '@/lib/events';
+import { getMyProducts, type Product } from '@/lib/products';
+import { getStorageFileUrl } from '@/lib/storage';
+import { getSuggestedUsers } from '@/lib/users';
 
-const FILTERS = ['All', 'Trending', 'People', 'Events', 'Products'];
+type SearchFilter = 'All' | 'People' | 'Events' | 'Products';
+type SearchSection = {
+  filter: Exclude<SearchFilter, 'All'>;
+  resultCount: number;
+  render: () => ReactNode;
+};
+type SearchPerson = {
+  id: string;
+  name: string;
+  handle: string;
+  avatarUrl?: string | null;
+};
+type SearchEvent = {
+  id: string;
+  title: string;
+  subtitle: string;
+  imageUrl?: string | null;
+};
+type SearchProduct = {
+  id: string;
+  title: string;
+  subtitle: string;
+  imageUrl?: string | null;
+};
 
-const MOCK_PEOPLE = [
-  { id: '1', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
-  { id: '2', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop' },
-  { id: '3', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
-];
+const FILTERS: SearchFilter[] = ['All', 'People', 'Events', 'Products'];
+const SEARCH_RESULT_LIMIT = 50;
 
-const MOCK_EVENTS = [
-  { id: '1', title: 'Rooftop Session Vol 4', subtitle: 'DJ Kojo • Tonight • 9pm • 0.3mi', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop' },
-  { id: '2', title: 'Rooftop Session Vol 4', subtitle: 'DJ Kojo • Tonight • 9pm • 0.3mi', image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=150&auto=format&fit=crop' },
-  { id: '3', title: 'Rooftop Session Vol 4', subtitle: 'DJ Kojo • Tonight • 9pm • 0.3mi', image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=150&auto=format&fit=crop' },
-];
+const resolveStorageUrl = (key?: string | null) => {
+  if (!key) {
+    return null;
+  }
 
-const MOCK_PRODUCTS = [
-  { id: '1', title: 'Nova Merch Tee', subtitle: 'by DJ Kojo • £25 • In Stock', image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=150&auto=format&fit=crop' },
-  { id: '2', title: 'Nova Merch Tee', subtitle: 'by DJ Kojo • £25 • In Stock', image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?q=80&w=150&auto=format&fit=crop' },
-  { id: '3', title: 'Nova Merch Tee', subtitle: 'by DJ Kojo • £25 • In Stock', image: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=150&auto=format&fit=crop' },
-];
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return null;
+  }
+};
+
+const formatMoney = (value: number) =>
+  `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const formatEventSchedule = (scheduledAt?: string | null) => {
+  if (!scheduledAt) {
+    return "Date TBA";
+  }
+
+  const date = new Date(scheduledAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date TBA";
+  }
+
+  const day = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+
+  return `${day} • ${time}`;
+};
+
+const getEventSubtitle = (event: EventResponse) => {
+  const host = event.host?.name || event.host?.username;
+  const location = event.location?.venue || event.location?.address || event.location?.searchLabel;
+
+  return [host, formatEventSchedule(event.scheduledAt), location].filter(Boolean).join(" • ");
+};
+
+const getProductSubtitle = (product: Product) => {
+  const discountedPrice = product.discountPercent > 0
+    ? product.priceUsd * (1 - product.discountPercent / 100)
+    : product.priceUsd;
+  const stockLabel = product.totalProduct > 0 ? "In Stock" : "Out of Stock";
+
+  return `${formatMoney(discountedPrice)} • ${stockLabel}`;
+};
+
+const toSearchEvent = (event: EventResponse): SearchEvent => ({
+  id: event.id,
+  title: event.name || "Untitled Event",
+  subtitle: getEventSubtitle(event),
+  imageUrl: resolveStorageUrl(event.bannerImageKey),
+});
+
+const toSearchProduct = (product: Product): SearchProduct => ({
+  id: product.id,
+  title: product.name,
+  subtitle: getProductSubtitle(product),
+  imageUrl: resolveStorageUrl(product.imageKeys[0]),
+});
 
 export default function SearchScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activeFilter, setActiveFilter] = useState<SearchFilter>('All');
+  const [people, setPeople] = useState<SearchPerson[]>([]);
+  const [events, setEvents] = useState<SearchEvent[]>([]);
+  const [products, setProducts] = useState<SearchProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const query = searchQuery.toLowerCase().trim();
 
-  const filteredPeople = MOCK_PEOPLE.filter(
-    p => p.name.toLowerCase().includes(query) || p.handle.toLowerCase().includes(query)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSearchData = async () => {
+      setIsLoading(true);
+
+      const [peopleResult, eventsResult, productsResult] = await Promise.allSettled([
+        getSuggestedUsers(SEARCH_RESULT_LIMIT),
+        getMapEvents({ limit: SEARCH_RESULT_LIMIT }),
+        getMyProducts(),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setPeople(peopleResult.status === 'fulfilled'
+        ? peopleResult.value.map(user => ({
+            id: user.id,
+            name: user.name,
+            handle: user.username ? `@${user.username}` : '@xenog',
+            avatarUrl: user.avatarUrl,
+          }))
+        : []);
+      setEvents(eventsResult.status === 'fulfilled' ? eventsResult.value.map(toSearchEvent) : []);
+      setProducts(productsResult.status === 'fulfilled' ? productsResult.value.map(toSearchProduct) : []);
+      setIsLoading(false);
+    };
+
+    void loadSearchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredPeople = useMemo(
+    () => people.filter(
+      p => p.name.toLowerCase().includes(query) || p.handle.toLowerCase().includes(query)
+    ),
+    [people, query],
   );
-  const filteredEvents = MOCK_EVENTS.filter(
-    e => e.title.toLowerCase().includes(query) || e.subtitle.toLowerCase().includes(query)
+  const filteredEvents = useMemo(
+    () => events.filter(
+      e => e.title.toLowerCase().includes(query) || e.subtitle.toLowerCase().includes(query)
+    ),
+    [events, query],
   );
-  const filteredProducts = MOCK_PRODUCTS.filter(
-    p => p.title.toLowerCase().includes(query) || p.subtitle.toLowerCase().includes(query)
+  const filteredProducts = useMemo(
+    () => products.filter(
+      p => p.title.toLowerCase().includes(query) || p.subtitle.toLowerCase().includes(query)
+    ),
+    [products, query],
   );
 
-  const hasResults = filteredPeople.length > 0 || filteredEvents.length > 0 || filteredProducts.length > 0;
+  const searchSections = useMemo<SearchSection[]>(() => [
+    {
+      filter: 'People',
+      resultCount: filteredPeople.length,
+      render: () => (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>People you know</Text>
+          {filteredPeople.map((person) => (
+            <TouchableOpacity 
+              key={person.id} 
+              style={styles.listItem}
+              onPress={() => router.push('/profile-screen/user-profile')}
+            >
+              {person.avatarUrl ? (
+                <Image source={{ uri: person.avatarUrl }} style={styles.personAvatar} />
+              ) : (
+                <View style={[styles.personAvatarFallback, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.personAvatarInitial, { color: colors.text }]}>
+                    {person.name.trim().charAt(0).toUpperCase() || '?'}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.listTextContainer}>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{person.name}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{person.handle}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      filter: 'Events',
+      resultCount: filteredEvents.length,
+      render: () => (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Events</Text>
+          {filteredEvents.map((event) => (
+            <TouchableOpacity 
+              key={event.id} 
+              style={styles.listItem}
+              onPress={() => router.push({
+                pathname: '/event-screen/event',
+                params: { eventId: event.id },
+              })}
+            >
+              {event.imageUrl ? (
+                <Image source={{ uri: event.imageUrl }} style={[styles.squareImage, { borderColor: colors.border }]} />
+              ) : (
+                <View style={[styles.squareImage, styles.squareImagePlaceholder, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                  <Feather name="calendar" size={20} color={colors.textSecondary} />
+                </View>
+              )}
+              <View style={styles.listTextContainer}>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{event.title}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{event.subtitle}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      filter: 'Products',
+      resultCount: filteredProducts.length,
+      render: () => (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Products</Text>
+          {filteredProducts.map((product) => (
+            <TouchableOpacity 
+              key={product.id} 
+              style={styles.listItem}
+              onPress={() => router.push({
+                pathname: '/profile-screen/product-details',
+                params: { productId: product.id },
+              })}
+            >
+              {product.imageUrl ? (
+                <Image source={{ uri: product.imageUrl }} style={[styles.squareImage, { borderColor: colors.border }]} />
+              ) : (
+                <View style={[styles.squareImage, styles.squareImagePlaceholder, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                  <Feather name="shopping-bag" size={20} color={colors.textSecondary} />
+                </View>
+              )}
+              <View style={styles.listTextContainer}>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{product.title}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{product.subtitle}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+  ], [colors.border, colors.text, colors.textSecondary, filteredEvents, filteredPeople, filteredProducts, router]);
+
+  const visibleSections = searchSections.filter(
+    section => activeFilter === 'All' || section.filter === activeFilter,
+  );
+  const hasResults = visibleSections.some(section => section.resultCount > 0);
 
   const renderContent = () => {
-    if (query !== '' && !hasResults) {
+    if (isLoading) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <ActivityIndicator color={colors.textSecondary} />
+        </View>
+      );
+    }
+
+    if (!hasResults) {
       return (
         <View style={styles.emptyStateContainer}>
           <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>No Result Found</Text>
@@ -56,67 +295,12 @@ export default function SearchScreen() {
 
     return (
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* People Section */}
-        {(activeFilter === 'All' || activeFilter === 'People') && filteredPeople.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>People you know</Text>
-            {filteredPeople.map((person) => (
-            <TouchableOpacity 
-              key={person.id} 
-              style={styles.listItem}
-              onPress={() => router.push('/profile-screen/user-profile')}
-            >
-              <Image source={{ uri: person.avatar }} style={styles.personAvatar} />
-              <View style={styles.listTextContainer}>
-                <Text style={[styles.listTitle, { color: colors.text }]}>{person.name}</Text>
-                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{person.handle}</Text>
-              </View>
-            </TouchableOpacity>
+        {visibleSections
+          .filter(section => section.resultCount > 0)
+          .map(section => (
+            <React.Fragment key={section.filter}>{section.render()}</React.Fragment>
           ))}
-        </View>
-        )}
 
-        {/* Events Section */}
-        {(activeFilter === 'All' || activeFilter === 'Events' || activeFilter === 'Trending') && filteredEvents.length > 0 && (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Events</Text>
-          {filteredEvents.map((event) => (
-            <TouchableOpacity 
-              key={event.id} 
-              style={styles.listItem}
-              onPress={() => router.push('/event-screen/event')}
-            >
-              <Image source={{ uri: event.image }} style={[styles.squareImage, { borderColor: colors.border }]} />
-              <View style={styles.listTextContainer}>
-                <Text style={[styles.listTitle, { color: colors.text }]}>{event.title}</Text>
-                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{event.subtitle}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-        )}
-
-        {/* Products Section */}
-        {(activeFilter === 'All' || activeFilter === 'Products' || activeFilter === 'Trending') && filteredProducts.length > 0 && (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Products</Text>
-          {filteredProducts.map((product) => (
-            <TouchableOpacity 
-              key={product.id} 
-              style={styles.listItem}
-              onPress={() => router.push('/event-screen/product/details')}
-            >
-              <Image source={{ uri: product.image }} style={[styles.squareImage, { borderColor: colors.border }]} />
-              <View style={styles.listTextContainer}>
-                <Text style={[styles.listTitle, { color: colors.text }]}>{product.title}</Text>
-                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{product.subtitle}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-        )}
-        
         <View style={{ height: 40 }} />
       </ScrollView>
     );
@@ -146,7 +330,7 @@ export default function SearchScreen() {
         </View>
 
         {/* Filter Chips */}
-        {!(query !== '' && !hasResults) && (
+        {(isLoading || query === '' || hasResults) && (
           <View style={styles.filtersWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersContainer}>
               {FILTERS.map((filter) => {
@@ -271,12 +455,29 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     marginRight: 14,
   },
+  personAvatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginRight: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personAvatarInitial: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
   squareImage: {
     width: 52,
     height: 52,
     borderRadius: 12,
     marginRight: 14,
     borderWidth: 1,
+  },
+  squareImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listTextContainer: {
     flex: 1,

@@ -7,6 +7,7 @@ import { deleteMoment, getProfileTimeline, shareMoment } from "@/lib/moments";
 import type { MomentInteractionSummary } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageDownloadUrl, getStorageFileUrl } from "@/lib/storage";
+import { getUserProfileStats } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import { Alert, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -18,9 +19,9 @@ const FALLBACK_PROFILE_HANDLE = '@mooment_user';
 
 const PROFILE_STATS = {
   posts: 0,
-  reviews: 12,
-  followers: 1200,
-  following: 450,
+  reviews: 0,
+  followers: 0,
+  following: 0,
 };
 
 const formatHandle = (username?: string | null, email?: string | null) => {
@@ -79,7 +80,10 @@ export default function ProfileTab() {
     }
 
     try {
-      const timeline = await getProfileTimeline(user.id);
+      const [timeline, stats] = await Promise.all([
+        getProfileTimeline(user.id),
+        getUserProfileStats(user.id),
+      ]);
 
       setPosts(
         timeline.items
@@ -94,6 +98,9 @@ export default function ProfileTab() {
       setProfileStats((currentStats) => ({
         ...currentStats,
         posts: timeline.stats.posts,
+        reviews: stats.reviews,
+        followers: stats.followers,
+        following: stats.following,
       }));
     } catch {
       setPosts([]);

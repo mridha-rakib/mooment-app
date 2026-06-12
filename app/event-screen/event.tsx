@@ -3,63 +3,742 @@ import AccessTab from "@/components/eventTabs/AccessTab";
 import ProductTab from "@/components/eventTabs/ProductTab";
 import VibeTab from "@/components/eventTabs/VibeTab";
 import BackButton from "@/components/ui/BackButton";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import {
+  claimEventReward,
+  deleteEvent,
+  deleteEventReward,
+  deleteEventTicket,
+  getEventById,
+  getMyEventRewardClaims,
+  type EventResponse,
+  type EventRewardPayload,
+  type EventRewardType,
+  type EventTicketPayload,
+} from "@/lib/events";
+import { getStorageFileUrl } from "@/lib/storage";
+import { followUser, unfollowUser } from "@/lib/users";
+import { useAuthStore } from "@/stores/authStore";
+import { useEventDraftStore } from "@/stores/eventDraftStore";
+import { Feather } from "@expo/vector-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import {
+  Comment02Icon,
+  Delete02Icon,
+  FavouriteIcon,
+  Flag01Icon,
+  Bookmark01Icon,
+  MoreHorizontalIcon,
+  Share01Icon,
+} from "@hugeicons/core-free-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Dimensions,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Modal,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTheme } from "@/hooks/useTheme";
-import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Comment02Icon, Share01Icon, FavouriteIcon, MoreHorizontalIcon, Flag01Icon, Bookmark01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get("window");
+const DEFAULT_BANNER =
+  "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
+const DEFAULT_AVATAR =
+  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
+
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const getDistanceMiles = (from: [number, number], to: [number, number]) => {
+  const earthRadiusKm = 6371;
+  const [fromLongitude, fromLatitude] = from;
+  const [toLongitude, toLatitude] = to;
+  const latitudeDelta = toRadians(toLatitude - fromLatitude);
+  const longitudeDelta = toRadians(toLongitude - fromLongitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(fromLatitude)) *
+      Math.cos(toRadians(toLatitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  const distanceKm = 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return distanceKm * 0.621371;
+};
+
+const formatEventDate = (scheduledAt?: string | null) => {
+  if (!scheduledAt) {
+    return "Date TBA";
+  }
+
+  const date = new Date(scheduledAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date TBA";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+};
+
+const formatEventTime = (scheduledAt?: string | null) => {
+  if (!scheduledAt) {
+    return "Time TBA";
+  }
+
+  const date = new Date(scheduledAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Time TBA";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+};
+
+const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_AVATAR) => {
+  if (!key) {
+    return fallback;
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return fallback;
+  }
+};
+
+const formatPrice = (tickets: EventResponse["tickets"]) => {
+  const prices = tickets
+    .map((ticket) => (ticket.type === "free" ? 0 : ticket.price))
+    .filter((price) => Number.isFinite(price));
+
+  if (prices.length === 0 || Math.min(...prices) <= 0) {
+    return "Free";
+  }
+
+  const price = Math.min(...prices);
+
+  return `From £${price.toLocaleString("en-GB", {
+    minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(price) ? 0 : 2,
+  })}`;
+};
+
+const getTicketsLeft = (tickets: EventResponse["tickets"]) =>
+  tickets.reduce((total, ticket) => total + Math.max(0, ticket.capacity), 0);
+
+const getTicketKey = (ticket: EventTicketPayload, index: number) =>
+  ticket.id ?? `${ticket.name}-${index}`;
+
+const clampTicketQuantity = (quantity: number, ticket: EventTicketPayload) =>
+  Math.min(Math.max(1, quantity), Math.min(2, Math.max(1, ticket.capacity)));
+
+const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => {
+  if (ticket.type === "free" || ticket.price <= 0) {
+    return "Free";
+  }
+
+  const total = ticket.price * quantity;
+
+  return `£${total.toLocaleString("en-GB", {
+    minimumFractionDigits: Number.isInteger(total) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(total) ? 0 : 2,
+  })}`;
+};
+
+const getDistanceLabel = (
+  event: EventResponse | null,
+  userLocation: [number, number] | null,
+): string => {
+  const latitude = event?.location?.latitude;
+  const longitude = event?.location?.longitude;
+
+  if (
+    userLocation &&
+    isFiniteCoordinate(latitude) &&
+    isFiniteCoordinate(longitude)
+  ) {
+    const miles = getDistanceMiles(userLocation, [longitude, latitude]);
+
+    if (miles < 0.1) {
+      return "nearby";
+    }
+
+    return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()}mi`;
+  }
+
+  return "nearby";
+};
+
+const getBannerImageUri = (event?: EventResponse | null) =>
+  resolveStorageUrl(event?.bannerOriginalImageKey ?? event?.bannerImageKey, DEFAULT_BANNER);
+
+const getEventBannerImageUris = (event?: EventResponse | null) => {
+  const urls = [
+    event?.bannerImageKey ? resolveStorageUrl(event.bannerImageKey, DEFAULT_BANNER) : null,
+    event?.bannerOriginalImageKey ? resolveStorageUrl(event.bannerOriginalImageKey, DEFAULT_BANNER) : null,
+  ].filter((url): url is string => Boolean(url));
+
+  return [...new Set(urls)];
+};
+
+const getHostAvatarUri = (event?: EventResponse | null) =>
+  resolveStorageUrl(event?.host?.avatarUrl ?? event?.host?.avatarKey, DEFAULT_AVATAR);
+
+const getHostHandle = (event?: EventResponse | null) => {
+  const handle = event?.host?.username?.trim().replace(/^@+/, "");
+
+  return handle ? `@${handle}` : "";
+};
+
+const getHeroCategoryTags = (event?: EventResponse | null) => {
+  if (!event) {
+    return [];
+  }
+
+  const tags: string[] = [];
+
+  if (event.category) {
+    tags.push(event.category);
+  }
+
+  return tags.slice(0, 2);
+};
+
+const getPrivacyLabel = (privacy?: EventResponse["privacy"]) =>
+  privacy === "private" ? "Private Event" : "Public Event";
+
+const isSameId = (left?: string | null, right?: string | null) =>
+  Boolean(left && right && left.toLowerCase() === right.toLowerCase());
 
 const EventScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const params = useLocalSearchParams<{ eventId?: string; id?: string; mode?: string }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const currentUser = useAuthStore((state) => state.user);
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const loadEventForEdit = useEventDraftStore((state) => state.loadFromEvent);
   const [activeTab, setActiveTab] = useState("About");
-  const [accessTab, setAccessTab] = useState("Tickets");
   const [menuVisible, setMenuVisible] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
-  const isHostMode = params.mode === "host";
+  const [isFollowPending, setIsFollowPending] = useState(false);
+  const [isDeletingEvent, setIsDeletingEvent] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+  const [deletingRewardId, setDeletingRewardId] = useState<string | null>(null);
+  const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [claimedRewardIds, setClaimedRewardIds] = useState<string[]>([]);
+  const [event, setEvent] = useState<EventResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
+  const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
+
+  const eventId = useMemo(() => {
+    const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
+
+    return explicitId ?? draftId;
+  }, [draftId, params.eventId, params.id]);
+
+  const isHostMode =
+    params.mode === "host" ||
+    Boolean(event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)));
+
+  const userLocation = useMemo(
+    () =>
+      typeof currentUser?.currentLocation?.longitude === "number" &&
+      typeof currentUser.currentLocation.latitude === "number"
+        ? ([currentUser.currentLocation.longitude, currentUser.currentLocation.latitude] as [number, number])
+        : null,
+    [currentUser?.currentLocation?.latitude, currentUser?.currentLocation?.longitude],
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadEvent = async () => {
+      if (!eventId) {
+        Alert.alert("Unable to load event", "Missing event id.");
+        router.back();
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const [loadedEvent, loadedClaims] = await Promise.all([
+          getEventById(eventId),
+          getMyEventRewardClaims(eventId).catch(() => []),
+        ]);
+
+        if (!isActive) {
+          return;
+        }
+
+        setEvent(loadedEvent);
+        setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
+        setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        Alert.alert("Unable to load event", "Please try again.");
+        router.back();
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadEvent();
+
+    return () => {
+      isActive = false;
+    };
+  }, [eventId, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      if (!eventId || isLoading) {
+        return () => {
+          isActive = false;
+        };
+      }
+
+      const refreshEvent = async () => {
+        try {
+          const [loadedEvent, loadedClaims] = await Promise.all([
+            getEventById(eventId),
+            getMyEventRewardClaims(eventId).catch(() => []),
+          ]);
+
+          if (!isActive) {
+            return;
+          }
+
+          setEvent(loadedEvent);
+          setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
+          setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
+        } catch {
+          // Initial loading handles user-facing errors. Focus refreshes stay quiet.
+        }
+      };
+
+      void refreshEvent();
+
+      return () => {
+        isActive = false;
+      };
+    }, [eventId, isLoading]),
+  );
+
+  const updateHostFollowState = (nextIsFollowing: boolean) => {
+    setIsFollowing(nextIsFollowing);
+    setEvent((currentEvent) => {
+      if (!currentEvent?.host) {
+        return currentEvent;
+      }
+
+      const wasFollowing = Boolean(currentEvent.host.isFollowing);
+      const followerDelta = nextIsFollowing === wasFollowing ? 0 : nextIsFollowing ? 1 : -1;
+      const currentFollowers = currentEvent.host.followersCount ?? 0;
+
+      return {
+        ...currentEvent,
+        host: {
+          ...currentEvent.host,
+          isFollowing: nextIsFollowing,
+          followersCount: Math.max(0, currentFollowers + followerDelta),
+        },
+      };
+    });
+  };
+
+  const toggleHostFollow = async () => {
+    const hostId = event?.host?.id;
+
+    if (!hostId || isHostMode || isFollowPending) {
+      return;
+    }
+
+    const wasFollowing = isFollowing;
+    updateHostFollowState(!wasFollowing);
+    setIsFollowPending(true);
+
+    try {
+      const follow = wasFollowing ? await unfollowUser(hostId) : await followUser(hostId);
+      updateHostFollowState(follow.isFollowing);
+    } catch (error) {
+      updateHostFollowState(wasFollowing);
+      Alert.alert(
+        wasFollowing ? "Unable to unfollow" : "Unable to follow",
+        getAuthErrorMessage(error, "Please try again."),
+      );
+    } finally {
+      setIsFollowPending(false);
+    }
+  };
+
+  const ticketsLeft = getTicketsLeft(event?.tickets ?? []);
+  const priceLabel = formatPrice(event?.tickets ?? []);
+  const selectedTicket = useMemo(() => {
+    if (!selectedTicketKey) {
+      return null;
+    }
+
+    return (event?.tickets ?? []).find((ticket, index) => getTicketKey(ticket, index) === selectedTicketKey) ?? null;
+  }, [event?.tickets, selectedTicketKey]);
+  const selectedTicketPriceLabel = selectedTicket
+    ? formatTicketPurchasePrice(selectedTicket, selectedTicketQuantity)
+    : priceLabel;
+  const footerPriceLabel = selectedTicket
+    ? `${selectedTicketQuantity} ${selectedTicketQuantity === 1 ? "ticket" : "tickets"}`
+    : "From";
+  const hostName = event?.host?.name ?? "Host";
+  const hostHandle = getHostHandle(event);
+  const hostAvatarUri = getHostAvatarUri(event);
+  const bannerImageUri = getBannerImageUri(event);
+  const eventImageUris = useMemo(() => {
+    const bannerUris = getEventBannerImageUris(event);
+
+    return bannerUris.length > 0 ? bannerUris : [bannerImageUri];
+  }, [bannerImageUri, event]);
+  const distanceLabel = getDistanceLabel(event, userLocation);
+  const eventDate = formatEventDate(event?.scheduledAt);
+  const eventTime = formatEventTime(event?.scheduledAt);
+  const goingCount = (event as EventResponse & { attendeesCount?: number | null } | null)?.attendeesCount ?? 0;
+  const eventStats = event as
+    | (EventResponse & {
+        attendeesCount?: number | null;
+        likesCount?: number | null;
+        commentsCount?: number | null;
+        sharesCount?: number | null;
+      })
+    | null;
+  const likesCount = eventStats?.likesCount ?? 0;
+  const commentsCount = eventStats?.commentsCount ?? 0;
+  const sharesCount = eventStats?.sharesCount ?? 0;
+
+  useEffect(() => {
+    if (!selectedTicketKey) {
+      setSelectedTicketQuantity(1);
+      return;
+    }
+
+    const currentTicket = (event?.tickets ?? []).find((ticket, index) => getTicketKey(ticket, index) === selectedTicketKey);
+
+    if (!currentTicket || currentTicket.capacity <= 0) {
+      setSelectedTicketKey(null);
+      setSelectedTicketQuantity(1);
+      return;
+    }
+
+    setSelectedTicketQuantity((quantity) => clampTicketQuantity(quantity, currentTicket));
+  }, [event?.tickets, selectedTicketKey]);
+
+  const handleEdit = () => {
+    setMenuVisible(false);
+
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    loadEventForEdit(event);
+    router.push("/create-event");
+  };
 
   const handleDelete = () => {
     setMenuVisible(false);
+
+    if (!event || !isHostMode || isDeletingEvent) {
+      return;
+    }
+
     Alert.alert(
       "Delete Event",
       "Are you sure you want to delete this event?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive", 
-          onPress: () => {
-            // Logic to delete the event
-            console.log("Event deleted");
-            router.back();
-          } 
-        }
-      ]
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setIsDeletingEvent(true);
+
+            try {
+              await deleteEvent(event.id);
+              router.back();
+            } catch (error) {
+              Alert.alert("Unable to delete event", getAuthErrorMessage(error, "Please try again."));
+            } finally {
+              setIsDeletingEvent(false);
+            }
+          },
+        },
+      ],
     );
+  };
+
+  const mergeUpdatedEvent = (updatedEvent: EventResponse) => {
+    setEvent((currentEvent) =>
+      currentEvent
+        ? {
+            ...currentEvent,
+            ...updatedEvent,
+            host: updatedEvent.host ?? currentEvent.host,
+          }
+        : updatedEvent,
+    );
+  };
+
+  const handleCreateTicket = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    loadEventForEdit(event);
+    router.push("/create-event/ticket-details");
+  };
+
+  const handleEditTicket = (ticket: EventTicketPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    loadEventForEdit(event);
+
+    const draftTicket = useEventDraftStore
+      .getState()
+      .tickets.find((item) => (ticket.id ? item.id === ticket.id : item.name === ticket.name));
+
+    if (!draftTicket) {
+      Alert.alert("Unable to edit ticket", "Please try again.");
+      return;
+    }
+
+    router.push({
+      pathname: "/create-event/ticket-details",
+      params: { localId: draftTicket.localId },
+    });
+  };
+
+  const handleViewTicket = (ticket: EventTicketPayload) => {
+    if (!event) {
+      return;
+    }
+
+    router.push({
+      pathname: "/event-screen/ticket-detail",
+      params: {
+        eventId: event.id,
+        ticketId: ticket.id ?? ticket.name,
+        mode: isHostMode ? "host" : "guest",
+      },
+    });
+  };
+
+  const handleSelectTicket = (ticket: EventTicketPayload, ticketKey: string) => {
+    if (ticket.capacity <= 0) {
+      return;
+    }
+
+    setSelectedTicketKey(ticketKey);
+    setSelectedTicketQuantity((quantity) =>
+      selectedTicketKey === ticketKey ? clampTicketQuantity(quantity, ticket) : 1,
+    );
+  };
+
+  const handleTicketQuantityChange = (
+    ticket: EventTicketPayload,
+    ticketKey: string,
+    quantity: number,
+  ) => {
+    if (ticket.capacity <= 0) {
+      return;
+    }
+
+    setSelectedTicketKey(ticketKey);
+    setSelectedTicketQuantity(clampTicketQuantity(quantity, ticket));
+  };
+
+  const handleBuySelectedTicket = () => {
+    if (!event || !selectedTicket || !selectedTicketKey) {
+      return;
+    }
+
+    const quantity = clampTicketQuantity(selectedTicketQuantity, selectedTicket);
+    const ticketId = selectedTicket.id ?? selectedTicket.name;
+
+    router.push({
+      pathname: "/event-screen/checkout",
+      params: {
+        eventId: event.id,
+        eventName: event.name ?? "Event",
+        eventDateTime: `${eventDate} • ${eventTime} • ${hostName}`,
+        ticketId,
+        ticketKey: selectedTicketKey,
+        ticketName: selectedTicket.name,
+        ticketType: selectedTicket.type,
+        ticketPrice: String(selectedTicket.price),
+        quantity: String(quantity),
+      },
+    });
+  };
+
+  const handleDeleteTicket = (ticket: EventTicketPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    const ticketId = ticket.id ?? ticket.name;
+
+    Alert.alert(
+      "Delete Ticket",
+      "Are you sure you want to delete this ticket?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingTicketId(ticketId);
+
+            try {
+              const updatedEvent = await deleteEventTicket(event.id, ticketId);
+
+              mergeUpdatedEvent(updatedEvent);
+            } catch (error) {
+              Alert.alert("Unable to delete ticket", getAuthErrorMessage(error, "Please try again."));
+            } finally {
+              setDeletingTicketId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openRewardForm = (rewardType: EventRewardType, reward?: EventRewardPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    router.push({
+      pathname: "/event-screen/reward-details",
+      params: {
+        eventId: event.id,
+        rewardType,
+        ...(reward?.id ? { rewardId: reward.id } : {}),
+      },
+    });
+  };
+
+  const handleCreateReward = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    Alert.alert(
+      "Create Reward",
+      "Choose the reward type.",
+      [
+        { text: "Product reward", onPress: () => openRewardForm("product") },
+        { text: "Ticket reward", onPress: () => openRewardForm("ticket") },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  };
+
+  const handleEditReward = (reward: EventRewardPayload) => {
+    openRewardForm(reward.rewardType, reward);
+  };
+
+  const handleDeleteReward = (reward: EventRewardPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    const rewardId = reward.id ?? reward.name;
+
+    Alert.alert(
+      "Delete Reward",
+      "Are you sure you want to delete this reward?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingRewardId(rewardId);
+
+            try {
+              const updatedEvent = await deleteEventReward(event.id, rewardId);
+
+              mergeUpdatedEvent(updatedEvent);
+            } catch (error) {
+              Alert.alert("Unable to delete reward", getAuthErrorMessage(error, "Please try again."));
+            } finally {
+              setDeletingRewardId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleClaimReward = async (reward: EventRewardPayload) => {
+    if (!event || isHostMode) {
+      return;
+    }
+
+    const rewardId = reward.id;
+
+    if (!rewardId) {
+      Alert.alert("Unable to claim reward", "Reward information is incomplete.");
+      return;
+    }
+
+    setClaimingRewardId(rewardId);
+
+    try {
+      await claimEventReward(event.id, rewardId);
+      setClaimedRewardIds((prev) => [...prev, rewardId]);
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Please try again.");
+      Alert.alert("Unable to claim reward", message);
+    } finally {
+      setClaimingRewardId(null);
+    }
+  };
+
+  const handleAddMembers = () => {
+    Alert.alert("Add Members", "Member selection is not available yet.");
   };
 
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
-      <BackButton color={colors.text}  onPress={() => router.back()}/>
+      <BackButton color={colors.text} onPress={() => router.back()} />
       <BackButton
         iconName={MoreHorizontalIcon}
         onPress={() => setMenuVisible(true)}
@@ -68,23 +747,22 @@ const EventScreen = () => {
     </View>
   );
 
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {renderHeader()}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Top Image Section */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.imageContainer}>
-          <Image
-            source={{
-              uri: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=300&auto=format&fit=crop",
-            }}
-            style={styles.heroImage}
-            contentFit="cover"
-          />
+          <Image source={{ uri: bannerImageUri }} style={styles.heroImage} contentFit="cover" />
           <LinearGradient
             pointerEvents="none"
             colors={["rgba(0, 0, 0, 0.5)", "rgba(0, 0, 0, 0)"]}
@@ -93,129 +771,118 @@ const EventScreen = () => {
           />
           <LinearGradient
             pointerEvents="none"
-            colors={[
-              "rgba(92, 48, 187, 0.1)",
-              "rgba(0, 0, 0, 0.72)",
-              "#000000",
-            ]}
-            locations={[0, 0.48, 1]}
+            colors={["rgba(92, 48, 187, 0.1)", "#000000"]}
+            locations={[0, 1]}
             start={{ x: 0.95, y: 0 }}
             end={{ x: 0.18, y: 1 }}
             style={styles.gradient}
           />
 
-          {/* Overlaid Event Meta */}
           <View style={styles.overlaidMeta}>
-            <View style={styles.tagsRow}>
-              <View
-                style={[styles.tag, { backgroundColor: "#8E54E9" }]}
-              >
-                <Text style={[styles.tagText, { color: "#FFFFFF" }]}>Music Party</Text>
+            <View style={styles.metaTopRow}>
+              <View style={styles.tagsRow}>
+                {getHeroCategoryTags(event).map((tag) => (
+                  <View key={tag} style={styles.tag}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                ))}
               </View>
-              <View
-                style={[styles.tag, { backgroundColor: "#FF6B3D" }]}
-              >
-                <Text style={[styles.tagText, { color: "#FFFFFF" }]}>Busy</Text>
-              </View>
+              {isHostMode && (
+                <TouchableOpacity
+                  style={styles.addMembersBtn}
+                  activeOpacity={0.85}
+                  onPress={handleAddMembers}
+                >
+                  <Feather name="plus" size={15} color="#111111" />
+                  <Text style={styles.addMembersText}>Add Members</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.hostRow}>
               <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop",
-                }}
-                style={[styles.hostAvatar, { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" }]}
+                source={{ uri: hostAvatarUri }}
+                style={[
+                  styles.hostAvatar,
+                  { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
+                ]}
               />
               <View style={styles.hostInfo}>
-                <Text style={[styles.hostName, { color: colors.text }]}>Dj Koko</Text>
+                <Text style={[styles.hostName, { color: colors.text }]}>{hostName}</Text>
                 <View style={styles.hostSubRow}>
-                  <Text style={[styles.hostUser, { color: colors.textSecondary }]}>@scfc_t</Text>
-                  <Text style={[styles.dotSeparator, { color: colors.textSecondary }]}> • </Text>
-                  <Feather name="lock" size={10} color={colors.textSecondary} />
-                  <Text style={[styles.privateText, { color: colors.textSecondary }]}> Private Event</Text>
+                  {!!hostHandle && <Text style={[styles.hostUser, { color: colors.textSecondary }]}>{hostHandle}</Text>}
+                  {!!hostHandle && <Text style={[styles.dotSeparator, { color: colors.textSecondary }]}> • </Text>}
+                  <Feather
+                    name={event?.privacy === "private" ? "lock" : "globe"}
+                    size={10}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={[styles.privateText, { color: colors.textSecondary }]}> {getPrivacyLabel(event?.privacy)}</Text>
                 </View>
               </View>
-              <TouchableOpacity 
-                style={[
-                  styles.followBtnSmall, 
-                  { backgroundColor: isFollowing ? colors.primary : (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.05)") }
-                ]}
-                onPress={() => setIsFollowing(!isFollowing)}
-              >
-                <Text style={[styles.followBtnTextSmall, { color: isFollowing ? "#FFF" : colors.text }]}>
-                  {isFollowing ? "Following" : "Follow"}
-                </Text>
-              </TouchableOpacity>
+              {!isHostMode && (
+                <TouchableOpacity
+                  style={[
+                    styles.followBtnSmall,
+                    {
+                      backgroundColor: isFollowing
+                        ? colors.primary
+                        : isDark
+                          ? "rgba(255, 255, 255, 0.15)"
+                          : "rgba(0, 0, 0, 0.05)",
+                    },
+                  ]}
+                  disabled={isFollowPending}
+                  onPress={toggleHostFollow}
+                >
+                  <Text style={[styles.followBtnTextSmall, { color: isFollowing ? "#FFF" : colors.text }]}>
+                    {isFollowing ? "Following" : "Follow"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.attendeesStatsRow}>
-              <View style={styles.avatarCluster}>
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
-                  }}
-                  style={[styles.avatarSmall, { zIndex: 3, borderColor: colors.background }]}
-                />
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop",
-                  }}
-                  style={[styles.avatarSmall, { zIndex: 2, marginLeft: -8, borderColor: colors.background }]}
-                />
-                <Image
-                  source={{
-                    uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop",
-                  }}
-                  style={[styles.avatarSmall, { zIndex: 1, marginLeft: -8, borderColor: colors.background }]}
-                />
-              </View>
               <Text style={[styles.statsText, { color: colors.text }]}>
-                41 going <Text style={[styles.dotSeparator, { color: colors.textSecondary }]}>•</Text> 58 tickets
-                left
+                {isHostMode ? `${ticketsLeft} tickets left` : `${goingCount} going • ${ticketsLeft} tickets left`}
               </Text>
             </View>
 
             <View style={styles.actionStatsRow}>
               <View style={styles.actionStat}>
                 <HugeiconsIcon icon={FavouriteIcon} size={18} color="#F2245C" />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>25</Text>
+                <Text style={[styles.actionStatText, { color: colors.text }]}>{likesCount}</Text>
               </View>
               <View style={styles.actionStat}>
-                <HugeiconsIcon
-                  icon={Comment02Icon}
-                  size={18}
-                  color={colors.textSecondary}
-                />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>25</Text>
+                <HugeiconsIcon icon={Comment02Icon} size={18} color={colors.textSecondary} />
+                <Text style={[styles.actionStatText, { color: colors.text }]}>{commentsCount}</Text>
               </View>
               <View style={styles.actionStat}>
                 <HugeiconsIcon icon={Share01Icon} size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>25</Text>
+                <Text style={[styles.actionStatText, { color: colors.text }]}>{sharesCount}</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Event Title & Basic Info */}
         <View style={styles.contentPadding}>
-          <Text style={[styles.eventTitle, { color: colors.text }]}>Rooftop Session Vol.4</Text>
+          <Text style={[styles.eventTitle, { color: colors.text }]}>{event?.name ?? "Event"}</Text>
           <View style={styles.eventInfoRow}>
             <View style={styles.infoItem}>
               <Feather name="calendar" size={14} color={colors.textSecondary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>Sat, Sep 19</Text>
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventDate}</Text>
             </View>
             <View style={styles.infoItem}>
               <Feather name="clock" size={14} color={colors.textSecondary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>9:00 - 11:00 PM</Text>
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventTime}</Text>
             </View>
             <View style={styles.infoItem}>
               <Feather name="map-pin" size={14} color={colors.textSecondary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>0.3mi</Text>
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{distanceLabel}</Text>
             </View>
           </View>
         </View>
 
-        {/* Tab Bar */}
         <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
           {["About", "Access", "Vibe", "Product"].map((tab) => (
             <TouchableOpacity
@@ -238,19 +905,65 @@ const EventScreen = () => {
           ))}
         </View>
 
-        {/* Main Content Switching */}
         <View style={styles.contentPadding}>
-          {activeTab === "About" && <AboutTab />}
-          {activeTab === "Access" && <AccessTab />}
+          {activeTab === "About" && (
+            <AboutTab
+              description={event?.description ?? null}
+              ageRestriction={event?.ageRestriction ?? null}
+              location={event?.location ?? null}
+              host={event?.host ?? null}
+              eventImageUris={eventImageUris}
+              isHostMode={isHostMode}
+              onHostFollowChange={updateHostFollowState}
+            />
+          )}
+          {activeTab === "Access" && (
+            <AccessTab
+              tickets={event?.tickets ?? []}
+              rewards={event?.rewards ?? []}
+              scheduledAt={event?.scheduledAt ?? null}
+              isHostMode={isHostMode}
+              deletingTicketId={deletingTicketId}
+              deletingRewardId={deletingRewardId}
+              claimingRewardId={claimingRewardId}
+              claimedRewardIds={claimedRewardIds}
+              selectedTicketKey={selectedTicketKey}
+              selectedTicketQuantity={selectedTicketQuantity}
+              onSelectTicket={handleSelectTicket}
+              onTicketQuantityChange={handleTicketQuantityChange}
+              onCreateTicket={handleCreateTicket}
+              onViewTicket={handleViewTicket}
+              onEditTicket={handleEditTicket}
+              onDeleteTicket={handleDeleteTicket}
+              onCreateReward={handleCreateReward}
+              onEditReward={handleEditReward}
+              onDeleteReward={handleDeleteReward}
+              onClaimReward={handleClaimReward}
+            />
+          )}
           {activeTab === "Vibe" && <VibeTab />}
-          {activeTab === "Product" && <ProductTab />}
+          {activeTab === "Product" && (
+            <ProductTab
+              creatorId={event?.userId ?? null}
+              host={event?.host ?? null}
+              isHostMode={isHostMode}
+            />
+          )}
         </View>
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Sticky Footer */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      <View
+        style={[
+          styles.footer,
+          {
+            paddingBottom: insets.bottom + 10,
+            backgroundColor: colors.background,
+            borderTopColor: colors.border,
+          },
+        ]}
+      >
         {isHostMode ? (
           <TouchableOpacity
             style={[styles.startEventBtn, { backgroundColor: colors.primary }]}
@@ -262,69 +975,95 @@ const EventScreen = () => {
         ) : (
           <>
             <View style={styles.priceContainer}>
-              <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>From</Text>
-              <Text style={[styles.priceValue, { color: colors.text }]}>£45</Text>
+              <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>{footerPriceLabel}</Text>
+              <Text style={[styles.priceValue, { color: colors.text }]}>{selectedTicketPriceLabel}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.buyBtn, { backgroundColor: colors.primary }]}
+              style={[
+                styles.buyBtn,
+                {
+                  backgroundColor: selectedTicket ? colors.primary : colors.card,
+                  opacity: selectedTicket ? 1 : 0.65,
+                },
+              ]}
               activeOpacity={0.8}
-              onPress={() => router.push("/event-screen/checkout")}
+              disabled={!selectedTicket}
+              onPress={handleBuySelectedTicket}
             >
-              <Text style={[styles.buyBtnText, { color: colors.background }]}>Buy Now</Text>
+              <Text style={[styles.buyBtnText, { color: selectedTicket ? colors.background : colors.textSecondary }]}>
+                {selectedTicket ? "Buy Now" : "Select Ticket"}
+              </Text>
             </TouchableOpacity>
           </>
         )}
       </View>
 
-      {/* More Menu Modal */}
       <Modal
         visible={menuVisible}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={() => setMenuVisible(false)}
       >
-        <TouchableOpacity 
-          style={styles.menuOverlay} 
-          activeOpacity={1} 
-          onPress={() => setMenuVisible(false)}
-        >
-          <View style={[styles.menuContent, { backgroundColor: isDark ? "#4A4A4A" : colors.card, top: insets.top + 60 }]}>
-            <TouchableOpacity 
-              style={styles.menuItem} 
-              onPress={() => {
-                setMenuVisible(false);
-                console.log("Reported");
-              }}
-              activeOpacity={0.7}
-            >
-              <HugeiconsIcon icon={Flag01Icon} size={20} color="#FFF" />
-              <Text style={[styles.menuItemText, { color: "#FFF" }]}>Report</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.menuSeparator} />
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+          <View
+            style={[
+              styles.menuContent,
+              {
+                backgroundColor: isDark ? "#4A4A4A" : colors.card,
+                top: insets.top + 60,
+              },
+            ]}
+          >
+            {isHostMode ? (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
+                  <Feather name="edit-3" size={20} color="#FFF" />
+                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>Edit</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.menuItem} 
-              onPress={() => {
-                setMenuVisible(false);
-                console.log("Saved");
-              }}
-              activeOpacity={0.7}
-            >
-              <HugeiconsIcon icon={Bookmark01Icon} size={20} color="#FFF" />
-              <Text style={[styles.menuItemText, { color: "#FFF" }]}>Save</Text>
-            </TouchableOpacity>
+                <View style={styles.menuSeparator} />
 
-            <View style={styles.menuSeparator} />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleDelete}
+                  activeOpacity={0.7}
+                  disabled={isDeletingEvent}
+                >
+                  <HugeiconsIcon icon={Delete02Icon} size={20} color="#FFF" />
+                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>
+                    {isDeletingEvent ? "Deleting..." : "Delete"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setMenuVisible(false);
+                    console.log("Reported");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <HugeiconsIcon icon={Flag01Icon} size={20} color="#FFF" />
+                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>Report</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.menuItem} 
-              onPress={handleDelete}
-              activeOpacity={0.7}
-            >
-              <HugeiconsIcon icon={Delete02Icon} size={20} color="#FFF" />
-              <Text style={[styles.menuItemText, { color: "#FFF" }]}>Delete</Text>
-            </TouchableOpacity>
+                <View style={styles.menuSeparator} />
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setMenuVisible(false);
+                    console.log("Saved");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <HugeiconsIcon icon={Bookmark01Icon} size={20} color="#FFF" />
+                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>Save</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -338,6 +1077,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   scrollContent: {
     paddingBottom: 20,
   },
@@ -350,7 +1094,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   imageContainer: {
-    width: width,
+    width,
     height: 302,
     position: "relative",
     overflow: "hidden",
@@ -375,23 +1119,48 @@ const styles = StyleSheet.create({
   },
   overlaidMeta: {
     position: "absolute",
-    bottom: 14,
+    bottom: 24,
     left: 20,
     right: 20,
   },
+  metaTopRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
   tagsRow: {
     flexDirection: "row",
-    gap: 7,
-    marginBottom: 10,
+    flexShrink: 1,
+    flexWrap: "wrap",
+    gap: 6,
+    paddingRight: 10,
   },
   tag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.24)",
+    borderRadius: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   tagText: {
+    color: "#FFFFFF",
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  addMembersBtn: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 6,
+    height: 24,
+    justifyContent: "center",
+    paddingHorizontal: 11,
+  },
+  addMembersText: {
+    color: "#111111",
+    fontSize: 11,
+    fontWeight: "700",
   },
   hostRow: {
     flexDirection: "row",
@@ -415,6 +1184,8 @@ const styles = StyleSheet.create({
   hostSubRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 2,
   },
   hostUser: {
     fontSize: 12,
@@ -437,17 +1208,7 @@ const styles = StyleSheet.create({
   attendeesStatsRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-  },
-  avatarCluster: {
-    flexDirection: "row",
-    marginRight: 10,
-  },
-  avatarSmall: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    marginBottom: 16,
   },
   statsText: {
     fontSize: 13,
@@ -498,32 +1259,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 3,
     borderBottomColor: "transparent",
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   tabLabel: {
     fontSize: 15,
     fontWeight: "600",
-  },
-  subTabWrapper: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    borderRadius: 16,
-    padding: 4,
-    borderWidth: 1,
-  },
-  segmentItem: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 12,
-  },
-  segmentLabel: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   footer: {
     position: "absolute",
@@ -563,7 +1304,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  /* More Menu Styles */
   menuOverlay: {
     flex: 1,
     backgroundColor: "transparent",
@@ -579,7 +1319,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   menuItem: {
     flexDirection: "row",

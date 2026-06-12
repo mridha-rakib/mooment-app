@@ -21,13 +21,14 @@ export type ProfileStats = {
 };
 
 type ProfileHeaderProps = {
+  userId: string;
   avatar: string;
   stats: ProfileStats;
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
 };
 
-export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
+export default function ProfileHeader({ userId, avatar, stats, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
@@ -46,11 +47,13 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
                 size={24}
               />
 
-              <Image 
-                source={require('@/assets/images/Mooment.png')}
-                style={[styles.logoImage, { tintColor: colors.text }]} 
-                resizeMode="contain" 
-              />
+              <View pointerEvents="none" style={styles.logoSlot}>
+                <Image
+                  source={require('@/assets/images/image.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+              </View>
             </>
           )}
 
@@ -96,7 +99,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity onPress={() => router.push('/profile-screen/reviews')}>
+          <TouchableOpacity onPress={() => router.push({
+            pathname: '/profile-screen/reviews',
+            params: { userId },
+          })}>
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: colors.text }]}>{stats.reviews}</Text>
               <View style={styles.labelRow}>
@@ -108,7 +114,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             </View>
           </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity onPress={() => router.push('/profile-screen/followers')}>
+          <TouchableOpacity onPress={() => router.push({
+            pathname: '/profile-screen/followers',
+            params: { userId },
+          })}>
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: colors.text }]}>{stats.followers}</Text>
               <View style={styles.labelRow}>
@@ -120,7 +129,10 @@ export default function ProfileHeader({ avatar, stats, isOwnProfile = true, onMe
             </View>
           </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity onPress={() => router.push('/profile-screen/following')}>
+          <TouchableOpacity onPress={() => router.push({
+            pathname: '/profile-screen/following',
+            params: { userId },
+          })}>
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: colors.text }]}>{stats.following}</Text>
               <View style={styles.labelRow}>
@@ -148,6 +160,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 25,
     paddingHorizontal: 5,
+    position: 'relative',
   },
   iconBtn: {
     width: 44,
@@ -176,6 +189,11 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 120,
     height: 28,
+  },
+  logoSlot: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topRow: {
     flexDirection: 'row',

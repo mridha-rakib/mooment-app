@@ -18,6 +18,10 @@ export type LocationSearchContext = {
   countryCode?: string | null;
 };
 
+type LocationSearchOptions = {
+  signal?: AbortSignal;
+};
+
 type MapboxFeature = {
   id?: string;
   place_name?: string;
@@ -68,12 +72,15 @@ type MapboxResponse = {
 
 const MAPBOX_GEOCODING_URL = "https://api.mapbox.com/geocoding/v5/mapbox.places";
 const MAPBOX_SEARCHBOX_FORWARD_URL = "https://api.mapbox.com/search/searchbox/v1/forward";
+const LOCATION_SEARCH_CACHE_LIMIT = 50;
 const DHAKA_FALLBACK_CONTEXT: LocationSearchContext = {
   countryCode: "bd",
   label: "Dhaka, Bangladesh",
   latitude: 23.77195,
   longitude: 90.39018,
 };
+
+const locationSearchCache = new Map<string, LocationSearchResult[]>();
 
 const CURATED_VENUES: Array<LocationSearchResult & { aliases: string[] }> = [
   {
@@ -166,13 +173,6 @@ const getSearchContext = (query: string, context?: LocationSearchContext | null)
   return null;
 };
 
-const getContextTerms = (context?: LocationSearchContext | null) =>
-  context?.label
-    ?.split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 2)
-    .slice(0, 2) ?? [];
-
 const buildLocalBBox = (context: LocationSearchContext, radiusKm = 30) => {
   const latitudeDelta = radiusKm / 111;
   const longitudeDelta = radiusKm / (111 * Math.max(Math.cos(toRadians(context.latitude)), 0.2));
@@ -183,6 +183,38 @@ const buildLocalBBox = (context: LocationSearchContext, radiusKm = 30) => {
     context.longitude + longitudeDelta,
     context.latitude + latitudeDelta,
   ].join(",");
+};
+
+const getSearchCacheKey = (query: string, context?: LocationSearchContext | null) => {
+  const normalizedQuery = normalizeText(query);
+  const normalizedContext = context
+    ? [
+        context.latitude.toFixed(3),
+        context.longitude.toFixed(3),
+        getCountryCodeFromContext(context) ?? "",
+        normalizeText(context.label ?? ""),
+      ].join("|")
+    : "global";
+
+  return `${normalizedQuery}::${normalizedContext}`;
+};
+
+const storeSearchResults = (key: string, results: LocationSearchResult[]) => {
+  if (locationSearchCache.has(key)) {
+    locationSearchCache.delete(key);
+  }
+
+  locationSearchCache.set(key, results);
+
+  while (locationSearchCache.size > LOCATION_SEARCH_CACHE_LIMIT) {
+    const oldestKey = locationSearchCache.keys().next().value as string | undefined;
+
+    if (!oldestKey) {
+      break;
+    }
+
+    locationSearchCache.delete(oldestKey);
+  }
 };
 
 const getFeatureCoordinates = (feature: MapboxFeature): [number, number] | null => {
@@ -255,8 +287,12 @@ const toLocationResult = (feature: MapboxFeature, fallbackId: string): LocationS
   };
 };
 
-const readLocationResults = async (url: string, fallbackIdPrefix = "location"): Promise<LocationSearchResult[]> => {
-  const response = await fetch(url);
+const readLocationResults = async (
+  url: string,
+  fallbackIdPrefix = "location",
+  signal?: AbortSignal,
+): Promise<LocationSearchResult[]> => {
+  const response = await fetch(url, signal ? { signal } : undefined);
 
   if (!response.ok) {
     throw new Error("Unable to search locations right now.");
@@ -273,6 +309,7 @@ const searchBoxForward = async (
   query: string,
   context?: LocationSearchContext | null,
   bbox?: string,
+  options: LocationSearchOptions = {},
 ): Promise<LocationSearchResult[]> => {
   const params = new URLSearchParams({
     access_token: MAPBOX_PUBLIC_TOKEN,
@@ -292,6 +329,7 @@ const searchBoxForward = async (
   return readLocationResults(
     `${MAPBOX_SEARCHBOX_FORWARD_URL}?${params.toString()}`,
     `searchbox-${bbox ? "local" : "global"}-${toIdSlug(query)}`,
+    options.signal,
   );
 };
 
@@ -299,6 +337,7 @@ const geocodeSearch = async (
   query: string,
   context?: LocationSearchContext | null,
   bbox?: string,
+  options: LocationSearchOptions = {},
 ): Promise<LocationSearchResult[]> => {
   const params = new URLSearchParams({
     access_token: MAPBOX_PUBLIC_TOKEN,
@@ -324,6 +363,7 @@ const geocodeSearch = async (
   return readLocationResults(
     `${MAPBOX_GEOCODING_URL}/${encodeURIComponent(query)}.json?${params.toString()}`,
     `geocode-${bbox ? "local" : "global"}-${toIdSlug(query)}`,
+    options.signal,
   );
 };
 
@@ -452,6 +492,7 @@ const rankResults = (
 export const searchLocations = async (
   query: string,
   context?: LocationSearchContext | null,
+  options: LocationSearchOptions = {},
 ): Promise<LocationSearchResult[]> => {
   const trimmedQuery = query.trim();
 
@@ -459,37 +500,49 @@ export const searchLocations = async (
     return [];
   }
 
+  const cacheKey = getSearchCacheKey(trimmedQuery, context);
+  const cachedResults = locationSearchCache.get(cacheKey);
+
+  if (cachedResults) {
+    return [...cachedResults];
+  }
+
   const searchContext = getSearchContext(trimmedQuery, context);
   const bbox = searchContext ? buildLocalBBox(searchContext) : undefined;
-  const contextTerms = getContextTerms(searchContext);
-  const expandedQuery =
-    contextTerms.length > 0 && !contextTerms.some((term) => normalizeText(trimmedQuery).includes(normalizeText(term)))
-      ? `${trimmedQuery} ${contextTerms.join(" ")}`
-      : trimmedQuery;
-
-  const localSearches = searchContext
-    ? await Promise.allSettled([
-        searchBoxForward(trimmedQuery, searchContext, bbox),
-        geocodeSearch(trimmedQuery, searchContext, bbox),
-        searchBoxForward(expandedQuery, searchContext, bbox),
-        geocodeSearch(expandedQuery, searchContext, bbox),
-      ])
-    : [];
-  const localResults = localSearches.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  const globalSearches = await Promise.allSettled([
-    searchBoxForward(trimmedQuery, searchContext),
-    geocodeSearch(trimmedQuery, searchContext),
-  ]);
-  const globalResults = globalSearches.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
   const curatedResults = curatedSearch(trimmedQuery, searchContext);
-  const fallbackResults = localFallbackSearch(trimmedQuery, searchContext, localResults);
+  const searchboxPromise = searchBoxForward(trimmedQuery, searchContext, bbox, options);
+  const geocodePromise = geocodeSearch(trimmedQuery, searchContext, bbox, options);
+  const remoteResults = await Promise.any([
+    searchboxPromise.then((results) => {
+      if (results.length === 0) {
+        throw new Error("empty searchbox response");
+      }
+
+      return results;
+    }),
+    geocodePromise.then((results) => {
+      if (results.length === 0) {
+        throw new Error("empty geocode response");
+      }
+
+      return results;
+    }),
+  ]).catch(async () => {
+    const settledResults = await Promise.allSettled([searchboxPromise, geocodePromise]);
+
+    return settledResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  });
+  const fallbackResults = localFallbackSearch(trimmedQuery, searchContext, remoteResults);
   const rankedResults = rankResults(
     trimmedQuery,
-    dedupeResults([...curatedResults, ...localResults, ...fallbackResults, ...globalResults]),
+    dedupeResults([...curatedResults, ...remoteResults, ...fallbackResults]),
     searchContext,
   );
+  const finalResults = ensureUniqueResultIds(rankedResults.slice(0, 8));
 
-  return ensureUniqueResultIds(rankedResults.slice(0, 8));
+  storeSearchResults(cacheKey, finalResults);
+
+  return finalResults;
 };
 
 export const reverseGeocodeLocation = async (

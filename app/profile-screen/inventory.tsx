@@ -1,10 +1,11 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "@/components/ui/BackButton";
 import { getMyProducts } from "@/lib/products";
-import { getStorageDownloadUrl } from "@/lib/storage";
+import { getStorageFileUrl } from "@/lib/storage";
 
 type InventoryItem = {
   id: string;
@@ -15,42 +16,31 @@ type InventoryItem = {
   isOutOfStock?: boolean;
 };
 
-const MOCK_INVENTORY: InventoryItem[] = [
-  {
-    id: '1',
-    name: 'Medusa Skin Whitening Cream',
-    image: 'https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=300',
-    stockCount: 45,
-    price: '$45.00',
-  },
-  {
-    id: '2',
-    name: 'Medusa Skin Whitening Cream',
-    image: 'https://images.unsplash.com/photo-1512446816042-444d641267d4?q=80&w=300',
-    stockCount: 0,
-    price: '$45.00',
-    isOutOfStock: true,
-  }
-];
-
 const FALLBACK_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=300';
 
 const formatProductPrice = (priceUsd: number) => `$${priceUsd.toFixed(2)}`;
 
+const getProductImageUrl = (imageKey: string) => {
+  try {
+    return getStorageFileUrl(imageKey);
+  } catch {
+    return FALLBACK_PRODUCT_IMAGE;
+  }
+};
+
 export default function InventoryScreen() {
   const router = useRouter();
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(MOCK_INVENTORY);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
-  useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
     let isMounted = true;
 
     getMyProducts()
       .then(async (products) => {
         const items = await Promise.all(
           products.map(async (product) => {
-            const image = product.imageKeys[0]
-              ? await getStorageDownloadUrl(product.imageKeys[0]).catch(() => FALLBACK_PRODUCT_IMAGE)
-              : FALLBACK_PRODUCT_IMAGE;
+            const image = product.imageKeys[0] ? getProductImageUrl(product.imageKeys[0]) : FALLBACK_PRODUCT_IMAGE;
 
             return {
               id: product.id,
@@ -72,7 +62,8 @@ export default function InventoryScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+    }, []),
+  );
 
   const renderItem = ({ item }: { item: InventoryItem }) => (
     <View style={styles.card}>
@@ -94,7 +85,7 @@ export default function InventoryScreen() {
             activeOpacity={0.8}
             onPress={() => router.push({
               pathname: '/profile-screen/product-details',
-              params: { name: item.name, image: item.image }
+              params: { productId: item.id }
             })}
           >
             <Text style={styles.viewBtnText}>View</Text>

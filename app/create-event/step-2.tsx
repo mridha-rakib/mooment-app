@@ -69,6 +69,10 @@ export default function CreateEventStep2() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [errors, setErrors] = useState<CreateEventStepTwoErrors>({});
+  const pickerButtonColors = {
+    negativeButton: { label: 'Cancel', textColor: colors.textSecondary },
+    positiveButton: { label: 'OK', textColor: colors.primary },
+  };
 
   const clearFieldError = (field: keyof CreateEventStepTwoErrors) => {
     setErrors((currentErrors) => {
@@ -278,6 +282,8 @@ export default function CreateEventStep2() {
           <DateTimePicker
             value={date}
             mode="date"
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={onDateChange}
           />
@@ -287,6 +293,8 @@ export default function CreateEventStep2() {
           <DateTimePicker
             value={date}
             mode="time"
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             is24Hour={false}
             onChange={onTimeChange}

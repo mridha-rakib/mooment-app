@@ -57,17 +57,19 @@ export default function SettingsScreen() {
   const dispatch = useDispatch();
   const { colors, isDark } = useTheme();
   const user = useAuthStore((state) => state.user);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
   const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
   const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
 
   // Settings states
-  const [notificationEnabled, setNotificationEnabled] = useState(true);
+  const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
 
   // Bottom sheet states
   const [isAccountTypeModalVisible, setAccountTypeModalVisible] = useState(false);
   const [selectedAccountType, setSelectedAccountType] = useState<'personal' | 'business'>('personal');
   const locationEnabled = Boolean(user?.currentLocationSharingEnabled);
+  const notificationEnabled = user?.notificationsEnabled ?? true;
 
   const handleLocationSharingChange = async (nextValue: boolean) => {
     if (isUpdatingLocation) {
@@ -97,6 +99,27 @@ export default function SettingsScreen() {
 
     dispatch(setTheme(nextTheme));
     void writeThemePreference(nextTheme);
+  };
+
+  const handleNotificationChange = async (nextValue: boolean) => {
+    if (isUpdatingNotifications) {
+      return;
+    }
+
+    setIsUpdatingNotifications(true);
+
+    try {
+      await updateProfile({
+        notificationsEnabled: nextValue,
+      });
+    } catch (error) {
+      Alert.alert(
+        "Notifications",
+        error instanceof Error ? error.message : "Unable to update notification preference.",
+      );
+    } finally {
+      setIsUpdatingNotifications(false);
+    }
   };
 
   return (
@@ -129,7 +152,8 @@ export default function SettingsScreen() {
             label="Notification" 
             type="toggle" 
             value={notificationEnabled}
-            onValueChange={setNotificationEnabled}
+            onValueChange={handleNotificationChange}
+            disabled={isUpdatingNotifications}
             colors={colors}
           />
           <SettingItem 

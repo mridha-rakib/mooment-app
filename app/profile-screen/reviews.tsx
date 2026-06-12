@@ -1,83 +1,62 @@
 import BackButton from "@/components/ui/BackButton";
 import { useTheme } from "@/hooks/useTheme";
+import { getUserReviews, type UserReviewResponse } from "@/lib/users";
+import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from 'expo-haptics';
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 
-const INITIAL_REVIEWS = [
-  {
-    id: '1',
-    name: 'Jane Cooper',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
-    time: "8:30pm",
-    liked: true,
-  },
-  {
-    id: '2',
-    name: 'Jane Cooper',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
-    time: "8:30pm",
-    liked: false,
-  },
-  {
-    id: '3',
-    name: 'Jane Cooper',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    text: "Doors open at 9 pm sharp. Rooftop level 7. Can't waint to see you all there tonight",
-    time: "8:30pm",
-    liked: true,
-  },
-];
-
-type Review = (typeof INITIAL_REVIEWS)[number];
 type ReviewCardProps = {
   colors: ReturnType<typeof useTheme>["colors"];
   onOpenProfile: () => void;
-  onToggleLike: (id: string) => void;
-  review: Review;
+  review: UserReviewResponse;
 };
 
-function ReviewCard({ colors, onOpenProfile, onToggleLike, review }: ReviewCardProps) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+const formatReviewTime = (createdAt: string) => {
+  const date = new Date(createdAt);
 
-  const handleToggleLike = () => {
-    scale.value = withSequence(
-      withSpring(1.4, { damping: 10, stiffness: 100 }),
-      withSpring(1, { damping: 10, stiffness: 100 }),
-    );
-    onToggleLike(review.id);
-  };
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+};
+
+function ReviewCard({ colors, onOpenProfile, review }: ReviewCardProps) {
+  const authorName = review.author?.name ?? "Mooment User";
 
   return (
     <View style={[styles.reviewCard, { backgroundColor: "#111112", borderColor: colors.border }]}>
       <View style={styles.reviewHeader}>
         <TouchableOpacity style={styles.userInfo} onPress={onOpenProfile} activeOpacity={0.7}>
-          <Image source={{ uri: review.avatar }} style={styles.avatar} />
-          <Text style={[styles.userName, { color: colors.text }]}>{review.name}</Text>
+          {review.author?.avatarUrl ? (
+            <Image source={{ uri: review.author.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatarFallback, { backgroundColor: colors.card }]}>
+              <Text style={[styles.avatarInitial, { color: colors.text }]}>
+                {authorName.trim().charAt(0).toUpperCase() || "?"}
+              </Text>
+            </View>
+          )}
+          <Text style={[styles.userName, { color: colors.text }]}>{authorName}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleToggleLike} activeOpacity={0.7}>
-          <Animated.View style={animatedStyle}>
-            <Feather
-              name={review.liked ? "thumbs-up" : "thumbs-down"}
-              size={16}
-              color={review.liked ? colors.primary : colors.text}
-            />
-          </Animated.View>
-        </TouchableOpacity>
+        <Feather
+          name={review.liked ? "thumbs-up" : "thumbs-down"}
+          size={16}
+          color={review.liked ? colors.primary : colors.textSecondary}
+        />
       </View>
       <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7}>
         <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
       </TouchableOpacity>
-      <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{review.time}</Text>
+      <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{formatReviewTime(review.createdAt)}</Text>
     </View>
   );
 }
@@ -85,35 +64,92 @@ function ReviewCard({ colors, onOpenProfile, onToggleLike, review }: ReviewCardP
 export default function ReviewsScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  const params = useLocalSearchParams<{ userId?: string }>();
+  const authUser = useAuthStore((state) => state.user);
+  const userId = params.userId ?? authUser?.id;
+  const [reviews, setReviews] = useState<UserReviewResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const toggleLike = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setReviews(prev => prev.map(r => r.id === id ? { ...r, liked: !r.liked } : r));
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadReviews = async () => {
+      if (!userId) {
+        setReviews([]);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const nextReviews = await getUserReviews(userId);
+
+        if (isMounted) {
+          setReviews(nextReviews);
+        }
+      } catch {
+        if (isMounted) {
+          setReviews([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadReviews();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userId]);
+
+  const openProfile = (review: UserReviewResponse) => {
+    if (!review.author) {
+      return;
+    }
+
+    router.push({
+      pathname: "/profile-screen/user-profile",
+      params: {
+        userId: review.author.id,
+        name: review.author.name,
+        avatar: review.author.avatarUrl ?? "",
+      },
+    });
   };
-
-  const openProfile = () => router.push('/profile-screen/user-profile');
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Reviews </Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Reviews</Text>
         <View style={{ width: 40 }} />
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {reviews.map((review) => (
-          <ReviewCard
-            colors={colors}
-            key={review.id}
-            onOpenProfile={openProfile}
-            onToggleLike={toggleLike}
-            review={review}
-          />
-        ))}
-      </ScrollView>
+
+      {isLoading ? (
+        <View style={styles.stateContainer}>
+          <ActivityIndicator color={colors.textSecondary} />
+        </View>
+      ) : reviews.length === 0 ? (
+        <View style={styles.stateContainer}>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No reviews yet</Text>
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {reviews.map((review) => (
+            <ReviewCard
+              colors={colors}
+              key={review.id}
+              onOpenProfile={() => openProfile(review)}
+              review={review}
+            />
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -123,16 +159,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 15,
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
+  },
+  stateContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 14,
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -146,22 +191,33 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   reviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   avatar: {
     width: 24,
     height: 24,
     borderRadius: 12,
   },
+  avatarFallback: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitial: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   userName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginLeft: 10,
   },
   reviewText: {
@@ -172,6 +228,6 @@ const styles = StyleSheet.create({
   },
   reviewTime: {
     fontSize: 11,
-    alignSelf: 'flex-end',
+    alignSelf: "flex-end",
   },
 });

@@ -79,15 +79,20 @@ const CustomSwitch: React.FC<CustomSwitchProps> = ({
 export default function OnboardingSettings() {
   const { colors, isDark } = useTheme();
   const userLocationSharingEnabled = useAuthStore((state) => Boolean(state.user?.currentLocationSharingEnabled));
+  const userNotificationsEnabled = useAuthStore((state) => state.user?.notificationsEnabled ?? true);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const [locationEnabled, setLocationEnabled] = useState<boolean>(userLocationSharingEnabled);
   const [notificationsEnabled, setNotificationsEnabled] =
-    useState<boolean>(true);
+    useState<boolean>(userNotificationsEnabled);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setLocationEnabled(userLocationSharingEnabled);
   }, [userLocationSharingEnabled]);
+
+  useEffect(() => {
+    setNotificationsEnabled(userNotificationsEnabled);
+  }, [userNotificationsEnabled]);
 
   const handleLocationToggle = async (nextValue: boolean) => {
     if (!nextValue) {
@@ -119,11 +124,19 @@ export default function OnboardingSettings() {
         await updateProfile({
           currentLocationSharingEnabled: true,
           currentLocation,
+          notificationsEnabled,
         });
       } else if (userLocationSharingEnabled) {
         await updateProfile({
           currentLocationSharingEnabled: false,
           currentLocation: null,
+          notificationsEnabled,
+        });
+      } else {
+        await updateProfile({
+          currentLocationSharingEnabled: false,
+          currentLocation: null,
+          notificationsEnabled,
         });
       }
 

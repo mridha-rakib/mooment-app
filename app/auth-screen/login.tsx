@@ -2,9 +2,10 @@ import {
   Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React,
-  { useState } from "react";
+  { useRef, useState } from "react";
 import { KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +19,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function Login() {
+  const scrollViewRef = useRef<ScrollView>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -27,6 +29,12 @@ export default function Login() {
   const login = useAuthStore((state) => state.login);
   const isLoading = useAuthStore((state) => state.isLoading);
   const authError = useAuthStore((state) => state.error);
+
+  const scrollToFormBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 250);
+  };
 
   const handleLogin = async () => {
     try {
@@ -48,10 +56,17 @@ export default function Login() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <KeyboardAvoidingView 
-        style={styles.container} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[styles.container, { backgroundColor: colors.background }]} 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.content}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={{ backgroundColor: colors.background }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Enter your credentials to sync with the pulse.</Text>
@@ -68,6 +83,7 @@ export default function Login() {
               autoCapitalize="none"
               keyboardType="email-address"
               editable={!isLoading}
+              disableFullscreenUI={Platform.OS === "android"}
             />
           </View>
 
@@ -82,6 +98,8 @@ export default function Login() {
               onChangeText={setPassword}
               editable={!isLoading}
               onSubmitEditing={handleLogin}
+              onFocus={scrollToFormBottom}
+              disableFullscreenUI={Platform.OS === "android"}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
               <Feather name={showPassword ? "eye" : "eye-off"} size={20} color={colors.textSecondary} />
@@ -128,7 +146,7 @@ export default function Login() {
               <Text style={[styles.createOneText, { color: colors.primary }]}>Create One</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -142,8 +160,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 28,
+    paddingVertical: 24,
+    paddingBottom: 96,
     justifyContent: "center",
   },
   header: {

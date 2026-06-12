@@ -7,6 +7,7 @@ import {
   Target01Icon,
 } from "@hugeicons/core-free-icons";
 import Mapbox from "@rnmapbox/maps";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import {
@@ -25,6 +26,14 @@ const MOOMENT_MAPBOX_PUBLIC_TOKEN =
 Mapbox.setAccessToken(MOOMENT_MAPBOX_PUBLIC_TOKEN);
 
 const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
+const SATELLITE_3D_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
+const TERRAIN_SOURCE_ID = "event-mapbox-dem";
+const TERRAIN_SOURCE_URL = "mapbox://mapbox.mapbox-terrain-dem-v1";
+const SATELLITE_3D_HEADING = -26;
+const SATELLITE_3D_PITCH = 62;
+const SATELLITE_3D_MIN_ZOOM = 12.8;
+
+type MapViewMode = "normal" | "satellite" | "satellite3d";
 
 export type MapMarkerData = {
   id: string;
@@ -85,6 +94,7 @@ export default function MapScreen({
   markers = [],
   onUserLocationChange,
 }: MapScreenProps) {
+  const router = useRouter();
   const { colors, isDark } = useTheme();
   const sharedLocation = useAuthStore((state) =>
     state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
@@ -96,11 +106,18 @@ export default function MapScreen({
   const [selectedCategory, setSelectedCategory] = useState("All");
   const cameraRef = React.useRef<Mapbox.Camera>(null);
   const [zoomLevel, setZoomLevel] = useState(12);
-  const [currentMapStyle, setCurrentMapStyle] = useState<string>(
-    isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light,
-  );
+  const [mapMode, setMapMode] = useState<MapViewMode>("normal");
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-  const isSatellite = currentMapStyle.includes("satellite");
+  const isSatellite = mapMode === "satellite" || mapMode === "satellite3d";
+  const isSatellite3D = mapMode === "satellite3d";
+  const currentMapStyle = isSatellite
+    ? SATELLITE_3D_STYLE_URL
+    : isDark
+      ? Mapbox.StyleURL.Dark
+      : Mapbox.StyleURL.Light;
+  const cameraZoomLevel = isSatellite3D
+    ? Math.max(zoomLevel, SATELLITE_3D_MIN_ZOOM)
+    : zoomLevel;
   const lastReportedLocationRef = React.useRef<string | null>(null);
 
   const applyUserLocation = React.useCallback(
@@ -116,16 +133,6 @@ export default function MapScreen({
     },
     [onUserLocationChange],
   );
-
-  React.useEffect(() => {
-    setCurrentMapStyle((currentStyle) =>
-      currentStyle.includes("satellite")
-        ? currentStyle
-        : isDark
-          ? Mapbox.StyleURL.Dark
-          : Mapbox.StyleURL.Light,
-    );
-  }, [isDark]);
 
   React.useEffect(() => {
     if (typeof sharedLongitude === "number" && typeof sharedLatitude === "number") {
@@ -153,6 +160,18 @@ export default function MapScreen({
     setModalVisible(true);
   };
 
+  const handleViewEvent = () => {
+    if (!selectedMarker?.id) {
+      return;
+    }
+
+    setModalVisible(false);
+    router.push({
+      pathname: "/event-screen/event",
+      params: { eventId: selectedMarker.id },
+    });
+  };
+
   const handleZoomIn = () => {
     setZoomLevel((prev) => Math.min(prev + 1, 20));
   };
@@ -162,18 +181,27 @@ export default function MapScreen({
   };
 
   const toggleMapStyle = () => {
-    const satelliteStyle = "mapbox://styles/mapbox/satellite-streets-v11";
-    const normalStyle = isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light;
-    setCurrentMapStyle((prev) =>
-      prev === satelliteStyle ? normalStyle : satelliteStyle,
-    );
+    setMapMode((currentMode) => {
+      if (currentMode === "normal") {
+        return "satellite";
+      }
+
+      if (currentMode === "satellite") {
+        setZoomLevel((currentZoom) => Math.max(currentZoom, SATELLITE_3D_MIN_ZOOM));
+        return "satellite3d";
+      }
+
+      return "normal";
+    });
   };
 
   const handleMyLocation = () => {
     if (userLocation) {
       cameraRef.current?.setCamera({
         centerCoordinate: userLocation,
-        zoomLevel: 14,
+        heading: isSatellite3D ? SATELLITE_3D_HEADING : 0,
+        pitch: isSatellite3D ? SATELLITE_3D_PITCH : 0,
+        zoomLevel: isSatellite3D ? Math.max(zoomLevel, 14.5) : 14,
         animationDuration: 1000,
       });
     }
@@ -229,15 +257,55 @@ export default function MapScreen({
       {/* Map Content Area */}
       <View style={styles.mapArea}>
         <Mapbox.MapView
-          key={currentMapStyle}
+          key={mapMode === "normal" ? currentMapStyle : mapMode}
           style={styles.map}
           styleURL={currentMapStyle}
           logoEnabled={false}
           attributionEnabled={false}
+          pitchEnabled={true}
+          rotateEnabled={true}
         >
+          {isSatellite3D && (
+            <>
+              <Mapbox.RasterDemSource
+                id={TERRAIN_SOURCE_ID}
+                url={TERRAIN_SOURCE_URL}
+                tileSize={512}
+                maxZoomLevel={14}
+              />
+              <Mapbox.Terrain
+                sourceID={TERRAIN_SOURCE_ID}
+                style={{ exaggeration: 1.16 }}
+              />
+              <Mapbox.Light
+                style={{
+                  anchor: "viewport",
+                  color: "#FFFFFF",
+                  intensity: 0.42,
+                  position: [1.25, 210, 42],
+                }}
+              />
+              <Mapbox.Atmosphere
+                style={{
+                  color: "#DDE8F8",
+                  highColor: "#AFC8F4",
+                  horizonBlend: 0.12,
+                  range: [-1.5, 4.5],
+                  spaceColor: "#06111E",
+                  starIntensity: 0.04,
+                  verticalRange: [0, 600],
+                }}
+              />
+            </>
+          )}
+
           <Mapbox.Camera
             ref={cameraRef}
-            zoomLevel={zoomLevel}
+            animationDuration={isSatellite3D ? 950 : 650}
+            animationMode="easeTo"
+            heading={isSatellite3D ? SATELLITE_3D_HEADING : 0}
+            pitch={isSatellite3D ? SATELLITE_3D_PITCH : 0}
+            zoomLevel={cameraZoomLevel}
             centerCoordinate={
               userLocation ??
               (markers && markers.length > 0
@@ -257,32 +325,35 @@ export default function MapScreen({
             />
           ))}
 
-          {/* Cinematic Dark Overlay for Satellite Mode (Natively under markers) */}
-          {isSatellite && (
-            <Mapbox.ShapeSource
-              id="dimSource"
-              shape={{
-                type: "Feature",
-                properties: {},
-                geometry: {
-                  type: "Polygon",
-                  coordinates: [
-                    [
-                      [-180, -90],
-                      [180, -90],
-                      [180, 90],
-                      [-180, 90],
-                      [-180, -90],
-                    ],
-                  ],
-                },
+          {isSatellite3D && (
+            <Mapbox.FillExtrusionLayer
+              id="event-map-buildings-3d"
+              sourceID="composite"
+              sourceLayerID="building"
+              minZoomLevel={13}
+              maxZoomLevel={22}
+              style={{
+                fillExtrusionBase: ["coalesce", ["get", "min_height"], 0],
+                fillExtrusionBaseAlignment: "terrain",
+                fillExtrusionColor: "#D6DBE6",
+                fillExtrusionEdgeRadius: 0.28,
+                fillExtrusionHeight: [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  13,
+                  0,
+                  15.5,
+                  ["coalesce", ["get", "height"], 26],
+                ],
+                fillExtrusionHeightAlignment: "terrain",
+                fillExtrusionOpacity: 0.58,
+                fillExtrusionVerticalGradient: true,
+                fillExtrusionAmbientOcclusionIntensity: 0.32,
+                fillExtrusionAmbientOcclusionRadius: 3.5,
+                fillExtrusionRoundedRoof: true,
               }}
-            >
-              <Mapbox.FillLayer
-                id="dimLayer"
-                style={{ fillColor: "black", fillOpacity: 0.3 }}
-              />
-            </Mapbox.ShapeSource>
+            />
           )}
 
           <Mapbox.UserLocation
@@ -328,6 +399,7 @@ export default function MapScreen({
         attendeesCount={selectedMarker?.attendeesCount}
         ageLimit={selectedMarker?.ageLimit ?? undefined}
         price={selectedMarker?.price ?? undefined}
+        onViewEvent={handleViewEvent}
       />
     </View>
   );
