@@ -33,6 +33,8 @@ const readEnvFile = () => {
 
 const fileEnv = readEnvFile();
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || fileEnv.EXPO_PUBLIC_API_BASE_URL;
+const mapboxPublicToken =
+  process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || fileEnv.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const appVariant = process.env.APP_VARIANT || process.env.EAS_BUILD_PROFILE || "development";
 
 const variantConfig = {
@@ -77,6 +79,7 @@ module.exports = ({ config }) => {
       extra: {
         ...baseConfig.extra,
         apiBaseUrl,
+        mapboxPublicToken,
       },
     },
   };

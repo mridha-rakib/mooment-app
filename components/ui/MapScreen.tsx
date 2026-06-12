@@ -10,6 +10,7 @@ import Mapbox from "@rnmapbox/maps";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
+import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import {
   Image,
   ScrollView,
@@ -21,9 +22,7 @@ import {
 import CinematicButton from "./CinematicButton";
 import EventPreviewModal from "./EventPreviewModal";
 
-const MOOMENT_MAPBOX_PUBLIC_TOKEN =
-  "***REMOVED***";
-Mapbox.setAccessToken(MOOMENT_MAPBOX_PUBLIC_TOKEN);
+Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
 const SATELLITE_3D_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
@@ -141,7 +140,7 @@ export default function MapScreen({
   }, [applyUserLocation, sharedLatitude, sharedLongitude]);
 
   React.useEffect(() => {
-    Mapbox.setAccessToken(MOOMENT_MAPBOX_PUBLIC_TOKEN);
+    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
   }, []);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
