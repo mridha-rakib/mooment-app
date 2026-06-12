@@ -1,6 +1,7 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,17 +18,98 @@ import {
   CheckoutFooter,
   COLORS,
 } from "@/components/event/checkout";
+import { startStripeCheckout } from "@/lib/stripeCheckout";
+
+const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(source ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parsePrice = (value: string | string[] | undefined, fallback = 45) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseFloat(source ?? "");
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const getParam = (value: string | string[] | undefined, fallback: string) => {
+  const source = Array.isArray(value) ? value[0] : value;
+
+  return source?.trim() || fallback;
+};
+
+const formatCurrency = (value: number) =>
+  `£${value.toLocaleString("en-GB", {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 const ProductCheckoutScreen = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    productId?: string;
+    productName?: string;
+    productPrice?: string;
+    quantity?: string;
+  }>();
   const [paymentType, setPaymentType] = useState("Online");
-  const [payWith, setPayWith] = useState("Credits");
+  const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
 
+  const productId = typeof params.productId === "string" ? params.productId : "";
+  const productName = getParam(params.productName, "Medusa Skin Care");
+  const quantity = parsePositiveInteger(params.quantity);
+  const productPrice = parsePrice(params.productPrice);
+  const total = productPrice * quantity;
   const orderItems = [
-    { name: "Medusa Skin Care", price: "$45" },
-    { name: "Medusa Skin Care", price: "$45" },
+    { name: `${productName} x ${quantity}`, price: formatCurrency(total) },
   ];
+
+  const handleContinue = async () => {
+    if (!agreed) {
+      Alert.alert("Terms required", "Please accept the refund policy and terms before payment.");
+      return;
+    }
+
+    if (paymentType !== "Online") {
+      Alert.alert("Pay at Door", "Pay at Door checkout is not connected yet.");
+      return;
+    }
+
+    if (payWith !== "Card" && payWith !== "Apple") {
+      Alert.alert("Coming soon", "Mooment Credits will be available later. Please use card or Apple Pay.");
+      return;
+    }
+
+    setIsPaying(true);
+
+    try {
+      await startStripeCheckout(
+        productId
+          ? {
+              kind: "product",
+              paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+              items: [{ productId, quantity }],
+              acceptedTerms: agreed,
+            }
+          : {
+              kind: "custom",
+              paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+              items: [{ name: productName, amount: productPrice, quantity }],
+              acceptedTerms: agreed,
+            },
+      );
+
+      router.replace({ pathname: "/event-screen/qr-code", params: { type: "product" } });
+    } catch (error) {
+      Alert.alert("Payment failed", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -45,17 +127,18 @@ const ProductCheckoutScreen = () => {
         <PaymentMethods 
           payWith={payWith} 
           onMethodChange={setPayWith} 
+          disabledMethods={["Credits"]}
         />
 
         <SecurityBanner />
 
         <OrderSummary 
           items={orderItems}
-          subtotal="$45"
-          reward="$45"
-          fee="$45"
-          tax="$45"
-          total="$45"
+          subtotal={formatCurrency(total)}
+          reward="£0"
+          fee="£0"
+          tax="£0"
+          total={formatCurrency(total)}
         />
 
         {/* Collection Info - Specific to Product */}
@@ -76,7 +159,9 @@ const ProductCheckoutScreen = () => {
 
       <View style={styles.footerWrapper}>
         <CheckoutFooter 
-          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: "product" } })} 
+          onPress={handleContinue}
+          disabled={!agreed || isPaying}
+          loading={isPaying}
         />
       </View>
     </View>

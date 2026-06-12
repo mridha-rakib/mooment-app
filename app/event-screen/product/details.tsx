@@ -222,7 +222,17 @@ const EventProductDetailsScreen = () => {
             <TouchableOpacity
               style={[styles.addToCartBtn, !isAvailable && styles.disabledButton]}
               disabled={!isAvailable}
-              onPress={() => router.push("/event-screen/product/cart")}
+              onPress={() =>
+                router.push({
+                  pathname: "/event-screen/product/checkout",
+                  params: {
+                    productId: product.id,
+                    productName: product.name,
+                    productPrice: String(currentPrice),
+                    quantity: "1",
+                  },
+                })
+              }
             >
               <Feather name="plus" size={18} color="#000000" style={{ marginRight: 8 }} />
               <Text style={styles.addToCartText}>Add to Cart</Text>

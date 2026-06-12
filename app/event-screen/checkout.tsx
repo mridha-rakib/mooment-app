@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,6 +19,7 @@ import {
   CheckoutFooter,
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
+import { startStripeCheckout } from "@/lib/stripeCheckout";
 
 const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
   const source = Array.isArray(value) ? value[0] : value;
@@ -59,13 +61,18 @@ const EventCheckoutScreen = () => {
     ticketPrice?: string;
     ticketType?: string;
     quantity?: string;
+    eventId?: string;
+    ticketId?: string;
   }>();
   const { colors, isDark } = useTheme();
   const [paymentType, setPaymentType] = useState("Online");
-  const [payWith, setPayWith] = useState("Credits");
+  const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
 
+  const eventId = typeof params.eventId === "string" ? params.eventId : "";
+  const ticketId = typeof params.ticketId === "string" ? params.ticketId : "";
   const eventName = getParam(params.eventName, "Event");
   const eventDateTime = getParam(params.eventDateTime, "Date TBA");
   const ticketName = getParam(params.ticketName, "Ticket");
@@ -78,6 +85,53 @@ const EventCheckoutScreen = () => {
   const orderItems = [
     { name: `${ticketName} x ${quantity}`, price: subtotal },
   ];
+
+  const handleContinue = async () => {
+    if (!agreed) {
+      Alert.alert("Terms required", "Please accept the refund policy and terms before payment.");
+      return;
+    }
+
+    if (paymentType !== "Online") {
+      Alert.alert("Pay at Door", "Pay at Door checkout is not connected yet.");
+      return;
+    }
+
+    if (isFreeTicket) {
+      router.push("/event-screen/payment-success");
+      return;
+    }
+
+    if (!eventId || !ticketId) {
+      Alert.alert("Payment unavailable", "This ticket checkout is missing event details.");
+      return;
+    }
+
+    if (payWith !== "Card" && payWith !== "Apple") {
+      Alert.alert("Coming soon", "Mooment Credits will be available later. Please use card or Apple Pay.");
+      return;
+    }
+
+    setIsPaying(true);
+
+    try {
+      await startStripeCheckout({
+        kind: "ticket",
+        paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+        eventId,
+        ticketId,
+        quantity,
+        anonymous,
+        acceptedTerms: agreed,
+      });
+
+      router.replace("/event-screen/payment-success");
+    } catch (error) {
+      Alert.alert("Payment failed", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -115,6 +169,7 @@ const EventCheckoutScreen = () => {
         <PaymentMethods 
           payWith={payWith} 
           onMethodChange={setPayWith} 
+          disabledMethods={["Credits"]}
         />
 
         <SecurityBanner />
@@ -130,7 +185,9 @@ const EventCheckoutScreen = () => {
       <View style={styles.footerWrapper}>
         <CheckoutFooter 
           buttonText="Continue to payment"
-          onPress={() => router.push("/event-screen/payment-success")} 
+          onPress={handleContinue}
+          disabled={!agreed || isPaying}
+          loading={isPaying}
         />
       </View>
     </View>

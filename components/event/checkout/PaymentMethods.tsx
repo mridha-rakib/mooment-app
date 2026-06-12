@@ -6,18 +6,30 @@ import { useTheme } from "@/hooks/useTheme";
 interface PaymentMethodsProps {
   payWith: string;
   onMethodChange: (method: string) => void;
+  disabledMethods?: string[];
 }
 
-const PaymentMethods = ({ payWith, onMethodChange }: PaymentMethodsProps) => {
+const PaymentMethods = ({ payWith, onMethodChange, disabledMethods = [] }: PaymentMethodsProps) => {
   const { colors } = useTheme();
+  const isDisabled = (method: string) => disabledMethods.includes(method);
+  const handlePress = (method: string) => {
+    if (!isDisabled(method)) {
+      onMethodChange(method);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Pay with</Text>
       <View style={styles.list}>
         <TouchableOpacity 
-          style={[styles.card, { backgroundColor: colors.card, borderColor: payWith === "Credits" ? colors.primary + '33' : 'transparent' }]}
-          onPress={() => onMethodChange("Credits")}
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderColor: payWith === "Credits" ? colors.primary + '33' : 'transparent' },
+            isDisabled("Credits") && styles.disabledCard,
+          ]}
+          onPress={() => handlePress("Credits")}
+          disabled={isDisabled("Credits")}
           activeOpacity={0.8}
         >
           <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Credits" && { borderColor: colors.primary }]}>
@@ -28,13 +40,13 @@ const PaymentMethods = ({ payWith, onMethodChange }: PaymentMethodsProps) => {
           </View>
           <View style={styles.info}>
             <Text style={[styles.name, { color: colors.text }]}>Mooment Credits</Text>
-            <Text style={[styles.sub, { color: colors.textSecondary }]}>Balance: $120.00</Text>
+            <Text style={[styles.sub, { color: colors.textSecondary }]}>Coming soon</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={[styles.card, { backgroundColor: colors.card, borderColor: payWith === "Card" ? colors.primary + '33' : 'transparent' }]}
-          onPress={() => onMethodChange("Card")}
+          onPress={() => handlePress("Card")}
           activeOpacity={0.8}
         >
           <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Card" && { borderColor: colors.primary }]}>
@@ -51,7 +63,7 @@ const PaymentMethods = ({ payWith, onMethodChange }: PaymentMethodsProps) => {
 
         <TouchableOpacity 
           style={[styles.card, { backgroundColor: colors.card, borderColor: payWith === "Apple" ? colors.primary + '33' : 'transparent' }]}
-          onPress={() => onMethodChange("Apple")}
+          onPress={() => handlePress("Apple")}
           activeOpacity={0.8}
         >
           <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Apple" && { borderColor: colors.primary }]}>
@@ -122,5 +134,8 @@ const styles = StyleSheet.create({
   },
   sub: {
     fontSize: 12,
+  },
+  disabledCard: {
+    opacity: 0.45,
   },
 });
