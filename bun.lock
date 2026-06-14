@@ -16,6 +16,7 @@
         "@reduxjs/toolkit": "^2.11.2",
         "@rnmapbox/maps": "^10.3.0",
         "@shopify/react-native-skia": "2.4.18",
+        "@stripe/stripe-react-native": "0.63.0",
         "axios": "^1.16.1",
         "expo": "~55.0.26",
         "expo-asset": "~55.0.17",
@@ -491,6 +492,8 @@
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, ""],
 
     "@standard-schema/utils": ["@standard-schema/utils@0.3.0", "", {}, ""],
+
+    "@stripe/stripe-react-native": ["@stripe/stripe-react-native@0.63.0", "", { "peerDependencies": { "expo": ">=46.0.9", "react": "*", "react-native": "*", "react-native-webview": "*" }, "optionalPeers": ["expo", "react-native-webview"] }, "sha512-5vy+b+sP3xOqtHDZ2nezOIx0MWbcrJ/hwoL74gAc2Qa+/wF/JVjzirG8zVD7AtMYFjlIldmznpSePaPEaLJLWA=="],
 
     "@turf/along": ["@turf/along@6.5.0", "", { "dependencies": { "@turf/bearing": "^6.5.0", "@turf/destination": "^6.5.0", "@turf/distance": "^6.5.0", "@turf/helpers": "^6.5.0", "@turf/invariant": "^6.5.0" } }, "sha512-LLyWQ0AARqJCmMcIEAXF4GEu8usmd4Kbz3qk1Oy5HoRNpZX47+i5exQtmIWKdqJ1MMhW26fCTXgpsEs5zgJ5gw=="],
 
