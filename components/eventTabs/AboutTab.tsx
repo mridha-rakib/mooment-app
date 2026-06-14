@@ -11,6 +11,7 @@ import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
 import type { EventAgeRestriction, EventHost, EventLocation } from "@/lib/events";
 import { useAuthStore } from "@/stores/authStore";
+import { getCategoryColor } from "@/constants/categoryColors";
 import FullScreen from "../event/FullScreen";
 import SegmentedControl from "../ui/SegmentedControl";
 
@@ -19,7 +20,7 @@ Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 const DEFAULT_HOST_AVATAR =
   "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop";
-const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
+const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
 
 type AboutTabProps = {
   description?: string | null;
@@ -28,6 +29,7 @@ type AboutTabProps = {
   host?: EventHost | null;
   eventImageUris?: string[];
   isHostMode?: boolean;
+  category?: string | null;
   onHostFollowChange?: (isFollowing: boolean) => void;
 };
 
@@ -141,8 +143,8 @@ type EventLocationMapProps = {
   location?: EventLocation | null;
   markerImage: string;
   markerLabel: string;
-  isDark: boolean;
   fallbackColor: string;
+  markerColor: string;
   onExpand: () => void;
 };
 
@@ -150,8 +152,8 @@ const EventLocationMap = ({
   location,
   markerImage,
   markerLabel,
-  isDark,
   fallbackColor,
+  markerColor,
   onExpand,
 }: EventLocationMapProps) => {
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -177,7 +179,7 @@ const EventLocationMap = ({
     <View style={styles.mapContainer}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+        styleURL={SATELLITE_STYLE_URL}
         logoEnabled={false}
         attributionEnabled={false}
         scrollEnabled={false}
@@ -191,11 +193,14 @@ const EventLocationMap = ({
           zoomLevel={14.5}
         />
         <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={styles.eventMarkerButton} accessibilityLabel={`${markerLabel} location`}>
+          <View
+            style={[styles.eventMarkerButton, { borderColor: markerColor, shadowColor: markerColor }]}
+            accessibilityLabel={`${markerLabel} location`}
+          >
             {markerImage ? (
               <Image source={{ uri: markerImage }} style={styles.eventMarkerImage} contentFit="cover" />
             ) : (
-              <View style={styles.eventMarkerDot} />
+              <View style={[styles.eventMarkerDot, { backgroundColor: markerColor }]} />
             )}
           </View>
         </Mapbox.MarkerView>
@@ -214,6 +219,7 @@ const AboutTab = ({
   host,
   eventImageUris = [],
   isHostMode = false,
+  category,
   onHostFollowChange,
 }: AboutTabProps) => {
   const router = useRouter();
@@ -236,6 +242,7 @@ const AboutTab = ({
 
   const hostEvents = useMemo(() => formatCompactCount(host?.eventsCount), [host?.eventsCount]);
 
+  const markerColor = getCategoryColor(category);
   const locationLabel = location?.searchLabel || location?.venue || location?.address || "Location";
   const primaryEventImage = eventImageUris[0] ?? "";
   const hasEventCoordinates = isFiniteCoordinate(location?.latitude) && isFiniteCoordinate(location?.longitude);
@@ -262,6 +269,7 @@ const AboutTab = ({
         eventVenue: location?.venue ?? "",
         eventAddress: location?.address ?? "",
         markerImage: primaryEventImage,
+        eventCategory: category ?? "",
         ...(hasSharedCoordinates
           ? {
               userLatitude: String(sharedLocation.latitude),
@@ -375,8 +383,8 @@ const AboutTab = ({
                 location={location}
                 markerImage={primaryEventImage}
                 markerLabel={locationLabel}
-                isDark={isDark}
                 fallbackColor={cardBackground}
+                markerColor={markerColor}
                 onExpand={openEventMap}
               />
             </View>
@@ -532,17 +540,15 @@ const styles = StyleSheet.create({
   },
   eventMarkerButton: {
     alignItems: "center",
-    backgroundColor: "#111111",
-    borderColor: EVENT_MARKER_BORDER_COLOR,
+    backgroundColor: "#080808",
     borderRadius: 28,
     borderWidth: 3,
     height: 56,
     justifyContent: "center",
     overflow: "hidden",
-    shadowColor: "#FFFFFF",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowOpacity: 0.75,
+    shadowRadius: 12,
     width: 56,
   },
   eventMarkerImage: {
@@ -550,7 +556,6 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   eventMarkerDot: {
-    backgroundColor: EVENT_MARKER_BORDER_COLOR,
     borderRadius: 8,
     height: 16,
     width: 16,

@@ -9,11 +9,11 @@ interface TermsAgreementProps {
 }
 
 const TermsAgreement = ({ agreed, onToggle }: TermsAgreementProps) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <TouchableOpacity 
-      style={[styles.container, { backgroundColor: colors.card + '66' }]}
+      style={[styles.container, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card + '66' }]}
       onPress={onToggle}
       activeOpacity={0.8}
     >
@@ -32,24 +32,24 @@ export default TermsAgreement;
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    gap: 16,
-    marginBottom: 24,
-    alignItems: "flex-start",
-    paddingRight: 20,
-    padding: 16,
-    borderRadius: 16,
+    gap: 10,
+    marginBottom: 12,
+    alignItems: "center",
+    minHeight: 56,
+    padding: 12,
+    borderRadius: 12,
   },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   text: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 16,
   },
   link: {
     fontWeight: "bold",

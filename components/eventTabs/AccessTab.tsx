@@ -12,6 +12,7 @@ type AccessTabProps = {
   tickets?: EventTicketPayload[];
   rewards?: EventRewardPayload[];
   scheduledAt?: string | null;
+  purchasedTicketCounts?: Record<string, number>;
   isHostMode?: boolean;
   selectedTicketKey?: string | null;
   selectedTicketQuantity?: number;
@@ -19,6 +20,8 @@ type AccessTabProps = {
   deletingRewardId?: string | null;
   claimingRewardId?: string | null;
   claimedRewardIds?: string[];
+  selectedAccessSubTab?: string;
+  onSelectAccessSubTab?: (subTab: string) => void;
   onSelectTicket?: (ticket: EventTicketPayload, ticketKey: string) => void;
   onTicketQuantityChange?: (ticket: EventTicketPayload, ticketKey: string, quantity: number) => void;
   onCreateTicket?: () => void;
@@ -63,10 +66,16 @@ const formatPrice = (ticket: EventTicketPayload) => {
     return "Free";
   }
 
-  return `£${ticket.price.toLocaleString("en-GB", {
+  return `$${ticket.price.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(ticket.price) ? 0 : 2,
     maximumFractionDigits: Number.isInteger(ticket.price) ? 0 : 2,
   })}`;
+};
+
+const getTicketDescriptionPreview = (value?: string | null) => {
+  const description = value?.trim() || "Ticket details provided by the event organizer.";
+
+  return description.length > 96 ? `${description.slice(0, 93).trim()}...` : description;
 };
 
 const getTicketKey = (ticket: EventTicketPayload, index: number) =>
@@ -102,6 +111,7 @@ const AccessTab = ({
   tickets = [],
   rewards = [],
   scheduledAt,
+  purchasedTicketCounts = {},
   isHostMode = false,
   selectedTicketKey = null,
   selectedTicketQuantity = 1,
@@ -109,6 +119,8 @@ const AccessTab = ({
   deletingRewardId = null,
   claimingRewardId = null,
   claimedRewardIds = [],
+  selectedAccessSubTab,
+  onSelectAccessSubTab,
   onSelectTicket,
   onTicketQuantityChange,
   onCreateTicket,
@@ -121,7 +133,15 @@ const AccessTab = ({
   onClaimReward,
 }: AccessTabProps) => {
   const { colors, isDark } = useTheme();
-  const [accessSubTab, setAccessSubTab] = useState("Tickets");
+  const [localAccessSubTab, setLocalAccessSubTab] = useState("Tickets");
+  const accessSubTab = selectedAccessSubTab ?? localAccessSubTab;
+  const handleSelectAccessSubTab = (subTab: string) => {
+    if (selectedAccessSubTab === undefined) {
+      setLocalAccessSubTab(subTab);
+    }
+
+    onSelectAccessSubTab?.(subTab);
+  };
 
   const totalTicketsLeft = useMemo(
     () => tickets.reduce((total, ticket) => total + Math.max(0, ticket.capacity), 0),
@@ -132,7 +152,7 @@ const AccessTab = ({
     <View style={{ marginTop: 20 }}>
       <View style={styles.alertBanner}>
         <Feather name="info" size={16} color="#FF6B3D" />
-        <Text style={styles.alertText}>You can only buy maximum of 2 tickets</Text>
+        <Text style={styles.alertText}>Maximum 2 tickets of each type per person</Text>
       </View>
 
       <View style={styles.availabilityRow}>
@@ -148,10 +168,15 @@ const AccessTab = ({
       {tickets.length > 0 ? (
         tickets.map((ticket, index) => {
           const ticketKey = getTicketKey(ticket, index);
+          const ticketId = ticket.id ?? ticketKey;
           const isSelected = selectedTicketKey === ticketKey;
           const isFreeTicket = ticket.type === "free" || ticket.price <= 0;
-          const maxQuantity = Math.min(2, Math.max(0, ticket.capacity));
-          const isSoldOut = maxQuantity === 0;
+          const isSoldOut = ticket.capacity <= 0;
+          const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
+          const remainingAllowed = Math.max(0, 2 - alreadyPurchased);
+          const isLimitReached = !isSoldOut && alreadyPurchased >= 2;
+          const maxQuantity = Math.min(remainingAllowed, Math.max(0, ticket.capacity));
+          const isUnavailable = isSoldOut || isLimitReached;
           const quantity = isSelected ? Math.min(Math.max(1, selectedTicketQuantity), maxQuantity || 1) : 0;
 
           return (
@@ -162,65 +187,110 @@ const AccessTab = ({
                 {
                   backgroundColor: isDark ? "#161521" : colors.backgroundSecondary,
                   borderColor: isSelected ? colors.primary : colors.border,
-                  opacity: isSoldOut ? 0.55 : 1,
+                  opacity: isUnavailable ? 0.55 : 1,
                 },
               ]}
               activeOpacity={0.86}
-              disabled={isSoldOut}
-              onPress={() => onSelectTicket?.(ticket, ticketKey)}
+              onPress={() => {
+                if (!isUnavailable) {
+                  onSelectTicket?.(ticket, ticketKey);
+                }
+              }}
             >
               <View style={[styles.ticketInnerCard, { backgroundColor: isDark ? "#0F0E13" : colors.card }]}>
                 <View style={styles.ticketHeader}>
                   <Text style={[styles.ticketType, { color: colors.text }]}>{ticket.name}</Text>
                   <View style={styles.ticketBadges}>
-                    {isSelected && (
+                    {isSelected && !isLimitReached && (
                       <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
                         <Feather name="check" size={12} color={colors.background} />
                       </View>
                     )}
-                    <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
-                      <Text style={[styles.countBadgeText, { color: colors.text }]}>
-                        {isSoldOut ? "Sold out" : `${ticket.capacity} left`}
-                      </Text>
-                    </View>
+                    {isLimitReached ? (
+                      <View style={[styles.limitBadge]}>
+                        <Feather name="slash" size={11} color="#FF6B3D" />
+                        <Text style={styles.limitBadgeText}>Limit reached</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
+                        <Text style={[styles.countBadgeText, { color: colors.text }]}>
+                          {isSoldOut ? "Sold out" : `${ticket.capacity} left`}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
-                <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>
-                  {ticket.description || "Ticket details provided by the event organizer."}
+                {isLimitReached && (
+                  <Text style={styles.limitReachedText}>
+                    You've purchased the maximum of 2 tickets of this type.
+                  </Text>
+                )}
+
+                <Text style={[styles.ticketDesc, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {getTicketDescriptionPreview(ticket.description)}
                 </Text>
-                <Text style={[styles.expiryText, { color: colors.textSecondary }]}>
-                  {formatExpiry(ticket.salesEndAt, scheduledAt)}
-                </Text>
+                <View style={styles.ticketMetaRow}>
+                  <Text style={[styles.expiryText, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {formatExpiry(ticket.salesEndAt, scheduledAt)}
+                  </Text>
+                  {!!onViewTicket && (
+                    <TouchableOpacity
+                      style={styles.viewDetailsButton}
+                      activeOpacity={0.75}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        onViewTicket(ticket);
+                      }}
+                    >
+                      <Feather name="info" size={13} color={colors.primary} />
+                      <Text style={[styles.viewDetailsText, { color: colors.primary }]}>Details</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 <View style={styles.ticketFooter}>
                   <View>
                     <Text style={[styles.ticketPrice, { color: colors.text }]}>{formatPrice(ticket)}</Text>
-                    {!isFreeTicket && <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>per ticket</Text>}
+                    {!isFreeTicket && (
+                      alreadyPurchased > 0 && !isLimitReached ? (
+                        <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>
+                          {alreadyPurchased} purchased • {remainingAllowed} left
+                        </Text>
+                      ) : (
+                        <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>per ticket</Text>
+                      )
+                    )}
                   </View>
                   <View style={[styles.counter, { backgroundColor: isDark ? "#222129" : colors.backgroundSecondary }]}>
                     <TouchableOpacity
                       style={[
                         styles.counterBtn,
                         { backgroundColor: isDark ? "#313036" : colors.border },
-                        (!isSelected || quantity <= 1) && styles.counterBtnDisabled,
+                        (!isSelected || quantity <= 1 || isUnavailable) && styles.counterBtnDisabled,
                       ]}
-                      disabled={!isSelected || quantity <= 1}
-                      onPress={() => onTicketQuantityChange?.(ticket, ticketKey, quantity - 1)}
+                      disabled={!isSelected || quantity <= 1 || isUnavailable}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        onTicketQuantityChange?.(ticket, ticketKey, quantity - 1);
+                      }}
                     >
-                      <Feather name="minus" size={16} color={colors.text} />
+                      <Feather name="minus" size={14} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.counterValue, { color: colors.text }]}>{quantity}</Text>
                     <TouchableOpacity
                       style={[
                         styles.counterBtn,
                         { backgroundColor: isDark ? "#313036" : colors.border },
-                        (isSoldOut || (isSelected && quantity >= maxQuantity)) && styles.counterBtnDisabled,
+                        (isUnavailable || (isSelected && quantity >= maxQuantity)) && styles.counterBtnDisabled,
                       ]}
-                      disabled={isSoldOut || (isSelected && quantity >= maxQuantity)}
-                      onPress={() => onTicketQuantityChange?.(ticket, ticketKey, isSelected ? quantity + 1 : 1)}
+                      disabled={isUnavailable || (isSelected && quantity >= maxQuantity)}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        onTicketQuantityChange?.(ticket, ticketKey, isSelected ? quantity + 1 : 1);
+                      }}
                     >
-                      <Feather name="plus" size={16} color={colors.text} />
+                      <Feather name="plus" size={14} color={colors.text} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -522,7 +592,7 @@ const AccessTab = ({
       <SegmentedControl
         options={["Tickets", "Rewards"]}
         selectedOption={accessSubTab}
-        onSelect={setAccessSubTab}
+        onSelect={handleSelectAccessSubTab}
         containerStyle={{ marginTop: 10, marginBottom: 10 }}
       />
 
@@ -798,31 +868,32 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   ticketCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     marginBottom: 16,
     borderWidth: 1,
     overflow: "hidden",
   },
   ticketInnerCard: {
-    borderRadius: 18,
+    borderRadius: 16,
     margin: 4,
-    padding: 16,
+    padding: 14,
   },
   ticketHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 10,
   },
   ticketType: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "bold",
     flex: 1,
+    lineHeight: 23,
   },
   ticketBadges: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   selectedBadge: {
     alignItems: "center",
@@ -833,24 +904,65 @@ const styles = StyleSheet.create({
   },
   countBadge: {
     backgroundColor: "#313036",
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   countBadgeText: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
+  },
+  limitBadge: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 107, 61, 0.12)",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  limitBadgeText: {
+    color: "#FF6B3D",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  limitReachedText: {
+    color: "#FF6B3D",
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+    marginBottom: 6,
   },
   ticketDesc: {
     color: "#8E8E9B",
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: 18,
     marginBottom: 8,
+  },
+  ticketMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 18,
   },
   expiryText: {
     color: "#8E8E9B",
-    fontSize: 13,
-    marginBottom: 20,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  viewDetailsButton: {
+    alignItems: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 4,
+    minHeight: 28,
+    paddingHorizontal: 6,
+  },
+  viewDetailsText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   ticketFooter: {
     flexDirection: "row",
@@ -858,26 +970,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ticketPrice: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "bold",
+    lineHeight: 30,
   },
   perTicketText: {
     color: "#8E8E9B",
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 1,
   },
   counter: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#222129",
-    borderRadius: 14,
-    padding: 6,
-    gap: 14,
+    borderRadius: 13,
+    padding: 5,
+    gap: 10,
   },
   counterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 11,
     backgroundColor: "#313036",
     justifyContent: "center",
     alignItems: "center",
@@ -886,8 +1000,10 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   counterValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "600",
+    minWidth: 18,
+    textAlign: "center",
   },
   secureBadge: {
     flexDirection: "row",

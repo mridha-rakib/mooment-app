@@ -7,11 +7,12 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { getCategoryColor } from "@/constants/categoryColors";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
 const USER_MARKER_COLOR = "#2F80ED";
+const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
 
 const firstParam = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
@@ -59,7 +60,7 @@ const formatDistance = (miles: number) => {
 export default function EventMapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{
     eventLatitude?: string;
     eventLongitude?: string;
@@ -69,6 +70,7 @@ export default function EventMapScreen() {
     markerImage?: string;
     userLatitude?: string;
     userLongitude?: string;
+    eventCategory?: string;
   }>();
   const cameraRef = useRef<Mapbox.Camera>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -85,6 +87,7 @@ export default function EventMapScreen() {
   const eventVenue = firstParam(params.eventVenue)?.trim() || "";
   const eventAddress = firstParam(params.eventAddress)?.trim() || "";
   const markerImage = firstParam(params.markerImage)?.trim() || "";
+  const markerColor = getCategoryColor(firstParam(params.eventCategory));
   const distanceLabel = useMemo(() => {
     if (!hasEventCoordinates || !hasUserCoordinates) {
       return null;
@@ -193,7 +196,7 @@ export default function EventMapScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+        styleURL={SATELLITE_STYLE_URL}
         logoEnabled={false}
         attributionEnabled={false}
         rotateEnabled
@@ -213,7 +216,7 @@ export default function EventMapScreen() {
               id="event-distance-line"
               style={{
                 lineCap: "round",
-                lineColor: EVENT_MARKER_BORDER_COLOR,
+                lineColor: markerColor,
                 lineDasharray: [2, 1.5],
                 lineOpacity: 0.9,
                 lineWidth: 3,
@@ -231,11 +234,14 @@ export default function EventMapScreen() {
         )}
 
         <Mapbox.MarkerView coordinate={eventCoordinate} anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={styles.eventMarkerButton} accessibilityLabel={`${eventTitle} location`}>
+          <View
+            style={[styles.eventMarkerButton, { borderColor: markerColor, shadowColor: markerColor }]}
+            accessibilityLabel={`${eventTitle} location`}
+          >
             {markerImage ? (
               <Image source={{ uri: markerImage }} style={styles.eventMarkerImage} contentFit="cover" />
             ) : (
-              <View style={styles.eventMarkerDot} />
+              <View style={[styles.eventMarkerDot, { backgroundColor: markerColor }]} />
             )}
           </View>
         </Mapbox.MarkerView>
@@ -252,7 +258,7 @@ export default function EventMapScreen() {
 
       <View style={[styles.infoCard, { bottom: insets.bottom + 18, backgroundColor: colors.card }]}>
         {!!distanceLabel && (
-          <View style={styles.distancePill}>
+          <View style={[styles.distancePill, { backgroundColor: markerColor }]}>
             <Feather name="navigation" size={14} color="#FFFFFF" />
             <Text style={styles.distanceText}>{distanceLabel}</Text>
           </View>
@@ -319,17 +325,15 @@ const styles = StyleSheet.create({
   },
   eventMarkerButton: {
     alignItems: "center",
-    backgroundColor: "#111111",
-    borderColor: EVENT_MARKER_BORDER_COLOR,
+    backgroundColor: "#080808",
     borderRadius: 30,
     borderWidth: 3,
     height: 60,
     justifyContent: "center",
     overflow: "hidden",
-    shadowColor: "#FFFFFF",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowOpacity: 0.75,
+    shadowRadius: 12,
     width: 60,
   },
   eventMarkerImage: {
@@ -337,7 +341,6 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   eventMarkerDot: {
-    backgroundColor: EVENT_MARKER_BORDER_COLOR,
     borderRadius: 8,
     height: 16,
     width: 16,
@@ -378,7 +381,6 @@ const styles = StyleSheet.create({
   distancePill: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: EVENT_MARKER_BORDER_COLOR,
     borderRadius: 16,
     flexDirection: "row",
     gap: 6,

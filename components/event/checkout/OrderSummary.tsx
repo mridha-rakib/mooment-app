@@ -17,12 +17,12 @@ interface OrderSummaryProps {
 }
 
 const OrderSummary = ({ items, subtotal, reward, fee, tax, total }: OrderSummaryProps) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Order</Text>
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <View style={[styles.card, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
         {items.map((item, index) => (
           <View key={index} style={styles.row}>
             <Text style={[styles.itemLabel, { color: colors.text }]}>{item.name}</Text>
@@ -64,48 +64,55 @@ export default OrderSummary;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 12,
   },
   card: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 12,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    minHeight: 22,
+    marginBottom: 8,
   },
   itemLabel: {
-    fontSize: 14,
+    fontSize: 12,
+    lineHeight: 18,
   },
   itemValue: {
-    fontSize: 14,
-    fontWeight: "bold",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   divider: {
     height: 1,
-    marginVertical: 4,
-    marginBottom: 16,
+    marginTop: 2,
+    marginBottom: 10,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
+    lineHeight: 18,
   },
   value: {
-    fontSize: 14,
-    fontWeight: "bold",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   totalLabel: {
-    fontSize: 15,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 22,
   },
   totalValue: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 24,
   },
 });

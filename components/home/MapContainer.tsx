@@ -2,8 +2,8 @@ import React from "react";
 import MapScreen, { MapMarkerData } from "@/components/ui/MapScreen";
 import { getMapEvents, type EventResponse } from "@/lib/events";
 import { getStorageFileUrl } from "@/lib/storage";
+import { getCategoryColor } from "@/constants/categoryColors";
 
-const EVENT_MARKER_COLOR = "#5C30BB";
 const EVENT_MAP_RADIUS_KM = 50;
 const EVENT_MAP_LIMIT = 100;
 const ACTIVE_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -146,7 +146,7 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
     longitude,
     image: event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : FALLBACK_EVENT_IMAGE,
     label: event.name || "Event",
-    glowColor: EVENT_MARKER_COLOR,
+    glowColor: getCategoryColor(event.category ?? null),
     category: event.category ?? null,
     scheduledAt: event.scheduledAt ?? null,
     hostName: getHostName(event),

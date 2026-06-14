@@ -49,7 +49,7 @@ const formatPrice = (product: Product) => {
     ? product.priceUsd * (1 - product.discountPercent / 100)
     : product.priceUsd;
 
-  return `£${price.toLocaleString("en-GB", {
+  return `$${price.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;

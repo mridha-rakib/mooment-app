@@ -33,7 +33,7 @@ const PaymentSuccessScreen = () => {
     { label: "Address", value: "Sky Terrace, NY" },
     { label: "Ticket", value: "Ticket x 1" },
     { label: "Date/Time", value: "Sat, Sep 9 • 9pm" },
-    { label: "Amount Paid", value: "£45", isPrice: true },
+    { label: "Amount Paid", value: "$45", isPrice: true },
   ];
 
   return (

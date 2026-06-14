@@ -1,9 +1,12 @@
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -14,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { addCartItem, getCart } from "@/lib/cart";
 import { getPublishedProduct, type Product } from "@/lib/products";
 import { getStorageFileUrl } from "@/lib/storage";
 
@@ -36,7 +40,7 @@ const FALLBACK_AVATAR =
   "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
 const formatMoney = (value: number) =>
-  `£${value.toLocaleString("en-GB", {
+  `$${value.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
@@ -67,6 +71,11 @@ const EventProductDetailsScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [quantity, setQuantity] = useState(1);
+  const [cartCount, setCartCount] = useState(0);
+  const [cartProductQuantity, setCartProductQuantity] = useState(0);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isOpeningCart, setIsOpeningCart] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -87,6 +96,7 @@ const EventProductDetailsScreen = () => {
         if (isActive) {
           setProduct(nextProduct);
           setActiveImageIndex(0);
+          setQuantity(1);
         }
       } catch {
         if (isActive) {
@@ -117,29 +127,131 @@ const EventProductDetailsScreen = () => {
   const currentPrice = product ? getDiscountedPrice(product) : 0;
   const hasDiscount = Boolean(product && product.discountPercent > 0);
   const isAvailable = Boolean(product && product.totalProduct > 0);
+  const maxQuantity = Math.max(product?.totalProduct ?? 1, 1);
+  const remainingStock = Math.max(maxQuantity - cartProductQuantity, 0);
+  const maxSelectableQuantity = Math.max(remainingStock, 1);
+  const canAddToCart = isAvailable && remainingStock > 0;
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      getCart()
+        .then((cart) => {
+          if (isActive) {
+            setCartCount(cart.totalQuantity);
+            setCartProductQuantity(
+              cart.items.find((item) => item.productId === productId)?.quantity ?? 0,
+            );
+          }
+        })
+        .catch(() => {
+          if (isActive) {
+            setCartCount(0);
+            setCartProductQuantity(0);
+          }
+        });
+
+      return () => {
+        isActive = false;
+      };
+    }, [productId]),
+  );
+
+  useEffect(() => {
+    setQuantity((value) => Math.min(value, maxSelectableQuantity));
+  }, [maxSelectableQuantity]);
 
   const handleImageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
     setActiveImageIndex(Math.min(Math.max(nextIndex, 0), imageUris.length - 1));
   };
 
+  const handleAddToCart = async () => {
+    if (!product || !canAddToCart || isAddingToCart) {
+      return;
+    }
+
+    setIsAddingToCart(true);
+
+    try {
+      const cart = await addCartItem(product.id, quantity);
+      setCartCount(cart.totalQuantity);
+      setCartProductQuantity(cart.items.find((item) => item.productId === product.id)?.quantity ?? 0);
+      router.push("/event-screen/product/cart");
+    } catch (error) {
+      Alert.alert("Unable to add item", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+
+  const handleOpenCart = async () => {
+    if (isOpeningCart) {
+      return;
+    }
+
+    setIsOpeningCart(true);
+
+    try {
+      const cart = await getCart();
+      setCartCount(cart.totalQuantity);
+      setCartProductQuantity(
+        product ? cart.items.find((item) => item.productId === product.id)?.quantity ?? 0 : 0,
+      );
+      router.push("/event-screen/product/cart");
+    } catch (error) {
+      Alert.alert("Unable to open cart", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setIsOpeningCart(false);
+    }
+  };
+
   const renderHeader = () => (
-    <View style={[styles.headerActions, { top: insets.top + 10 }]}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.8}>
-        <Feather name="chevron-left" size={24} color={COLORS.text} />
-      </TouchableOpacity>
-
-      <Text style={styles.headerTitle}>Product Details</Text>
-
-      <View style={styles.headerRight}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => router.push("/event-screen/product/cart")}>
-          <Feather name="shopping-cart" size={20} color={COLORS.text} />
+    <>
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(0, 0, 0, 0.52)", "rgba(0, 0, 0, 0.22)", "rgba(0, 0, 0, 0)"]}
+        locations={[0, 0.55, 1]}
+        style={[styles.headerScrim, { height: insets.top + 92 }]}
+      />
+      <View pointerEvents="box-none" style={[styles.headerActions, { top: insets.top + 10 }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerBtn}
+          activeOpacity={0.8}
+          hitSlop={10}
+        >
+          <Feather name="chevron-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerBtn} activeOpacity={0.8}>
-          <Feather name="more-horizontal" size={20} color={COLORS.text} />
-        </TouchableOpacity>
+
+        <Text pointerEvents="none" style={styles.headerTitle}>Product Details</Text>
+
+        <View pointerEvents="box-none" style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={handleOpenCart}
+            activeOpacity={0.8}
+            hitSlop={10}
+            disabled={isOpeningCart}
+          >
+            {isOpeningCart ? (
+              <ActivityIndicator color={COLORS.text} size="small" />
+            ) : (
+              <Feather name="shopping-cart" size={20} color={COLORS.text} />
+            )}
+            {cartCount > 0 && (
+              <View pointerEvents="none" style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount > 99 ? "99+" : cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerBtn} activeOpacity={0.8} hitSlop={10}>
+            <Feather name="more-horizontal" size={20} color={COLORS.text} />
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </>
   );
 
   return (
@@ -200,11 +312,19 @@ const EventProductDetailsScreen = () => {
               <View style={styles.quantitySection}>
                 <Text style={styles.quantityLabel}>Quantity</Text>
                 <View style={styles.counter}>
-                  <TouchableOpacity style={styles.counterBtn}>
+                  <TouchableOpacity
+                    style={[styles.counterBtn, quantity <= 1 && styles.counterBtnDisabled]}
+                    disabled={quantity <= 1}
+                    onPress={() => setQuantity((value) => Math.max(1, value - 1))}
+                  >
                     <Feather name="minus" size={14} color={COLORS.textMuted} />
                   </TouchableOpacity>
-                  <Text style={styles.counterValue}>1</Text>
-                  <TouchableOpacity style={styles.counterBtnActive}>
+                  <Text style={styles.counterValue}>{quantity}</Text>
+                  <TouchableOpacity
+                    style={[styles.counterBtnActive, quantity >= maxSelectableQuantity && styles.counterBtnDisabled]}
+                    disabled={quantity >= maxSelectableQuantity}
+                    onPress={() => setQuantity((value) => Math.min(maxSelectableQuantity, value + 1))}
+                  >
                     <Feather name="plus" size={14} color={COLORS.text} />
                   </TouchableOpacity>
                 </View>
@@ -220,22 +340,18 @@ const EventProductDetailsScreen = () => {
               {hasDiscount && <Text style={styles.oldPrice}>{formatMoney(product.priceUsd)}</Text>}
             </View>
             <TouchableOpacity
-              style={[styles.addToCartBtn, !isAvailable && styles.disabledButton]}
-              disabled={!isAvailable}
-              onPress={() =>
-                router.push({
-                  pathname: "/event-screen/product/checkout",
-                  params: {
-                    productId: product.id,
-                    productName: product.name,
-                    productPrice: String(currentPrice),
-                    quantity: "1",
-                  },
-                })
-              }
+              style={[styles.addToCartBtn, !canAddToCart && styles.disabledButton]}
+              disabled={!canAddToCart || isAddingToCart}
+              onPress={handleAddToCart}
             >
-              <Feather name="plus" size={18} color="#000000" style={{ marginRight: 8 }} />
-              <Text style={styles.addToCartText}>Add to Cart</Text>
+              {isAddingToCart ? (
+                <ActivityIndicator color="#000000" size="small" style={{ marginRight: 8 }} />
+              ) : (
+                <Feather name="plus" size={18} color="#000000" style={{ marginRight: 8 }} />
+              )}
+              <Text style={styles.addToCartText}>
+                {isAddingToCart ? "Adding..." : canAddToCart ? "Add to Cart" : "Max in Cart"}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -280,6 +396,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "bold",
   },
+  cartBadge: {
+    alignItems: "center",
+    backgroundColor: COLORS.accentRed,
+    borderColor: COLORS.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 16,
+    height: 16,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    position: "absolute",
+    right: -3,
+    top: -3,
+  },
+  cartBadgeText: {
+    color: COLORS.text,
+    fontSize: 8,
+    fontWeight: "bold",
+  },
   container: {
     backgroundColor: COLORS.background,
     flex: 1,
@@ -310,6 +445,9 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: "center",
     width: 32,
+  },
+  counterBtnDisabled: {
+    opacity: 0.45,
   },
   counterValue: {
     color: COLORS.text,
@@ -356,30 +494,54 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     alignItems: "center",
+    elevation: 20,
     flexDirection: "row",
+    height: 40,
     justifyContent: "space-between",
     left: 16,
     position: "absolute",
     right: 16,
-    zIndex: 10,
+    zIndex: 20,
   },
   headerBtn: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(14, 13, 18, 0.72)",
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    borderWidth: 1,
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
+    overflow: "visible",
     position: "relative",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
     width: 40,
+    elevation: 6,
   },
   headerRight: {
     flexDirection: "row",
     gap: 8,
   },
+  headerScrim: {
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 9,
+  },
   headerTitle: {
     color: COLORS.text,
     fontSize: 16,
     fontWeight: "bold",
+    left: 56,
+    position: "absolute",
+    right: 56,
+    textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.65)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
   heroImage: {
     height: "100%",

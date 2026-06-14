@@ -11,7 +11,7 @@ export const EVENT_CATEGORIES = [
   "Games & Leisure",
   "Learning & Classes",
   "Markets & Trade",
-  "Sheet Performances",
+  "Street Performances",
   "Religious & Spiritual",
   "College Events",
   "Premium Experiences",

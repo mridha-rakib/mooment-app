@@ -20,7 +20,7 @@ const CheckoutFooter = ({
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
       <TouchableOpacity 
         style={[styles.button, { backgroundColor: colors.primary }, (disabled || loading) && styles.disabledButton]}
         onPress={onPress}
@@ -41,17 +41,18 @@ export default CheckoutFooter;
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 14,
+    paddingTop: 12,
   },
   button: {
-    paddingVertical: 18,
-    borderRadius: 16,
+    height: 52,
+    borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   text: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "700",
   },
   disabledButton: {
     opacity: 0.55,

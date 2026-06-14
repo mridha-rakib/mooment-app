@@ -14,8 +14,8 @@ const EventCard = ({ title, dateTime }: EventCardProps) => {
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Event</Text>
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <View style={[styles.iconBg, { backgroundColor: isDark ? "rgba(212, 176, 235, 0.1)" : "rgba(142, 84, 233, 0.1)" }]}>
+      <View style={[styles.card, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
+        <View style={[styles.iconBg, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : "rgba(142, 84, 233, 0.1)" }]}>
           <Ionicons name="apps" size={20} color={colors.primary} />
         </View>
         <View style={styles.info}>
@@ -31,24 +31,26 @@ export default EventCard;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 12,
   },
   card: {
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 12,
+    minHeight: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
   iconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -56,11 +58,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginBottom: 4,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   dateTime: {
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 16,
   },
 });

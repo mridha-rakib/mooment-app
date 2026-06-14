@@ -126,8 +126,8 @@ export default function ProductDetails() {
       {/* Footer / Add to Cart */}
       <View style={styles.footer}>
         <View style={styles.priceContainer}>
-          <Text style={styles.currentPrice}>£28</Text>
-          <Text style={styles.originalPrice}>£32</Text>
+          <Text style={styles.currentPrice}>$28</Text>
+          <Text style={styles.originalPrice}>$32</Text>
         </View>
         <TouchableOpacity
           style={styles.addToCartBtn}

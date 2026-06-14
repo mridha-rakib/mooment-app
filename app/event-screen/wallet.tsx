@@ -1,10 +1,11 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  Dimensions,
+  ActivityIndicator,
   Image,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -13,59 +14,161 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { useTheme } from "@/hooks/useTheme";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import CinematicButton from "@/components/ui/CinematicButton";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { getMyTicketWallet, type TicketWalletItem } from "@/lib/payments";
+import { getStorageFileUrl } from "@/lib/storage";
 
-const { width } = Dimensions.get("window");
+type WalletTab = "Shared" | "Active" | "Used" | "Canceled";
+
+type WalletSection = {
+  title: string;
+  items: TicketWalletItem[];
+};
+
+const DEFAULT_EVENT_IMAGE =
+  "https://images.unsplash.com/photo-1514525253361-bee8a187499b?q=80&w=400&auto=format&fit=crop";
+const WALLET_TABS: WalletTab[] = ["Shared", "Active", "Used", "Canceled"];
+
+const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_EVENT_IMAGE) => {
+  if (!key) {
+    return fallback;
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return fallback;
+  }
+};
+
+const isSameDay = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) {
+    return "Date TBA";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date TBA";
+  }
+
+  const dateLabel = date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    weekday: "short",
+  });
+  const timeLabel = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    hour12: true,
+    minute: "2-digit",
+  });
+
+  return `${dateLabel} • ${timeLabel}`;
+};
+
+const getLocationLabel = (item: TicketWalletItem) =>
+  item.event.location?.venue ||
+  item.event.location?.searchLabel ||
+  item.event.location?.address ||
+  "Location TBA";
+
+const getAddressLabel = (item: TicketWalletItem) =>
+  item.event.location?.address || item.event.location?.searchLabel || "Address TBA";
+
+const getTicketSections = (items: TicketWalletItem[]): WalletSection[] => {
+  const now = new Date();
+  const tonight: TicketWalletItem[] = [];
+  const upcoming: TicketWalletItem[] = [];
+
+  for (const item of items) {
+    const scheduledAt = item.event.scheduledAt ? new Date(item.event.scheduledAt) : null;
+
+    if (scheduledAt && !Number.isNaN(scheduledAt.getTime()) && isSameDay(scheduledAt, now)) {
+      tonight.push(item);
+    } else {
+      upcoming.push(item);
+    }
+  }
+
+  return [
+    { title: "Tonight", items: tonight },
+    { title: "Upcoming", items: upcoming },
+  ].filter((section) => section.items.length > 0);
+};
 
 const TicketWalletScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState("Shared");
+  const [activeTab, setActiveTab] = useState<WalletTab>("Active");
+  const [tickets, setTickets] = useState<TicketWalletItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const sections = [
-    {
-      title: "Tonight",
-      items: [
-        {
-          id: "1",
-          eventTitle: "Rooftop Session Vol.4",
-          host: "DJ Koko",
-          sharedBy: {
-            name: "Talha Rahman",
-            avatar: "https://i.pravatar.cc/150?u=talha",
-          },
-          location: "New York City",
-          dateTime: "Sat, Sep 9 • 9:00 - 4:00 PM",
-          address: "123 Main Street, New York, NY 1001",
-          image: "https://images.unsplash.com/photo-1514525253361-bee8a187499b?q=80&w=400&auto=format&fit=crop",
-          status: "Active",
-        },
-      ],
-    },
-    {
-      title: "Upcoming",
-      items: [
-        {
-          id: "2",
-          eventTitle: "Rooftop Session Vol.4",
-          host: "DJ Koko",
-          sharedBy: {
-            name: "Talha Rahman",
-            avatar: "https://i.pravatar.cc/150?u=talha",
-          },
-          location: "New York City",
-          dateTime: "Sat, Sep 9 • 9:00 - 4:00 PM",
-          address: "123 Main Street, New York, NY 1001",
-          image: "https://images.unsplash.com/photo-1514525253361-bee8a187499b?q=80&w=400&auto=format&fit=crop",
-          status: "Active",
-        },
-      ],
-    },
-  ];
+  const loadTickets = useCallback(async (refreshing = false) => {
+    if (refreshing) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    setErrorMessage(null);
+
+    try {
+      const walletTickets = await getMyTicketWallet();
+      setTickets(walletTickets);
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error, "Unable to load ticket wallet."));
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadTickets();
+    }, [loadTickets]),
+  );
+
+  const visibleTickets = useMemo(() => {
+    if (activeTab === "Shared") {
+      return tickets.filter(
+        (ticket) =>
+          ticket.walletStatus === "active" &&
+          (ticket.source === "shared" || Boolean(ticket.currentShare)),
+      );
+    }
+
+    const walletStatus: TicketWalletItem["walletStatus"] =
+      activeTab === "Canceled" ? "cancelled" : activeTab === "Used" ? "used" : "active";
+
+    return tickets.filter((ticket) => ticket.source === "owned" && ticket.walletStatus === walletStatus);
+  }, [activeTab, tickets]);
+
+  const sections = useMemo(() => getTicketSections(visibleTickets), [visibleTickets]);
+
+  const emptyLabel =
+    activeTab === "Shared"
+      ? "No shared tickets yet."
+      : `No ${activeTab.toLowerCase()} tickets yet.`;
+
+  const handleSelectTab = (tab: string) => {
+    if (WALLET_TABS.includes(tab as WalletTab)) {
+      setActiveTab(tab as WalletTab);
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
@@ -84,26 +187,67 @@ const TicketWalletScreen = () => {
       {/* Tabs */}
       <View style={styles.tabContainer}>
         <SegmentedControl
-          options={["Shared", "Active", "Used", "Canceled"]}
+          options={WALLET_TABS}
           selectedOption={activeTab}
-          onSelect={setActiveTab}
+          onSelect={handleSelectTab}
         />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void loadTickets(true)}
+            tintColor={colors.text}
+          />
+        }
       >
-        {sections.map((section, idx) => (
+        {isLoading ? (
+          <View style={styles.stateContainer}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.stateContainer}>
+            <Text style={[styles.stateText, { color: colors.textSecondary }]}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { borderColor: colors.border }]}
+              onPress={() => void loadTickets()}
+            >
+              <Text style={[styles.retryText, { color: colors.text }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : sections.length === 0 ? (
+          <View style={styles.stateContainer}>
+            <Text style={[styles.stateText, { color: colors.textSecondary }]}>{emptyLabel}</Text>
+          </View>
+        ) : sections.map((section, idx) => (
           <View key={idx} style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
             {section.items.map((item) => (
               <View key={item.id} style={styles.cardContainer}>
-                {/* Shared By Info */}
                 <View style={styles.sharedInfo}>
-                  <Image source={{ uri: item.sharedBy.avatar }} style={styles.avatar} />
+                  <Image
+                    source={{
+                      uri: resolveStorageUrl(
+                        item.source === "shared"
+                          ? item.sharedBy?.avatarKey
+                          : item.currentShare?.friend?.avatarKey ?? item.event.host?.avatarKey,
+                        "https://i.pravatar.cc/150?u=host",
+                      ),
+                    }}
+                    style={styles.avatar}
+                  />
                   <Text style={[styles.sharedText, { color: colors.textSecondary }]}>
-                    Shared by <Text style={[styles.sharedName, { color: colors.text }]}>{item.sharedBy.name}</Text>
+                    {item.source === "shared" ? "Shared by " : item.currentShare ? "Shared with " : "Hosted by "}
+                    <Text style={[styles.sharedName, { color: colors.text }]}>
+                      {item.source === "shared"
+                        ? item.sharedBy?.name ?? "Friend"
+                        : item.currentShare
+                          ? item.currentShare.friend?.name ?? "Friend"
+                          : item.event.host?.name ?? "Host"}
+                    </Text>
                   </Text>
                 </View>
 
@@ -116,30 +260,65 @@ const TicketWalletScreen = () => {
                     style={styles.cardHeader}
                   >
                     <View>
-                      <Text style={[styles.eventTitle, { color: colors.text }]}>{item.eventTitle}</Text>
-                      <Text style={[styles.hostText, { color: colors.textSecondary }]}>by {item.host}</Text>
+                      <Text style={[styles.eventTitle, { color: colors.text }]}>{item.event.name ?? item.ticketName}</Text>
+                      <Text style={[styles.hostText, { color: colors.textSecondary }]}>by {item.event.host?.name ?? "Host"}</Text>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" }]}>
-                      <Text style={[styles.statusText, { color: colors.success }]}>{item.status}</Text>
+                      <Text style={[styles.statusText, { color: colors.success }]}>
+                        {item.walletStatus === "cancelled" ? "Canceled" : item.walletStatus === "used" ? "Used" : "Active"}
+                      </Text>
                     </View>
                   </LinearGradient>
 
                   {/* Card Body */}
                   <View style={styles.cardBody}>
-                    <Image source={{ uri: item.image }} style={styles.ticketImage} />
+                    <Image
+                      source={{
+                        uri: resolveStorageUrl(item.event.bannerOriginalImageKey ?? item.event.bannerImageKey),
+                      }}
+                      style={styles.ticketImage}
+                    />
                     <View style={styles.ticketInfo}>
                       <View style={styles.locationRow}>
                         <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-                        <Text style={[styles.locationText, { color: colors.text }]}>{item.location}</Text>
+                        <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={1}>
+                          {getLocationLabel(item)}
+                        </Text>
                       </View>
-                      <Text style={[styles.dateTimeText, { color: colors.text }]}>{item.dateTime}</Text>
+                      <Text style={[styles.dateTimeText, { color: colors.text }]}>{formatDateTime(item.event.scheduledAt)}</Text>
                       <Text style={[styles.addressText, { color: colors.textSecondary }]} numberOfLines={2}>
-                        {item.address}
+                        {getAddressLabel(item)}
                       </Text>
                       
                       <TouchableOpacity 
                         style={[styles.viewTicketBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
-                        onPress={() => router.push("/event-screen/ticket-detail")}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/event-screen/ticket-detail",
+                            params: {
+                              source: "wallet",
+                              walletSource: item.source,
+                              purchaseCount: String(item.quantity),
+                              ticketNo: item.ticketNo,
+                              orderId: item.orderId,
+                              eventId: item.event.id,
+                              ticketId: item.ticketId,
+                              eventTitle: item.event.name ?? item.ticketName,
+                              ticketName: item.ticketName,
+                              hostName: item.event.host?.name ?? "Host",
+                              hostHandle: item.event.host?.username ? `@${item.event.host.username}` : "",
+                              bannerImageKey: item.event.bannerOriginalImageKey ?? item.event.bannerImageKey ?? "",
+                              location: getLocationLabel(item),
+                              address: getAddressLabel(item),
+                              dateTime: formatDateTime(item.event.scheduledAt),
+                              amount: String(item.totalAmount),
+                              currency: item.currency,
+                              currentShareId: item.currentShare?.id ?? "",
+                              currentShareFriendName: item.currentShare?.friend?.name ?? "",
+                              currentShareFriendId: item.currentShare?.friend?.id ?? "",
+                            },
+                          })
+                        }
                       >
                         <Text style={[styles.viewTicketText, { color: colors.textSecondary }]}>View Ticket</Text>
                         <Feather name="arrow-right" size={14} color={colors.textSecondary} />
@@ -202,6 +381,29 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  stateContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 260,
+    paddingHorizontal: 24,
+  },
+  stateText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  retryBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  retryText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   section: {
     marginBottom: 24,

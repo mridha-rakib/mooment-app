@@ -117,6 +117,19 @@ export type EventMapQuery = {
   limit?: number;
 };
 
+export type NowEventStatus = "live_now" | "starting_soon" | "last_call";
+
+export type NowModeEventResponse = EventResponse & {
+  nowStatus: NowEventStatus;
+};
+
+export type NowModeQuery = {
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+  limit?: number;
+};
+
 export type RewardClaim = {
   id: string;
   userId: string;
@@ -129,6 +142,17 @@ export type RewardClaim = {
 export type ProfileEventGroups = {
   active: EventResponse[];
   past: EventResponse[];
+};
+
+export type PostTagEventStatus = "live" | "active" | "upcoming";
+
+export type PostTagEvent = {
+  id: string;
+  name: string;
+  bannerImageUrl?: string | null;
+  scheduledAt: string;
+  location?: EventLocation | null;
+  postTagStatus: PostTagEventStatus;
 };
 
 const getEventFromResponse = (response: unknown): EventResponse => {
@@ -314,6 +338,18 @@ export const getMyEvents = async (): Promise<EventResponse[]> => {
   return getEventsFromResponse(response);
 };
 
+export const getMyPostTagEvents = async (): Promise<PostTagEvent[]> => {
+  const response = await api.get("/events/mine/post-tag");
+  const events = response.data?.data?.events;
+  return Array.isArray(events) ? (events as PostTagEvent[]) : [];
+};
+
+export const getEventTicketAccess = async (eventId: string): Promise<{ hasAccess: boolean }> => {
+  const response = await api.get(`/events/${encodeURIComponent(eventId)}/ticket-access`);
+  const access = response.data?.data?.access as { hasAccess: boolean } | undefined;
+  return access ?? { hasAccess: false };
+};
+
 export const getMyProfileEvents = async (): Promise<ProfileEventGroups> => {
   const response = await api.get("/events/mine/profile");
   const events = response.data?.data?.events;
@@ -339,6 +375,13 @@ export const getMapEvents = async (params: EventMapQuery = {}): Promise<EventRes
   const events = response.data?.data?.events;
 
   return Array.isArray(events) ? (events as EventResponse[]) : [];
+};
+
+export const getNowModeEvents = async (params: NowModeQuery = {}): Promise<NowModeEventResponse[]> => {
+  const response = await api.get("/events/now", { params });
+  const events = response.data?.data?.events;
+
+  return Array.isArray(events) ? (events as NowModeEventResponse[]) : [];
 };
 
 export const claimEventReward = async (eventId: string, rewardId: string): Promise<RewardClaim> => {

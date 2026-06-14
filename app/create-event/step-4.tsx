@@ -7,6 +7,7 @@ import {
   Platform,
   StatusBar,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -51,6 +52,18 @@ export default function CreateEventStep4() {
 
     return `Expires in • ${dateLabel} • ${timeLabel}`;
   };
+
+  const getTicketDescriptionPreview = (value?: string | null) => {
+    const description = value?.trim() || 'Entry from 9pm. Standing only.';
+
+    return description.length > 88 ? `${description.slice(0, 85).trim()}...` : description;
+  };
+
+  const formatTicketPrice = (price: number) =>
+    `$${price.toLocaleString('en-US', {
+      minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
+      maximumFractionDigits: Number.isInteger(price) ? 0 : 2,
+    })}`;
 
   const handleSaveDraft = async () => {
     try {
@@ -100,7 +113,11 @@ export default function CreateEventStep4() {
       </View>
 
       {/* Form Content */}
-      <View style={styles.formContainer}>
+      <ScrollView
+        style={styles.formContainer}
+        contentContainerStyle={styles.formContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Create Ticket Button */}
         <TouchableOpacity 
           style={[styles.createTicketButton, { backgroundColor: colors.primary }]}
@@ -112,24 +129,49 @@ export default function CreateEventStep4() {
 
         {tickets.map((ticket) => {
           const isFreeTicket = ticket.type === 'free' || ticket.price <= 0;
-          const ticketPriceLabel = isFreeTicket ? 'Free' : `£${ticket.price}`;
+          const ticketPriceLabel = isFreeTicket ? 'Free' : formatTicketPrice(ticket.price);
 
           return (
-          <View key={ticket.localId} style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <TouchableOpacity
+            key={ticket.localId}
+            style={[
+              styles.ticketCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                shadowOpacity: isDark ? 0 : 0.08,
+              },
+            ]}
+            activeOpacity={0.82}
+            onPress={() => router.push({ pathname: '/create-event/ticket-preview', params: { localId: ticket.localId } })}
+          >
             <View style={styles.ticketHeader}>
               <View style={styles.ticketTitleContainer}>
-                <Text style={[styles.ticketTitle, { color: colors.text }]}>{ticket.name}</Text>
-                <View style={[styles.badge, { backgroundColor: isDark ? '#3F3F46' : '#E5E5EA' }]}>
-                  <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{ticket.capacity} left</Text>
+                <Text style={[styles.ticketTitle, { color: colors.text }]} numberOfLines={1}>
+                  {ticket.name || 'General Ticket'}
+                </Text>
+                <View style={[styles.badge, { backgroundColor: isDark ? '#3F3F46' : '#F1EEF5' }]}>
+                  <Text style={[styles.badgeText, { color: isDark ? '#D9D2E2' : colors.primary }]}>{ticket.capacity} left</Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={() => router.push({ pathname: '/create-event/ticket-details', params: { localId: ticket.localId } })}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                activeOpacity={0.72}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  router.push({ pathname: '/create-event/ticket-details', params: { localId: ticket.localId } });
+                }}
+              >
                 <Feather name="edit-3" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.ticketDescription, { color: colors.textSecondary }]}>{ticket.description || 'Entry from 9pm. Standing only.'}</Text>
-            <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]}>{formatTicketExpiry(ticket.salesEndAt)}</Text>
+            <Text style={[styles.ticketDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+              {getTicketDescriptionPreview(ticket.description)}
+            </Text>
+            <Text style={[styles.ticketExpiry, { color: colors.textSecondary }]} numberOfLines={1}>
+              {formatTicketExpiry(ticket.salesEndAt)}
+            </Text>
 
             <View style={styles.ticketFooter}>
               <View>
@@ -137,8 +179,11 @@ export default function CreateEventStep4() {
                 {!isFreeTicket && <Text style={[styles.perTicket, { color: colors.textSecondary }]}>per ticket</Text>}
               </View>
               <TouchableOpacity
+                style={styles.iconButton}
+                activeOpacity={0.72}
                 disabled={isDeletingTicket}
-                onPress={() => {
+                onPress={(event) => {
+                  event.stopPropagation();
                   setTicketToDeleteId(ticket.localId);
                   setIsDeleteModalVisible(true);
                 }}
@@ -146,16 +191,13 @@ export default function CreateEventStep4() {
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
               </TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
           );
         })}
-      </View>
-
-      {/* Spacer */}
-      <View style={{ flex: 1 }} />
+      </ScrollView>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.background }]}>
         <TouchableOpacity 
           style={[styles.nextButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-event/step-5')}
@@ -209,7 +251,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   formContainer: {
+    flex: 1,
+  },
+  formContent: {
     paddingHorizontal: 16,
+    paddingBottom: 20,
   },
   createTicketButton: {
     flexDirection: 'row',
@@ -217,7 +263,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 12,
-    marginBottom: 24,
+    marginBottom: 28,
   },
   createTicketText: {
     fontSize: 15,
@@ -225,27 +271,35 @@ const styles = StyleSheet.create({
   },
   ticketCard: {
     borderRadius: 16,
-    padding: 20,
+    padding: 18,
     borderWidth: 1,
+    marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+    elevation: 2,
   },
   ticketHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    gap: 12,
+    marginBottom: 10,
   },
   ticketTitleContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   ticketTitle: {
+    flexShrink: 1,
     fontSize: 17,
     fontWeight: '700',
   },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 10,
   },
   badgeText: {
@@ -254,11 +308,13 @@ const styles = StyleSheet.create({
   },
   ticketDescription: {
     fontSize: 13,
-    marginBottom: 4,
+    lineHeight: 18,
+    marginBottom: 6,
   },
   ticketExpiry: {
     fontSize: 12,
-    marginBottom: 16,
+    lineHeight: 16,
+    marginBottom: 18,
   },
   ticketFooter: {
     flexDirection: 'row',
@@ -271,6 +327,12 @@ const styles = StyleSheet.create({
   },
   perTicket: {
     fontSize: 11,
+  },
+  iconButton: {
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
   footer: {
     paddingHorizontal: 16,

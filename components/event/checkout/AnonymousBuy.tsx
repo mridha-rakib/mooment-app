@@ -9,11 +9,11 @@ interface AnonymousBuyProps {
 }
 
 const AnonymousBuy = ({ active, onToggle }: AnonymousBuyProps) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <TouchableOpacity 
-      style={[styles.container, { backgroundColor: colors.card }]}
+      style={[styles.container, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}
       onPress={onToggle}
       activeOpacity={0.8}
     >
@@ -32,16 +32,17 @@ export default AnonymousBuy;
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    minHeight: 58,
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 12,
   },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
@@ -50,11 +51,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginBottom: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   sub: {
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 16,
   },
 });

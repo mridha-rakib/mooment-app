@@ -364,7 +364,7 @@ export default function TicketDetailsScreen() {
           <View ref={(node) => { fieldRefs.current.ticketPrice = node; }} style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>PRICE</Text>
             <View style={[styles.priceInput, { backgroundColor: colors.card }]}>
-              <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>£</Text>
+              <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>$</Text>
               <TextInput
                 style={[styles.priceField, { color: colors.text }]}
                 placeholder="45"

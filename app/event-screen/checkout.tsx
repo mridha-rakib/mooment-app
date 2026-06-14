@@ -5,13 +5,14 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import {
   CheckoutHeader,
   EventCard,
   OrderSummary,
-  AnonymousBuy,
   PaymentTypeSelector,
   PaymentMethods,
   SecurityBanner,
@@ -19,6 +20,7 @@ import {
   CheckoutFooter,
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
+import { startMoomentCreditsCheckout } from "@/lib/payments";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
 const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
@@ -41,12 +43,17 @@ const getParam = (value: string | string[] | undefined, fallback: string) => {
   return source?.trim() || fallback;
 };
 
+const BUYER_FEE_STRIPE = 0.10;
+const BUYER_FEE_CREDITS = 0.05;
+
+const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 const formatCurrency = (value: number) => {
   if (value <= 0) {
-    return "£0";
+    return "$0";
   }
 
-  return `£${value.toLocaleString("en-GB", {
+  return `$${value.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
   })}`;
@@ -68,7 +75,6 @@ const EventCheckoutScreen = () => {
   const [paymentType, setPaymentType] = useState("Online");
   const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
-  const [anonymous, setAnonymous] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
 
   const eventId = typeof params.eventId === "string" ? params.eventId : "";
@@ -79,8 +85,13 @@ const EventCheckoutScreen = () => {
   const quantity = parsePositiveInteger(params.quantity);
   const ticketPrice = parsePrice(params.ticketPrice);
   const isFreeTicket = params.ticketType === "free" || ticketPrice <= 0;
-  const subtotalValue = isFreeTicket ? 0 : ticketPrice * quantity;
+  const subtotalValue = isFreeTicket ? 0 : roundCurrency(ticketPrice * quantity);
+  const feeRate = payWith === "Credits" ? BUYER_FEE_CREDITS : BUYER_FEE_STRIPE;
+  const feeValue = isFreeTicket ? 0 : roundCurrency(subtotalValue * feeRate);
+  const totalValue = isFreeTicket ? 0 : roundCurrency(subtotalValue + feeValue);
   const subtotal = isFreeTicket ? "Free" : formatCurrency(subtotalValue);
+  const fee = isFreeTicket ? "$0" : formatCurrency(feeValue);
+  const total = isFreeTicket ? "Free" : formatCurrency(totalValue);
 
   const orderItems = [
     { name: `${ticketName} x ${quantity}`, price: subtotal },
@@ -107,25 +118,43 @@ const EventCheckoutScreen = () => {
       return;
     }
 
-    if (payWith !== "Card" && payWith !== "Apple") {
-      Alert.alert("Coming soon", "Mooment Credits will be available later. Please use card or Apple Pay.");
-      return;
-    }
-
     setIsPaying(true);
 
     try {
-      await startStripeCheckout({
-        kind: "ticket",
-        paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
-        eventId,
-        ticketId,
-        quantity,
-        anonymous,
-        acceptedTerms: agreed,
-      });
+      const order = payWith === "Credits"
+        ? await startMoomentCreditsCheckout({
+          kind: "ticket",
+          paymentMethod: "mooment_credits",
+          eventId,
+          ticketId,
+          quantity,
+          anonymous: false,
+          acceptedTerms: agreed,
+        })
+        : await startStripeCheckout({
+          kind: "ticket",
+          paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+          eventId,
+          ticketId,
+          quantity,
+          anonymous: false,
+          acceptedTerms: agreed,
+        });
 
-      router.replace("/event-screen/payment-success");
+      router.replace({
+        pathname: "/event-screen/payment-success",
+        params: {
+          orderId: order.id,
+          eventId,
+          ticketId,
+          ticketName,
+          eventName,
+          eventDateTime,
+          quantity: String(quantity),
+          amount: String(order.totalAmount),
+          currency: order.currency,
+        },
+      });
     } catch (error) {
       Alert.alert("Payment failed", error instanceof Error ? error.message : "Please try again.");
     } finally {
@@ -142,37 +171,38 @@ const EventCheckoutScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <EventCard 
-          title={eventName}
-          dateTime={eventDateTime}
-        />
-
-        <OrderSummary 
-          items={orderItems}
-          subtotal={subtotal}
-          reward="£0"
-          fee="£0"
-          tax="£0"
-          total={subtotal}
-        />
-
-        <AnonymousBuy 
-          active={anonymous}
-          onToggle={() => setAnonymous(!anonymous)}
-        />
-
         <PaymentTypeSelector 
           paymentType={paymentType} 
           onTypeChange={setPaymentType} 
         />
         
-        <PaymentMethods 
-          payWith={payWith} 
-          onMethodChange={setPayWith} 
-          disabledMethods={["Credits"]}
+        <PaymentMethods
+          payWith={payWith}
+          onMethodChange={setPayWith}
         />
 
         <SecurityBanner />
+
+        <EventCard 
+          title={eventName}
+          dateTime={eventDateTime}
+        />
+
+        <OrderSummary
+          items={orderItems}
+          subtotal={subtotal}
+          reward="$0"
+          fee={fee}
+          tax="$0"
+          total={total}
+        />
+
+        <View style={styles.noticeCard}>
+          <Ionicons name="information-circle-outline" size={20} color="#E75737" />
+          <Text style={styles.noticeText}>
+            Products are collected in person at the event. A QR code will be generated after payment. Present it to the host to receive your items
+          </Text>
+        </View>
 
         <TermsAgreement 
           agreed={agreed} 
@@ -201,12 +231,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 132,
   },
   footerWrapper: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-  }
+  },
+  noticeCard: {
+    alignItems: "center",
+    backgroundColor: "#1C1718",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+    minHeight: 74,
+    padding: 12,
+  },
+  noticeText: {
+    color: "#B3B3B3",
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
 });

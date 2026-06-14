@@ -1,4 +1,3 @@
-import { initPaymentSheet, initStripe, presentPaymentSheet } from "@stripe/stripe-react-native";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { Platform } from "react-native";
@@ -13,17 +12,41 @@ const stripeMerchantIdentifier =
   (Constants.expoConfig?.extra?.stripeMerchantIdentifier as string | undefined)?.trim() ||
   process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER?.trim();
 
+const loadStripeSdk = async () => {
+  try {
+    return await import("@stripe/stripe-react-native");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (
+      message.includes("StripeSdk") ||
+      message.includes("@stripe/stripe-react-native")
+    ) {
+      throw new Error(
+        "Stripe payments are not available in this dev build. Rebuild the Expo dev client after installing @stripe/stripe-react-native.",
+      );
+    }
+
+    throw error;
+  }
+};
+
 export const startStripeCheckout = async (
   payload: CreateCheckoutIntentPayload,
 ): Promise<CheckoutOrder> => {
-  const checkout = await createCheckoutIntent(payload);
-
   if (payload.paymentMethod === "apple_pay" && Platform.OS !== "ios") {
     throw new Error("Apple Pay is only available on iOS devices.");
   }
 
   if (payload.paymentMethod === "apple_pay" && !stripeMerchantIdentifier) {
     throw new Error("Apple Pay is not configured. Add EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER.");
+  }
+
+  const { initPaymentSheet, initStripe, presentPaymentSheet } = await loadStripeSdk();
+  const checkout = await createCheckoutIntent(payload);
+
+  if (!checkout.publishableKey || !checkout.paymentIntentClientSecret) {
+    throw new Error("Stripe checkout was not initialized by the server.");
   }
 
   await initStripe({

@@ -17,6 +17,7 @@ import {
   type EventRewardType,
   type EventTicketPayload,
 } from "@/lib/events";
+import { getMyTicketPurchaseCounts } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
@@ -136,7 +137,7 @@ const formatPrice = (tickets: EventResponse["tickets"]) => {
 
   const price = Math.min(...prices);
 
-  return `From £${price.toLocaleString("en-GB", {
+  return `From $${price.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
     maximumFractionDigits: Number.isInteger(price) ? 0 : 2,
   })}`;
@@ -158,7 +159,7 @@ const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => 
 
   const total = ticket.price * quantity;
 
-  return `£${total.toLocaleString("en-GB", {
+  return `$${total.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(total) ? 0 : 2,
     maximumFractionDigits: Number.isInteger(total) ? 0 : 2,
   })}`;
@@ -229,6 +230,15 @@ const getPrivacyLabel = (privacy?: EventResponse["privacy"]) =>
 const isSameId = (left?: string | null, right?: string | null) =>
   Boolean(left && right && left.toLowerCase() === right.toLowerCase());
 
+const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+
+  router.replace("/(tabs)/home");
+};
+
 const EventScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ eventId?: string; id?: string; mode?: string }>();
@@ -248,8 +258,10 @@ const EventScreen = () => {
   const [claimedRewardIds, setClaimedRewardIds] = useState<string[]>([]);
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [purchasedTicketCounts, setPurchasedTicketCounts] = useState<Record<string, number>>({});
   const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
   const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
+  const [accessSubTab, setAccessSubTab] = useState("Tickets");
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -276,16 +288,17 @@ const EventScreen = () => {
     const loadEvent = async () => {
       if (!eventId) {
         Alert.alert("Unable to load event", "Missing event id.");
-        router.back();
+        goBackOrHome(router);
         return;
       }
 
       setIsLoading(true);
 
       try {
-        const [loadedEvent, loadedClaims] = await Promise.all([
+        const [loadedEvent, loadedClaims, loadedCounts] = await Promise.all([
           getEventById(eventId),
           getMyEventRewardClaims(eventId).catch(() => []),
+          getMyTicketPurchaseCounts(eventId).catch(() => ({})),
         ]);
 
         if (!isActive) {
@@ -295,13 +308,14 @@ const EventScreen = () => {
         setEvent(loadedEvent);
         setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
         setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
+        setPurchasedTicketCounts(loadedCounts);
       } catch {
         if (!isActive) {
           return;
         }
 
         Alert.alert("Unable to load event", "Please try again.");
-        router.back();
+        goBackOrHome(router);
       } finally {
         if (isActive) {
           setIsLoading(false);
@@ -328,9 +342,10 @@ const EventScreen = () => {
 
       const refreshEvent = async () => {
         try {
-          const [loadedEvent, loadedClaims] = await Promise.all([
+          const [loadedEvent, loadedClaims, loadedCounts] = await Promise.all([
             getEventById(eventId),
             getMyEventRewardClaims(eventId).catch(() => []),
+            getMyTicketPurchaseCounts(eventId).catch(() => ({})),
           ]);
 
           if (!isActive) {
@@ -340,6 +355,7 @@ const EventScreen = () => {
           setEvent(loadedEvent);
           setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
           setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
+          setPurchasedTicketCounts(loadedCounts);
         } catch {
           // Initial loading handles user-facing errors. Focus refreshes stay quiet.
         }
@@ -563,10 +579,21 @@ const EventScreen = () => {
       return;
     }
 
+    const ticketId = ticket.id ?? ticket.name;
+    const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
+
+    if (alreadyPurchased >= 2) {
+      return;
+    }
+
+    if (selectedTicketKey === ticketKey) {
+      setSelectedTicketKey(null);
+      setSelectedTicketQuantity(1);
+      return;
+    }
+
     setSelectedTicketKey(ticketKey);
-    setSelectedTicketQuantity((quantity) =>
-      selectedTicketKey === ticketKey ? clampTicketQuantity(quantity, ticket) : 1,
-    );
+    setSelectedTicketQuantity(1);
   };
 
   const handleTicketQuantityChange = (
@@ -587,8 +614,15 @@ const EventScreen = () => {
       return;
     }
 
-    const quantity = clampTicketQuantity(selectedTicketQuantity, selectedTicket);
     const ticketId = selectedTicket.id ?? selectedTicket.name;
+    const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
+    const maxAllowed = Math.max(0, 2 - alreadyPurchased);
+
+    if (maxAllowed <= 0) {
+      return;
+    }
+
+    const quantity = Math.min(clampTicketQuantity(selectedTicketQuantity, selectedTicket), maxAllowed);
 
     router.push({
       pathname: "/event-screen/checkout",
@@ -604,6 +638,16 @@ const EventScreen = () => {
         quantity: String(quantity),
       },
     });
+  };
+
+  const handleTicketCtaPress = () => {
+    if (!selectedTicket || !selectedTicketKey) {
+      setActiveTab("Access");
+      setAccessSubTab("Tickets");
+      return;
+    }
+
+    handleBuySelectedTicket();
   };
 
   const handleDeleteTicket = (ticket: EventTicketPayload) => {
@@ -914,6 +958,7 @@ const EventScreen = () => {
               host={event?.host ?? null}
               eventImageUris={eventImageUris}
               isHostMode={isHostMode}
+              category={event?.category ?? null}
               onHostFollowChange={updateHostFollowState}
             />
           )}
@@ -922,6 +967,7 @@ const EventScreen = () => {
               tickets={event?.tickets ?? []}
               rewards={event?.rewards ?? []}
               scheduledAt={event?.scheduledAt ?? null}
+              purchasedTicketCounts={purchasedTicketCounts}
               isHostMode={isHostMode}
               deletingTicketId={deletingTicketId}
               deletingRewardId={deletingRewardId}
@@ -929,6 +975,8 @@ const EventScreen = () => {
               claimedRewardIds={claimedRewardIds}
               selectedTicketKey={selectedTicketKey}
               selectedTicketQuantity={selectedTicketQuantity}
+              selectedAccessSubTab={accessSubTab}
+              onSelectAccessSubTab={setAccessSubTab}
               onSelectTicket={handleSelectTicket}
               onTicketQuantityChange={handleTicketQuantityChange}
               onCreateTicket={handleCreateTicket}
@@ -941,7 +989,14 @@ const EventScreen = () => {
               onClaimReward={handleClaimReward}
             />
           )}
-          {activeTab === "Vibe" && <VibeTab />}
+          {activeTab === "Vibe" && eventId && (
+            <VibeTab
+              eventId={eventId}
+              eventName={event?.name ?? "Event"}
+              isHostMode={isHostMode}
+              scheduledAt={event?.scheduledAt}
+            />
+          )}
           {activeTab === "Product" && (
             <ProductTab
               creatorId={event?.userId ?? null}
@@ -983,12 +1038,11 @@ const EventScreen = () => {
                 styles.buyBtn,
                 {
                   backgroundColor: selectedTicket ? colors.primary : colors.card,
-                  opacity: selectedTicket ? 1 : 0.65,
+                  opacity: 1,
                 },
               ]}
               activeOpacity={0.8}
-              disabled={!selectedTicket}
-              onPress={handleBuySelectedTicket}
+              onPress={handleTicketCtaPress}
             >
               <Text style={[styles.buyBtnText, { color: selectedTicket ? colors.background : colors.textSecondary }]}>
                 {selectedTicket ? "Buy Now" : "Select Ticket"}

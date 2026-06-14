@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { Tabs as ExpoTabs } from "expo-router";
 import React, { useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Path, Svg } from "react-native-svg";
 import AddOptionsModal from "../../components/modals/AddOptionsModal";
 import { useTheme } from "@/hooks/useTheme";
@@ -9,6 +10,10 @@ import { useTheme } from "@/hooks/useTheme";
 export default function TabLayout() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const TAB_BAR_INNER_HEIGHT = 56;
+  const tabBarHeight = TAB_BAR_INNER_HEIGHT + insets.bottom;
 
   return (
     <>
@@ -19,9 +24,9 @@ export default function TabLayout() {
             backgroundColor: colors.background,
             borderTopWidth: 1,
             borderTopColor: colors.border,
-            height: 80,
+            height: tabBarHeight,
             paddingTop: 12,
-            paddingBottom: 24,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
             elevation: 0,
             shadowOpacity: 0,
           },

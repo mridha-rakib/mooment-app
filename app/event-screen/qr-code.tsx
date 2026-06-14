@@ -1,13 +1,10 @@
-import {
-  Feather } from '@expo/vector-icons';
-import { useLocalSearchParams,
-  useRouter } from 'expo-router';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
   Alert,
   Dimensions,
   Image,
-  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,11 +15,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '@/hooks/useTheme';
-import CinematicButton from '@/components/ui/CinematicButton';
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 
 const { width } = Dimensions.get('window');
-const QR_SIZE = width * 0.72;
+const CONTENT_WIDTH = Math.min(width - 40, 401);
+const QR_SIZE = CONTENT_WIDTH - 32;
 
 export default function QRCodeScreen() {
   const router = useRouter();
@@ -40,21 +36,23 @@ export default function QRCodeScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <CinematicButton
+        <TouchableOpacity
+          style={styles.backBtn}
           onPress={() => router.back()}
-          icon={ArrowLeft01Icon}
-          size={22}
-        />
+          activeOpacity={0.8}
+        >
+          <Feather name="chevron-left" size={22} color={colors.text} />
+        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>QR Code</Text>
-        <View style={{ width: 36 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {type === 'product' ? (
           /* ── Product QR ── */
           <>
             {/* Product card */}
-            <View style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.productCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
               <Image
                 source={{ uri: 'https://images.unsplash.com/photo-1631390164305-9c6a5e4c3f5f?q=80&w=120&auto=format&fit=crop' }}
                 style={styles.productImage}
@@ -62,12 +60,12 @@ export default function QRCodeScreen() {
               <View style={styles.productInfo}>
                 <Text style={[styles.productName, { color: colors.text }]}>Medusa Skin Whitening Cream</Text>
                 <Text style={[styles.productMeta, { color: colors.textSecondary }]}>@djLoko  •  QTY: 1</Text>
-                <Text style={[styles.productPrice, { color: colors.primary }]}>£26</Text>
+                <Text style={[styles.productPrice, { color: colors.primary }]}>$26</Text>
               </View>
             </View>
 
             {/* Location */}
-            <View style={styles.infoSection}>
+            <View style={[styles.infoSection, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
               <View style={styles.infoRow}>
                 <Feather name="map-pin" size={15} color={colors.textSecondary} style={{ marginRight: 8 }} />
                 <Text style={[styles.infoLabel, { color: colors.text }]}>New York City</Text>
@@ -85,8 +83,6 @@ export default function QRCodeScreen() {
                 <Text style={[styles.infoDetailValue, { color: colors.text }]}>Tonight • 9pm</Text>
               </View>
             </View>
-
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
             {/* Order number */}
             <View style={styles.orderRow}>
@@ -110,35 +106,72 @@ export default function QRCodeScreen() {
             </View>
 
             {/* Success message */}
-            <View style={[styles.successBanner, { backgroundColor: colors.success + '1A' }]}>
-              <Feather name="check-circle" size={15} color={colors.success} style={{ marginRight: 8 }} />
-              <Text style={[styles.successText, { color: colors.success }]}>
-                Your Product has been handover to you in the venue. Thank you for buying from us.
+            <View style={styles.instructionBanner}>
+              <Ionicons name="information-circle-outline" size={20} color="#E75737" />
+              <Text style={styles.instructionText}>
+                Show this QR code to the host at the event to collect your item. Keep screen brightness high.
               </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.walletButton}
+              activeOpacity={0.85}
+              onPress={() => router.push("/event-screen/wallet")}
+            >
+              <Ionicons name="ticket-outline" size={16} color="#111111" />
+              <Text style={styles.walletButtonText}>Ticket Wallet</Text>
+              <Feather name="arrow-right" size={15} color="#111111" />
+            </TouchableOpacity>
           </>
         ) : (
           /* ── Event Ticket QR ── */
           <>
-            <View style={styles.ticketHeader}>
-              <Text style={[styles.ticketForLabel, { color: colors.textSecondary }]}>Your ticket for</Text>
-              <Text style={[styles.ticketEventName, { color: colors.text }]}>Rooftop Sessions Vol. 4</Text>
-              <Text style={[styles.ticketMeta, { color: colors.textSecondary }]}>Tonight • 9pm</Text>
+            <View style={[styles.ticketSummaryCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
+              <View style={[styles.ticketIconBox, { backgroundColor: colors.primary + "1A" }]}>
+                <Ionicons name="ticket-outline" size={28} color={colors.primary} />
+              </View>
+              <View style={styles.ticketSummaryInfo}>
+                <Text style={[styles.ticketSummaryTitle, { color: colors.text }]} numberOfLines={1}>
+                  Rooftop Sessions Vol. 4
+                </Text>
+                <Text style={[styles.ticketSummaryMeta, { color: colors.textSecondary }]}>
+                  @dj_koko  •  QTY: 1
+                </Text>
+                <Text style={[styles.ticketSummaryPrice, { color: colors.primary }]}>Paid $45</Text>
+              </View>
+              <View style={styles.confirmedBadge}>
+                <Text style={styles.confirmedText}>Confirmed</Text>
+              </View>
             </View>
 
-            {/* Payment & Status Info */}
-            <View style={styles.paymentStatusRow}>
-              <View style={styles.paymentInfo}>
-                <Text style={[styles.payLabel, { color: colors.text }]}>Pay <Text style={[styles.payAmount, { color: colors.success }]}>$45</Text> at Door</Text>
+            <View style={[styles.eventInfoCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
+              <View style={styles.eventInfoTitleRow}>
+                <Feather name="map-pin" size={18} color={colors.textSecondary} />
+                <Text style={[styles.eventInfoTitle, { color: colors.text }]}>New York City</Text>
               </View>
-              <View style={[styles.pendingBadge, { backgroundColor: colors.warning + '1A', borderColor: colors.warning + '33' }]}>
-                <Text style={[styles.pendingText, { color: colors.warning }]}>Pending</Text>
+              <View style={styles.eventInfoDetails}>
+                <View style={styles.infoDetail}>
+                  <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Venue:</Text>
+                  <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                    The Rooftop Lounge
+                  </Text>
+                </View>
+                <View style={styles.infoDetail}>
+                  <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Address:</Text>
+                  <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                    123 Main Street, New York, NY 1001
+                  </Text>
+                </View>
+                <View style={styles.infoDetail}>
+                  <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Time:</Text>
+                  <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]}>Tonight • 9pm</Text>
+                </View>
               </View>
-
             </View>
 
             {/* Ticket ID */}
             <View style={styles.ticketIdRow}>
+              <Text style={[styles.ticketIdLabel, { color: colors.textSecondary }]}>Order No:</Text>
               <Text style={[styles.ticketIdText, { color: colors.textSecondary }]}>MOM-2026-8741</Text>
             </View>
 
@@ -153,6 +186,23 @@ export default function QRCodeScreen() {
                 />
               </View>
             </View>
+
+            <View style={styles.instructionBanner}>
+              <Ionicons name="information-circle-outline" size={20} color="#E75737" />
+              <Text style={styles.instructionText}>
+                Show this QR code to the host at the event to verify your ticket. Keep screen brightness high.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.walletButton}
+              activeOpacity={0.85}
+              onPress={() => router.push("/event-screen/wallet")}
+            >
+              <Ionicons name="ticket-outline" size={16} color="#111111" />
+              <Text style={styles.walletButtonText}>Ticket Wallet</Text>
+              <Feather name="arrow-right" size={15} color="#111111" />
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -166,54 +216,61 @@ const styles = StyleSheet.create({
   /* Header */
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14,
   },
   backBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 32, height: 32, borderRadius: 12,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1,
+    backgroundColor: 'rgba(104, 104, 104, 0.16)',
   },
   headerTitle: {
-    flex: 1,
-    fontWeight: '700', fontSize: 17, textAlign: 'center',
+    fontWeight: '600', fontSize: 16, textAlign: 'center',
+    letterSpacing: -0.08,
+  },
+  headerSpacer: {
+    width: 32,
+  },
+  scrollContent: {
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
   },
 
   /* Product card */
   productCard: {
     flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 16, marginTop: 6, marginBottom: 16,
-    borderRadius: 14, padding: 12, gap: 12,
-    borderWidth: 1,
+    width: CONTENT_WIDTH,
+    minHeight: 86,
+    borderRadius: 12, padding: 12, gap: 12,
   },
-  productImage: { width: 56, height: 56, borderRadius: 10 },
+  productImage: { width: 64, height: 64, borderRadius: 12 },
   productInfo: { flex: 1 },
-  productName: { fontWeight: '700', fontSize: 14, marginBottom: 4 },
+  productName: { fontWeight: '700', fontSize: 15, marginBottom: 4 },
   productMeta: { fontSize: 12, marginBottom: 6 },
-  productPrice: { fontWeight: 'bold', fontSize: 16 },
+  productPrice: { fontWeight: '700', fontSize: 18 },
 
   /* Info section */
-  infoSection: { paddingHorizontal: 16, gap: 6, marginBottom: 16 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  infoLabel: { fontWeight: '600', fontSize: 14 },
-  infoDetail: { flexDirection: 'row', gap: 6 },
-  infoDetailLabel: { fontSize: 13, width: 64 },
-  infoDetailValue: { fontSize: 13, flex: 1 },
-
-  divider: { height: 1, marginHorizontal: 16, marginBottom: 14 },
+  infoSection: { width: CONTENT_WIDTH, borderRadius: 12, padding: 12, gap: 8 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  infoLabel: { fontWeight: '700', fontSize: 16 },
+  infoDetail: { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  infoDetailLabel: { fontSize: 13, fontWeight: '600' },
+  infoDetailValue: { fontSize: 13, flex: 1, fontWeight: '600' },
 
   /* Order */
   orderRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, marginBottom: 20,
     justifyContent: 'center',
+    gap: 8,
   },
-  orderLabel: { fontSize: 13, marginRight: 8 },
-  orderNumber: { fontSize: 13 },
+  orderLabel: { fontSize: 14 },
+  orderNumber: { fontSize: 14, fontWeight: '600' },
 
   /* QR */
   qrWrapper: {
-    alignItems: 'center', marginBottom: 20,
-    paddingHorizontal: 24,
+    alignItems: 'center',
   },
   qrContainer: {
     borderRadius: 24,
@@ -227,53 +284,126 @@ const styles = StyleSheet.create({
     width: QR_SIZE, height: QR_SIZE,
   },
 
-  /* Success banner */
-  successBanner: {
+  instructionBanner: {
     flexDirection: 'row', alignItems: 'flex-start',
-    borderRadius: 12, marginHorizontal: 16,
-    padding: 14,
+    backgroundColor: '#1C1718',
+    borderRadius: 12,
+    gap: 8,
+    minHeight: 68,
+    padding: 12,
+    width: CONTENT_WIDTH,
   },
-  successText: { fontSize: 13, flex: 1, lineHeight: 19 },
+  instructionText: {
+    color: '#B3B3B3',
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  walletButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#B2ABBA',
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 38,
+    paddingHorizontal: 16,
+    shadowColor: '#B2ABBA',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  walletButtonText: {
+    color: '#111111',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
 
   /* Event ticket */
-  ticketHeader: { alignItems: 'center', paddingTop: 20, paddingBottom: 30, paddingHorizontal: 24 },
-  ticketForLabel: { fontSize: 14, marginBottom: 10 },
-  ticketEventName: { fontWeight: 'bold', fontSize: 24, textAlign: 'center', marginBottom: 8 },
-  ticketMeta: { fontSize: 14 },
-
-  /* New styles for Ticket Detail match */
-  paymentStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  paymentInfo: {
+  ticketSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    minHeight: 86,
+    padding: 12,
+    borderRadius: 12,
+    width: CONTENT_WIDTH,
   },
-  payLabel: {
-    fontSize: 15,
+  ticketIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  payAmount: {
-    fontWeight: 'bold',
+  ticketSummaryInfo: {
+    flex: 1,
   },
-  pendingBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  ticketSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  ticketSummaryMeta: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  ticketSummaryPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 24,
+    marginTop: 8,
+  },
+  confirmedBadge: {
+    backgroundColor: 'rgba(29, 158, 117, 0.1)',
+    borderColor: 'rgba(29, 158, 117, 0.35)',
     borderRadius: 8,
     borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  pendingText: {
-    fontSize: 13,
-    fontWeight: 'bold',
+  confirmedText: {
+    color: '#1D9E75',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  eventInfoCard: {
+    borderRadius: 12,
+    gap: 16,
+    padding: 12,
+    width: CONTENT_WIDTH,
+  },
+  eventInfoTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  eventInfoTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  eventInfoDetails: {
+    gap: 8,
   },
   ticketIdRow: {
     alignItems: 'center',
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  ticketIdLabel: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   ticketIdText: {
     fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 18,
   },
 });

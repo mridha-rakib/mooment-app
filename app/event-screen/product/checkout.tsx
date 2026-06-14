@@ -1,6 +1,7 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -18,55 +19,78 @@ import {
   CheckoutFooter,
   COLORS,
 } from "@/components/event/checkout";
+import { clearCart, getCart, type Cart } from "@/lib/cart";
+import { startMoomentCreditsCheckout } from "@/lib/payments";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
-const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
-  const source = Array.isArray(value) ? value[0] : value;
-  const parsed = Number.parseInt(source ?? "", 10);
+const BUYER_FEE_STRIPE = 0.10;
+const BUYER_FEE_CREDITS = 0.05;
 
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const parsePrice = (value: string | string[] | undefined, fallback = 45) => {
-  const source = Array.isArray(value) ? value[0] : value;
-  const parsed = Number.parseFloat(source ?? "");
-
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const getParam = (value: string | string[] | undefined, fallback: string) => {
-  const source = Array.isArray(value) ? value[0] : value;
-
-  return source?.trim() || fallback;
-};
+const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 const formatCurrency = (value: number) =>
-  `£${value.toLocaleString("en-GB", {
+  `$${value.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
 
 const ProductCheckoutScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    productId?: string;
-    productName?: string;
-    productPrice?: string;
-    quantity?: string;
-  }>();
   const [paymentType, setPaymentType] = useState("Online");
   const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [cart, setCart] = useState<Cart | null>(null);
+  const [isLoadingCart, setIsLoadingCart] = useState(true);
 
-  const productId = typeof params.productId === "string" ? params.productId : "";
-  const productName = getParam(params.productName, "Medusa Skin Care");
-  const quantity = parsePositiveInteger(params.quantity);
-  const productPrice = parsePrice(params.productPrice);
-  const total = productPrice * quantity;
-  const orderItems = [
-    { name: `${productName} x ${quantity}`, price: formatCurrency(total) },
-  ];
+  useEffect(() => {
+    let isActive = true;
+
+    const loadCart = async () => {
+      try {
+        const loadedCart = await getCart();
+
+        if (!isActive) {
+          return;
+        }
+
+        if (loadedCart.items.length === 0) {
+          Alert.alert("Cart is empty", "Add products to your cart before checking out.");
+          router.back();
+          return;
+        }
+
+        setCart(loadedCart);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        Alert.alert("Unable to load cart", "Please try again.");
+        router.back();
+      } finally {
+        if (isActive) {
+          setIsLoadingCart(false);
+        }
+      }
+    };
+
+    void loadCart();
+
+    return () => {
+      isActive = false;
+    };
+  }, [router]);
+
+  const feeRate = payWith === "Credits" ? BUYER_FEE_CREDITS : BUYER_FEE_STRIPE;
+  const subtotalValue = cart?.subtotalUsd ?? 0;
+  const feeValue = roundCurrency(subtotalValue * feeRate);
+  const totalValue = roundCurrency(subtotalValue + feeValue);
+
+  const orderItems = (cart?.items ?? []).map((item) => ({
+    name: `${item.product.name} x ${item.quantity}`,
+    price: formatCurrency(item.lineTotalUsd),
+  }));
 
   const handleContinue = async () => {
     if (!agreed) {
@@ -79,30 +103,36 @@ const ProductCheckoutScreen = () => {
       return;
     }
 
-    if (payWith !== "Card" && payWith !== "Apple") {
-      Alert.alert("Coming soon", "Mooment Credits will be available later. Please use card or Apple Pay.");
+    if (!cart || cart.items.length === 0) {
+      Alert.alert("Cart is empty", "Add products to your cart before checking out.");
       return;
     }
+
+    const items = cart.items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+    }));
 
     setIsPaying(true);
 
     try {
-      await startStripeCheckout(
-        productId
-          ? {
-              kind: "product",
-              paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
-              items: [{ productId, quantity }],
-              acceptedTerms: agreed,
-            }
-          : {
-              kind: "custom",
-              paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
-              items: [{ name: productName, amount: productPrice, quantity }],
-              acceptedTerms: agreed,
-            },
-      );
+      if (payWith === "Credits") {
+        await startMoomentCreditsCheckout({
+          kind: "product",
+          paymentMethod: "mooment_credits",
+          items,
+          acceptedTerms: agreed,
+        });
+      } else {
+        await startStripeCheckout({
+          kind: "product",
+          paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+          items,
+          acceptedTerms: agreed,
+        });
+      }
 
+      await clearCart().catch(() => {});
       router.replace({ pathname: "/event-screen/qr-code", params: { type: "product" } });
     } catch (error) {
       Alert.alert("Payment failed", error instanceof Error ? error.message : "Please try again.");
@@ -111,56 +141,51 @@ const ProductCheckoutScreen = () => {
     }
   };
 
+  if (isLoadingCart) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <CheckoutHeader title="Checkout" />
+        <ActivityIndicator color={COLORS.primary} size="large" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <CheckoutHeader title="Checkout" />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <PaymentTypeSelector 
-          paymentType={paymentType} 
-          onTypeChange={setPaymentType} 
-        />
-        
-        <PaymentMethods 
-          payWith={payWith} 
-          onMethodChange={setPayWith} 
-          disabledMethods={["Credits"]}
-        />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <PaymentTypeSelector paymentType={paymentType} onTypeChange={setPaymentType} />
+
+        <PaymentMethods payWith={payWith} onMethodChange={setPayWith} />
 
         <SecurityBanner />
 
-        <OrderSummary 
+        <OrderSummary
           items={orderItems}
-          subtotal={formatCurrency(total)}
-          reward="£0"
-          fee="£0"
-          tax="£0"
-          total={formatCurrency(total)}
+          subtotal={formatCurrency(subtotalValue)}
+          reward="$0"
+          fee={formatCurrency(feeValue)}
+          tax="$0"
+          total={formatCurrency(totalValue)}
         />
 
-        {/* Collection Info - Specific to Product */}
         <View style={styles.collectionBanner}>
           <Ionicons name="information-circle" size={22} color={COLORS.accentOrange} />
           <Text style={styles.collectionText}>
-            Products are collected in person at the event. A QR code will be generated after payment. Present it to the host to receive your items
+            Products are collected in person at the event. A QR code will be generated after payment. Present it to the host to receive your items.
           </Text>
         </View>
 
-        <TermsAgreement 
-          agreed={agreed} 
-          onToggle={() => setAgreed(!agreed)} 
-        />
+        <TermsAgreement agreed={agreed} onToggle={() => setAgreed(!agreed)} />
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
       <View style={styles.footerWrapper}>
-        <CheckoutFooter 
+        <CheckoutFooter
           onPress={handleContinue}
-          disabled={!agreed || isPaying}
+          disabled={!agreed || isPaying || !cart}
           loading={isPaying}
         />
       </View>
@@ -171,33 +196,37 @@ const ProductCheckoutScreen = () => {
 export default ProductCheckoutScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    padding: 16,
+  centered: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   collectionBanner: {
-    flexDirection: "row",
     backgroundColor: "rgba(255, 107, 61, 0.05)",
-    padding: 16,
+    borderColor: "rgba(255, 107, 61, 0.1)",
     borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
     gap: 12,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 107, 61, 0.1)",
+    padding: 16,
   },
   collectionText: {
-    flex: 1,
     color: COLORS.textMuted,
+    flex: 1,
     fontSize: 13,
     lineHeight: 20,
   },
+  container: {
+    backgroundColor: COLORS.background,
+    flex: 1,
+  },
   footerWrapper: {
-    position: "absolute",
     bottom: 0,
     left: 0,
+    position: "absolute",
     right: 0,
+  },
+  scrollContent: {
+    padding: 16,
   },
 });

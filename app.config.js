@@ -35,6 +35,8 @@ const fileEnv = readEnvFile();
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || fileEnv.EXPO_PUBLIC_API_BASE_URL;
 const mapboxPublicToken =
   process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || fileEnv.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+const stripeMerchantIdentifier =
+  process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER || fileEnv.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER;
 const appVariant = process.env.APP_VARIANT || process.env.EAS_BUILD_PROFILE || "development";
 
 const variantConfig = {
@@ -75,11 +77,22 @@ module.exports = ({ config }) => {
         ...baseConfig.android,
         package: selectedVariant?.androidPackage || baseConfig.android?.package,
       },
-      plugins: [...(baseConfig.plugins || []), "./plugins/withUsesCleartextTraffic"],
+      plugins: [
+        ...(baseConfig.plugins || []),
+        [
+          "@stripe/stripe-react-native",
+          {
+            enableGooglePay: true,
+            merchantIdentifier: stripeMerchantIdentifier,
+          },
+        ],
+        "./plugins/withUsesCleartextTraffic",
+      ],
       extra: {
         ...baseConfig.extra,
         apiBaseUrl,
         mapboxPublicToken,
+        stripeMerchantIdentifier,
       },
     },
   };

@@ -14,7 +14,7 @@ import { CameraView,
   useMicrophonePermissions } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VideoView,
   useVideoPlayer } from 'expo-video';
 import React,
@@ -49,7 +49,6 @@ import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
 
-const MOCK_EVENT = 'Roofstope Series Vol1.';
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop';
 const FALLBACK_AUTHOR_NAME = 'Mooment User';
 const MAX_MEDIA_ITEMS = 10;
@@ -640,7 +639,7 @@ function QRDetailsModal({
             <View style={{ flex: 1 }}>
               <Text style={[qdStyles.productTitle, { color: colors.text }]}>Medusa Skin Whitening Cream</Text>
               <Text style={[qdStyles.productMeta, { color: colors.textSecondary }]}>@df_koko • QTY: 1</Text>
-              <Text style={[qdStyles.productPrice, { color: colors.primary }]}>£28</Text>
+              <Text style={[qdStyles.productPrice, { color: colors.primary }]}>$28</Text>
             </View>
           </View>
 
@@ -1187,6 +1186,7 @@ const audioStyles = StyleSheet.create({
 export default function CreateMomentScreen() {
   const screenColors = CREATE_MOMENT_COLORS;
   const router = useRouter();
+  const params = useLocalSearchParams<{ eventId?: string; eventName?: string }>();
   const user = useAuthStore((state) => state.user);
   const scrollViewRef = useRef<ScrollView>(null);
   const captionPosition = useRef(0);
@@ -1201,8 +1201,17 @@ export default function CreateMomentScreen() {
   const [selectedMediaContentType, setSelectedMediaContentType] = useState<string | null>(null);
   const [selectedMediaName, setSelectedMediaName] = useState<string | null>(null);
   const [selectedMediaDurationSeconds, setSelectedMediaDurationSeconds] = useState<number | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<string>(MOCK_EVENT);
+  const [selectedEvent, setSelectedEvent] = useState<string>('');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedEventCode, setSelectedEventCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.eventId && params.eventName) {
+      setSelectedEventId(params.eventId);
+      setSelectedEvent(params.eventName);
+      setPublishToEvent(true);
+    }
+  }, [params.eventId, params.eventName]);
   const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
   const [audience, setAudience] = useState('Public');
   const [showConfetti, setShowConfetti] = useState(false);
@@ -1563,6 +1572,7 @@ export default function CreateMomentScreen() {
           taggedPeople,
           eventTitle: publishToEvent ? eventTitle : null,
           eventCode: publishToEvent ? eventCode : null,
+          eventId: publishToEvent ? selectedEventId : null,
           mediaItems,
         })),
       );
@@ -1666,7 +1676,9 @@ export default function CreateMomentScreen() {
                 {publishToEvent && (
                   <>
                     <Text style={styles.authorMuted}> at </Text>
-                    <Text style={styles.authorBold}>{selectedEvent}</Text>
+                    <Text style={[styles.authorBold, !selectedEvent && { color: '#8E8E9B' }]}>
+                      {selectedEvent || 'Select an event'}
+                    </Text>
                   </>
                 )}
               </Text>
@@ -1840,7 +1852,8 @@ export default function CreateMomentScreen() {
         visible={showEventModal}
         onClose={() => setShowEventModal(false)}
         onSelect={ev => {
-          setSelectedEvent(ev);
+          setSelectedEvent(ev.title);
+          setSelectedEventId(ev.id);
           setSelectedEventCode(null);
           setShowEventModal(false);
         }}

@@ -152,7 +152,7 @@ export default function ProfileHeader({ userId, avatar, stats, isOwnProfile = tr
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 12,
   },
   brandedHeader: {
     flexDirection: 'row',

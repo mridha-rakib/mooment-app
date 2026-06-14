@@ -1,5 +1,6 @@
 import { useTheme } from "@/hooks/useTheme";
 import { EVENT_CATEGORIES } from "@/constants/eventCategories";
+import { getCategoryColor, CATEGORY_COLORS } from "@/constants/categoryColors";
 import {
   Add01Icon,
   Remove01Icon,
@@ -24,8 +25,7 @@ import EventPreviewModal from "./EventPreviewModal";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const EVENT_MARKER_BORDER_COLOR = "#5C30BB";
-const SATELLITE_3D_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
+const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
 const TERRAIN_SOURCE_ID = "event-mapbox-dem";
 const TERRAIN_SOURCE_URL = "mapbox://mapbox.mapbox-terrain-dem-v1";
 const SATELLITE_3D_HEADING = -26;
@@ -65,23 +65,25 @@ const MapMarker = ({
   coordinate,
   image,
   label,
+  glowColor,
   onPress,
 }: {
   coordinate: [number, number];
   image: string;
   label: string;
+  glowColor: string;
   onPress: () => void;
 }) => {
   return (
     <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
       <TouchableOpacity
-        style={styles.eventMarkerButton}
+        style={[styles.eventMarkerButton, { shadowColor: glowColor }]}
         onPress={onPress}
         activeOpacity={0.9}
         accessibilityRole="button"
         accessibilityLabel={label ? `${label} event` : "Event marker"}
       >
-        <View style={styles.eventMarkerFrame}>
+        <View style={[styles.eventMarkerFrame, { borderColor: glowColor }]}>
           <Image source={{ uri: image }} style={styles.markerImage} resizeMode="cover" />
         </View>
       </TouchableOpacity>
@@ -94,7 +96,7 @@ export default function MapScreen({
   onUserLocationChange,
 }: MapScreenProps) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const sharedLocation = useAuthStore((state) =>
     state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
   );
@@ -105,19 +107,18 @@ export default function MapScreen({
   const [selectedCategory, setSelectedCategory] = useState("All");
   const cameraRef = React.useRef<Mapbox.Camera>(null);
   const [zoomLevel, setZoomLevel] = useState(12);
-  const [mapMode, setMapMode] = useState<MapViewMode>("normal");
+  const [mapMode, setMapMode] = useState<MapViewMode>("satellite");
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const isSatellite = mapMode === "satellite" || mapMode === "satellite3d";
   const isSatellite3D = mapMode === "satellite3d";
   const currentMapStyle = isSatellite
-    ? SATELLITE_3D_STYLE_URL
-    : isDark
-      ? Mapbox.StyleURL.Dark
-      : Mapbox.StyleURL.Light;
+    ? SATELLITE_STYLE_URL
+    : Mapbox.StyleURL.Dark;
   const cameraZoomLevel = isSatellite3D
     ? Math.max(zoomLevel, SATELLITE_3D_MIN_ZOOM)
     : zoomLevel;
   const lastReportedLocationRef = React.useRef<string | null>(null);
+  const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
   const applyUserLocation = React.useCallback(
     (coordinate: [number, number]) => {
@@ -142,7 +143,6 @@ export default function MapScreen({
   React.useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
   }, []);
-  const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
   const categories = ["All", ...EVENT_CATEGORIES];
   const visibleMarkers = React.useMemo(
@@ -208,52 +208,43 @@ export default function MapScreen({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Categories - Only show categories here as HomeHeader is now separate */}
       <View style={styles.topHeader}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoriesScroll}
         >
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
-              style={[
-                styles.categoryBtn,
-                {
-                  backgroundColor:
-                    selectedCategory === cat
-                      ? colors.text
-                      : isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "rgba(0,0,0,0.05)",
-                },
-                selectedCategory !== cat && {
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                },
-              ]}
-            >
-              <Text
+          {categories.map((cat) => {
+            const isActive = selectedCategory === cat;
+            const catColor = cat === "All" ? "#8E54E9" : getCategoryColor(cat);
+            return (
+              <TouchableOpacity
+                key={cat}
+                onPress={() => setSelectedCategory(cat)}
                 style={[
-                  styles.categoryText,
-                  {
-                    color:
-                      selectedCategory === cat
-                        ? colors.background
-                        : colors.text,
-                  },
+                  styles.categoryBtn,
+                  isActive
+                    ? { backgroundColor: catColor, borderColor: catColor, borderWidth: 1 }
+                    : styles.categoryBtnInactive,
                 ]}
               >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                {cat !== "All" && (
+                  <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(cat) }]} />
+                )}
+                <Text
+                  style={[
+                    styles.categoryText,
+                    { color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.65)" },
+                  ]}
+                >
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
-      {/* Map Content Area */}
       <View style={styles.mapArea}>
         <Mapbox.MapView
           key={mapMode === "normal" ? currentMapStyle : mapMode}
@@ -286,12 +277,12 @@ export default function MapScreen({
               />
               <Mapbox.Atmosphere
                 style={{
-                  color: "#DDE8F8",
-                  highColor: "#AFC8F4",
-                  horizonBlend: 0.12,
+                  color: "#0A1628",
+                  highColor: "#1A2F50",
+                  horizonBlend: 0.1,
                   range: [-1.5, 4.5],
-                  spaceColor: "#06111E",
-                  starIntensity: 0.04,
+                  spaceColor: "#020810",
+                  starIntensity: 0.08,
                   verticalRange: [0, 600],
                 }}
               />
@@ -313,13 +304,13 @@ export default function MapScreen({
             }
           />
 
-          {/* Markers */}
           {visibleMarkers.map((marker) => (
             <MapMarker
               key={marker.id}
               coordinate={[marker.longitude, marker.latitude]}
               image={marker.image}
               label={marker.label}
+              glowColor={marker.glowColor}
               onPress={() => handleMarkerPress(marker)}
             />
           ))}
@@ -334,7 +325,7 @@ export default function MapScreen({
               style={{
                 fillExtrusionBase: ["coalesce", ["get", "min_height"], 0],
                 fillExtrusionBaseAlignment: "terrain",
-                fillExtrusionColor: "#D6DBE6",
+                fillExtrusionColor: "#0D1117",
                 fillExtrusionEdgeRadius: 0.28,
                 fillExtrusionHeight: [
                   "interpolate",
@@ -346,10 +337,10 @@ export default function MapScreen({
                   ["coalesce", ["get", "height"], 26],
                 ],
                 fillExtrusionHeightAlignment: "terrain",
-                fillExtrusionOpacity: 0.58,
+                fillExtrusionOpacity: 0.72,
                 fillExtrusionVerticalGradient: true,
-                fillExtrusionAmbientOcclusionIntensity: 0.32,
-                fillExtrusionAmbientOcclusionRadius: 3.5,
+                fillExtrusionAmbientOcclusionIntensity: 0.45,
+                fillExtrusionAmbientOcclusionRadius: 4,
                 fillExtrusionRoundedRoof: true,
               }}
             />
@@ -368,7 +359,6 @@ export default function MapScreen({
           />
         </Mapbox.MapView>
 
-        {/* Map Controls */}
         <View style={styles.mapControlsLeft}>
           <CinematicButton icon={Add01Icon} onPress={handleZoomIn} />
           <CinematicButton icon={Remove01Icon} onPress={handleZoomOut} />
@@ -380,7 +370,6 @@ export default function MapScreen({
         </View>
       </View>
 
-      {/* Event Preview Modal */}
       <EventPreviewModal
         visible={modalVisible}
         onClose={() => {
@@ -412,22 +401,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   eventMarkerButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    shadowColor: "#FFFFFF",
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.75,
+    shadowRadius: 12,
+    elevation: 12,
   },
   eventMarkerFrame: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     borderWidth: 3,
-    borderColor: EVENT_MARKER_BORDER_COLOR,
-    backgroundColor: "#111111",
+    borderColor: "#9CA3AF",
+    backgroundColor: "#080808",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
@@ -435,29 +423,6 @@ const styles = StyleSheet.create({
   markerImage: {
     width: "100%",
     height: "100%",
-  },
-  currentLocationOuter: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(59, 130, 246, 0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    shadowColor: "#007AFF",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  currentLocationInner: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#007AFF",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
   },
   topHeader: {
     width: "100%",
@@ -468,50 +433,7 @@ const styles = StyleSheet.create({
   mapArea: {
     flex: 1,
     overflow: "hidden",
-    backgroundColor: "#1a1a1a", // Fallback color to see if mapArea is rendering
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  dropdownBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  dropdownText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    letterSpacing: -0.5,
-  },
-  headerRight: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "#000000",
   },
   categoriesScroll: {
     paddingHorizontal: 16,
@@ -519,12 +441,25 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   categoryBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 25,
+    gap: 6,
+  },
+  categoryBtnInactive: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+  },
+  categoryDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
   },
   mapControlsLeft: {

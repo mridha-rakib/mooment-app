@@ -1,96 +1,107 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  FlatList, Image, Modal, Platform, StyleSheet,
+  ActivityIndicator, FlatList, Image, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
-type EventStatus = 'live' | 'active' | 'upcoming';
+import { getMyPostTagEvents, type PostTagEvent, type PostTagEventStatus } from '@/lib/events';
 
-const MOCK_EVENTS = [
-  {
-    id: '1',
-    title: 'Rooftop Session Vol 4',
-    organizer: 'DJ Kojo',
-    time: 'Tonight • 9pm',
-    distance: '0.3mi',
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
-    status: 'live' as EventStatus,
-  },
-  {
-    id: '2',
-    title: 'Rooftop Session Vol 4',
-    organizer: 'DJ Kojo',
-    time: 'Tonight • 9pm',
-    distance: '0.3mi',
-    image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=200&auto=format&fit=crop',
-    status: 'active' as EventStatus,
-  },
-  {
-    id: '3',
-    title: 'Rooftop Session Vol 4',
-    organizer: 'DJ Kojo',
-    time: 'Tonight • 9pm',
-    distance: '0.3mi',
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=200&auto=format&fit=crop',
-    status: 'upcoming' as EventStatus,
-  },
-  {
-    id: '4',
-    title: 'Jazz Night at the Loft',
-    organizer: 'Blue Note',
-    time: 'Tomorrow • 8pm',
-    distance: '1.1mi',
-    image: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=200&auto=format&fit=crop',
-    status: 'upcoming' as EventStatus,
-  },
-];
+type SelectedEvent = {
+  id: string;
+  title: string;
+};
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSelect: (eventTitle: string) => void;
+  onSelect: (event: SelectedEvent) => void;
 };
 
-// Status badge configs
-const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bg: string; dot: boolean }> = {
+const STATUS_CONFIG: Record<PostTagEventStatus, { label: string; color: string; bg: string; dot: boolean }> = {
   live:     { label: 'Live',     color: '#16D869', bg: 'rgba(22,216,105,0.12)', dot: true },
   active:   { label: 'Active',   color: '#16D869', bg: 'transparent',           dot: false },
   upcoming: { label: 'Upcoming', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  dot: false },
 };
 
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop';
+
+function formatEventMeta(event: PostTagEvent): string {
+  const parts: string[] = [];
+
+  if (event.location?.venue) {
+    parts.push(event.location.venue);
+  } else if (event.location?.address) {
+    parts.push(event.location.address);
+  }
+
+  if (event.scheduledAt) {
+    const date = new Date(event.scheduledAt);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow = date.toDateString() === tomorrow.toDateString();
+
+    const dayLabel = isToday ? 'Tonight' : isTomorrow ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const timeLabel = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    parts.push(`${dayLabel} • ${timeLabel}`);
+  }
+
+  return parts.join(' • ');
+}
+
 export default function EventPickerModal({ visible, onClose, onSelect }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [events, setEvents] = useState<PostTagEvent[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filtered = MOCK_EVENTS.filter(e =>
-    e.title.toLowerCase().includes(search.toLowerCase()) ||
-    e.organizer.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    if (!visible) return;
+
+    let cancelled = false;
+    setLoading(true);
+
+    getMyPostTagEvents()
+      .then((data) => {
+        if (!cancelled) setEvents(data);
+      })
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  const filtered = events.filter(e =>
+    e.name.toLowerCase().includes(search.toLowerCase()) ||
+    (e.location?.venue ?? '').toLowerCase().includes(search.toLowerCase()),
   );
 
-  const handleSelect = (id: string, title: string) => {
-    setSelectedId(id);
-    onSelect(title);  // immediately update parent
-    onClose();        // close modal
-    // router.push({ pathname: '/live-screen/live-room-screen', params: { id, title } });
+  const handleSelect = (event: PostTagEvent) => {
+    setSelectedId(event.id);
+    onSelect({ id: event.id, title: event.name });
+    onClose();
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
       <View style={styles.overlay}>
-        {/* Tap outside to close */}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
         <View style={styles.sheet}>
-          {/* Handle */}
           <View style={styles.handle} />
-
-          {/* Title */}
           <Text style={styles.title}>Events</Text>
 
-          {/* Search */}
           <View style={styles.searchRow}>
             <Feather name="search" size={16} color="#454555" style={{ marginRight: 10 }} />
             <TextInput
@@ -107,33 +118,37 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
             )}
           </View>
 
-          {/* Event list OR empty state */}
-          {filtered.length > 0 ? (
+          {loading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color="#8E54E9" size="small" />
+            </View>
+          ) : filtered.length > 0 ? (
             <FlatList
               data={filtered}
               keyExtractor={item => item.id}
               showsVerticalScrollIndicator={false}
               style={{ maxHeight: 400 }}
               renderItem={({ item }) => {
-                const cfg = STATUS_CONFIG[item.status];
+                const cfg = STATUS_CONFIG[item.postTagStatus];
                 const isSelected = selectedId === item.id;
                 return (
                   <TouchableOpacity
                     style={[styles.eventRow, isSelected && styles.eventRowSelected]}
-                    onPress={() => handleSelect(item.id, item.title)}
+                    onPress={() => handleSelect(item)}
                     activeOpacity={0.85}
                   >
-                    <Image source={{ uri: item.image }} style={styles.eventImage} />
+                    <Image
+                      source={{ uri: item.bannerImageUrl ?? FALLBACK_IMAGE }}
+                      style={styles.eventImage}
+                    />
                     <View style={styles.eventInfo}>
-                      <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-                      <Text style={styles.eventMeta}>
-                        {item.organizer} • {item.time} • {item.distance}
-                      </Text>
+                      <Text style={styles.eventTitle} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.eventMeta} numberOfLines={1}>{formatEventMeta(item)}</Text>
                     </View>
                     <View style={[
                       styles.statusBadge,
-                      { borderColor: cfg.color + (item.status === 'live' ? '00' : '55') },
-                      item.status !== 'live' && { borderWidth: 1 },
+                      { borderColor: cfg.color + (item.postTagStatus === 'live' ? '00' : '55') },
+                      item.postTagStatus !== 'live' && { borderWidth: 1 },
                       { backgroundColor: cfg.bg },
                     ]}>
                       {cfg.dot && <View style={[styles.statusDot, { backgroundColor: cfg.color }]} />}
@@ -144,13 +159,12 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
               }}
             />
           ) : (
-            /* ── Empty State ── */
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>
-                Currently you did not buy any ticket, browse events to book
+                You have no active or upcoming events to tag. Create an event first.
               </Text>
               <TouchableOpacity style={styles.browseBtn} onPress={onClose} activeOpacity={0.8}>
-                <Text style={styles.browseBtnText}>Browse Event</Text>
+                <Text style={styles.browseBtnText}>Close</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -185,7 +199,6 @@ const styles = StyleSheet.create({
     fontSize: 18, textAlign: 'center', marginBottom: 14,
   },
 
-  /* Search */
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'transparent',
@@ -196,8 +209,11 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
 
-  /* List */
-  separator: { height: 1, backgroundColor: '#1A1A2E' },
+  loadingState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+
   eventRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 12, paddingHorizontal: 2,
@@ -217,7 +233,6 @@ const styles = StyleSheet.create({
   },
   eventMeta: { color: '#8E8E9B', fontSize: 12 },
 
-  /* Status badge */
   statusBadge: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 4,
@@ -230,7 +245,6 @@ const styles = StyleSheet.create({
     fontSize: 12, fontWeight: '700',
   },
 
-  /* Empty state */
   emptyState: {
     paddingVertical: 36,
     paddingHorizontal: 24,

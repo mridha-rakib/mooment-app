@@ -41,9 +41,10 @@ export default PaymentTypeSelector;
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    gap: 32,
-    marginBottom: 24,
-    paddingHorizontal: 4,
+    gap: 24,
+    marginBottom: 18,
+    paddingHorizontal: 2,
+    paddingVertical: 8,
   },
   item: {
     flexDirection: "row",
@@ -51,20 +52,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
     justifyContent: "center",
     alignItems: "center",
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   text: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
   },
 });

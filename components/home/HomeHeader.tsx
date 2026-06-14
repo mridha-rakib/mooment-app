@@ -1,16 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react-native';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import FilterModal from './FilterModal';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '../ui/CinematicButton';
-
-const { width } = Dimensions.get('window');
 
 interface HomeHeaderProps {
   selectedType: string;
@@ -19,11 +14,9 @@ interface HomeHeaderProps {
 
 export default function HomeHeader({ selectedType, setSelectedType }: HomeHeaderProps) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [filterVisible, setFilterVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
-
-  const isMapMode = selectedType === 'Map';
 
   return (
     <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
@@ -51,11 +44,17 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
             icon={Search01Icon}
             onPress={() => router.push('/discover-screen/search')}
             style={styles.iconBtn}
+            width={38}
+            height={38}
+            borderRadius={19}
           />
           <CinematicButton
             icon={FilterHorizontalIcon}
             onPress={() => setFilterVisible(true)}
             style={styles.iconBtn}
+            width={38}
+            height={38}
+            borderRadius={19}
           />
         </View>
       </View>
@@ -80,8 +79,8 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
                 <Text style={[styles.dropdownText, { color: colors.text }]}>Feed</Text>
               </TouchableOpacity>
               <View style={[styles.dropdownSeparator, { backgroundColor: colors.border }]} />
-              <TouchableOpacity 
-                style={styles.dropdownItem} 
+              <TouchableOpacity
+                style={styles.dropdownItem}
                 onPress={() => { setSelectedType('Map'); setDropdownVisible(false); }}
               >
                 <View style={[styles.greenDot, selectedType === 'Map' ? { opacity: 1 } : { opacity: 0 }]} />
@@ -104,9 +103,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 15,
+    minHeight: 46,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 8,
     position: "relative",
   },
   mapHeaderLeft: {
@@ -128,9 +128,11 @@ const styles = StyleSheet.create({
   feedBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    height: 38,
+    minWidth: 96,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    borderRadius: 19,
   },
   greenDot: {
     width: 6,
@@ -145,19 +147,21 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   logoImage: {
-    width: 120,
-    height: 28,
+    width: 112,
+    height: 26,
   },
   logoSlot: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: -1,
   },
   headerIcons: {
     flexDirection: "row",
+    gap: 8,
   },
   iconBtn: {
-    marginLeft: 12,
+    marginLeft: 0,
   },
 
   dropdownOverlay: {

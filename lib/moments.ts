@@ -33,6 +33,7 @@ export type Moment = {
   taggedPeople: string[];
   eventTitle?: string | null;
   eventCode?: string | null;
+  eventId?: string | null;
   mediaItems: MomentMediaItem[];
   likesCount: number;
   commentsCount: number;
@@ -91,7 +92,13 @@ export type CreateMomentPayload = {
   taggedPeople?: string[];
   eventTitle?: string | null;
   eventCode?: string | null;
+  eventId?: string | null;
   mediaItems?: MomentMediaItem[];
+};
+
+export const getEventMoments = async (eventId: string): Promise<Moment[]> => {
+  const response = await api.get(`/moments/event/${encodeURIComponent(eventId)}`);
+  return (response.data?.data?.moments ?? []) as Moment[];
 };
 
 export const createMoment = async (payload: CreateMomentPayload): Promise<Moment> => {

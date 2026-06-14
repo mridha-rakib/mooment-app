@@ -14,19 +14,31 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
+  FlatList,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  cancelTicketShare,
+  shareTicketWithFriend,
+  type TicketShare,
+} from "@/lib/payments";
+import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
 
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
+const { width } = Dimensions.get("window");
+const WALLET_CONTENT_WIDTH = Math.min(width - 32, 360);
 
 const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_BANNER) => {
   if (!key) {
@@ -45,7 +57,7 @@ const formatPrice = (ticket?: EventTicketPayload | null) => {
     return "Free";
   }
 
-  return `£${ticket.price.toLocaleString("en-GB", {
+  return `$${ticket.price.toLocaleString("en-US", {
     minimumFractionDigits: Number.isInteger(ticket.price) ? 0 : 2,
     maximumFractionDigits: Number.isInteger(ticket.price) ? 0 : 2,
   })}`;
@@ -82,16 +94,98 @@ const getHostHandle = (event?: EventResponse | null) => {
   return handle ? `@${handle}` : "";
 };
 
+const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(source ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const getParamValue = (value: string | string[] | undefined, fallback: string) => {
+  const source = Array.isArray(value) ? value[0] : value;
+
+  return source?.trim() || fallback;
+};
+
+const formatWalletAmount = (amount: string | string[] | undefined, currency: string | string[] | undefined) => {
+  const amountSource = Array.isArray(amount) ? amount[0] : amount;
+  const currencySource = Array.isArray(currency) ? currency[0] : currency;
+  const parsedAmount = Number.parseFloat(amountSource ?? "");
+
+  if (!Number.isFinite(parsedAmount)) {
+    return "$0";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencySource?.trim().toUpperCase() || "USD",
+    minimumFractionDigits: Number.isInteger(parsedAmount) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(parsedAmount) ? 0 : 2,
+  }).format(parsedAmount);
+};
+
 const TicketDetailScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<{ eventId?: string; ticketId?: string; mode?: string }>();
+  const params = useLocalSearchParams<{
+    eventId?: string;
+    ticketId?: string;
+    mode?: string;
+    source?: string;
+    purchaseCount?: string;
+    ticketNo?: string;
+    orderId?: string;
+    eventTitle?: string;
+    ticketName?: string;
+    hostName?: string;
+    hostHandle?: string;
+    bannerImageKey?: string;
+    location?: string;
+    address?: string;
+    dateTime?: string;
+    amount?: string;
+    currency?: string;
+    walletSource?: string;
+    currentShareId?: string;
+    currentShareFriendName?: string;
+    currentShareFriendId?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const currentUser = useAuthStore((state) => state.user);
   const loadEventForEdit = useEventDraftStore((state) => state.loadFromEvent);
+  const isWalletTicket = params.source === "wallet" || (!params.eventId && !params.ticketId);
   const [event, setEvent] = useState<EventResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!isWalletTicket);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [friends, setFriends] = useState<FriendUserResponse[]>([]);
+  const [friendSearch, setFriendSearch] = useState("");
+  const [isFriendsLoading, setIsFriendsLoading] = useState(false);
+  const [isShareSubmitting, setIsShareSubmitting] = useState(false);
+  const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
+  const [currentShare, setCurrentShare] = useState<TicketShare | null>(() => {
+    const currentShareId = getParamValue(params.currentShareId, "");
+
+    if (!currentShareId) {
+      return null;
+    }
+
+    return {
+      id: currentShareId,
+      ownerUserId: "",
+      recipientUserId: getParamValue(params.currentShareFriendId, ""),
+      orderId: getParamValue(params.orderId, ""),
+      eventId: getParamValue(params.eventId, ""),
+      ticketId: getParamValue(params.ticketId, ""),
+      status: "active",
+      sharedAt: "",
+      cancelledAt: null,
+      friend: {
+        id: getParamValue(params.currentShareFriendId, ""),
+        name: getParamValue(params.currentShareFriendName, "Friend"),
+      },
+    };
+  });
 
   const eventId = typeof params.eventId === "string" ? params.eventId : null;
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : null;
@@ -114,6 +208,13 @@ const TicketDetailScreen = () => {
       let isActive = true;
 
       const loadTicket = async () => {
+        if (isWalletTicket) {
+          setEvent(null);
+          setErrorMessage(null);
+          setIsLoading(false);
+          return;
+        }
+
         if (!eventId || !ticketId) {
           setErrorMessage("Ticket details are unavailable.");
           setIsLoading(false);
@@ -149,7 +250,7 @@ const TicketDetailScreen = () => {
       return () => {
         isActive = false;
       };
-    }, [eventId, ticketId]),
+    }, [eventId, isWalletTicket, ticketId]),
   );
 
   const handleEditTicket = () => {
@@ -176,6 +277,7 @@ const TicketDetailScreen = () => {
 
   const details = [
     { label: "Ticket", value: ticket?.name ?? "Ticket unavailable" },
+    { label: "Type", value: ticket?.type === "pay" ? "Paid" : "Free" },
     { label: "Available", value: `${ticket?.capacity ?? 0} left` },
     { label: "Price", value: formatPrice(ticket) },
     { label: "Sales end", value: formatDateTime(ticket?.salesEndAt) },
@@ -184,6 +286,308 @@ const TicketDetailScreen = () => {
     { label: "Venue", value: event?.location?.venue ?? "Venue TBA" },
     { label: "Address", value: event?.location?.address ?? event?.location?.searchLabel ?? "Address TBA" },
   ];
+
+  const walletPurchaseCount = parsePositiveInteger(params.purchaseCount);
+  const walletHasShareQr = walletPurchaseCount >= 2;
+  const walletTicketNo = getParamValue(params.ticketNo, "MOM-2024-8575");
+  const walletEventTitle = getParamValue(params.eventTitle, "Ticket");
+  const walletTicketName = getParamValue(params.ticketName, "Ticket");
+  const walletHostName = getParamValue(params.hostName, "Host");
+  const walletHostHandle = getParamValue(params.hostHandle, "");
+  const walletBannerImage = resolveStorageUrl(getParamValue(params.bannerImageKey, ""), DEFAULT_BANNER);
+  const walletLocation = getParamValue(params.location, "Location TBA");
+  const walletAddress = getParamValue(params.address, "Address TBA");
+  const walletDateTime = getParamValue(params.dateTime, "Date TBA");
+  const walletAmount = formatWalletAmount(params.amount, params.currency);
+  const walletSource = getParamValue(params.walletSource, "owned");
+  const walletCanShare = walletSource === "owned" && walletPurchaseCount >= 2;
+  const walletDetails = [
+    { label: "Ticket No", value: walletTicketNo },
+    { label: "Host", value: walletHostName },
+    { label: "Venue", value: walletEventTitle },
+    { label: "Address", value: walletAddress },
+    { label: "Ticket", value: `${walletTicketName} x ${walletPurchaseCount}` },
+    { label: "Date and time", value: walletDateTime },
+    {
+      label: walletHasShareQr ? "Amount paid" : "Amount Pending",
+      value: walletAmount,
+      isPrice: true,
+    },
+  ];
+
+  const loadFriends = async (search = friendSearch) => {
+    setIsFriendsLoading(true);
+    setShareErrorMessage(null);
+
+    try {
+      const friendUsers = await getFriendUsers(search, 100);
+      setFriends(friendUsers);
+    } catch (error) {
+      setShareErrorMessage(getAuthErrorMessage(error, "Unable to load friends."));
+    } finally {
+      setIsFriendsLoading(false);
+    }
+  };
+
+  const handleOpenShareModal = async () => {
+    setIsShareModalVisible(true);
+    setFriendSearch("");
+    await loadFriends("");
+  };
+
+  const handleShareWithFriend = async (friend: FriendUserResponse) => {
+    if (currentShare) {
+      setShareErrorMessage("Cancel the current share before choosing another friend.");
+      return;
+    }
+
+    const shareEventId = getParamValue(params.eventId, "");
+    const shareTicketId = getParamValue(params.ticketId, "");
+
+    if (!shareEventId || !shareTicketId) {
+      setShareErrorMessage("Ticket share details are unavailable.");
+      return;
+    }
+
+    setIsShareSubmitting(true);
+    setShareErrorMessage(null);
+
+    try {
+      const share = await shareTicketWithFriend({
+        eventId: shareEventId,
+        ticketId: shareTicketId,
+        friendId: friend.id,
+      });
+
+      setCurrentShare(share);
+    } catch (error) {
+      setShareErrorMessage(getAuthErrorMessage(error, "Unable to share ticket."));
+    } finally {
+      setIsShareSubmitting(false);
+    }
+  };
+
+  const handleCancelShare = async () => {
+    if (!currentShare) {
+      return;
+    }
+
+    setIsShareSubmitting(true);
+    setShareErrorMessage(null);
+
+    try {
+      await cancelTicketShare(currentShare.id);
+      setCurrentShare(null);
+      await loadFriends(friendSearch);
+    } catch (error) {
+      setShareErrorMessage(getAuthErrorMessage(error, "Unable to cancel ticket share."));
+    } finally {
+      setIsShareSubmitting(false);
+    }
+  };
+
+  if (isWalletTicket) {
+    return (
+      <View style={styles.walletContainer}>
+        <StatusBar barStyle="light-content" />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.walletScrollContent,
+            { paddingBottom: insets.bottom + 28 },
+          ]}
+        >
+          <View style={styles.walletHero}>
+            <Image source={{ uri: walletBannerImage }} style={styles.walletHeroImage} contentFit="cover" />
+            <LinearGradient
+              colors={["rgba(12,7,28,0.18)", "rgba(12,7,28,0.62)", "#101014"]}
+              locations={[0, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+
+            <View style={[styles.walletHeader, { paddingTop: insets.top + 10 }]}>
+              <BackButton color="#FFFFFF" onPress={() => router.back()} />
+              <Text style={styles.walletHeaderTitle}>Ticket Detail</Text>
+              <View style={styles.walletHeaderSpacer} />
+            </View>
+
+            <View style={styles.walletHeroContent}>
+              <View style={styles.walletCategoryPill}>
+                <Text style={styles.walletCategoryText}>Music Party</Text>
+              </View>
+              <View style={styles.walletHostRow}>
+                <Image source={{ uri: DEFAULT_AVATAR }} style={styles.walletHostAvatar} contentFit="cover" />
+                <View style={styles.walletHostCopy}>
+                  <Text style={styles.walletHostName}>{walletHostName}</Text>
+                  {!!walletHostHandle && <Text style={styles.walletHostHandle}>{walletHostHandle}</Text>}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.walletContent}>
+            <View style={styles.walletInfoCard}>
+              <View style={styles.walletCardHeader}>
+                <View style={styles.walletCardTitleBlock}>
+                  <Text style={styles.walletEventTitle}>{walletEventTitle}</Text>
+                  <Text style={styles.walletEventCity}>{walletLocation}</Text>
+                </View>
+                <View style={styles.walletStatusBadge}>
+                  <Text style={styles.walletStatusText}>Active</Text>
+                </View>
+              </View>
+
+              <View style={styles.walletDetailsList}>
+                {walletDetails.map((item, index) => (
+                  <View key={item.label}>
+                    <View style={styles.walletDetailRow}>
+                      <Text style={styles.walletDetailLabel}>{item.label}</Text>
+                      <Text
+                        style={[
+                          styles.walletDetailValue,
+                          item.isPrice && styles.walletPriceValue,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item.value}
+                      </Text>
+                    </View>
+                    {index < walletDetails.length - 1 && <View style={styles.walletDivider} />}
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={walletCanShare ? styles.walletDualActions : styles.walletSingleActions}>
+              {walletCanShare && (
+                <TouchableOpacity
+                  style={styles.walletShareButton}
+                  activeOpacity={0.85}
+                  onPress={() => void handleOpenShareModal()}
+                >
+                  <Text style={styles.walletShareButtonText}>Share QR</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.walletShowButton,
+                  walletCanShare ? styles.walletActionFlex : styles.walletShowButtonFull,
+                ]}
+                activeOpacity={0.85}
+                onPress={() =>
+                  router.push({
+                    pathname: "/event-screen/qr-code",
+                    params: { type: "event" },
+                  })
+                }
+              >
+                <Text style={styles.walletShowButtonText}>Show QR</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.walletCancelButton}
+              activeOpacity={0.85}
+              onPress={() => Alert.alert("Cancel ticket", "Ticket cancellation is not connected yet.")}
+            >
+              <Text style={styles.walletCancelButtonText}>Cancel ticket</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        <Modal
+          visible={isShareModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setIsShareModalVisible(false)}
+        >
+          <View style={styles.shareModalOverlay}>
+            <View style={styles.shareModalSheet}>
+              <View style={styles.shareModalHeader}>
+                <View>
+                  <Text style={styles.shareModalTitle}>Share QR</Text>
+                  <Text style={styles.shareModalSubtitle}>{walletTicketName}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.shareModalClose}
+                  onPress={() => setIsShareModalVisible(false)}
+                  activeOpacity={0.85}
+                >
+                  <Feather name="x" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              {currentShare && (
+                <View style={styles.currentShareCard}>
+                  <View>
+                    <Text style={styles.currentShareLabel}>Currently shared with</Text>
+                    <Text style={styles.currentShareName}>{currentShare.friend?.name ?? "Friend"}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.cancelShareButton}
+                    onPress={() => void handleCancelShare()}
+                    disabled={isShareSubmitting}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.cancelShareButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <TextInput
+                value={friendSearch}
+                onChangeText={(value) => {
+                  setFriendSearch(value);
+                  void loadFriends(value);
+                }}
+                placeholder="Search friends"
+                placeholderTextColor="#77717D"
+                style={styles.friendSearchInput}
+              />
+
+              {!!shareErrorMessage && <Text style={styles.shareErrorText}>{shareErrorMessage}</Text>}
+
+              {isFriendsLoading ? (
+                <View style={styles.friendState}>
+                  <ActivityIndicator color="#C2B9CB" />
+                </View>
+              ) : (
+                <FlatList
+                  data={friends.filter((friend) => friend.id !== currentShare?.friend?.id)}
+                  keyExtractor={(item) => item.id}
+                  style={styles.friendList}
+                  contentContainerStyle={friends.length === 0 ? styles.friendState : undefined}
+                  keyboardShouldPersistTaps="handled"
+                  ListEmptyComponent={<Text style={styles.friendEmptyText}>No mutual friends found.</Text>}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.friendRow}
+                      onPress={() => void handleShareWithFriend(item)}
+                      disabled={isShareSubmitting || Boolean(currentShare)}
+                      activeOpacity={0.85}
+                    >
+                      <Image
+                        source={{ uri: resolveStorageUrl(item.avatarKey, DEFAULT_AVATAR) }}
+                        style={styles.friendAvatar}
+                        contentFit="cover"
+                      />
+                      <View style={styles.friendCopy}>
+                        <Text style={styles.friendName}>{item.name}</Text>
+                        {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
+                      </View>
+                      <Text style={[styles.friendAction, currentShare && styles.friendActionDisabled]}>
+                        {currentShare ? "Cancel first" : "Share"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -212,7 +616,7 @@ const TicketDetailScreen = () => {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + (isHostMode ? 104 : 160) }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 104 }}
       >
         <View style={styles.hero}>
           <Image source={{ uri: bannerImageUri }} style={styles.heroImage} contentFit="cover" />
@@ -254,7 +658,7 @@ const TicketDetailScreen = () => {
                 <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={2}>
                   {ticket.name}
                 </Text>
-                <Text style={[styles.eventLocation, { color: colors.textSecondary }]} numberOfLines={2}>
+                <Text style={[styles.eventLocation, { color: colors.textSecondary }]}>
                   {ticket.description || "Ticket details provided by the event organizer."}
                 </Text>
               </View>
@@ -294,20 +698,9 @@ const TicketDetailScreen = () => {
             <Text style={[styles.primaryBtnText, { color: colors.background }]}>Edit Ticket</Text>
           </TouchableOpacity>
         ) : (
-          <>
-            <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-              onPress={() => router.push({ pathname: "/event-screen/qr-code", params: { type: "event" } })}
-            >
-              <Text style={[styles.primaryBtnText, { color: colors.background }]}>Show QR</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.secondaryBtn, { backgroundColor: colors.danger + "1A", borderColor: colors.danger + "1A" }]}
-            >
-              <Text style={[styles.secondaryBtnText, { color: colors.danger }]}>Cancel ticket</Text>
-            </TouchableOpacity>
-          </>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+            <Text style={[styles.primaryBtnText, { color: colors.background }]}>Back to Tickets</Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -515,5 +908,374 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontSize: 16,
     fontWeight: "700",
+  },
+  walletContainer: {
+    backgroundColor: "#101014",
+    flex: 1,
+  },
+  walletScrollContent: {
+    alignItems: "center",
+  },
+  walletHero: {
+    height: 208,
+    width: "100%",
+  },
+  walletHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  walletHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+  walletHeaderTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  walletHeaderSpacer: {
+    width: 44,
+  },
+  walletHeroContent: {
+    bottom: 12,
+    left: 20,
+    position: "absolute",
+    right: 20,
+  },
+  walletCategoryPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.26)",
+    borderRadius: 5,
+    marginBottom: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  walletCategoryText: {
+    color: "#D9D2DD",
+    fontSize: 8,
+    fontWeight: "700",
+  },
+  walletHostRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  walletHostAvatar: {
+    borderColor: "#EBD8C8",
+    borderRadius: 17,
+    borderWidth: 2,
+    height: 34,
+    width: 34,
+  },
+  walletHostCopy: {
+    flex: 1,
+  },
+  walletHostName: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16,
+  },
+  walletHostHandle: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  walletSharedRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    marginTop: 6,
+  },
+  walletSharedAvatar: {
+    borderRadius: 7,
+    height: 14,
+    width: 14,
+  },
+  walletSharedText: {
+    color: "#A6A0AA",
+    fontSize: 9,
+    fontWeight: "500",
+  },
+  walletSharedName: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  walletContent: {
+    marginTop: 4,
+    width: WALLET_CONTENT_WIDTH,
+  },
+  walletInfoCard: {
+    backgroundColor: "#17151A",
+    borderColor: "#2A2730",
+    borderRadius: 7,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  walletCardHeader: {
+    alignItems: "flex-start",
+    backgroundColor: "#181420",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  walletCardTitleBlock: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  walletEventTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
+  walletEventCity: {
+    color: "#A6A0AA",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 1,
+  },
+  walletStatusBadge: {
+    backgroundColor: "rgba(22,216,105,0.12)",
+    borderColor: "rgba(22,216,105,0.42)",
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  walletStatusText: {
+    color: "#16D869",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  walletDetailsList: {
+    paddingHorizontal: 12,
+  },
+  walletDetailRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    minHeight: 29,
+    paddingVertical: 5,
+  },
+  walletDetailLabel: {
+    color: "#A6A0AA",
+    fontSize: 10,
+    lineHeight: 14,
+    width: 92,
+  },
+  walletDetailValue: {
+    color: "#FFFFFF",
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 14,
+    textAlign: "right",
+  },
+  walletPriceValue: {
+    color: "#DFFF00",
+  },
+  walletDivider: {
+    backgroundColor: "#3B3740",
+    height: 1,
+  },
+  walletSingleActions: {
+    marginTop: 16,
+  },
+  walletDualActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 16,
+  },
+  walletShareButton: {
+    alignItems: "center",
+    backgroundColor: "#3B3B3D",
+    borderRadius: 7,
+    flex: 1,
+    height: 40,
+    justifyContent: "center",
+  },
+  walletShareButtonText: {
+    color: "#C9C1CF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  walletShowButton: {
+    alignItems: "center",
+    backgroundColor: "#C2B9CB",
+    borderRadius: 7,
+    height: 40,
+    justifyContent: "center",
+  },
+  walletActionFlex: {
+    flex: 1,
+  },
+  walletShowButtonFull: {
+    width: "100%",
+  },
+  walletShowButtonText: {
+    color: "#17151A",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  walletCancelButton: {
+    alignItems: "center",
+    backgroundColor: "#2B100F",
+    borderRadius: 7,
+    height: 39,
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  walletCancelButtonText: {
+    color: "#FF4D4D",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  shareModalOverlay: {
+    backgroundColor: "rgba(0,0,0,0.58)",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  shareModalSheet: {
+    backgroundColor: "#121116",
+    borderColor: "#2A2730",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    maxHeight: "78%",
+    padding: 16,
+    paddingBottom: 28,
+  },
+  shareModalHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  shareModalTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 24,
+  },
+  shareModalSubtitle: {
+    color: "#A6A0AA",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  shareModalClose: {
+    alignItems: "center",
+    backgroundColor: "#242229",
+    borderRadius: 16,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  currentShareCard: {
+    alignItems: "center",
+    backgroundColor: "#1B1821",
+    borderColor: "#36313D",
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    padding: 12,
+  },
+  currentShareLabel: {
+    color: "#A6A0AA",
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 15,
+  },
+  currentShareName: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  cancelShareButton: {
+    backgroundColor: "#2B100F",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cancelShareButtonText: {
+    color: "#FF4D4D",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  friendSearchInput: {
+    backgroundColor: "#1B1821",
+    borderColor: "#36313D",
+    borderRadius: 10,
+    borderWidth: 1,
+    color: "#FFFFFF",
+    fontSize: 14,
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  shareErrorText: {
+    color: "#FF6B6B",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+    marginTop: 10,
+  },
+  friendList: {
+    marginTop: 10,
+  },
+  friendState: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 160,
+  },
+  friendEmptyText: {
+    color: "#A6A0AA",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  friendRow: {
+    alignItems: "center",
+    borderBottomColor: "#28242E",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 62,
+    paddingVertical: 10,
+  },
+  friendAvatar: {
+    borderRadius: 20,
+    height: 40,
+    width: 40,
+  },
+  friendCopy: {
+    flex: 1,
+  },
+  friendName: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
+  friendHandle: {
+    color: "#A6A0AA",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  friendAction: {
+    color: "#C2B9CB",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  friendActionDisabled: {
+    color: "#77717D",
   },
 });

@@ -21,15 +21,18 @@ export default SecurityBanner;
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    padding: 16,
-    borderRadius: 16,
-    gap: 12,
-    marginBottom: 20,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 10,
+    marginBottom: 12,
     alignItems: "center",
   },
   text: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 17,
   },
 });

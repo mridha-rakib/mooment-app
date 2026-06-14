@@ -12,7 +12,7 @@ const MOCK_PRODUCTS: PostData[] = [
     mediaUris: ['https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=800'],
     productDetails: {
       title: 'Medusa Skin Whitening Cream',
-      price: '£28',
+      price: '$28',
       buttonText: 'View'
     }
   }

@@ -1,20 +1,62 @@
 import { useTheme } from "@/hooks/useTheme";
+import { getEventTicketAccess } from "@/lib/events";
+import { getEventMoments } from "@/lib/moments";
+import type { Moment } from "@/lib/moments";
+import { getStorageFileUrl } from "@/lib/storage";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import SegmentedControl from "../ui/SegmentedControl";
 import CinematicButton from "../ui/CinematicButton";
+import SegmentedControl from "../ui/SegmentedControl";
 const { width } = Dimensions.get("window");
 
-// Removed hardcoded COLORS to use useTheme hook
+const NOW_MODE_LOOKAHEAD_MS = 3 * 60 * 60 * 1000;
+const ACTIVE_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
+
+type PostTagStatus = "live" | "active" | "upcoming" | "ended";
+
+const computePostTagStatus = (scheduledAt?: string | null): PostTagStatus => {
+  if (!scheduledAt) return "upcoming";
+  const scheduled = new Date(scheduledAt).getTime();
+  const now = Date.now();
+  if (scheduled > now) return "upcoming";
+  if (now - scheduled <= NOW_MODE_LOOKAHEAD_MS) return "live";
+  if (now - scheduled <= ACTIVE_EVENT_WINDOW_MS) return "active";
+  return "ended";
+};
+
+const formatTimeAgo = (createdAt: string): string => {
+  const diff = Date.now() - new Date(createdAt).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
+
+const resolveMediaUrl = (moment: Moment): string | null => {
+  const first = moment.mediaItems?.[0];
+  if (!first) return null;
+  if (first.url) return first.url;
+  if (first.storageKey) {
+    try {
+      return getStorageFileUrl(first.storageKey);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
 
 const ROOMS_DATA = [
   {
@@ -37,53 +79,56 @@ const ROOMS_DATA = [
   },
 ];
 
-const MOOMENTS_DATA = [
-  {
-    id: "1",
-    user: "Dj Koko",
-    avatar:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop",
-    time: "2 min ago",
-    text: "Setting up for tonight. The view from up here is unreal",
-    image:
-      "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
-    likes: 25,
-    comments: 25,
-    shares: 25,
-    isFollowing: false,
-  },
-  {
-    id: "2",
-    user: "Ronald Richards",
-    avatar:
-      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
-    time: "2 min ago",
-    text: "Behind the scenes at Saturday market",
-    likes: 25,
-    comments: 25,
-    shares: 25,
-    isFollowing: true,
-  },
-  {
-    id: "3",
-    user: "Giden Jao",
-    avatar:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
-    time: "2 min ago",
-    text: "Setting up for tonight. The view from up here is unreal",
-    image:
-      "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop",
-    likes: 25,
-    comments: 25,
-    shares: 0,
-    isFollowing: false,
-  },
-];
+type VibeTabProps = {
+  eventId: string;
+  eventName: string;
+  isHostMode: boolean;
+  scheduledAt?: string | null;
+};
 
-const VibeTab = () => {
+const VibeTab = ({ eventId, eventName, isHostMode, scheduledAt }: VibeTabProps) => {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [vibeSubTab, setVibeSubTab] = useState("Live");
+  const [moments, setMoments] = useState<Moment[]>([]);
+  const [isMomentsLoading, setIsMomentsLoading] = useState(false);
+  const [hasTicketAccess, setHasTicketAccess] = useState(false);
+
+  const postTagStatus = computePostTagStatus(scheduledAt);
+  const canPost =
+    isHostMode ||
+    ((postTagStatus === "live" || postTagStatus === "active") && hasTicketAccess);
+
+  const loadMoments = useCallback(async () => {
+    setIsMomentsLoading(true);
+    try {
+      const data = await getEventMoments(eventId);
+      setMoments(data);
+    } catch {
+      // fail silently — show empty state
+    } finally {
+      setIsMomentsLoading(false);
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    if (vibeSubTab !== "Mooments") return;
+    void loadMoments();
+  }, [vibeSubTab, loadMoments]);
+
+  useEffect(() => {
+    if (isHostMode) return;
+    getEventTicketAccess(eventId)
+      .then((result) => setHasTicketAccess(result.hasAccess))
+      .catch(() => setHasTicketAccess(false));
+  }, [eventId, isHostMode]);
+
+  const handlePostMooment = () => {
+    router.push({
+      pathname: "/post-screen/create-post",
+      params: { eventId, eventName },
+    });
+  };
 
   const renderLive = () => (
     <View style={{ marginTop: 20 }}>
@@ -96,10 +141,7 @@ const VibeTab = () => {
             <View
               style={[
                 styles.ovalCard,
-                {
-                  backgroundColor:"#0D0D25",
-                  borderColor: "#AC86D4"
-                },
+                { backgroundColor: "#0D0D25", borderColor: "#AC86D4" },
               ]}
             >
               <TouchableOpacity
@@ -113,10 +155,7 @@ const VibeTab = () => {
                 <View
                   style={[
                     styles.onlineIndicator,
-                    {
-                      borderColor: colors.background,
-                      backgroundColor: "#16D869",
-                    },
+                    { borderColor: colors.background, backgroundColor: "#16D869" },
                   ]}
                 />
               </TouchableOpacity>
@@ -141,15 +180,9 @@ const VibeTab = () => {
               <Text style={[styles.roomTitle, { color: colors.text }]}>
                 {room.title}
               </Text>
-              <Text
-                style={[styles.speakingText, { color: colors.textSecondary }]}
-              >
-                <TouchableOpacity
-                  onPress={() => router.push("/profile-screen/user-profile")}
-                >
-                  <Text
-                    style={[styles.hostNameHighlight, { color: colors.text }]}
-                  >
+              <Text style={[styles.speakingText, { color: colors.textSecondary }]}>
+                <TouchableOpacity onPress={() => router.push("/profile-screen/user-profile")}>
+                  <Text style={[styles.hostNameHighlight, { color: colors.text }]}>
                     {room.host}
                   </Text>
                 </TouchableOpacity>{" "}
@@ -158,60 +191,22 @@ const VibeTab = () => {
 
               <View style={styles.listenerRow}>
                 <View style={styles.avatarCluster}>
-                  <TouchableOpacity
-                    onPress={() => router.push("/profile-screen/user-profile")}
-                  >
+                  {[
+                    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
+                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop",
+                    "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop",
+                  ].map((uri, i) => (
                     <Image
-                      source={{
-                        uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
-                      }}
+                      key={uri}
+                      source={{ uri }}
                       style={[
                         styles.avatarSmall,
-                        { zIndex: 3, borderColor: colors.background },
+                        { zIndex: 3 - i, marginLeft: i > 0 ? -8 : 0, borderColor: colors.background },
                       ]}
                     />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => router.push("/profile-screen/user-profile")}
-                  >
-                    <Image
-                      source={{
-                        uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop",
-                      }}
-                      style={[
-                        styles.avatarSmall,
-                        {
-                          zIndex: 2,
-                          marginLeft: -8,
-                          borderColor: colors.background,
-                        },
-                      ]}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => router.push("/profile-screen/user-profile")}
-                  >
-                    <Image
-                      source={{
-                        uri: "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop",
-                      }}
-                      style={[
-                        styles.avatarSmall,
-                        {
-                          zIndex: 1,
-                          marginLeft: -8,
-                          borderColor: colors.background,
-                        },
-                      ]}
-                    />
-                  </TouchableOpacity>
+                  ))}
                 </View>
-                <Text
-                  style={[
-                    styles.listenerCount,
-                    { color: colors.textSecondary },
-                  ]}
-                >
+                <Text style={[styles.listenerCount, { color: colors.textSecondary }]}>
                   {room.listeners} listening
                 </Text>
               </View>
@@ -224,160 +219,122 @@ const VibeTab = () => {
 
   const renderMooments = () => (
     <View style={{ marginTop: 20 }}>
-      {/* Post Button */}
-      <TouchableOpacity
-        style={[
-          styles.postBtn,
-          {
-            backgroundColor: isDark
-              ? "rgba(255, 255, 255, 0.1)"
-              : "rgba(0, 0, 0, 0.05)",
-          },
-        ]}
-      >
-        <Feather name="plus" size={20} color={colors.textSecondary} />
-        <Text style={[styles.postBtnText, { color: colors.textSecondary }]}>
-          Post Mooment
-        </Text>
-      </TouchableOpacity>
-
-      {/* Timer Banner */}
-      <View
-        style={[
-          styles.timerBanner,
-          {
-            backgroundColor: isDark
-              ? "rgba(255, 107, 61, 0.1)"
-              : "rgba(255, 107, 61, 0.05)",
-          },
-        ]}
-      >
-        <View style={styles.timerLeft}>
-          <Feather name="info" size={16} color="#FF6B3D" />
-          <Text style={[styles.timerText, { color: "#FF6B3D" }]}>
-            Next mooment available in
-          </Text>
-        </View>
-        <Text style={[styles.timerCountdown, { color: "#FF6B3D" }]}>
-          10 min
-        </Text>
-      </View>
-
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        24 Mooments
-      </Text>
-
-      {/* Feed */}
-      {MOOMENTS_DATA.map((item) => (
-        <View
-          key={item.id}
-          style={[styles.postCard, { backgroundColor: colors.card }]}
+      {canPost && (
+        <TouchableOpacity
+          style={[
+            styles.postBtn,
+            {
+              backgroundColor: isDark
+                ? "rgba(255, 255, 255, 0.1)"
+                : "rgba(0, 0, 0, 0.05)",
+            },
+          ]}
+          onPress={handlePostMooment}
+          activeOpacity={0.85}
         >
-          <View style={styles.postHeader}>
-            <Image source={{ uri: item.avatar }} style={styles.postAvatar} />
-            <View style={styles.postUserInfo}>
-              <Text style={[styles.postUserName, { color: colors.text }]}>
-                {item.user}
-              </Text>
-              <Text style={[styles.postTime, { color: colors.textSecondary }]}>
-                {item.time}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.followBtn,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.05)",
-                  borderColor: colors.border,
-                },
-                item.isFollowing && [
-                  styles.followBtnActive,
-                  {
-                    backgroundColor: "transparent",
-                    borderColor: colors.border,
-                  },
-                ],
-              ]}
-            >
-              <Text
-                style={[
-                  styles.followBtnText,
-                  { color: colors.text },
-                  item.isFollowing && [
-                    styles.followBtnTextActive,
-                    { color: colors.textSecondary },
-                  ],
-                ]}
-              >
-                {item.isFollowing ? "Following" : "+ Follow"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.moreBtn}>
-              <Feather
-                name="more-horizontal"
-                size={18}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-          </View>
+          <Feather name="plus" size={20} color={colors.textSecondary} />
+          <Text style={[styles.postBtnText, { color: colors.textSecondary }]}>
+            Post Mooment
+          </Text>
+        </TouchableOpacity>
+      )}
 
-          <Text style={[styles.postText, { color: colors.text }]}>
-            {item.text}
+      {isMomentsLoading ? (
+        <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} />
+      ) : moments.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Feather name="image" size={32} color={colors.textSecondary} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            No mooments yet
+          </Text>
+          {canPost && (
+            <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
+              Be the first to share a moment from this event
+            </Text>
+          )}
+        </View>
+      ) : (
+        <>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {moments.length} {moments.length === 1 ? "Mooment" : "Mooments"}
           </Text>
 
-          {item.image && (
-            <Image source={{ uri: item.image }} style={styles.postImage} />
-          )}
+          {moments.map((item) => {
+            const mediaUrl = resolveMediaUrl(item);
+            const authorName = item.author?.name ?? "Unknown";
+            const avatarKey = item.author?.avatarUrl ?? item.author?.avatarKey;
+            const avatarUri = avatarKey
+              ? (avatarKey.startsWith("http") ? avatarKey : (() => {
+                  try { return getStorageFileUrl(avatarKey); } catch { return undefined; }
+                })())
+              : undefined;
 
-          <View style={styles.postFooter}>
-            <View style={styles.footerStat}>
-              <Feather name="heart" size={16} color={colors.textSecondary} />
-              <Text
-                style={[styles.footerStatText, { color: colors.textSecondary }]}
+            return (
+              <View
+                key={item.id}
+                style={[styles.postCard, { backgroundColor: colors.card }]}
               >
-                {item.likes}
-              </Text>
-            </View>
-            <View style={styles.footerStat}>
-              <Feather
-                name="message-circle"
-                size={16}
-                color={colors.textSecondary}
-              />
-              <Text
-                style={[styles.footerStatText, { color: colors.textSecondary }]}
-              >
-                {item.comments}
-              </Text>
-            </View>
-            {item.shares > 0 && (
-              <View style={styles.footerStat}>
-                <Feather
-                  name="share-2"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.footerStatText,
-                    { color: colors.textSecondary },
-                  ]}
-                >
-                  {item.shares}
-                </Text>
+                <View style={styles.postHeader}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.postAvatar} />
+                  ) : (
+                    <View style={[styles.postAvatar, styles.postAvatarPlaceholder, { backgroundColor: colors.border }]} />
+                  )}
+                  <View style={styles.postUserInfo}>
+                    <Text style={[styles.postUserName, { color: colors.text }]}>
+                      {authorName}
+                    </Text>
+                    <Text style={[styles.postTime, { color: colors.textSecondary }]}>
+                      {formatTimeAgo(item.createdAt)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.moreBtn}>
+                    <Feather name="more-horizontal" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                {!!item.caption && (
+                  <Text style={[styles.postText, { color: colors.text }]}>
+                    {item.caption}
+                  </Text>
+                )}
+
+                {mediaUrl && item.mediaItems?.[0]?.type === "image" && (
+                  <Image source={{ uri: mediaUrl }} style={styles.postImage} contentFit="cover" />
+                )}
+
+                <View style={styles.postFooter}>
+                  <View style={styles.footerStat}>
+                    <Feather name="heart" size={16} color={colors.textSecondary} />
+                    <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>
+                      {item.likesCount}
+                    </Text>
+                  </View>
+                  <View style={styles.footerStat}>
+                    <Feather name="message-circle" size={16} color={colors.textSecondary} />
+                    <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>
+                      {item.commentsCount}
+                    </Text>
+                  </View>
+                  {item.sharesCount > 0 && (
+                    <View style={styles.footerStat}>
+                      <Feather name="share-2" size={16} color={colors.textSecondary} />
+                      <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>
+                        {item.sharesCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            )}
-          </View>
-        </View>
-      ))}
+            );
+          })}
+        </>
+      )}
     </View>
   );
 
   return (
     <View>
-      {/* Sub-Tabs / Toggle */}
       <SegmentedControl
         options={["Live", "Mooments"]}
         selectedOption={vibeSubTab}
@@ -393,11 +350,6 @@ const VibeTab = () => {
 export default VibeTab;
 
 const styles = StyleSheet.create({
-  tabWrapper: {
-    borderRadius: 12,
-    marginTop: 10,
-    marginBottom: 10,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
@@ -413,7 +365,6 @@ const styles = StyleSheet.create({
   },
   ovalCard: {
     width: "65%",
-    height: "auto",
     borderRadius: 55,
     borderWidth: 1,
     alignItems: "center",
@@ -454,18 +405,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#AC86D4",
   },
-  joinBtn: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 12,
-    width: 10,
-    alignItems: "center",
-  },
-  joinBtnText: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
   roomInfo: {
     width: "100%",
   },
@@ -502,10 +441,8 @@ const styles = StyleSheet.create({
   listenerCount: {
     fontSize: 11,
   },
-  /* Mooments Styles */
   postBtn: {
     flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
     paddingVertical: 14,
     justifyContent: "center",
@@ -517,28 +454,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  timerBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  emptyState: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 107, 61, 0.1)",
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 24,
+    paddingVertical: 48,
+    gap: 10,
   },
-  timerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  timerText: {
-    color: "#FF6B3D",
-    fontSize: 14,
+  emptyText: {
+    fontSize: 16,
     fontWeight: "600",
   },
-  timerCountdown: {
-    fontSize: 14,
-    fontWeight: "bold",
+  emptySubText: {
+    fontSize: 13,
+    textAlign: "center",
+    maxWidth: 240,
   },
   postCard: {
     borderRadius: 16,
@@ -556,6 +484,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 12,
   },
+  postAvatarPlaceholder: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
   postUserInfo: {
     flex: 1,
   },
@@ -566,24 +497,6 @@ const styles = StyleSheet.create({
   postTime: {
     fontSize: 12,
   },
-  followBtn: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
-  },
-  followBtnActive: {
-    backgroundColor: "transparent",
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  followBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  followBtnTextActive: {},
   moreBtn: {
     padding: 4,
   },
