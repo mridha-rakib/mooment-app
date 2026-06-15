@@ -73,6 +73,7 @@ export type EventPayload = {
   ageRestriction?: EventAgeRestriction | null;
   category?: EventCategory | null;
   scheduledAt?: string | null;
+  endAt?: string | null;
   location?: EventLocation | null;
   tickets?: EventTicketPayload[];
   privacy?: EventPrivacy;
@@ -83,6 +84,7 @@ export type PublishedEventPayload = EventPayload & {
   ageRestriction: EventAgeRestriction;
   category: EventCategory;
   scheduledAt: string;
+  endAt: string;
   location: EventLocation;
   tickets: EventTicketPayload[];
   privacy: EventPrivacy;
@@ -101,6 +103,7 @@ export type EventResponse = {
   ageRestriction?: EventAgeRestriction | null;
   category?: EventCategory | null;
   scheduledAt?: string | null;
+  endAt?: string | null;
   location?: EventLocation | null;
   tickets: EventTicketPayload[];
   rewards: EventRewardPayload[];

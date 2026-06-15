@@ -1,6 +1,4 @@
 import {
-  AudioWave01Icon,
-  Calendar01Icon,
   ChevronRight,
   PencilEdit01Icon,
   QrCodeIcon,
@@ -19,8 +17,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/hooks/useTheme';
-
-import LiveRoomSetupModal from './LiveRoomSetupModal';
+import { getMyProfileEvents } from '@/lib/events';
 
 interface AddOptionsModalProps {
   visible: boolean;
@@ -38,15 +35,6 @@ const OPTIONS = [
     route: '/post-screen/create-post',
   },
   {
-    id: 'story',
-    label: 'Create Plan',
-    description: 'Show your upcoming activity',
-    icon: Calendar01Icon,
-    color: '#173414',
-    bg: '#5DCAA5',
-    route: '/plan-screen/create-plan',
-  },
-  {
     id: 'event',
     label: 'Create Event',
     description: 'Post a real-world experience',
@@ -54,15 +42,6 @@ const OPTIONS = [
     color: '#631C1C',
     bg: '#DE7777',
     route: '/create-event',
-  },
-  {
-    id: 'live',
-    label: 'Live Room',
-    description: 'Go live audio live room',
-    icon: AudioWave01Icon,
-    color: '#5D3925',
-    bg: '#EF9F27',
-    route: '/live-screen/live-room-setup',
   },
   {
     id: 'scan',
@@ -79,68 +58,90 @@ const OPTIONS = [
 export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const [liveSetupVisible, setLiveSetupVisible] = React.useState(false);
+  const [canScanQr, setCanScanQr] = React.useState(false);
+  const visibleOptions = React.useMemo(
+    () => OPTIONS.filter((option) => option.id !== 'scan' || canScanQr),
+    [canScanQr],
+  );
 
-  const handleOption = (id: string, route: string) => {
-    onClose();
-    if (id === 'live') {
-      setTimeout(() => setLiveSetupVisible(true), 300); // Small delay to allow previous modal to close smoothly
+  React.useEffect(() => {
+    if (!visible) {
       return;
     }
+
+    let isMounted = true;
+    setCanScanQr(false);
+
+    const loadEventAccess = async () => {
+      try {
+        const profileEvents = await getMyProfileEvents();
+
+        if (isMounted) {
+          setCanScanQr(profileEvents.active.length > 0);
+        }
+      } catch {
+        if (isMounted) {
+          setCanScanQr(false);
+        }
+      }
+    };
+
+    void loadEventAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible]);
+
+  const handleOption = (route: string) => {
+    onClose();
     router.push(route as any);
   };
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={[styles.overlay, { backgroundColor: isDark ? '#000000CC' : 'rgba(0,0,0,0.4)' }]} 
+        activeOpacity={1} 
+        onPress={onClose}
       >
-        <TouchableOpacity 
-          style={[styles.overlay, { backgroundColor: isDark ? '#000000CC' : 'rgba(0,0,0,0.4)' }]} 
-          activeOpacity={1} 
-          onPress={onClose}
-        >
-          <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-          
-          <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <View style={[styles.handle, { backgroundColor: colors.text }]} />
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
+        <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+        
+        <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <View style={[styles.handle, { backgroundColor: colors.text }]} />
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
 
-            <View style={styles.optionsList}>
-              {OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.id}
-                  style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => handleOption(opt.id, opt.route)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
-                    <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />
-                  </View>
+          <View style={styles.optionsList}>
+            {visibleOptions.map((opt) => (
+              <TouchableOpacity
+                key={opt.id}
+                style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => handleOption(opt.route)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
+                  <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />
+                </View>
 
-                  <View style={styles.optionText}>
-                    <Text style={[styles.optionLabel, { color: colors.text }]}>{opt.label}</Text>
-                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]} numberOfLines={2}>{opt.description}</Text>
-                  </View>
+                <View style={styles.optionText}>
+                  <Text style={[styles.optionLabel, { color: colors.text }]}>{opt.label}</Text>
+                  <Text style={[styles.optionDesc, { color: colors.textSecondary }]} numberOfLines={2}>{opt.description}</Text>
+                </View>
 
-                  <HugeiconsIcon icon={ChevronRight} size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-              ))}
-            </View>
+                <HugeiconsIcon icon={ChevronRight} size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            ))}
+          </View>
 
-            <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
-          </TouchableOpacity>
+          <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
         </TouchableOpacity>
-      </Modal>
-
-      <LiveRoomSetupModal 
-        visible={liveSetupVisible} 
-        onClose={() => setLiveSetupVisible(false)} 
-      />
-    </>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 

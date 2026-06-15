@@ -8,6 +8,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { usePlanStore } from '@/stores/planStore';
 
+const firstParam = (value: unknown): string | undefined => {
+  const param = Array.isArray(value) ? value[0] : value;
+  return typeof param === 'string' ? param : undefined;
+};
+
+const optionalNumberParam = (value: unknown) => {
+  const parsedNumber = Number(firstParam(value));
+  return Number.isFinite(parsedNumber) ? parsedNumber : undefined;
+};
+
 export default function MapSelectionScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -15,6 +25,10 @@ export default function MapSelectionScreen() {
   const addPlan = usePlanStore((state) => state.addPlan);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const planFriendIds = firstParam(params.planFriendIds)
+    ? String(firstParam(params.planFriendIds)).split(',').filter(Boolean)
+    : [];
 
   const handleConfirm = async () => {
     if (isSaving) {
@@ -24,19 +38,28 @@ export default function MapSelectionScreen() {
     setIsSaving(true);
 
     try {
-      await addPlan({
-        date: String(params.planDate ?? ''),
-        dateIso: params.planDateIso ? String(params.planDateIso) : undefined,
-        event: params.planEvent ? String(params.planEvent) : undefined,
-        friends: params.planFriends ? String(params.planFriends) : undefined,
-        location: params.planLocation ? String(params.planLocation) : undefined,
-        name: String(params.planName ?? ''),
-        time: String(params.planTime ?? ''),
+      const createdPlan = await addPlan({
+        date: String(firstParam(params.planDate) ?? ''),
+        dateIso: params.planDateIso ? String(firstParam(params.planDateIso)) : undefined,
+        event: params.planEvent ? String(firstParam(params.planEvent)) : undefined,
+        eventId: params.planEventId ? String(firstParam(params.planEventId)) : undefined,
+        friendIds: planFriendIds,
+        friends: params.planFriends ? String(firstParam(params.planFriends)) : undefined,
+        latitude: optionalNumberParam(params.planLatitude),
+        location: params.planLocation ? String(firstParam(params.planLocation)) : undefined,
+        longitude: optionalNumberParam(params.planLongitude),
+        name: String(firstParam(params.planName) ?? ''),
+        time: String(firstParam(params.planTime) ?? ''),
       });
       setShowConfetti(true);
       setTimeout(() => {
         router.replace({
           pathname: '/plan-screen/my-plan' as any,
+          params: {
+            focusYear: String(createdPlan.year),
+            focusMonth: String(createdPlan.month),
+            focusDay: String(createdPlan.day),
+          },
         });
       }, 2500);
     } catch {
@@ -81,7 +104,7 @@ export default function MapSelectionScreen() {
         <View style={styles.searchContainer}>
           <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Feather name="map-pin" size={18} color={colors.textSecondary} style={styles.searchIcon} />
-            <Text style={[styles.searchText, { color: colors.text }]}>{params.planLocation || 'Los Angeles, CA'}</Text>
+            <Text style={[styles.searchText, { color: colors.text }]}>{firstParam(params.planLocation) || 'Los Angeles, CA'}</Text>
           </View>
         </View>
 

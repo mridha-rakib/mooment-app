@@ -1,37 +1,147 @@
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { HugeiconsIcon } from "@hugeicons/react-native";
-import { 
-  Search01Icon, 
-} from "@hugeicons/core-free-icons";
 import { Feather } from "@expo/vector-icons";
-import { useTheme } from "@/hooks/useTheme";
+import { Search01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const USERS = [
-  { id: '1', name: 'Dj Koko', handle: '@selfd_d', image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=150', status: 'Add' },
-  { id: '2', name: 'Dj Koko', handle: '@selfd_d', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=150', status: 'Added' },
-  { id: '3', name: 'Dj Koko', handle: '@selfd_d', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150', status: 'Add' },
-  { id: '4', name: 'Dj Koko', handle: '@selfd_d', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150', status: 'Add' },
-];
+import { useTheme } from "@/hooks/useTheme";
+import { getStorageFileUrl } from "@/lib/storage";
+import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
+import { usePlanStore } from "@/stores/planStore";
+
+const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
+
+const firstParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
+
+const resolveAvatarUrl = (friend: FriendUserResponse) => {
+  if (friend.avatarUrl) {
+    return friend.avatarUrl;
+  }
+
+  if (!friend.avatarKey) {
+    return DEFAULT_AVATAR;
+  }
+
+  try {
+    return getStorageFileUrl(friend.avatarKey);
+  } catch {
+    return DEFAULT_AVATAR;
+  }
+};
 
 export default function AddFriendScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [users, setUsers] = useState(USERS);
-  const [search, setSearch] = useState('');
+  const params = useLocalSearchParams<{ planId?: string }>();
+  const planId = firstParam(params.planId);
+  const plan = usePlanStore((state) => state.plans.find((item) => item.id === planId));
+  const updatePlanFriends = usePlanStore((state) => state.updatePlanFriends);
+  const [friends, setFriends] = useState<FriendUserResponse[]>([]);
+  const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [savingFriendId, setSavingFriendId] = useState<string | null>(null);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(() => new Set(plan?.friendIds ?? []));
 
-  const toggleStatus = (id: string) => {
-    setUsers(users.map(u => u.id === id ? { ...u, status: u.status === 'Add' ? 'Added' : 'Add' } : u));
+  useEffect(() => {
+    setSelectedFriendIds(new Set(plan?.friendIds ?? []));
+  }, [plan?.friendIds]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setIsLoading(true);
+    getFriendUsers(search.trim() || undefined)
+      .then((data) => {
+        if (!cancelled) {
+          setFriends(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          Alert.alert("Unable to load friends", "Please try again.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [search]);
+
+  const displayedFriends = useMemo(() => {
+    const friendMap = new Map<string, FriendUserResponse>();
+
+    for (const friend of plan?.friendUsers ?? []) {
+      friendMap.set(friend.id, {
+        id: friend.id,
+        name: friend.name,
+        username: friend.username,
+        avatarKey: friend.avatarKey,
+        avatarUrl: friend.avatarUrl,
+      });
+    }
+
+    for (const friend of friends) {
+      friendMap.set(friend.id, friend);
+    }
+
+    return [...friendMap.values()];
+  }, [friends, plan?.friendUsers]);
+
+  const toggleFriend = async (friend: FriendUserResponse) => {
+    if (!plan || savingFriendId) {
+      return;
+    }
+
+    const nextSelectedIds = new Set(selectedFriendIds);
+    const isSelected = nextSelectedIds.has(friend.id);
+
+    if (isSelected) {
+      nextSelectedIds.delete(friend.id);
+    } else {
+      nextSelectedIds.add(friend.id);
+    }
+
+    const selectedFriends = displayedFriends.filter((item) => nextSelectedIds.has(item.id));
+    if (!isSelected && !selectedFriends.some((item) => item.id === friend.id)) {
+      selectedFriends.push(friend);
+    }
+
+    setSavingFriendId(friend.id);
+    setSelectedFriendIds(nextSelectedIds);
+
+    try {
+      await updatePlanFriends(plan.id, selectedFriends);
+    } catch {
+      setSelectedFriendIds(selectedFriendIds);
+      Alert.alert("Unable to update friends", "Please try again.");
+    } finally {
+      setSavingFriendId((currentId) => (currentId === friend.id ? null : currentId));
+    }
   };
 
   return (
     <View style={[s.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={[s.closeBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
           <Feather name="x" size={20} color={colors.text} />
@@ -40,11 +150,10 @@ export default function AddFriendScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Search Bar Row */}
       <View style={s.searchRow}>
         <View style={[s.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <HugeiconsIcon icon={Search01Icon} size={18} color={colors.textSecondary} style={s.searchIcon} />
-          <TextInput 
+          <TextInput
             style={[s.searchInput, { color: colors.text }]}
             placeholder="Search"
             placeholderTextColor={colors.textSecondary}
@@ -52,74 +161,96 @@ export default function AddFriendScreen() {
             onChangeText={setSearch}
           />
         </View>
-        <TouchableOpacity onPress={() => setSearch('')}>
+        <TouchableOpacity onPress={() => setSearch("")}>
           <Text style={[s.cancelBtnText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
       </View>
 
-      {/* List */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.listContent}>
-        {users.map((user) => (
-          <View key={user.id} style={[s.userRow, { borderBottomColor: colors.border }]}>
-            <Image source={{ uri: user.image }} style={[s.avatar, { borderColor: colors.border }]} />
-            <View style={s.userInfo}>
-              <Text style={[s.userName, { color: colors.text }]}>{user.name}</Text>
-              <Text style={[s.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>
-            </View>
-            <TouchableOpacity 
-              style={[
-                s.actionBtn, 
-                user.status === 'Added' 
-                  ? { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 } 
-                  : { backgroundColor: colors.primary }
-              ]}
-              onPress={() => toggleStatus(user.id)}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                s.actionBtnText, 
-                { color: user.status === 'Added' ? colors.textSecondary : colors.background }
-              ]}>
-                {user.status}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+      {!plan ? (
+        <View style={s.emptyState}>
+          <Text style={[s.emptyText, { color: colors.textSecondary }]}>Select a plan before adding friends.</Text>
+        </View>
+      ) : isLoading && displayedFriends.length === 0 ? (
+        <View style={s.emptyState}>
+          <ActivityIndicator color={colors.textSecondary} />
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.listContent}>
+          {displayedFriends.map((friend) => {
+            const isSelected = selectedFriendIds.has(friend.id);
+            const isSaving = savingFriendId === friend.id;
+
+            return (
+              <View key={friend.id} style={[s.userRow, { borderBottomColor: colors.border }]}>
+                <Image source={{ uri: resolveAvatarUrl(friend) }} style={[s.avatar, { borderColor: colors.border }]} />
+                <View style={s.userInfo}>
+                  <Text style={[s.userName, { color: colors.text }]}>{friend.name}</Text>
+                  <Text style={[s.userHandle, { color: colors.textSecondary }]}>
+                    {friend.username ? `@${friend.username.replace(/^@+/, "")}` : "Friend"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    s.actionBtn,
+                    isSelected
+                      ? { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }
+                      : { backgroundColor: colors.primary },
+                    isSaving && s.actionBtnDisabled,
+                  ]}
+                  onPress={() => toggleFriend(friend)}
+                  activeOpacity={0.7}
+                  disabled={isSaving || Boolean(savingFriendId && savingFriendId !== friend.id)}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color={isSelected ? colors.textSecondary : colors.background} />
+                  ) : (
+                    <Text style={[s.actionBtnText, { color: isSelected ? colors.textSecondary : colors.background }]}>
+                      {isSelected ? "Added" : "Add"}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+          {!isLoading && displayedFriends.length === 0 && (
+            <Text style={[s.emptyText, { color: colors.textSecondary }]}>No friends found.</Text>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1 },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 20, 
-    paddingBottom: 20 
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
-  closeBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 12, 
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     borderWidth: 1,
-    justifyContent: 'center', 
-    alignItems: 'center' 
+    justifyContent: "center",
+    alignItems: "center",
   },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  
+  headerTitle: { fontSize: 18, fontWeight: "700" },
+
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
     gap: 12,
     marginBottom: 24,
   },
   searchContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 52,
@@ -130,17 +261,20 @@ const s = StyleSheet.create({
   cancelBtnText: { fontSize: 15 },
 
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  userRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingVertical: 18, 
-    borderBottomWidth: 1, 
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 18,
+    borderBottomWidth: 1,
   },
   avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 14, borderWidth: 1 },
   userInfo: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  userName: { fontSize: 16, fontWeight: "700", marginBottom: 2 },
   userHandle: { fontSize: 13 },
 
-  actionBtn: { width: 80, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  actionBtnText: { fontSize: 13, fontWeight: '700' },
+  actionBtn: { width: 80, height: 32, borderRadius: 8, justifyContent: "center", alignItems: "center" },
+  actionBtnDisabled: { opacity: 0.7 },
+  actionBtnText: { fontSize: 13, fontWeight: "700" },
+  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
+  emptyText: { fontSize: 14, fontWeight: "600", textAlign: "center" },
 });

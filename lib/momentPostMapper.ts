@@ -87,7 +87,9 @@ const resolveMediaUri = (
 
 export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions): PostData | null => {
   const authorName = moment.author?.name ?? DEFAULT_AUTHOR_NAME;
-  const authorAvatar = moment.author?.avatarUrl ?? options.fallbackAvatar;
+  const authorAvatar = (moment.author?.avatarKey && options.storageUrlResolver)
+    ? options.storageUrlResolver(moment.author.avatarKey)
+    : (moment.author?.avatarUrl ?? options.fallbackAvatar);
   const visualMedia = moment.mediaItems
     .filter(isVisualMediaItem)
     .map((mediaItem) => ({

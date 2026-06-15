@@ -332,8 +332,8 @@ export default function MyPlanView() {
       <EventPickerModal
         visible={isSelectEventModalVisible}
         onClose={() => setIsSelectEventModalVisible(false)}
-        onSelect={(title) => {
-          setSelectedEventRadio(title);
+        onSelect={(event) => {
+          setSelectedEventRadio(event.title);
           setIsSelectEventModalVisible(false);
         }}
       />

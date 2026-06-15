@@ -1,16 +1,25 @@
 import { Feather } from "@expo/vector-icons";
 import { Tabs as ExpoTabs } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Path, Svg } from "react-native-svg";
 import AddOptionsModal from "../../components/modals/AddOptionsModal";
 import { useTheme } from "@/hooks/useTheme";
+import { getStorageFileUrl } from "@/lib/storage";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function TabLayout() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [tabAvatarError, setTabAvatarError] = useState(false);
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const user = useAuthStore((state) => state.user);
+  const tabAvatarUri = user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null;
+
+  useEffect(() => {
+    setTabAvatarError(false);
+  }, [user?.avatarKey]);
 
   const TAB_BAR_INNER_HEIGHT = 56;
   const tabBarHeight = TAB_BAR_INNER_HEIGHT + insets.bottom;
@@ -106,10 +115,17 @@ export default function TabLayout() {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={[styles.profileAvatar, { borderColor: focused ? colors.text : 'transparent' }]}>
-              <Image
-                source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop" }}
-                style={styles.profileImage}
-              />
+              {tabAvatarUri && !tabAvatarError ? (
+                <Image
+                  source={{ uri: tabAvatarUri }}
+                  style={styles.profileImage}
+                  onError={() => setTabAvatarError(true)}
+                />
+              ) : (
+                <View style={[styles.profileImage, styles.profileImageFallback, { backgroundColor: colors.card }]}>
+                  <Feather name="user" size={14} color={colors.textSecondary} />
+                </View>
+              )}
             </View>
           ),
         }}
@@ -136,7 +152,11 @@ const styles = StyleSheet.create({
   profileImage: {
     width: "100%",
     height: "100%",
-  }
+  },
+  profileImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
 
 

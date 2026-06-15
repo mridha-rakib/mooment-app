@@ -7,6 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { createMomentComment, getMomentComments, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
+import { getStorageFileUrl } from '@/lib/storage';
 
 const { height } = Dimensions.get('window');
 
@@ -101,7 +102,7 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
   id: comment.id,
   authorId: comment.author?.id,
   authorName: comment.author?.name ?? 'Mooment User',
-  authorAvatar: comment.author?.avatarUrl ?? DEFAULT_COMMENT_AVATAR,
+  authorAvatar: (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null) ?? comment.author?.avatarUrl ?? DEFAULT_COMMENT_AVATAR,
   text: comment.text,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
   likesCount: 0,
@@ -125,6 +126,7 @@ export default function CommentsModal({
 }) {
   const { colors, isDark } = useTheme();
   const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
+  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
   const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
   const [commentText, setCommentText] = useState('');
   const [isLoadingComments, setIsLoadingComments] = useState(false);
@@ -186,6 +188,7 @@ export default function CommentsModal({
     if (visible) {
       setReplyingTo(null);
       setCommentText('');
+      setFailedAvatarIds(new Set());
       void loadComments();
     }
   }, [loadComments, visible]);
@@ -277,7 +280,17 @@ export default function CommentsModal({
         )}
         
         <TouchableOpacity activeOpacity={0.7} onPress={() => handleProfilePress(item)}>
-          <Image source={{ uri: item.authorAvatar }} style={styles.commentAvatar} />
+          {!failedAvatarIds.has(item.id) ? (
+            <Image
+              source={{ uri: item.authorAvatar }}
+              style={styles.commentAvatar}
+              onError={() => setFailedAvatarIds((prev) => new Set([...prev, item.id]))}
+            />
+          ) : (
+            <View style={[styles.commentAvatar, styles.commentAvatarFallback]}>
+              <Feather name="user" size={14} color="#8E8E9B" />
+            </View>
+          )}
         </TouchableOpacity>
         
         <View style={styles.commentContent}>
@@ -496,6 +509,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginRight: 12,
     zIndex: 2,
+  },
+  commentAvatarFallback: {
+    backgroundColor: '#2B2B36',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   commentContent: {
     flex: 1,

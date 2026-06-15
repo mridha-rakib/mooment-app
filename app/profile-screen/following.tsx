@@ -1,6 +1,7 @@
 import BackButton from "@/components/ui/BackButton";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, getUserFollowing, unfollowUser, type ProfileFollowUserResponse } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
@@ -20,6 +21,7 @@ export default function FollowingScreen() {
   const [following, setFollowing] = useState<ProfileFollowUserResponse[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
   useEffect(() => {
     let isMounted = true;
@@ -89,12 +91,13 @@ export default function FollowingScreen() {
   };
 
   const openProfile = (user: ProfileFollowUserResponse) => {
+    const avatarUri = user.avatarKey ? getStorageFileUrl(user.avatarKey) : (user.avatarUrl ?? "");
     router.push({
       pathname: "/profile-screen/user-profile",
       params: {
         userId: user.id,
         name: user.name,
-        avatar: user.avatarUrl ?? "",
+        avatar: avatarUri,
       },
     });
   };
@@ -117,7 +120,9 @@ export default function FollowingScreen() {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
-          {following.map((user) => (
+          {following.map((user) => {
+            const avatarUri = user.avatarKey ? getStorageFileUrl(user.avatarKey) : user.avatarUrl;
+            return (
             <View key={user.id} style={[styles.userItem, { borderBottomColor: colors.border }]}>
               <TouchableOpacity
                 style={styles.userClickableArea}
@@ -125,8 +130,12 @@ export default function FollowingScreen() {
                 activeOpacity={0.7}
               >
                 <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
-                  {user.avatarUrl ? (
-                    <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+                  {avatarUri && !failedAvatarIds.has(user.id) ? (
+                    <Image
+                      source={{ uri: avatarUri }}
+                      style={styles.avatar}
+                      onError={() => setFailedAvatarIds((prev) => new Set([...prev, user.id]))}
+                    />
                   ) : (
                     <View style={[styles.avatarFallback, { backgroundColor: colors.card }]}>
                       <Text style={[styles.avatarInitial, { color: colors.text }]}>
@@ -160,7 +169,8 @@ export default function FollowingScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
     </SafeAreaView>

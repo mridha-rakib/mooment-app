@@ -11,6 +11,7 @@ import Mapbox from "@rnmapbox/maps";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
+import { usePlanStore } from "@/stores/planStore";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import {
   Image,
@@ -97,6 +98,8 @@ export default function MapScreen({
 }: MapScreenProps) {
   const router = useRouter();
   const { colors } = useTheme();
+  const plans = usePlanStore((state) => state.plans);
+  const restorePlans = usePlanStore((state) => state.restorePlans);
   const sharedLocation = useAuthStore((state) =>
     state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
   );
@@ -144,6 +147,10 @@ export default function MapScreen({
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
   }, []);
 
+  React.useEffect(() => {
+    restorePlans();
+  }, [restorePlans]);
+
   const categories = ["All", ...EVENT_CATEGORIES];
   const visibleMarkers = React.useMemo(
     () =>
@@ -168,6 +175,46 @@ export default function MapScreen({
     router.push({
       pathname: "/event-screen/event",
       params: { eventId: selectedMarker.id },
+    });
+  };
+
+  const handleAddToCalendar = () => {
+    if (!selectedMarker?.id) {
+      return;
+    }
+
+    setModalVisible(false);
+    router.push({
+      pathname: "/plan-screen/create-plan",
+      params: {
+        eventId: selectedMarker.id,
+        eventTitle: selectedMarker.label,
+        eventLocation: selectedMarker.location ?? "Location TBA",
+        eventLatitude: String(selectedMarker.latitude),
+        eventLongitude: String(selectedMarker.longitude),
+        eventScheduledAt: selectedMarker.scheduledAt ?? "",
+        lockLocation: "true",
+      },
+    });
+  };
+
+  const existingPlan = selectedMarker?.id
+    ? plans.find((p) => p.eventId === selectedMarker.id) ?? null
+    : null;
+
+  const handleViewInCalendar = () => {
+    if (!existingPlan) {
+      return;
+    }
+
+    setModalVisible(false);
+    router.push({
+      pathname: "/plan-screen/my-plan" as any,
+      params: {
+        focusYear: String(existingPlan.year),
+        focusMonth: String(existingPlan.month),
+        focusDay: String(existingPlan.day),
+      },
     });
   };
 
@@ -387,7 +434,10 @@ export default function MapScreen({
         attendeesCount={selectedMarker?.attendeesCount}
         ageLimit={selectedMarker?.ageLimit ?? undefined}
         price={selectedMarker?.price ?? undefined}
+        onAddToCalendar={handleAddToCalendar}
         onViewEvent={handleViewEvent}
+        isAddedToCalendar={!!existingPlan}
+        onViewInCalendar={handleViewInCalendar}
       />
     </View>
   );

@@ -7,7 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getProfileTimeline, type MomentInteractionSummary } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
-import { getStorageDownloadUrl, getStorageFileUrl } from "@/lib/storage";
+import { getStorageFileUrl } from "@/lib/storage";
 import { getUserById, getUserProfileStats } from "@/lib/users";
 
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
@@ -70,11 +70,7 @@ export default function UserProfileScreen() {
       let nextAvatar = params.avatar || DEFAULT_AVATAR;
 
       if (user.avatarKey) {
-        try {
-          nextAvatar = await getStorageDownloadUrl(user.avatarKey);
-        } catch {
-          nextAvatar = params.avatar || DEFAULT_AVATAR;
-        }
+        nextAvatar = getStorageFileUrl(user.avatarKey);
       }
 
       setAvatarUri(nextAvatar);

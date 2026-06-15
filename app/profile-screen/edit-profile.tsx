@@ -2,7 +2,7 @@ import BackButton from "@/components/ui/BackButton";
 import { Spinner, SpinnerCustom } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { getStorageDownloadUrl, uploadFileToStorage } from "@/lib/storage";
+import { getStorageDownloadUrl, getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   KeyboardTypeOptions,
   Linking,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -24,6 +25,7 @@ import {
   TextInput,
   TextInputProps,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
   ViewStyle,
 } from "react-native";
@@ -32,8 +34,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200";
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,40}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GENDER_OPTIONS = ["Male", "Female", "Others"] as const;
 
 type ProfileType = "personal" | "business";
+type GenderOption = (typeof GENDER_OPTIONS)[number];
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
@@ -187,6 +191,7 @@ export default function EditProfileScreen() {
   const [username, setUsername] = useState(user?.username ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [gender, setGender] = useState(user?.gender ?? "");
+  const [isGenderDropdownVisible, setIsGenderDropdownVisible] = useState(false);
   const [age, setAge] = useState(user?.age ? String(user.age) : "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [address, setAddress] = useState(user?.address ?? "");
@@ -258,35 +263,14 @@ export default function EditProfileScreen() {
   }, [type, user]);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!user?.avatarKey) {
+      setAvatarUri(DEFAULT_AVATAR);
+      setHasImage(true);
+      return;
+    }
 
-    const loadAvatar = async () => {
-      if (!user?.avatarKey) {
-        setAvatarUri(DEFAULT_AVATAR);
-        setHasImage(true);
-        return;
-      }
-
-      try {
-        const url = await getStorageDownloadUrl(user.avatarKey);
-
-        if (isMounted) {
-          setAvatarUri(url);
-          setHasImage(true);
-        }
-      } catch {
-        if (isMounted) {
-          setAvatarUri(DEFAULT_AVATAR);
-          setHasImage(true);
-        }
-      }
-    };
-
-    void loadAvatar();
-
-    return () => {
-      isMounted = false;
-    };
+    setAvatarUri(getStorageFileUrl(user.avatarKey));
+    setHasImage(true);
   }, [user?.avatarKey]);
 
   const handlePickAvatar = async () => {
@@ -378,6 +362,11 @@ export default function EditProfileScreen() {
     setBusinessDocumentKey(null);
     setPendingDocument(null);
     setDocumentMeta(null);
+  };
+
+  const handleGenderSelect = (selectedGender: GenderOption) => {
+    setGender(selectedGender);
+    setIsGenderDropdownVisible(false);
   };
 
   const handleOpenDocument = async () => {
@@ -580,15 +569,22 @@ export default function EditProfileScreen() {
                     value={address}
                   />
                 ) : (
-                  <CustomInput
-                    colors={colors}
-                    editable={!isBusy}
-                    icon="target"
-                    onChangeText={setGender}
-                    placeholder="Gender"
-                    rightIcon="chevron-down"
-                    value={gender}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    disabled={isBusy}
+                    onPress={() => setIsGenderDropdownVisible(true)}
+                    style={[
+                      styles.inputContainer,
+                      { backgroundColor: colors.card, borderColor: colors.border },
+                      isBusy && styles.disabledButton,
+                    ]}
+                  >
+                    <Feather name="target" size={16} color={colors.textSecondary} style={styles.inputIcon} />
+                    <Text style={[styles.input, { color: gender ? colors.text : colors.textSecondary }]}>
+                      {gender || "Gender"}
+                    </Text>
+                    <Feather name="chevron-down" size={16} color={colors.textSecondary} style={styles.inputRightIcon} />
+                  </TouchableOpacity>
                 )}
               </View>
 
@@ -687,6 +683,39 @@ export default function EditProfileScreen() {
               )}
             </TouchableOpacity>
           </View>
+
+          <Modal
+            animationType="fade"
+            transparent
+            visible={isGenderDropdownVisible}
+            onRequestClose={() => setIsGenderDropdownVisible(false)}
+          >
+            <TouchableWithoutFeedback onPress={() => setIsGenderDropdownVisible(false)}>
+              <View style={styles.dropdownOverlay}>
+                <TouchableWithoutFeedback>
+                  <View style={[styles.dropdownSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {GENDER_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        activeOpacity={0.75}
+                        onPress={() => handleGenderSelect(option)}
+                        style={styles.dropdownOption}
+                      >
+                        <Text
+                          style={[
+                            styles.dropdownOptionText,
+                            { color: gender === option ? colors.text : colors.textSecondary },
+                          ]}
+                        >
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
         </>
       )}
     </SafeAreaView>
@@ -887,6 +916,26 @@ const styles = StyleSheet.create({
   },
   docActionBtn: {
     padding: 2,
+  },
+  dropdownOverlay: {
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 20,
+  },
+  dropdownSheet: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  dropdownOption: {
+    minHeight: 52,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  dropdownOptionText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
   footer: {
     borderTopWidth: 1,

@@ -1,35 +1,100 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert, Platform, ScrollView, StatusBar,
+    ActivityIndicator, Alert, Platform, ScrollView, StatusBar,
     StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getFriendUsers, type FriendUserResponse } from '@/lib/users';
 
-/* ─── Fake Event / Friends Dropdown Data ─── */
+/* ─── Fake Event Dropdown Data ─── */
 const EVENTS = ['Rooftop Session Vol 4', 'Summer Fest 2026', 'Underground Beats', 'Jazz Night'];
-const FRIENDS = ['Dj Koko', 'Tuval', 'Nosel', 'Alex', 'Maya', 'Jordan'];
+
+const firstParam = (value?: string | string[]) => Array.isArray(value) ? value[0] : value;
+
+const getInitialDate = (dateIso?: string) => {
+  if (!dateIso) {
+    return new Date();
+  }
+
+  const parsedDate = new Date(dateIso);
+  return Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+};
 
 export default function CreatePlanScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ mode?: string; planName?: string; planDate?: string; planDateIso?: string; planTime?: string; planEvent?: string; planFriends?: string }>();
+  const params = useLocalSearchParams<{
+    mode?: string;
+    planName?: string;
+    planDate?: string;
+    planDateIso?: string;
+    planTime?: string;
+    planEvent?: string;
+    planFriends?: string;
+    planLocation?: string;
+    planLatitude?: string;
+    planLongitude?: string;
+    eventId?: string;
+    eventTitle?: string;
+    eventLocation?: string;
+    eventLatitude?: string;
+    eventLongitude?: string;
+    eventScheduledAt?: string;
+    lockLocation?: string;
+  }>();
 
-  const isEdit = params.mode === 'edit';
+  const eventTitle = firstParam(params.eventTitle);
+  const eventLocation = firstParam(params.eventLocation);
+  const eventScheduledAt = firstParam(params.eventScheduledAt);
+  const eventLatitude = firstParam(params.eventLatitude);
+  const eventLongitude = firstParam(params.eventLongitude);
+  const planDateIso = firstParam(params.planDateIso);
+  const isEdit = firstParam(params.mode) === 'edit';
+  const isEventLocationLocked = firstParam(params.lockLocation) === 'true' || Boolean(eventLocation);
+  const isEventLocked = Boolean(eventTitle) || firstParam(params.lockLocation) === 'true';
 
-  const [name, setName] = useState(params.planName || '');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [name, setName] = useState(firstParam(params.planName) || '');
+  const [selectedDate, setSelectedDate] = useState(() => getInitialDate(eventScheduledAt || planDateIso));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState(params.planEvent || '');
-  const [selectedLocation, setSelectedLocation] = useState('123, Main Street NYC');
-  const [selectedFriends, setSelectedFriends] = useState(params.planFriends || '');
+  const [selectedEvent, setSelectedEvent] = useState(firstParam(params.planEvent) || eventTitle || '');
+  const [selectedLocation, setSelectedLocation] = useState(firstParam(params.planLocation) || eventLocation || '123, Main Street NYC');
   const [showEventDropdown, setShowEventDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showFriendsDropdown, setShowFriendsDropdown] = useState(false);
+
+  const [availableFriends, setAvailableFriends] = useState<FriendUserResponse[]>([]);
+  const [isFriendsLoading, setIsFriendsLoading] = useState(false);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
+
+  const selectedFriendsDisplay = availableFriends
+    .filter((f) => selectedFriendIds.has(f.id))
+    .map((f) => f.name)
+    .join(', ');
+
+  useEffect(() => {
+    setIsFriendsLoading(true);
+    getFriendUsers()
+      .then(setAvailableFriends)
+      .catch(() => {})
+      .finally(() => setIsFriendsLoading(false));
+  }, []);
+
+  const toggleFriend = (friend: FriendUserResponse) => {
+    setSelectedFriendIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(friend.id)) {
+        next.delete(friend.id);
+      } else {
+        next.add(friend.id);
+      }
+      return next;
+    });
+  };
 
   const onDateChange = (event: any, date?: Date) => {
     setShowDatePicker(false);
@@ -76,14 +141,18 @@ export default function CreatePlanScreen() {
     // Navigate to Map Selection screen
     router.push({
       pathname: '/plan-screen/map-selection' as any,
-      params: { 
-        planName: name, 
-        planDate: formatDate(selectedDate), 
+      params: {
+        planName: name,
+        planDate: formatDate(selectedDate),
         planDateIso: selectedDate.toISOString(),
-        planTime: formatTime(selectedDate), 
-        planEvent: selectedEvent, 
-        planFriends: selectedFriends, 
-        planLocation: selectedLocation 
+        planTime: formatTime(selectedDate),
+        planEvent: selectedEvent,
+        planEventId: firstParam(params.eventId) || '',
+        planFriends: selectedFriendsDisplay,
+        planFriendIds: [...selectedFriendIds].join(','),
+        planLocation: selectedLocation,
+        planLatitude: eventLatitude || firstParam(params.planLatitude) || '',
+        planLongitude: eventLongitude || firstParam(params.planLongitude) || '',
       },
     });
   };
@@ -122,9 +191,10 @@ export default function CreatePlanScreen() {
         <View style={styles.dateTimeRow}>
           <View style={styles.dateCol}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
-            <TouchableOpacity 
-              style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} 
-              activeOpacity={0.8}
+            <TouchableOpacity
+              style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}
+              activeOpacity={isEventLocked ? 1 : 0.8}
+              disabled={isEventLocked}
               onPress={() => setShowDatePicker(true)}
             >
               <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -135,9 +205,10 @@ export default function CreatePlanScreen() {
           </View>
           <View style={styles.timeCol}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>TIME</Text>
-            <TouchableOpacity 
-              style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]} 
-              activeOpacity={0.8}
+            <TouchableOpacity
+              style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}
+              activeOpacity={isEventLocked ? 1 : 0.8}
+              disabled={isEventLocked}
               onPress={() => setShowTimePicker(true)}
             >
               <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -148,7 +219,7 @@ export default function CreatePlanScreen() {
           </View>
         </View>
 
-        {showDatePicker && (
+        {!isEventLocked && showDatePicker && (
           <DateTimePicker
             value={selectedDate}
             mode="date"
@@ -157,7 +228,7 @@ export default function CreatePlanScreen() {
           />
         )}
 
-        {showTimePicker && (
+        {!isEventLocked && showTimePicker && (
           <DateTimePicker
             value={selectedDate}
             mode="time"
@@ -170,16 +241,19 @@ export default function CreatePlanScreen() {
         {/* ── Event Selector ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>EVENT</Text>
         <TouchableOpacity
-          style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-          activeOpacity={0.8}
+          style={[styles.dropdownBtn, isEventLocked && styles.readOnlyDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}
+          activeOpacity={isEventLocked ? 1 : 0.8}
+          disabled={isEventLocked}
+          accessibilityRole={isEventLocked ? 'text' : 'button'}
+          accessibilityLabel={isEventLocked ? `Event: ${selectedEvent}` : 'Select event'}
           onPress={() => { setShowEventDropdown(!showEventDropdown); setShowFriendsDropdown(false); }}
         >
           <Text style={[styles.dropdownText, { color: colors.text }, !selectedEvent && { color: colors.textSecondary }]}>
             {selectedEvent || 'Select Event'}
           </Text>
-          <Feather name={showEventDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
+          <Feather name={isEventLocked ? 'lock' : (showEventDropdown ? 'chevron-up' : 'chevron-down')} size={16} color={colors.textSecondary} />
         </TouchableOpacity>
-        {showEventDropdown && (
+        {!isEventLocked && showEventDropdown && (
           <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {EVENTS.map((ev) => (
               <TouchableOpacity
@@ -198,19 +272,32 @@ export default function CreatePlanScreen() {
         {/* ── Location Selector ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>LOCATION</Text>
         <TouchableOpacity
-          style={[styles.dropdownBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          style={[styles.dropdownBtn, isEventLocationLocked && styles.readOnlyDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
-          onPress={() => { setShowLocationDropdown(!showLocationDropdown); setShowEventDropdown(false); setShowFriendsDropdown(false); }}
+          accessibilityRole="button"
+          accessibilityLabel={isEventLocationLocked ? `View event location: ${selectedLocation}` : 'Select location'}
+          onPress={isEventLocationLocked
+            ? () => router.push({
+                pathname: '/plan-screen/view-location' as any,
+                params: {
+                  eventName: selectedEvent,
+                  locationName: selectedLocation,
+                  latitude: eventLatitude || firstParam(params.planLatitude) || '',
+                  longitude: eventLongitude || firstParam(params.planLongitude) || '',
+                },
+              })
+            : () => { setShowLocationDropdown(!showLocationDropdown); setShowEventDropdown(false); setShowFriendsDropdown(false); }
+          }
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.dropdownTextRow}>
             <Feather name="map-pin" size={14} color={colors.textSecondary} style={{ marginRight: 8 }} />
-            <Text style={[styles.dropdownText, { color: colors.text }, !selectedLocation && { color: colors.textSecondary }]}>
+            <Text style={[styles.dropdownText, styles.locationText, { color: colors.text }, !selectedLocation && { color: colors.textSecondary }]} numberOfLines={1}>
               {selectedLocation || 'Select Location'}
             </Text>
           </View>
-          <Feather name="chevron-right" size={16} color={colors.textSecondary} />
+          <Feather name={isEventLocationLocked ? 'lock' : 'chevron-right'} size={16} color={colors.textSecondary} />
         </TouchableOpacity>
-        {showLocationDropdown && (
+        {!isEventLocationLocked && showLocationDropdown && (
           <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {['123, Main Street NYC', 'Los Angeles, CA', 'Central Park'].map((loc) => (
               <TouchableOpacity
@@ -233,29 +320,31 @@ export default function CreatePlanScreen() {
           activeOpacity={0.8}
           onPress={() => { setShowFriendsDropdown(!showFriendsDropdown); setShowEventDropdown(false); setShowLocationDropdown(false); }}
         >
-          <Text style={[styles.dropdownText, { color: colors.text }, !selectedFriends && { color: colors.textSecondary }]}>
-            {selectedFriends || 'Select Friends'}
+          <Text style={[styles.dropdownText, { color: colors.text }, !selectedFriendsDisplay && { color: colors.textSecondary }]}>
+            {selectedFriendsDisplay || 'Select Friends'}
           </Text>
           <Feather name={showFriendsDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         {showFriendsDropdown && (
           <View style={[styles.dropdownList, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {FRIENDS.map((fr) => {
-              const isSelected = selectedFriends.split(', ').includes(fr);
+            {isFriendsLoading ? (
+              <View style={styles.dropdownLoading}>
+                <ActivityIndicator size="small" color={colors.textSecondary} />
+              </View>
+            ) : availableFriends.length === 0 ? (
+              <View style={styles.dropdownLoading}>
+                <Text style={[styles.dropdownItemText, { color: colors.textSecondary }]}>No friends found</Text>
+              </View>
+            ) : availableFriends.map((fr) => {
+              const isSelected = selectedFriendIds.has(fr.id);
               return (
                 <TouchableOpacity
-                  key={fr}
+                  key={fr.id}
                   style={[styles.dropdownItem, { borderBottomColor: colors.border }, isSelected && styles.dropdownItemActive]}
-                  onPress={() => {
-                    if (isSelected) {
-                      setSelectedFriends(selectedFriends.split(', ').filter((f) => f !== fr).join(', '));
-                    } else {
-                      setSelectedFriends(selectedFriends ? `${selectedFriends}, ${fr}` : fr);
-                    }
-                  }}
+                  onPress={() => toggleFriend(fr)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.dropdownItemText, { color: colors.textSecondary }, isSelected && styles.dropdownItemTextActive]}>{fr}</Text>
+                  <Text style={[styles.dropdownItemText, { color: colors.textSecondary }, isSelected && styles.dropdownItemTextActive]}>{fr.name}</Text>
                   {isSelected && <Feather name="check" size={14} color={colors.primary} />}
                 </TouchableOpacity>
               );
@@ -312,10 +401,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, height: 48,
   },
   dropdownText: { fontSize: 14 },
+  dropdownTextRow: { flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 10 },
+  locationText: { flex: 1 },
+  readOnlyDropdown: { opacity: 1 },
   dropdownList: {
     borderRadius: 12,
     borderWidth: 1,
     marginTop: 4, overflow: 'hidden',
+  },
+  dropdownLoading: {
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   dropdownItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

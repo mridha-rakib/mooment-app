@@ -6,7 +6,7 @@ import { getAuthErrorMessage } from "@/lib/authErrors";
 import { deleteMoment, getProfileTimeline, shareMoment } from "@/lib/moments";
 import type { MomentInteractionSummary } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
-import { getStorageDownloadUrl, getStorageFileUrl } from "@/lib/storage";
+import { getStorageFileUrl } from "@/lib/storage";
 import { getUserProfileStats } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import { Alert, View } from "react-native";
@@ -44,32 +44,12 @@ export default function ProfileTab() {
   const [profileStats, setProfileStats] = useState(PROFILE_STATS);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!user?.avatarKey) {
+      setAvatarUri(DEFAULT_AVATAR);
+      return;
+    }
 
-    const loadAvatar = async () => {
-      if (!user?.avatarKey) {
-        setAvatarUri(DEFAULT_AVATAR);
-        return;
-      }
-
-      try {
-        const url = await getStorageDownloadUrl(user.avatarKey);
-
-        if (isMounted) {
-          setAvatarUri(url);
-        }
-      } catch {
-        if (isMounted) {
-          setAvatarUri(DEFAULT_AVATAR);
-        }
-      }
-    };
-
-    void loadAvatar();
-
-    return () => {
-      isMounted = false;
-    };
+    setAvatarUri(getStorageFileUrl(user.avatarKey));
   }, [user?.avatarKey]);
 
   const loadTimeline = useCallback(async () => {

@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
@@ -34,6 +34,11 @@ export default function ProfileHeader({ userId, avatar, stats, isOwnProfile = tr
   const [showMore, setShowMore] = React.useState(false);
   const [isSearching, setIsSearching] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatar]);
 
   return (
     <View style={styles.container}>
@@ -90,7 +95,17 @@ export default function ProfileHeader({ userId, avatar, stats, isOwnProfile = tr
 
       <View style={styles.infoRow}>
         <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
-          <Image source={{ uri: avatar }} style={styles.avatar} />
+          {!avatarLoadFailed ? (
+            <Image
+              source={{ uri: avatar }}
+              style={styles.avatar}
+              onError={() => setAvatarLoadFailed(true)}
+            />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: colors.card }]}>
+              <Feather name="user" size={36} color={colors.textSecondary} />
+            </View>
+          )}
         </View>
 
         <View style={styles.statsContainer}>
@@ -232,6 +247,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 40,
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statsContainer: {
     flex: 1,

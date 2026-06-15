@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 
 import { useRouter } from 'expo-router';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -22,6 +23,7 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
   const router = useRouter();
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
+  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
   useEffect(() => {
     setFollowedUserIds(users.filter((user) => user.isFollowing).map((user) => user.id));
@@ -101,7 +103,17 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
               } as any)}
               style={styles.avatarContainer}
             >
-              <Image source={{ uri: user.avatarUri }} style={styles.avatar} />
+              {!failedAvatarIds.has(user.id) ? (
+                <Image
+                  source={{ uri: user.avatarUri }}
+                  style={styles.avatar}
+                  onError={() => setFailedAvatarIds((prev) => new Set([...prev, user.id]))}
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Feather name="user" size={28} color="#8E8E9B" />
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -176,6 +188,10 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 35,
     backgroundColor: '#13131A',
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   userName: {
     color: '#FFFFFF',

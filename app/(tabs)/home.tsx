@@ -181,7 +181,7 @@ export default function HomeFeed() {
         setSuggestedUsers(users.map((user) => ({
           id: user.id,
           name: user.name,
-          avatarUri: user.avatarUrl?.trim() || STORY_FALLBACK_AVATAR,
+          avatarUri: user.avatarKey ? getStorageFileUrl(user.avatarKey) : (user.avatarUrl?.trim() || STORY_FALLBACK_AVATAR),
           isFollowing: user.isFollowing,
         })));
       } catch {

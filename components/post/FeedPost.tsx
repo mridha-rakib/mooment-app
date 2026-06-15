@@ -353,6 +353,7 @@ export default function FeedPost({
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(Boolean(post.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
+  const [authorAvatarError, setAuthorAvatarError] = useState(false);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const moreBtnRef = useRef<View>(null);
   const [menuTop, setMenuTop] = useState(0);
@@ -387,6 +388,7 @@ export default function FeedPost({
 
   useEffect(() => {
     setIsFollowing(Boolean(post.isFollowing));
+    setAuthorAvatarError(false);
   }, [post.id, post.isFollowing]);
 
   useEffect(() => {
@@ -551,7 +553,17 @@ export default function FeedPost({
               }
             } as any)}
           >
-            <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
+            {!authorAvatarError ? (
+              <Image
+                source={{ uri: post.authorAvatar }}
+                style={styles.postAvatar}
+                onError={() => setAuthorAvatarError(true)}
+              />
+            ) : (
+              <View style={[styles.postAvatar, styles.postAvatarFallback]}>
+                <Feather name="user" size={16} color="#8E8E9B" />
+              </View>
+            )}
             <View style={styles.authorTextContainer}>
               <Text style={styles.authorLine} numberOfLines={2}>
                 <Text style={[styles.postAuthor, { color: colors.text }]}>{post.authorName}</Text>
@@ -891,6 +903,11 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     marginRight: 10,
+  },
+  postAvatarFallback: {
+    backgroundColor: '#2B2B36',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   authorTextContainer: {
     flex: 1,

@@ -3,7 +3,9 @@ import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getStorageFileUrl } from '@/lib/storage';
 import { followUser, getSuggestedUsers, unfollowUser } from '@/lib/users';
+import { Feather } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 
 const CheckIcon = () => (
@@ -30,6 +32,7 @@ const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 export default function PeopleToFollowScreen() {
   const [users, setUsers] = useState(INITIAL_USERS);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
+  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
   useEffect(() => {
     let isMounted = true;
@@ -46,7 +49,7 @@ export default function PeopleToFollowScreen() {
           id: user.id,
           name: user.name,
           handle: user.username ? `@${user.username}` : '@xenog',
-          avatar: user.avatarUrl ?? FALLBACK_AVATARS[index % FALLBACK_AVATARS.length],
+          avatar: user.avatarKey ? getStorageFileUrl(user.avatarKey) : (user.avatarUrl ?? FALLBACK_AVATARS[index % FALLBACK_AVATARS.length]),
           isFollowing: user.isFollowing,
         })));
       } catch {
@@ -121,7 +124,17 @@ export default function PeopleToFollowScreen() {
           {users.map((user, index) => (
             <View key={user.id}>
               <View style={styles.listItem}>
-                <Image source={{ uri: user.avatar }} style={styles.avatar} />
+                {!failedAvatarIds.has(user.id) ? (
+                  <Image
+                    source={{ uri: user.avatar }}
+                    style={styles.avatar}
+                    onError={() => setFailedAvatarIds((prev) => new Set([...prev, user.id]))}
+                  />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Feather name="user" size={18} color="#8E8E9B" />
+                  </View>
+                )}
                 <View style={styles.textContainer}>
                   <Text style={styles.name}>{user.name}</Text>
                   <Text style={styles.handle}>{user.handle}</Text>
@@ -194,6 +207,11 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     marginRight: 12,
+  },
+  avatarFallback: {
+    backgroundColor: '#2B2B36',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textContainer: {
     flex: 1,

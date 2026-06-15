@@ -7,6 +7,7 @@ const projectRoot = path.resolve(__dirname, "..");
 
 const targets = [
   path.join(tempDir, "metro-cache"),
+  path.join(tempDir, "metro-file-map-*"),
   path.join(tempDir, "haste-map-metro-*"),
   path.join(projectRoot, ".metro-cache"),
   path.join(projectRoot, ".expo", "web", "cache"),

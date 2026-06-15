@@ -39,6 +39,7 @@ type EventDraftState = {
   ageRestriction: EventAgeRestriction;
   category: EventCategory | null;
   scheduledAt: string;
+  endAt: string;
   location: EventLocation;
   tickets: EventDraftTicket[];
   privacy: EventPrivacy;
@@ -49,7 +50,12 @@ type EventDraftState = {
     bannerOriginalImageUri?: string | null;
     bannerImageDisplay?: EventImageDisplay | null;
   }) => void;
-  setStepTwo: (payload: { ageRestriction: EventAgeRestriction; category: EventCategory | null; scheduledAt: string }) => void;
+  setStepTwo: (payload: {
+    ageRestriction: EventAgeRestriction;
+    category: EventCategory | null;
+    scheduledAt: string;
+    endAt: string;
+  }) => void;
   setStepThree: (payload: { location: EventLocation }) => void;
   setPrivacy: (privacy: EventPrivacy) => void;
   upsertTicket: (ticket: Partial<EventDraftTicket>) => void;
@@ -74,23 +80,37 @@ const createDefaultTicket = (): EventDraftTicket => ({
   type: "pay",
 });
 
-const createInitialState = () => ({
-  draftId: null,
-  isEditingPublishedEvent: false,
-  name: "",
-  description: "",
-  bannerImageUri: null,
-  bannerImageKey: null,
-  bannerOriginalImageUri: null,
-  bannerOriginalImageKey: null,
-  bannerImageDisplay: null,
-  ageRestriction: "all_ages" as EventAgeRestriction,
-  category: null,
-  scheduledAt: new Date().toISOString(),
-  location: {},
-  tickets: [createDefaultTicket()],
-  privacy: "public" as EventPrivacy,
-});
+const addHours = (value: string | Date, hours: number) => {
+  const date = new Date(value);
+  const baseDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  return new Date(baseDate.getTime() + hours * 60 * 60 * 1000);
+};
+
+const getDefaultEndAt = (scheduledAt: string | Date) => addHours(scheduledAt, 2).toISOString();
+
+const createInitialState = () => {
+  const scheduledAt = new Date().toISOString();
+
+  return {
+    scheduledAt,
+    draftId: null,
+    isEditingPublishedEvent: false,
+    name: "",
+    description: "",
+    bannerImageUri: null,
+    bannerImageKey: null,
+    bannerOriginalImageUri: null,
+    bannerOriginalImageKey: null,
+    bannerImageDisplay: null,
+    ageRestriction: "all_ages" as EventAgeRestriction,
+    category: null,
+    endAt: getDefaultEndAt(scheduledAt),
+    location: {},
+    tickets: [createDefaultTicket()],
+    privacy: "public" as EventPrivacy,
+  };
+};
 
 const isRemoteUri = (uri: string) => /^https?:\/\//i.test(uri);
 
@@ -190,8 +210,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     }));
   },
 
-  setStepTwo: ({ ageRestriction, category, scheduledAt }) => {
-    set({ ageRestriction, category, scheduledAt });
+  setStepTwo: ({ ageRestriction, category, scheduledAt, endAt }) => {
+    set({ ageRestriction, category, scheduledAt, endAt });
   },
 
   setStepThree: ({ location }) => {
@@ -341,6 +361,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       name: state.name.trim() || "Untitled Event",
       privacy: state.privacy,
       scheduledAt: state.scheduledAt,
+      endAt: state.endAt,
       tickets: stripLocalTicketFields(state.tickets),
     };
     let event: EventResponse;
@@ -387,6 +408,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       ageRestriction: event.ageRestriction ?? "all_ages",
       category: event.category ?? null,
       scheduledAt: event.scheduledAt ?? new Date().toISOString(),
+      endAt: event.endAt ?? getDefaultEndAt(event.scheduledAt ?? new Date()),
       location: event.location ?? {},
       tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [createDefaultTicket()],
       privacy: event.privacy,
@@ -439,6 +461,7 @@ const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> 
     name: state.name.trim() || null,
     privacy: state.privacy,
     scheduledAt: state.scheduledAt,
+    endAt: state.endAt,
     tickets: stripLocalTicketFields(state.tickets),
   };
 };

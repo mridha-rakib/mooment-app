@@ -37,8 +37,14 @@ const createEventStepTwoSchema = z.object({
     message: 'Select a category before continuing.',
   }),
   scheduledAt: z.custom<Date>((value) => value instanceof Date && !Number.isNaN(value.getTime()), {
-    message: 'Choose a valid date and time.',
+    message: 'Choose a valid start date and time.',
   }),
+  endAt: z.custom<Date>((value) => value instanceof Date && !Number.isNaN(value.getTime()), {
+    message: 'Choose a valid end time.',
+  }),
+}).refine((value) => value.endAt > value.scheduledAt, {
+  message: 'End time must be after the start time.',
+  path: ['endAt'],
 });
 
 type CreateEventStepTwoValues = z.infer<typeof createEventStepTwoSchema>;
@@ -50,6 +56,7 @@ export default function CreateEventStep2() {
   const draftAgeRestriction = useEventDraftStore((state) => state.ageRestriction);
   const draftCategory = useEventDraftStore((state) => state.category);
   const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const draftEndAt = useEventDraftStore((state) => state.endAt);
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const [selectedAge, setSelectedAge] = useState<AgeOption>(() => {
@@ -61,13 +68,19 @@ export default function CreateEventStep2() {
   const [selectedCategory, setSelectedCategory] = useState<EventCategory | null>(
     isEventCategory(draftCategory) ? draftCategory : null,
   );
-  const [date, setDate] = useState(() => {
+  const [startAt, setStartAt] = useState(() => {
     const parsedDate = new Date(draftScheduledAt);
 
     return Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
   });
+  const [endAt, setEndAt] = useState(() => {
+    const parsedDate = new Date(draftEndAt);
+
+    return Number.isNaN(parsedDate.getTime()) ? new Date(Date.now() + 2 * 60 * 60 * 1000) : parsedDate;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [errors, setErrors] = useState<CreateEventStepTwoErrors>({});
   const pickerButtonColors = {
     negativeButton: { label: 'Cancel', textColor: colors.textSecondary },
@@ -89,23 +102,47 @@ export default function CreateEventStep2() {
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      const newDate = new Date(date);
-      newDate.setFullYear(selectedDate.getFullYear());
-      newDate.setMonth(selectedDate.getMonth());
-      newDate.setDate(selectedDate.getDate());
-      setDate(newDate);
+      const nextStartAt = new Date(startAt);
+      const nextEndAt = new Date(endAt);
+
+      nextStartAt.setFullYear(selectedDate.getFullYear());
+      nextStartAt.setMonth(selectedDate.getMonth());
+      nextStartAt.setDate(selectedDate.getDate());
+      nextEndAt.setFullYear(selectedDate.getFullYear());
+      nextEndAt.setMonth(selectedDate.getMonth());
+      nextEndAt.setDate(selectedDate.getDate());
+      setStartAt(nextStartAt);
+      setEndAt(nextEndAt);
       clearFieldError('scheduledAt');
+      clearFieldError('endAt');
     }
   };
 
-  const onTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(false);
+  const onStartTimeChange = (event: any, selectedTime?: Date) => {
+    setShowStartTimePicker(false);
     if (selectedTime) {
-      const newDate = new Date(date);
-      newDate.setHours(selectedTime.getHours());
-      newDate.setMinutes(selectedTime.getMinutes());
-      setDate(newDate);
+      const nextStartAt = new Date(startAt);
+      nextStartAt.setHours(selectedTime.getHours());
+      nextStartAt.setMinutes(selectedTime.getMinutes());
+      nextStartAt.setSeconds(0, 0);
+      setStartAt(nextStartAt);
+      setEndAt((currentEndAt) =>
+        currentEndAt > nextStartAt ? currentEndAt : new Date(nextStartAt.getTime() + 2 * 60 * 60 * 1000),
+      );
       clearFieldError('scheduledAt');
+      clearFieldError('endAt');
+    }
+  };
+
+  const onEndTimeChange = (event: any, selectedTime?: Date) => {
+    setShowEndTimePicker(false);
+    if (selectedTime) {
+      const nextEndAt = new Date(endAt);
+      nextEndAt.setHours(selectedTime.getHours());
+      nextEndAt.setMinutes(selectedTime.getMinutes());
+      nextEndAt.setSeconds(0, 0);
+      setEndAt(nextEndAt);
+      clearFieldError('endAt');
     }
   };
 
@@ -139,7 +176,8 @@ export default function CreateEventStep2() {
     setStepTwo({
       ageRestriction: toAgeRestriction(values?.ageRestriction ?? selectedAge),
       category: values?.category ?? selectedCategory,
-      scheduledAt: (values?.scheduledAt ?? date).toISOString(),
+      scheduledAt: (values?.scheduledAt ?? startAt).toISOString(),
+      endAt: (values?.endAt ?? endAt).toISOString(),
     });
   };
 
@@ -157,7 +195,8 @@ export default function CreateEventStep2() {
     const result = createEventStepTwoSchema.safeParse({
       ageRestriction: selectedAge,
       category: selectedCategory,
-      scheduledAt: date,
+      scheduledAt: startAt,
+      endAt,
     });
 
     if (!result.success) {
@@ -167,6 +206,7 @@ export default function CreateEventStep2() {
         ageRestriction: fieldErrors.ageRestriction?.[0],
         category: fieldErrors.category?.[0],
         scheduledAt: fieldErrors.scheduledAt?.[0],
+        endAt: fieldErrors.endAt?.[0],
       });
 
       return;
@@ -246,41 +286,58 @@ export default function CreateEventStep2() {
 
         {/* Date and Time Row */}
         <View style={styles.dateTimeGroup}>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
+            <TouchableOpacity
+              style={[
+                styles.selector,
+                { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <View style={styles.selectorLeft}>
+                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(startAt)}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.row}>
             <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>START TIME</Text>
               <TouchableOpacity
                 style={[
                   styles.selector,
                   { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
                 ]}
-                onPress={() => setShowDatePicker(true)}
+                onPress={() => setShowStartTimePicker(true)}
               >
-                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(date)}</Text>
+                <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(startAt)}</Text>
               </TouchableOpacity>
             </View>
 
             <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>TIME</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
               <TouchableOpacity
                 style={[
                   styles.selector,
-                  { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
+                  { backgroundColor: colors.card, borderColor: errors.endAt ? colors.danger : 'transparent' },
                 ]}
-                onPress={() => setShowTimePicker(true)}
+                onPress={() => setShowEndTimePicker(true)}
               >
                 <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(date)}</Text>
+                <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(endAt)}</Text>
               </TouchableOpacity>
             </View>
           </View>
           {errors.scheduledAt ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.scheduledAt}</Text> : null}
+          {errors.endAt ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endAt}</Text> : null}
         </View>
 
         {showDatePicker && (
           <DateTimePicker
-            value={date}
+            value={startAt}
             mode="date"
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
@@ -289,15 +346,27 @@ export default function CreateEventStep2() {
           />
         )}
 
-        {showTimePicker && (
+        {showStartTimePicker && (
           <DateTimePicker
-            value={date}
+            value={startAt}
             mode="time"
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             is24Hour={false}
-            onChange={onTimeChange}
+            onChange={onStartTimeChange}
+          />
+        )}
+
+        {showEndTimePicker && (
+          <DateTimePicker
+            value={endAt}
+            mode="time"
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour={false}
+            onChange={onEndTimeChange}
           />
         )}
       </View>
@@ -439,6 +508,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  selectorLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
   },
   errorText: {
     fontSize: 12,

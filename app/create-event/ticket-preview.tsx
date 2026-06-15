@@ -61,6 +61,7 @@ export default function TicketPreviewScreen() {
   );
   const eventName = useEventDraftStore((state) => state.name);
   const scheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const endAt = useEventDraftStore((state) => state.endAt);
   const location = useEventDraftStore((state) => state.location);
   const privacy = useEventDraftStore((state) => state.privacy);
 
@@ -74,12 +75,13 @@ export default function TicketPreviewScreen() {
       { icon: 'cash-outline', label: 'Price', value: formatPrice(ticket.type, ticket.price) },
       { icon: 'people-outline', label: 'Capacity', value: `${ticket.capacity} left` },
       { icon: 'time-outline', label: 'Sales end', value: formatDateTime(ticket.salesEndAt) },
-      { icon: 'calendar-outline', label: 'Event date', value: formatDateTime(scheduledAt) },
+      { icon: 'calendar-outline', label: 'Event starts', value: formatDateTime(scheduledAt) },
+      { icon: 'time-outline', label: 'Event ends', value: formatDateTime(endAt) },
       { icon: 'lock-closed-outline', label: 'Visibility', value: privacy === 'private' ? 'Private event' : 'Public event' },
       { icon: 'location-outline', label: 'Venue', value: location.venue || 'Venue TBA' },
       { icon: 'navigate-outline', label: 'Address', value: location.address || location.searchLabel || 'Address TBA' },
     ];
-  }, [location.address, location.searchLabel, location.venue, privacy, scheduledAt, ticket]);
+  }, [endAt, location.address, location.searchLabel, location.venue, privacy, scheduledAt, ticket]);
 
   if (!ticket) {
     return (

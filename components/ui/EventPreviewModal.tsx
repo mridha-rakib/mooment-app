@@ -18,7 +18,10 @@ type EventPreviewModalProps = {
   attendeesCount?: number;
   ageLimit?: string;
   price?: string;
+  onAddToCalendar?: () => void;
   onViewEvent?: () => void;
+  isAddedToCalendar?: boolean;
+  onViewInCalendar?: () => void;
 };
 
 export default function EventPreviewModal({
@@ -35,7 +38,10 @@ export default function EventPreviewModal({
   attendeesCount = 0,
   ageLimit = "All Ages",
   price = "Free",
-  onViewEvent
+  onAddToCalendar,
+  onViewEvent,
+  isAddedToCalendar = false,
+  onViewInCalendar,
 }: EventPreviewModalProps) {
   const { colors, isDark } = useTheme();
   const distanceLabel = distance === "nearby" ? "nearby" : `${distance} away`;
@@ -117,8 +123,14 @@ export default function EventPreviewModal({
 
           {/* Buttons */}
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }]}>
-              <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Add To Calendar</Text>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { backgroundColor: isAddedToCalendar ? 'rgba(142,84,233,0.2)' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') }]}
+              onPress={isAddedToCalendar ? onViewInCalendar : onAddToCalendar}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.secondaryBtnText, { color: isAddedToCalendar ? '#8E54E9' : colors.text }]}>
+                {isAddedToCalendar ? 'View in Calendar' : 'Add To Calendar'}
+              </Text>
             </TouchableOpacity>
             
             <TouchableOpacity 

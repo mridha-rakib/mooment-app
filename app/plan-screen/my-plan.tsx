@@ -13,10 +13,12 @@ import {
   UserGroupIcon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
+  ActivityIndicator,
   Dimensions,
   Image, Modal, Platform,
   Pressable, ScrollView,
@@ -24,7 +26,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlanStore } from '@/stores/planStore';
-import type { PlanEvent } from '@/stores/planStore';
+import type { PlanEvent, PlanFriend } from '@/stores/planStore';
 
 /* ─── Constants ─── */
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -34,6 +36,17 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
+function getMonthRange(y: number, m: number) {
+  return {
+    from: new Date(y, m, 1, 0, 0, 0, 0).toISOString(),
+    to: new Date(y, m + 1, 0, 23, 59, 59, 999).toISOString(),
+  };
+}
+function parseIntegerParam(value?: string) {
+  const parsed = value ? parseInt(value, 10) : NaN;
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
 function getTimeMinutes(time: string) {
   const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
 
@@ -63,28 +76,40 @@ const EVENT_CARD_ACTIVE = {
   muted: '#9A9898',
   text: '#FFFFFF',
 };
-const ATTENDEE_AVATARS = [
-  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=100',
-];
+const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400';
+
+const getFriendInitials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || '?';
 
 export default function MyPlanScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const rawParams = useLocalSearchParams<{ focusYear?: string; focusMonth?: string; focusDay?: string }>();
+  const parsedFocusYear = parseIntegerParam(rawParams.focusYear);
+  const parsedFocusMonth = parseIntegerParam(rawParams.focusMonth);
+  const parsedFocusDay = parseIntegerParam(rawParams.focusDay);
+  const focusYear = parsedFocusYear;
+  const focusMonth = parsedFocusMonth !== null && parsedFocusMonth >= 0 && parsedFocusMonth <= 11 ? parsedFocusMonth : null;
+  const focusDay = parsedFocusDay !== null && parsedFocusDay >= 1 && parsedFocusDay <= 31 ? parsedFocusDay : null;
   const plans = usePlanStore((state) => state.plans);
+  const isPlansLoading = usePlanStore((state) => state.isLoading);
+  const plansError = usePlanStore((state) => state.error);
   const deletePlan = usePlanStore((state) => state.deletePlan);
   const restorePlans = usePlanStore((state) => state.restorePlans);
 
   const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [selectedDay, setSelectedDay] = useState(now.getDate());
+  const [calYear, setCalYear] = useState(() => focusYear ?? now.getFullYear());
+  const [calMonth, setCalMonth] = useState(() => focusMonth ?? now.getMonth());
+  const [selectedDay, setSelectedDay] = useState(() => focusDay ?? now.getDate());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [events, setEvents] = useState<PlanEvent[]>([]);
-  const hasAppliedInitialPlanDateRef = useRef(false);
+  const appliedFocusKeyRef = useRef<string | null>(null);
 
   const handleAddEvent = () => {
     setEvents([
@@ -92,6 +117,9 @@ export default function MyPlanScreen() {
       {
         id: Math.random().toString(), day: selectedDay, month: calMonth, year: calYear, time: '6:00 PM',
         title: planName || 'Dinner', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop',
+        friendIds: [],
+        friendNames: [],
+        friendUsers: [],
         venue: planLocation || 'Rooftop Series Vol.4',
       }
     ]);
@@ -109,38 +137,63 @@ export default function MyPlanScreen() {
   const [selectedFriends] = useState<string[]>([]);
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
   const [centeredEventId, setCenteredEventId] = useState<string | null>(null);
+  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+
+  const handleDeletePlan = (plan: PlanEvent) => {
+    if (deletingPlanId) {
+      return;
+    }
+
+    Alert.alert(
+      'Delete plan',
+      `Remove "${plan.title}" from your plan?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingPlanId(plan.id);
+
+            try {
+              await deletePlan(plan.id);
+              setCenteredEventId((currentId) => currentId === plan.id ? null : currentId);
+            } catch {
+              Alert.alert('Unable to delete plan', 'Please try again.');
+            } finally {
+              setDeletingPlanId((currentId) => currentId === plan.id ? null : currentId);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const visibleMonthRange = useMemo(() => getMonthRange(calYear, calMonth), [calMonth, calYear]);
 
   useEffect(() => {
-    void restorePlans();
-  }, [restorePlans]);
+    void restorePlans(visibleMonthRange);
+  }, [restorePlans, visibleMonthRange]);
+
+  const focusKey = focusYear !== null && focusMonth !== null && focusDay !== null
+    ? `${focusYear}-${focusMonth}-${focusDay}`
+    : null;
+
+  useEffect(() => {
+    if (!focusKey || focusYear === null || focusMonth === null || focusDay === null || appliedFocusKeyRef.current === focusKey) {
+      return;
+    }
+
+    setCalYear(focusYear);
+    setCalMonth(focusMonth);
+    setSelectedDay(focusDay);
+    setCalendarOpen(true);
+    appliedFocusKeyRef.current = focusKey;
+  }, [focusKey, focusYear, focusMonth, focusDay]);
 
   useEffect(() => {
     setEvents(plans);
   }, [plans]);
-
-  useEffect(() => {
-    if (events.length === 0) {
-      hasAppliedInitialPlanDateRef.current = false;
-      setCalendarOpen(false);
-      return;
-    }
-
-    if (hasAppliedInitialPlanDateRef.current) {
-      return;
-    }
-
-    const firstEvent = events[0];
-
-    if (!firstEvent) {
-      return;
-    }
-
-    setCalYear(firstEvent.year);
-    setCalMonth(firstEvent.month);
-    setSelectedDay(firstEvent.day);
-    setCalendarOpen(true);
-    hasAppliedInitialPlanDateRef.current = true;
-  }, [events]);
 
   const highlightedDays = useMemo(
     () => new Set(events.filter((event) => event.year === calYear && event.month === calMonth).map((event) => event.day)),
@@ -164,15 +217,25 @@ export default function MyPlanScreen() {
   }, [daysInMonth, firstDay]);
 
   const dayEvents = useMemo(
-    () => events.filter(e => e.year === calYear && e.month === calMonth && e.day === selectedDay),
+    () => events
+      .filter(e => e.year === calYear && e.month === calMonth && e.day === selectedDay)
+      .sort((a, b) => {
+        if (a.scheduledAt && b.scheduledAt) return a.scheduledAt.localeCompare(b.scheduledAt);
+        return getTimeMinutes(a.time) - getTimeMinutes(b.time);
+      }),
     [calMonth, calYear, events, selectedDay],
   );
+  const selectedPlanForMenu = useMemo(
+    () => dayEvents.find((event) => event.id === centeredEventId) ?? dayEvents[0] ?? null,
+    [centeredEventId, dayEvents],
+  );
 
-  const hasAnyEvents = events.length > 0;
+  const hasAnyEvents = events.some((event) => event.year === calYear && event.month === calMonth);
   const displayedTimeSlots = useMemo(() => {
-    const slots = new Set([...TIME_SLOTS, ...dayEvents.map((event) => event.time)]);
-
-    return [...slots].sort((a, b) => getTimeMinutes(a) - getTimeMinutes(b));
+    // When the selected day has real plans, show only those plans' time slots.
+    // Only fall back to hardcoded placeholder slots when there are no plans for the day.
+    const base = dayEvents.length > 0 ? dayEvents.map((e) => e.time) : TIME_SLOTS;
+    return [...new Set(base)].sort((a, b) => getTimeMinutes(a) - getTimeMinutes(b));
   }, [dayEvents]);
 
   return (
@@ -227,6 +290,7 @@ export default function MyPlanScreen() {
                   return (
                     <TouchableOpacity key={ci} style={[s.calCell, sel && [s.calCellSel, { backgroundColor: colors.border }], hl && !sel && [s.calCellHl, { borderColor: colors.primary }]]} onPress={() => setSelectedDay(day)} activeOpacity={0.7}>
                       <Text style={[s.calDay, { color: colors.text }, sel && s.calDaySel, hl && !sel && [s.calDayHl, { color: colors.text }]]}>{day}</Text>
+                      {hl && <View style={[s.calEventDot, { backgroundColor: sel ? colors.text : colors.primary }]} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -237,6 +301,15 @@ export default function MyPlanScreen() {
 
         {/* ═══ Timeline ═══ */}
         {hasAnyEvents && <Text style={[s.yourPlanLabel, { color: colors.text }]}>Your Plan</Text>}
+        {isPlansLoading && (
+          <View style={s.planStatusRow}>
+            <ActivityIndicator color={colors.textSecondary} />
+            <Text style={[s.planStatusText, { color: colors.textSecondary }]}>Loading plans...</Text>
+          </View>
+        )}
+        {!isPlansLoading && plansError && (
+          <Text style={[s.planErrorText, { color: colors.primary }]}>{plansError}</Text>
+        )}
         <View style={s.timelineContainer}>
           <View style={[s.timelineVerticalLine, { backgroundColor: colors.border }]} />
           {displayedTimeSlots.map((slot) => {
@@ -249,10 +322,10 @@ export default function MyPlanScreen() {
                 isCentered={centeredEventId === ev?.id}
                 onToggleCenter={() => setCenteredEventId(centeredEventId === ev?.id ? null : (ev?.id || null))}
                 onAddPress={() => router.push('/plan-screen/create-plan' as any)}
+                isDeleting={deletingPlanId === ev?.id}
                 onDelete={() => {
                   if (ev) {
-                    void deletePlan(ev.id);
-                    setCenteredEventId(null);
+                    handleDeletePlan(ev);
                   }
                 }}
                 colors={colors}
@@ -283,8 +356,23 @@ export default function MyPlanScreen() {
                   setIsMoreMenuVisible(false);
                   if (item.isCreate) {
                     router.push('/plan-screen/create-plan' as any);
+                  } else if (item.label === 'Add Friend') {
+                    if (selectedPlanForMenu) {
+                      router.push({
+                        pathname: '/plan-screen/add-friend' as any,
+                        params: { planId: selectedPlanForMenu.id },
+                      });
+                    } else {
+                      Alert.alert('No plan selected', 'Select a day with a plan before adding friends.');
+                    }
                   } else if (item.route) {
                     router.push(item.route as any);
+                  } else if (item.label === 'Delete') {
+                    if (selectedPlanForMenu) {
+                      handleDeletePlan(selectedPlanForMenu);
+                    } else {
+                      Alert.alert('No plan selected', 'Select a day with a plan before deleting.');
+                    }
                   }
                 }}>
                   <HugeiconsIcon icon={item.icon} size={18} color={item.color || colors.text} style={s.moreMenuIcon} />
@@ -431,8 +519,8 @@ export default function MyPlanScreen() {
       <EventPickerModal
         visible={isSelectEventModalVisible}
         onClose={() => setIsSelectEventModalVisible(false)}
-        onSelect={(title) => {
-          setSelectedEventRadio(title);
+        onSelect={(event) => {
+          setSelectedEventRadio(event.title);
           setIsSelectEventModalVisible(false);
         }}
       />
@@ -441,8 +529,8 @@ export default function MyPlanScreen() {
 }
 
 /* ─── Sub-Component for individual slot animation ─── */
-function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDelete, colors }: {
-  slot: string, ev?: PlanEvent, isCentered: boolean, onToggleCenter: () => void, onAddPress: () => void, onDelete: () => void, colors: any
+function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDelete, isDeleting, colors }: {
+  slot: string, ev?: PlanEvent, isCentered: boolean, onToggleCenter: () => void, onAddPress: () => void, onDelete: () => void, isDeleting?: boolean, colors: any
 }) {
   const router = useRouter();
   const alignAnim = useRef(new Animated.Value(0)).current;
@@ -473,15 +561,34 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDele
     ? `${ev.venue} at ${ev.location}`
     : `${ev?.venue || 'Rooftop Series Vol.4'} at 123, Ave NYC`;
 
+  const friends = ev?.friendUsers ?? [];
+  const friendSummary = friends.length === 0 ? 'No friends added' : `${friends.length} friend${friends.length === 1 ? '' : 's'}`;
+
+  const renderFriendAvatar = (friend: PlanFriend, index: number, borderColor: string) => {
+    const marginLeft = index === 0 ? 0 : -8;
+
+    if (friend.avatarUrl || friend.avatarKey) {
+      return (
+        <Image
+          key={friend.id}
+          source={{ uri: friend.avatarUrl || DEFAULT_AVATAR }}
+          style={[s.capsuleAvatar, { borderColor, marginLeft }]}
+        />
+      );
+    }
+
+    return (
+      <View key={friend.id} style={[s.initialsAvatar, { borderColor, marginLeft }]}>
+        <Text style={s.initialsText}>{getFriendInitials(friend.name)}</Text>
+      </View>
+    );
+  };
+
   const renderAvatars = (borderColor: string) => (
     <View style={s.avatarGroup}>
-      {ATTENDEE_AVATARS.map((avatar, index) => (
-        <Image
-          key={avatar}
-          source={{ uri: avatar }}
-          style={[s.capsuleAvatar, { borderColor, marginLeft: index === 0 ? 0 : -8 }]}
-        />
-      ))}
+      {friends.length > 0
+        ? friends.map((friend, index) => renderFriendAvatar(friend, index, borderColor))
+        : <Text style={[s.noFriendsText, { color: secondaryColor }]}>No friends</Text>}
     </View>
   );
 
@@ -510,7 +617,9 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDele
 
                 <View style={s.capsuleAvatarsRow}>
                   {renderAvatars(avatarBorder)}
-                  <Text style={[s.capsuleMoreText, { color: secondaryColor }]}>+41</Text>
+                  {friends.length > 0 && (
+                    <Text style={[s.capsuleMoreText, { color: secondaryColor }]}>{friendSummary}</Text>
+                  )}
                 </View>
               </TouchableOpacity>
             </Animated.View>
@@ -534,7 +643,7 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDele
                       </View>
                       <View style={s.wideCardMiddle}>
                         {renderAvatars(EVENT_CARD_ACTIVE.background)}
-                        <Text style={[s.wideCardMoreText, { color: EVENT_CARD_ACTIVE.muted }]}>+41</Text>
+                        <Text style={[s.wideCardMoreText, { color: EVENT_CARD_ACTIVE.muted }]}>{friendSummary}</Text>
                         <View style={s.metaDot} />
                         <Text style={[s.wideCardMoreText, { color: EVENT_CARD_ACTIVE.muted }]}>{ev.time}</Text>
                       </View>
@@ -548,21 +657,30 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDele
                         >
                           <HugeiconsIcon icon={Share01Icon} size={20} color={EVENT_CARD_ACTIVE.border} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={s.footerIcon} hitSlop={8} onPress={onDelete}>
-                          <HugeiconsIcon icon={Delete02Icon} size={20} color={EVENT_CARD_ACTIVE.border} />
+                        <TouchableOpacity
+                          style={[s.footerIcon, isDeleting && s.footerIconDisabled]}
+                          hitSlop={8}
+                          onPress={onDelete}
+                          disabled={isDeleting}
+                        >
+                          <HugeiconsIcon icon={Delete02Icon} size={20} color={isDeleting ? EVENT_CARD_ACTIVE.muted : EVENT_CARD_ACTIVE.border} />
                         </TouchableOpacity>
                       </View>
                       <View style={s.footerActions}>
                         <TouchableOpacity
-                          style={s.viewBtnSmall}
-                          onPress={() => router.push('/event-screen/event')}
+                          style={[s.viewBtnSmall, !ev.eventId && { opacity: 0.4 }]}
+                          disabled={!ev.eventId}
+                          onPress={() => router.push({ pathname: '/event-screen/event' as any, params: { eventId: ev.eventId! } })}
                         >
                           <Text style={s.viewBtnTextSmall}>View</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={s.addedPillSmall}
                           activeOpacity={0.8}
-                          onPress={() => router.push('/plan-screen/add-friend')}
+                          onPress={() => router.push({
+                            pathname: '/plan-screen/add-friend' as any,
+                            params: { planId: ev.id },
+                          })}
                         >
                           <Feather name="check" size={14} color={EVENT_CARD_ACTIVE.background} />
                           <Text style={s.addedTextSmall}>Added</Text>
@@ -651,6 +769,9 @@ const s = StyleSheet.create({
 
   /* Timeline */
   yourPlanLabel: { fontSize: 16, fontWeight: 'bold', marginBottom: 16, paddingHorizontal: 20 },
+  planStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, marginBottom: 16 },
+  planStatusText: { fontSize: 13, fontWeight: '600' },
+  planErrorText: { fontSize: 13, fontWeight: '600', paddingHorizontal: 20, marginBottom: 16 },
 
   timelineContainer: { position: 'relative', marginTop: 0 },
   timelineVerticalLine: { position: 'absolute', left: 24, top: 0, bottom: 0, width: 1 },
@@ -692,9 +813,20 @@ const s = StyleSheet.create({
   capsuleVenue: { fontSize: 12, lineHeight: 16, textAlign: 'center', width: '100%' },
   capsuleTime: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
   capsuleImg: { width: 80, height: 40, borderRadius: 12 },
-  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 20 },
-  avatarGroup: { flexDirection: 'row', alignItems: 'center' },
+  capsuleAvatarsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20, maxWidth: 116, flexWrap: 'wrap', justifyContent: 'center' },
+  avatarGroup: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
   capsuleAvatar: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.2 },
+  initialsAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.2,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  initialsText: { color: '#FFFFFF', fontSize: 8, fontWeight: '700' },
+  noFriendsText: { fontSize: 11, lineHeight: 14, fontWeight: '500' },
   capsuleMoreText: { fontSize: 12, lineHeight: 16 },
 
   /* Node + Wide Card */
@@ -741,6 +873,7 @@ const s = StyleSheet.create({
   wideCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   footerIcons: { flexDirection: 'row', alignItems: 'center', gap: 20, width: 60 },
   footerIcon: { padding: 4 },
+  footerIconDisabled: { opacity: 0.45 },
   footerActions: { flexDirection: 'row', gap: 20, alignItems: 'center' },
   viewBtnSmall: { width: 49, height: 32, borderRadius: 8, backgroundColor: 'rgba(17, 17, 17, 0.8)', justifyContent: 'center', alignItems: 'center' },
   viewBtnTextSmall: { color: EVENT_CARD_ACTIVE.text, fontSize: 14, lineHeight: 16, fontWeight: '500' },
@@ -775,6 +908,7 @@ const s = StyleSheet.create({
   calDay: { fontSize: 14 },
   calDaySel: { fontWeight: '700' },
   calDayHl: {},
+  calEventDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
 
   /* Bottom Sheets & Modals */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 80 },
