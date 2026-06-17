@@ -16,6 +16,7 @@ interface SegmentedControlProps {
   selectedOption: string;
   onSelect: (option: string) => void;
   containerStyle?: object;
+  renderOption?: (option: string, isSelected: boolean) => React.ReactNode;
 }
 
 interface GappedBorderProps {
@@ -86,6 +87,7 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
   selectedOption,
   onSelect,
   containerStyle,
+  renderOption,
 }) => {
   const { colors, isDark } = useTheme();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
@@ -153,19 +155,23 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
                 </Canvas>
               </View>
             )}
-            <Text
-              style={[
-                styles.segmentLabel,
-                {
-                  color:
-                    selectedOption === option
-                      ? colors.text
-                      : colors.textSecondary,
-                },
-              ]}
-            >
-              {option}
-            </Text>
+            {renderOption ? (
+              renderOption(option, selectedOption === option)
+            ) : (
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  {
+                    color:
+                      selectedOption === option
+                        ? colors.text
+                        : colors.textSecondary,
+                  },
+                ]}
+              >
+                {option}
+              </Text>
+            )}
           </TouchableOpacity>
         ))}
       </View>

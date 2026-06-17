@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
@@ -594,6 +594,21 @@ const AccessTab = ({
         selectedOption={accessSubTab}
         onSelect={handleSelectAccessSubTab}
         containerStyle={{ marginTop: 10, marginBottom: 10 }}
+        renderOption={(option, isSelected) => (
+          <Ionicons
+            name={
+              option === "Tickets"
+                ? isSelected
+                  ? "ticket"
+                  : "ticket-outline"
+                : isSelected
+                  ? "gift"
+                  : "gift-outline"
+            }
+            size={20}
+            color={isSelected ? colors.text : colors.textSecondary}
+          />
+        )}
       />
 
       {accessSubTab === "Tickets"

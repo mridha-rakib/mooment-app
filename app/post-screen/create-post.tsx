@@ -63,7 +63,6 @@ const CREATE_MOMENT_COLORS = {
   surfaceBorder: 'rgba(255,255,255,0.10)',
 };
 
-type MomentMode = 'feed' | 'event';
 type SelectedMediaType = 'image' | 'video' | 'audio';
 type SelectedImageItem = {
   id: string;
@@ -1191,8 +1190,6 @@ export default function CreateMomentScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const captionPosition = useRef(0);
 
-  const [publishToFeed, setPublishToFeed] = useState(true);
-  const [publishToEvent, setPublishToEvent] = useState(false);
   const [caption, setCaption] = useState('');
   const [selectedImages, setSelectedImages] = useState<SelectedImageItem[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -1209,7 +1206,6 @@ export default function CreateMomentScreen() {
     if (params.eventId && params.eventName) {
       setSelectedEventId(params.eventId);
       setSelectedEvent(params.eventName);
-      setPublishToEvent(true);
     }
   }, [params.eventId, params.eventName]);
   const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
@@ -1513,14 +1509,6 @@ export default function CreateMomentScreen() {
     ];
   };
 
-  const togglePublishToFeed = () => {
-    setPublishToFeed((current) => (current && !publishToEvent ? true : !current));
-  };
-
-  const togglePublishToEvent = () => {
-    setPublishToEvent((current) => (current && !publishToFeed ? true : !current));
-  };
-
   const scrollToCaption = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollTo({
@@ -1536,27 +1524,14 @@ export default function CreateMomentScreen() {
     }
 
     const trimmedCaption = caption.trim();
-    const targetModes: MomentMode[] = publishToEvent
-      ? ['feed', 'event']
-      : ['feed'];
 
     if (!trimmedCaption && selectedImages.length === 0 && !selectedImage) {
       Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
       return false;
     }
 
-    if (!publishToFeed && !publishToEvent) {
-      Alert.alert('Create Mooment', 'Choose Feed or Event before creating a moment.');
-      return false;
-    }
-
-    const eventTitle = publishToEvent ? (eventTitleOverride ?? selectedEvent).trim() : null;
-    const eventCode = publishToEvent ? eventCodeOverride?.trim() || selectedEventCode?.trim() || null : null;
-
-    if (publishToEvent && !eventTitle) {
-      Alert.alert('Create Mooment', 'Select or scan an event before creating an event moment.');
-      return false;
-    }
+    const eventTitle = (eventTitleOverride ?? selectedEvent).trim() || null;
+    const eventCode = eventCodeOverride?.trim() || selectedEventCode?.trim() || null;
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
@@ -1564,18 +1539,16 @@ export default function CreateMomentScreen() {
     try {
       const mediaItems = await buildMediaItems();
 
-      await Promise.all(
-        targetModes.map((targetMode) => createMoment({
-          mode: targetMode,
-          caption: trimmedCaption || null,
-          audience: normalizeAudience(audience),
-          taggedPeople,
-          eventTitle: publishToEvent ? eventTitle : null,
-          eventCode: publishToEvent ? eventCode : null,
-          eventId: publishToEvent ? selectedEventId : null,
-          mediaItems,
-        })),
-      );
+      await createMoment({
+        mode: 'feed',
+        caption: trimmedCaption || null,
+        audience: normalizeAudience(audience),
+        taggedPeople,
+        eventTitle,
+        eventCode,
+        eventId: selectedEventId,
+        mediaItems,
+      });
 
       return true;
     } catch (error) {
@@ -1602,6 +1575,11 @@ export default function CreateMomentScreen() {
   };
 
   const taggedLabel = taggedPeople.join(', ');
+  const clearSelectedEvent = () => {
+    setSelectedEvent('');
+    setSelectedEventId(null);
+    setSelectedEventCode(null);
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -1619,27 +1597,6 @@ export default function CreateMomentScreen() {
         <Text style={styles.headerTitle}>Create Mooment</Text>
         <TouchableOpacity style={[styles.doneBtn, isSubmitting && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isSubmitting}>
           <Text style={styles.doneBtnText}>Done</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Mode Checkboxes ── */}
-      <View style={styles.checkboxRow}>
-        <TouchableOpacity style={styles.checkboxItem} onPress={togglePublishToFeed} activeOpacity={0.8}>
-          <View style={[styles.checkbox, publishToFeed ? styles.checkboxActive : styles.checkboxInactive]}>
-            {publishToFeed && <Feather name="check" size={12} color={screenColors.primaryText} />}
-          </View>
-          <Text style={[styles.checkboxLabel, publishToFeed && styles.checkboxLabelActive]}>Feed</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.checkboxItem}
-          onPress={togglePublishToEvent}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.checkbox, publishToEvent ? styles.checkboxActive : styles.checkboxInactive]}>
-            {publishToEvent && <Feather name="check" size={12} color={screenColors.primaryText} />}
-          </View>
-          <Text style={[styles.checkboxLabel, publishToEvent && styles.checkboxLabelActive]}>Event</Text>
         </TouchableOpacity>
       </View>
 
@@ -1672,25 +1629,27 @@ export default function CreateMomentScreen() {
                     <Text style={styles.authorBold}>{taggedLabel}</Text>
                   </>
                 )}
-                {/* Event link only in Event mode */}
-                {publishToEvent && (
+                {selectedEvent ? (
                   <>
                     <Text style={styles.authorMuted}> at </Text>
-                    <Text style={[styles.authorBold, !selectedEvent && { color: '#8E8E9B' }]}>
-                      {selectedEvent || 'Select an event'}
-                    </Text>
+                    <Text style={styles.authorBold}>{selectedEvent}</Text>
                   </>
-                )}
+                ) : null}
               </Text>
             </View>
 
-            {publishToEvent && (
+            <View style={styles.eventActions}>
               <TouchableOpacity style={styles.eventPill} onPress={() => setShowEventModal(true)} activeOpacity={0.8}>
-                <View style={styles.eventPillDot} />
-                <Text style={styles.eventPillText}>Event</Text>
+                <Feather name="map-pin" size={12} color="#16D869" />
+                <Text style={styles.eventPillText}>{selectedEvent ? 'Event' : 'Tag Event'}</Text>
                 <Feather name="chevron-down" size={12} color="#16D869" />
               </TouchableOpacity>
-            )}
+              {selectedEvent ? (
+                <TouchableOpacity style={styles.eventClearPill} onPress={clearSelectedEvent} activeOpacity={0.8}>
+                  <Feather name="x" size={13} color={screenColors.bodyText} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
 
           {/* ── Content Section (Media + Caption) ── */}
@@ -1752,7 +1711,7 @@ export default function CreateMomentScreen() {
 
           <TextInput
             style={styles.stitchInput}
-            placeholder={publishToEvent && !publishToFeed ? "Share what this moment means to you..." : "Write your stitch here. . ."}
+            placeholder="Write your stitch here. . ."
             placeholderTextColor={screenColors.bodyText}
             value={caption}
             onChangeText={setCaption}
@@ -1919,36 +1878,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 27,
-    paddingHorizontal: 28,
-    paddingBottom: 20,
-  },
-  checkboxItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  checkbox: { justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: CREATE_MOMENT_COLORS.primary,
-  },
-  checkboxInactive: {
-    width: 16,
-    height: 16,
-    borderRadius: 2,
-    borderWidth: 2,
-    borderColor: '#D9D9D9',
-  },
-  checkboxLabel: {
-    color: CREATE_MOMENT_COLORS.text,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  checkboxLabelActive: { color: CREATE_MOMENT_COLORS.text },
-
   keyboardView: {
     flex: 1,
   },
@@ -1966,9 +1895,10 @@ const styles = StyleSheet.create({
   authorBold: { color: CREATE_MOMENT_COLORS.text, fontWeight: '600' },
   authorMuted: { color: CREATE_MOMENT_COLORS.bodyText, fontWeight: '400' },
 
+  eventActions: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 },
   eventPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(22,216,105,0.12)', borderWidth: 1, borderColor: 'rgba(22,216,105,0.35)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 5 },
-  eventPillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#16D869' },
   eventPillText: { color: '#16D869', fontSize: 12, fontWeight: '700' },
+  eventClearPill: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: CREATE_MOMENT_COLORS.surface, borderWidth: 1, borderColor: CREATE_MOMENT_COLORS.surfaceBorder },
 
   imageCarousel: {
     marginBottom: 24,

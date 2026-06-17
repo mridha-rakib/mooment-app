@@ -86,6 +86,7 @@ module.exports = ({ config }) => {
             merchantIdentifier: stripeMerchantIdentifier,
           },
         ],
+        "./plugins/withAndroidGradleMemorySettings",
         "./plugins/withUsesCleartextTraffic",
       ],
       extra: {

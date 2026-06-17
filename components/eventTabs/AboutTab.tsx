@@ -350,6 +350,21 @@ const AboutTab = ({
         selectedOption={subTab}
         onSelect={setSubTab}
         containerStyle={{ marginTop: 16, marginBottom: 0 }}
+        renderOption={(option, isSelected) => (
+          <Ionicons
+            name={
+              option === "Description"
+                ? isSelected
+                  ? "document-text"
+                  : "document-text-outline"
+                : isSelected
+                  ? "images"
+                  : "images-outline"
+            }
+            size={20}
+            color={isSelected ? colors.text : colors.textSecondary}
+          />
+        )}
       />
 
       <View style={styles.contentStack}>

@@ -1,5 +1,4 @@
 import { useTheme } from "@/hooks/useTheme";
-import { getEventTicketAccess } from "@/lib/events";
 import { getEventMoments } from "@/lib/moments";
 import type { Moment } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -86,18 +85,15 @@ type VibeTabProps = {
   scheduledAt?: string | null;
 };
 
-const VibeTab = ({ eventId, eventName, isHostMode, scheduledAt }: VibeTabProps) => {
+const VibeTab = ({ eventId, eventName, scheduledAt }: VibeTabProps) => {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [vibeSubTab, setVibeSubTab] = useState("Live");
   const [moments, setMoments] = useState<Moment[]>([]);
   const [isMomentsLoading, setIsMomentsLoading] = useState(false);
-  const [hasTicketAccess, setHasTicketAccess] = useState(false);
 
   const postTagStatus = computePostTagStatus(scheduledAt);
-  const canPost =
-    isHostMode ||
-    ((postTagStatus === "live" || postTagStatus === "active") && hasTicketAccess);
+  const canPost = postTagStatus === "live" || postTagStatus === "active" || postTagStatus === "upcoming";
 
   const loadMoments = useCallback(async () => {
     setIsMomentsLoading(true);
@@ -115,13 +111,6 @@ const VibeTab = ({ eventId, eventName, isHostMode, scheduledAt }: VibeTabProps) 
     if (vibeSubTab !== "Mooments") return;
     void loadMoments();
   }, [vibeSubTab, loadMoments]);
-
-  useEffect(() => {
-    if (isHostMode) return;
-    getEventTicketAccess(eventId)
-      .then((result) => setHasTicketAccess(result.hasAccess))
-      .catch(() => setHasTicketAccess(false));
-  }, [eventId, isHostMode]);
 
   const handlePostMooment = () => {
     router.push({
