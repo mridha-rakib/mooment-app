@@ -1,6 +1,9 @@
-import { useTheme } from "@/hooks/useTheme";
-import { EVENT_CATEGORIES } from "@/constants/eventCategories";
 import { getCategoryColor } from "@/constants/categoryColors";
+import { EVENT_CATEGORIES } from "@/constants/eventCategories";
+import { useTheme } from "@/hooks/useTheme";
+import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { useAuthStore } from "@/stores/authStore";
+import { usePlanStore } from "@/stores/planStore";
 import {
   Add01Icon,
   Remove01Icon,
@@ -10,13 +13,12 @@ import {
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import Mapbox from "@rnmapbox/maps";
 import type { MapState } from "@rnmapbox/maps";
+import Mapbox from "@rnmapbox/maps";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { useAuthStore } from "@/stores/authStore";
-import { usePlanStore } from "@/stores/planStore";
-import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import {
   Image,
   ScrollView,
@@ -27,24 +29,22 @@ import {
 } from "react-native";
 import Svg, {
   Defs,
-  RadialGradient as SvgRadialGradient,
-  Circle as SvgCircle,
   Stop,
+  Circle as SvgCircle,
+  RadialGradient as SvgRadialGradient,
 } from "react-native-svg";
-import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
 import CinematicButton from "./CinematicButton";
 import EventPreviewModal from "./EventPreviewModal";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const satelliteStyle = "mapbox://styles/mapbox/satellite-streets-v12";
-const normalStyle = "mapbox://styles/mapbox/traffic-night-v2";
+const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
+const TRAFFIC_DARK_STYLE_URL = "mapbox://styles/mapbox/traffic-night-v2";
 const DEFAULT_MAP_CENTER: [number, number] = [-73.935242, 40.73061];
 const DEFAULT_ZOOM_LEVEL = 12;
 const USER_LOCATION_ZOOM_LEVEL = 14;
 
-type MapViewMode = "normal" | "satellite";
+type MapViewMode = "traffic" | "satellite";
 
 export type MapMarkerData = {
   id: string;
@@ -82,8 +82,6 @@ const MapMarker = ({
   glowColor = "#D4B0EB",
   onPress,
   isSatellite,
-  distance = "0.4 mi",
-  attendeesCount = 126,
 }: {
   coordinate: [number, number];
   image: string;
@@ -91,8 +89,6 @@ const MapMarker = ({
   glowColor: string;
   onPress: () => void;
   isSatellite: boolean;
-  distance?: string | null;
-  attendeesCount?: number;
 }) => {
   const { colors } = useTheme();
 
@@ -157,7 +153,7 @@ const MapMarker = ({
                 {label}
               </Text>
               <View style={styles.satStatsRow}>
-                <Text style={styles.satStatsText}>{distance}</Text>
+                <Text style={styles.satStatsText}>0.4 mi</Text>
                 <View style={styles.satDot} />
                 <HugeiconsIcon
                   icon={UserGroupIcon}
@@ -165,7 +161,7 @@ const MapMarker = ({
                   color="rgba(255,255,255,0.6)"
                 />
                 <Text style={[styles.satStatsText, { marginLeft: 2 }]}>
-                  {attendeesCount}
+                  126
                 </Text>
               </View>
             </View>
@@ -186,7 +182,7 @@ const MapMarker = ({
   }
 
   return (
-    <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
+    <Mapbox.MarkerView coordinate={coordinate}>
       <TouchableOpacity
         style={styles.markerContent}
         onPress={onPress}
@@ -245,31 +241,39 @@ export default function MapScreen({
   const plans = usePlanStore((state) => state.plans);
   const restorePlans = usePlanStore((state) => state.restorePlans);
   const sharedLocation = useAuthStore((state) =>
-    state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
+    state.user?.currentLocationSharingEnabled
+      ? state.user.currentLocation
+      : null,
   );
   const sharedLongitude = sharedLocation?.longitude;
   const sharedLatitude = sharedLocation?.latitude;
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedMarker, setSelectedMarker] = useState<MapMarkerData | null>(null);
+  const [selectedMarker, setSelectedMarker] = useState<MapMarkerData | null>(
+    null,
+  );
   const [selectedCategory, setSelectedCategory] = useState("All");
   const cameraRef = React.useRef<Mapbox.Camera>(null);
   const currentZoomRef = React.useRef(DEFAULT_ZOOM_LEVEL);
   const hasInitialUserLocationCenteredRef = React.useRef(false);
   const userHasExploredMapRef = React.useRef(false);
-  const [mapMode, setMapMode] = useState<MapViewMode>("normal");
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [mapMode, setMapMode] = useState<MapViewMode>("traffic");
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(
+    null,
+  );
   const isSatellite = mapMode === "satellite";
-  const currentMapStyle = isSatellite ? satelliteStyle : normalStyle;
+  const currentMapStyle = isSatellite
+    ? SATELLITE_STYLE_URL
+    : TRAFFIC_DARK_STYLE_URL;
   const mapModeLabel = {
-    normal: "Normal View",
+    traffic: "Traffic View",
     satellite: "Satellite View",
   }[mapMode];
   const mapModeIcon = {
-    normal: TrafficIncidentIcon,
+    traffic: TrafficIncidentIcon,
     satellite: SatelliteIcon,
   }[mapMode];
   const mapShadeStyle = {
-    normal: styles.mapShadeNormal,
+    traffic: styles.mapShadeTraffic,
     satellite: styles.mapShadeSatellite,
   }[mapMode];
   const lastReportedLocationRef = React.useRef<string | null>(null);
@@ -295,7 +299,10 @@ export default function MapScreen({
   );
 
   React.useEffect(() => {
-    if (typeof sharedLongitude === "number" && typeof sharedLatitude === "number") {
+    if (
+      typeof sharedLongitude === "number" &&
+      typeof sharedLatitude === "number"
+    ) {
       applyUserLocation([sharedLongitude, sharedLatitude]);
     }
   }, [applyUserLocation, sharedLatitude, sharedLongitude]);
@@ -383,7 +390,7 @@ export default function MapScreen({
   };
 
   const existingPlan = selectedMarker?.id
-    ? plans.find((p) => p.eventId === selectedMarker.id) ?? null
+    ? (plans.find((p) => p.eventId === selectedMarker.id) ?? null)
     : null;
 
   const handleViewInCalendar = () => {
@@ -428,11 +435,11 @@ export default function MapScreen({
 
   const toggleMapStyle = () => {
     setMapMode((currentMode) => {
-      if (currentMode === "normal") {
+      if (currentMode === "traffic") {
         return "satellite";
       }
 
-      return "normal";
+      return "traffic";
     });
   };
 
@@ -460,12 +467,21 @@ export default function MapScreen({
                 style={[
                   styles.categoryBtn,
                   isActive
-                    ? { backgroundColor: catColor, borderColor: catColor, borderWidth: 1 }
+                    ? {
+                        backgroundColor: catColor,
+                        borderColor: catColor,
+                        borderWidth: 1,
+                      }
                     : styles.categoryBtnInactive,
                 ]}
               >
                 {cat !== "All" && (
-                  <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(cat) }]} />
+                  <View
+                    style={[
+                      styles.categoryDot,
+                      { backgroundColor: getCategoryColor(cat) },
+                    ]}
+                  />
                 )}
                 <Text
                   style={[
@@ -508,10 +524,8 @@ export default function MapScreen({
               image={marker.image}
               label={marker.label}
               glowColor={marker.glowColor}
-              isSatellite={isSatellite}
-              distance={marker.distance}
-              attendeesCount={marker.attendeesCount}
               onPress={() => handleMarkerPress(marker)}
+              isSatellite={isSatellite}
             />
           ))}
 
@@ -586,26 +600,129 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  eventMarkerButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.75,
-    shadowRadius: 12,
-    elevation: 12,
+  /* ── Normal (traffic) marker styles ── */
+  markerContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  eventMarkerFrame: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  glowLayer: {
+    position: "absolute",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  imageWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 3,
-    borderColor: "#9CA3AF",
-    backgroundColor: "#080808",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 2,
   },
+  markerImage: {
+    width: 56,
+    height: 56,
+  },
+  labelContainer: {
+    position: "absolute",
+    left: 64,
+    width: 100,
+  },
+  labelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+  },
+  /* ── Satellite marker styles ── */
+  satMarkerContainer: {
+    alignItems: "flex-start",
+  },
+  satBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 0,
+    paddingRight: 18,
+    borderRadius: 30,
+    overflow: "hidden",
+  },
+  satImageGlow: {
+    position: "absolute",
+    left: 0,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    opacity: 0.7,
+    transform: [{ scale: 2.2 }],
+  },
+  satImageWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    overflow: "hidden",
+    zIndex: 1,
+  },
+  satImage: {
+    width: "100%",
+    height: "100%",
+  },
+  satTextContainer: {
+    marginLeft: 10,
+    justifyContent: "center",
+    maxWidth: 120,
+  },
+  satLabel: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    lineHeight: 18,
+  },
+  satStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 1,
+  },
+  satStatsText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  satDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "rgba(255,255,255,0.4)",
+    marginHorizontal: 6,
+  },
+  satAnchorGlow: {
+    position: "absolute",
+    bottom: -10,
+    left: 17,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    opacity: 0.4,
+    transform: [{ scale: 3.5 }],
+  },
+  satAnchorPoint: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    marginTop: 15,
+    marginLeft: 22,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 2,
+  },
+  /* ── Layout / chrome ── */
   topHeader: {
     width: "100%",
     zIndex: 10,
@@ -620,7 +737,7 @@ const styles = StyleSheet.create({
   mapShade: {
     ...StyleSheet.absoluteFillObject,
   },
-  mapShadeNormal: {
+  mapShadeTraffic: {
     backgroundColor: "rgba(0,0,0,0.48)",
   },
   mapShadeSatellite: {
@@ -691,149 +808,5 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.1)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.16)",
-  },
-
-  // Satellite Marker Styles
-  satMarkerContainer: {
-    alignItems: "flex-start",
-    justifyContent: "flex-end",
-    position: "relative",
-    paddingBottom: 10,
-  },
-  satImageGlow: {
-    position: "absolute",
-    top: -3,
-    left: 8,
-    width: 60,
-    height: 60,
-    zIndex: 1,
-  },
-  satAnchorGlow: {
-    position: "absolute",
-    bottom: -6,
-    left: 19,
-    width: 20,
-    height: 20,
-    zIndex: 1,
-  },
-  satBubble: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingRight: 14,
-    paddingLeft: 10,
-    paddingVertical: 8,
-    borderRadius: 24,
-    overflow: "hidden",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.15)",
-    marginBottom: 10,
-    maxWidth: 220,
-    minHeight: 52,
-    zIndex: 2,
-  },
-  satImageWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 2,
-    overflow: "hidden",
-    marginRight: 8,
-    backgroundColor: "#000000",
-  },
-  satImage: {
-    width: "100%",
-    height: "100%",
-  },
-  satTextContainer: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  satLabel: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 14,
-    marginBottom: 2,
-  },
-  satStatsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 1,
-  },
-  satStatsText: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 9,
-    fontWeight: "500",
-  },
-  satDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: "rgba(255,255,255,0.4)",
-    marginHorizontal: 4,
-  },
-  satAnchorPoint: {
-    position: "absolute",
-    bottom: 0,
-    left: 25,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 2,
-    zIndex: 3,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-
-  // Normal Marker Styles
-  markerContent: {
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  glowLayer: {
-    position: "absolute",
-    width: 56,
-    height: 56,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  imageWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 3,
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  markerImage: {
-    width: "100%",
-    height: "100%",
-  },
-  labelContainer: {
-    backgroundColor: "rgba(0,0,0,0.8)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  labelText: {
-    fontSize: 10,
-    fontWeight: "bold",
   },
 });
