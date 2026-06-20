@@ -164,7 +164,7 @@ export default function MessagesScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Blocked'>('All');
-  const [subTab, setSubTab] = useState<'DMs' | 'Groups' | 'Rooms'>('DMs');
+  const [subTab, setSubTab] = useState<'DMs' | 'Groups'>('DMs');
   const [roomTab, setRoomTab] = useState<'Event Rooms' | 'General Rooms'>('Event Rooms');
   const [dmConversations, setDmConversations] = useState<ConversationData[]>([]);
   const [isDmsLoading, setIsDmsLoading] = useState(false);
@@ -382,29 +382,39 @@ export default function MessagesScreen() {
       {/* Segmented Control */}
       <View style={{ marginBottom: 16 }}>
         <SegmentedControl
-          options={['DMs', 'Groups', 'Rooms']}
+          options={['DMs', 'Groups']}
           selectedOption={subTab}
           onSelect={(opt) => setSubTab(opt as any)}
+          renderOption={(option, isSelected) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather
+                name={option === 'DMs' ? 'mail' : 'users'}
+                size={14}
+                color={isSelected ? colors.text : colors.textSecondary}
+              />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: isSelected ? colors.text : colors.textSecondary }}>
+                {option}
+              </Text>
+            </View>
+          )}
         />
       </View>
 
-      {/* Top Tabs (Only for DMs and Groups) */}
-      {subTab !== 'Rooms' && (
-        <View style={styles.tabRow}>
-          {(['All', 'Unread', 'Blocked'] as const).map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, topTab === tab && styles.tabActive]}
-              onPress={() => setTopTab(tab)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabText, topTab === tab && { color: '#FFFFFF' }]}>{tab}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      {/* Top Tabs */}
+      <View style={styles.tabRow}>
+        {(['All', 'Unread', 'Blocked'] as const).map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, topTab === tab && styles.tabActive]}
+            onPress={() => setTopTab(tab)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabText, topTab === tab && { color: '#FFFFFF' }]}>{tab}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      {/* Room Tabs */}
+      {/* Room Tabs hidden — preserved for future restoration
       {subTab === 'Rooms' && (
         <View style={styles.roomTabsRow}>
           {(['Event Rooms', 'General Rooms'] as const).map(tab => (
@@ -420,12 +430,38 @@ export default function MessagesScreen() {
           ))}
         </View>
       )}
+      */}
 
 
 
 
       {/* Lists */}
-      {subTab === 'Rooms' ? (
+      <FlatList
+        key="conversations-list"
+        data={filtered}
+        keyExtractor={item => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            {subTab === 'DMs' && isDmsLoading ? (
+              <ActivityIndicator color={colors.textSecondary} />
+            ) : (
+              <>
+                <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  {subTab === 'DMs'
+                    ? dmsError ?? (topTab === 'Unread' ? 'No unread DMs' : 'No friends found')
+                    : 'No conversations found'}
+                </Text>
+              </>
+            )}
+          </View>
+        }
+        renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}
+      />
+      {/* Rooms grid hidden — preserved for future restoration
+      {subTab === 'Rooms' && (
         <FlatList
           key="rooms-grid"
           data={MOCK_ROOMS}
@@ -436,32 +472,8 @@ export default function MessagesScreen() {
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 16 }}
           renderItem={renderRoomItem}
         />
-      ) : (
-        <FlatList
-          key="conversations-list"
-          data={filtered}
-          keyExtractor={item => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              {subTab === 'DMs' && isDmsLoading ? (
-                <ActivityIndicator color={colors.textSecondary} />
-              ) : (
-                <>
-                  <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    {subTab === 'DMs'
-                      ? dmsError ?? (topTab === 'Unread' ? 'No unread DMs' : 'No friends found')
-                      : 'No conversations found'}
-                  </Text>
-                </>
-              )}
-            </View>
-          }
-          renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}
-        />
       )}
+      */}
     </SafeAreaView>
   );
 }

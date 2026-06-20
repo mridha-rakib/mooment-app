@@ -64,12 +64,16 @@ const EventCheckoutScreen = () => {
   const params = useLocalSearchParams<{
     eventName?: string;
     eventDateTime?: string;
+    eventDateDisplay?: string;
     ticketName?: string;
     ticketPrice?: string;
     ticketType?: string;
     quantity?: string;
     eventId?: string;
     ticketId?: string;
+    hostName?: string;
+    venue?: string;
+    address?: string;
   }>();
   const { colors, isDark } = useTheme();
   const [paymentType, setPaymentType] = useState("Online");
@@ -81,7 +85,11 @@ const EventCheckoutScreen = () => {
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : "";
   const eventName = getParam(params.eventName, "Event");
   const eventDateTime = getParam(params.eventDateTime, "Date TBA");
+  const eventDateDisplay = getParam(params.eventDateDisplay, eventDateTime);
   const ticketName = getParam(params.ticketName, "Ticket");
+  const hostName = getParam(params.hostName, "");
+  const venue = getParam(params.venue, "");
+  const address = getParam(params.address, "");
   const quantity = parsePositiveInteger(params.quantity);
   const ticketPrice = parsePrice(params.ticketPrice);
   const isFreeTicket = params.ticketType === "free" || ticketPrice <= 0;
@@ -109,7 +117,22 @@ const EventCheckoutScreen = () => {
     }
 
     if (isFreeTicket) {
-      router.push("/event-screen/payment-success");
+      router.push({
+        pathname: "/event-screen/payment-success",
+        params: {
+          eventId,
+          eventName,
+          eventDateDisplay,
+          hostName,
+          venue,
+          address,
+          ticketName,
+          quantity: String(quantity),
+          amount: "0",
+          currency: "usd",
+          isFree: "true",
+        },
+      });
       return;
     }
 
@@ -131,15 +154,18 @@ const EventCheckoutScreen = () => {
           anonymous: false,
           acceptedTerms: agreed,
         })
-        : await startStripeCheckout({
-          kind: "ticket",
-          paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
-          eventId,
-          ticketId,
-          quantity,
-          anonymous: false,
-          acceptedTerms: agreed,
-        });
+        : await startStripeCheckout(
+          {
+            kind: "ticket",
+            paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+            eventId,
+            ticketId,
+            quantity,
+            anonymous: false,
+            acceptedTerms: agreed,
+          },
+          { isDark },
+        );
 
       router.replace({
         pathname: "/event-screen/payment-success",
@@ -149,10 +175,14 @@ const EventCheckoutScreen = () => {
           ticketId,
           ticketName,
           eventName,
-          eventDateTime,
+          eventDateDisplay,
+          hostName,
+          venue,
+          address,
           quantity: String(quantity),
           amount: String(order.totalAmount),
           currency: order.currency,
+          createdAt: order.createdAt,
         },
       });
     } catch (error) {

@@ -3,6 +3,7 @@ import type { EventCategory } from "@/constants/eventCategories";
 import {
   createDraftTicket,
   createEventTicket,
+  deleteEvent,
   deleteDraftTicket,
   deleteEventTicket,
   publishEvent,
@@ -64,19 +65,20 @@ type EventDraftState = {
   removeTicket: (localId: string) => Promise<EventResponse | null>;
   saveDraft: () => Promise<EventResponse>;
   publish: () => Promise<EventResponse>;
+  discardDraft: () => Promise<void>;
   loadFromEvent: (event: EventResponse) => void;
   resetDraft: () => void;
 };
 
 const DEFAULT_TICKET_ID = "default-general-ticket";
 
-const createDefaultTicket = (): EventDraftTicket => ({
+const createDefaultTicket = (scheduledAt?: string | null): EventDraftTicket => ({
   capacity: 42,
   description: "Entry from 9pm. Standing only.",
   localId: DEFAULT_TICKET_ID,
   name: "General Ticket",
   price: 45,
-  salesEndAt: new Date().toISOString(),
+  salesEndAt: scheduledAt ?? addHours(new Date(), 24).toISOString(),
   type: "pay",
 });
 
@@ -107,7 +109,7 @@ const createInitialState = () => {
     category: null,
     endAt: getDefaultEndAt(scheduledAt),
     location: {},
-    tickets: [createDefaultTicket()],
+    tickets: [],
     privacy: "public" as EventPrivacy,
   };
 };
@@ -211,7 +213,11 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   },
 
   setStepTwo: ({ ageRestriction, category, scheduledAt, endAt }) => {
-    set({ ageRestriction, category, scheduledAt, endAt });
+    const currentTickets = get().tickets;
+    const tickets = currentTickets.map((t) =>
+      t.localId === DEFAULT_TICKET_ID && !t.id ? { ...t, salesEndAt: scheduledAt } : t
+    );
+    set({ ageRestriction, category, scheduledAt, endAt, tickets });
   },
 
   setStepThree: ({ location }) => {
@@ -277,6 +283,12 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
         set(getEventSyncState(event, nextTickets));
 
         return event;
+      }
+
+      const hasUnsavedSiblings = nextTickets.some((t) => !t.id && t.localId !== localId);
+
+      if (hasUnsavedSiblings) {
+        return await currentState.saveDraft();
       }
 
       const ticketPayload = stripLocalTicketField(nextTicket);
@@ -410,9 +422,17 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       scheduledAt: event.scheduledAt ?? new Date().toISOString(),
       endAt: event.endAt ?? getDefaultEndAt(event.scheduledAt ?? new Date()),
       location: event.location ?? {},
-      tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [createDefaultTicket()],
+      tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [],
       privacy: event.privacy,
     });
+  },
+
+  discardDraft: async () => {
+    const { draftId, isEditingPublishedEvent } = get();
+    if (draftId && !isEditingPublishedEvent) {
+      await deleteEvent(draftId);
+    }
+    set(createInitialState());
   },
 
   resetDraft: () => {

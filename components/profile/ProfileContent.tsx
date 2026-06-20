@@ -58,6 +58,7 @@ export default function ProfileContent({
         />
       )}
       
+      {/* Shop content hidden — preserved for future restoration
       {activeTab === 'shop' && (
         <ProfileShop 
           onCommentPress={onCommentPress} 
@@ -65,6 +66,7 @@ export default function ProfileContent({
           isOwnProfile={isOwnProfile}
         />
       )}
+      */}
     </View>
   );
 }

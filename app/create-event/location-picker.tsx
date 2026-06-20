@@ -359,6 +359,16 @@ export default function LocationPickerScreen() {
           pitchEnabled={true}
           rotateEnabled={true}
         >
+          {isSatelliteMode && (
+            <Mapbox.RasterLayer
+              id="satellite"
+              existing
+              style={{
+                rasterBrightnessMax: 0.4,
+                rasterSaturation: -0.15,
+              }}
+            />
+          )}
           {is3DMode && (
             <>
               <Mapbox.RasterDemSource

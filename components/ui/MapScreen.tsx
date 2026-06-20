@@ -1,13 +1,16 @@
 import { useTheme } from "@/hooks/useTheme";
 import { EVENT_CATEGORIES } from "@/constants/eventCategories";
-import { getCategoryColor, CATEGORY_COLORS } from "@/constants/categoryColors";
+import { getCategoryColor } from "@/constants/categoryColors";
 import {
   Add01Icon,
   Remove01Icon,
   SatelliteIcon,
   Target01Icon,
+  TrafficIncidentIcon,
 } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import Mapbox from "@rnmapbox/maps";
+import type { MapState } from "@rnmapbox/maps";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
@@ -27,13 +30,12 @@ import EventPreviewModal from "./EventPreviewModal";
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
-const TERRAIN_SOURCE_ID = "event-mapbox-dem";
-const TERRAIN_SOURCE_URL = "mapbox://mapbox.mapbox-terrain-dem-v1";
-const SATELLITE_3D_HEADING = -26;
-const SATELLITE_3D_PITCH = 62;
-const SATELLITE_3D_MIN_ZOOM = 12.8;
+const TRAFFIC_DARK_STYLE_URL = "mapbox://styles/mapbox/traffic-night-v2";
+const DEFAULT_MAP_CENTER: [number, number] = [-73.935242, 40.73061];
+const DEFAULT_ZOOM_LEVEL = 12;
+const USER_LOCATION_ZOOM_LEVEL = 14;
 
-type MapViewMode = "normal" | "satellite" | "satellite3d";
+type MapViewMode = "traffic" | "satellite";
 
 export type MapMarkerData = {
   id: string;
@@ -53,6 +55,8 @@ export type MapMarkerData = {
   attendeesCount?: number;
   ageLimit?: string | null;
   price?: string | null;
+  ticketsAvailable?: string | null;
+  ticketSalesEndDate?: string | null;
 };
 
 type MapScreenProps = {
@@ -109,19 +113,34 @@ export default function MapScreen({
   const [selectedMarker, setSelectedMarker] = useState<MapMarkerData | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const cameraRef = React.useRef<Mapbox.Camera>(null);
-  const [zoomLevel, setZoomLevel] = useState(12);
-  const [mapMode, setMapMode] = useState<MapViewMode>("satellite");
+  const currentZoomRef = React.useRef(DEFAULT_ZOOM_LEVEL);
+  const hasInitialUserLocationCenteredRef = React.useRef(false);
+  const userHasExploredMapRef = React.useRef(false);
+  const [mapMode, setMapMode] = useState<MapViewMode>("traffic");
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-  const isSatellite = mapMode === "satellite" || mapMode === "satellite3d";
-  const isSatellite3D = mapMode === "satellite3d";
+  const isSatellite = mapMode === "satellite";
   const currentMapStyle = isSatellite
     ? SATELLITE_STYLE_URL
-    : Mapbox.StyleURL.Dark;
-  const cameraZoomLevel = isSatellite3D
-    ? Math.max(zoomLevel, SATELLITE_3D_MIN_ZOOM)
-    : zoomLevel;
+    : TRAFFIC_DARK_STYLE_URL;
+  const mapModeLabel = {
+    traffic: "Traffic View",
+    satellite: "Satellite View",
+  }[mapMode];
+  const mapModeIcon = {
+    traffic: TrafficIncidentIcon,
+    satellite: SatelliteIcon,
+  }[mapMode];
+  const mapShadeStyle = {
+    traffic: styles.mapShadeTraffic,
+    satellite: styles.mapShadeSatellite,
+  }[mapMode];
   const lastReportedLocationRef = React.useRef<string | null>(null);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
+  const defaultCameraCenter: [number, number] =
+    userLocation ??
+    (markers && markers.length > 0
+      ? [markers[0].longitude, markers[0].latitude]
+      : DEFAULT_MAP_CENTER);
 
   const applyUserLocation = React.useCallback(
     (coordinate: [number, number]) => {
@@ -150,6 +169,33 @@ export default function MapScreen({
   React.useEffect(() => {
     restorePlans();
   }, [restorePlans]);
+
+  const centerOnUserLocation = React.useCallback(
+    (coordinate: [number, number], animationDuration: number) => {
+      currentZoomRef.current = USER_LOCATION_ZOOM_LEVEL;
+      cameraRef.current?.setCamera({
+        centerCoordinate: coordinate,
+        heading: 0,
+        pitch: 0,
+        zoomLevel: USER_LOCATION_ZOOM_LEVEL,
+        animationDuration,
+      });
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    if (
+      !userLocation ||
+      hasInitialUserLocationCenteredRef.current ||
+      userHasExploredMapRef.current
+    ) {
+      return;
+    }
+
+    hasInitialUserLocationCenteredRef.current = true;
+    centerOnUserLocation(userLocation, 650);
+  }, [centerOnUserLocation, userLocation]);
 
   const categories = ["All", ...EVENT_CATEGORIES];
   const visibleMarkers = React.useMemo(
@@ -218,38 +264,43 @@ export default function MapScreen({
     });
   };
 
+  const handleCameraChanged = React.useCallback((state: MapState) => {
+    if (typeof state.properties.zoom === "number") {
+      currentZoomRef.current = state.properties.zoom;
+    }
+
+    if (state.gestures.isGestureActive) {
+      userHasExploredMapRef.current = true;
+    }
+  }, []);
+
   const handleZoomIn = () => {
-    setZoomLevel((prev) => Math.min(prev + 1, 20));
+    userHasExploredMapRef.current = true;
+    const nextZoom = Math.min(currentZoomRef.current + 1, 20);
+    currentZoomRef.current = nextZoom;
+    cameraRef.current?.zoomTo(nextZoom, 250);
   };
 
   const handleZoomOut = () => {
-    setZoomLevel((prev) => Math.max(prev - 1, 1));
+    userHasExploredMapRef.current = true;
+    const nextZoom = Math.max(currentZoomRef.current - 1, 1);
+    currentZoomRef.current = nextZoom;
+    cameraRef.current?.zoomTo(nextZoom, 250);
   };
 
   const toggleMapStyle = () => {
     setMapMode((currentMode) => {
-      if (currentMode === "normal") {
+      if (currentMode === "traffic") {
         return "satellite";
       }
 
-      if (currentMode === "satellite") {
-        setZoomLevel((currentZoom) => Math.max(currentZoom, SATELLITE_3D_MIN_ZOOM));
-        return "satellite3d";
-      }
-
-      return "normal";
+      return "traffic";
     });
   };
 
   const handleMyLocation = () => {
     if (userLocation) {
-      cameraRef.current?.setCamera({
-        centerCoordinate: userLocation,
-        heading: isSatellite3D ? SATELLITE_3D_HEADING : 0,
-        pitch: isSatellite3D ? SATELLITE_3D_PITCH : 0,
-        zoomLevel: isSatellite3D ? Math.max(zoomLevel, 14.5) : 14,
-        animationDuration: 1000,
-      });
+      centerOnUserLocation(userLocation, 1000);
     }
   };
 
@@ -294,61 +345,22 @@ export default function MapScreen({
 
       <View style={styles.mapArea}>
         <Mapbox.MapView
-          key={mapMode === "normal" ? currentMapStyle : mapMode}
           style={styles.map}
           styleURL={currentMapStyle}
           logoEnabled={false}
           attributionEnabled={false}
           pitchEnabled={true}
           rotateEnabled={true}
+          onCameraChanged={handleCameraChanged}
         >
-          {isSatellite3D && (
-            <>
-              <Mapbox.RasterDemSource
-                id={TERRAIN_SOURCE_ID}
-                url={TERRAIN_SOURCE_URL}
-                tileSize={512}
-                maxZoomLevel={14}
-              />
-              <Mapbox.Terrain
-                sourceID={TERRAIN_SOURCE_ID}
-                style={{ exaggeration: 1.16 }}
-              />
-              <Mapbox.Light
-                style={{
-                  anchor: "viewport",
-                  color: "#FFFFFF",
-                  intensity: 0.42,
-                  position: [1.25, 210, 42],
-                }}
-              />
-              <Mapbox.Atmosphere
-                style={{
-                  color: "#0A1628",
-                  highColor: "#1A2F50",
-                  horizonBlend: 0.1,
-                  range: [-1.5, 4.5],
-                  spaceColor: "#020810",
-                  starIntensity: 0.08,
-                  verticalRange: [0, 600],
-                }}
-              />
-            </>
-          )}
-
           <Mapbox.Camera
             ref={cameraRef}
-            animationDuration={isSatellite3D ? 950 : 650}
-            animationMode="easeTo"
-            heading={isSatellite3D ? SATELLITE_3D_HEADING : 0}
-            pitch={isSatellite3D ? SATELLITE_3D_PITCH : 0}
-            zoomLevel={cameraZoomLevel}
-            centerCoordinate={
-              userLocation ??
-              (markers && markers.length > 0
-                ? [markers[0].longitude, markers[0].latitude]
-                : [-73.935242, 40.73061])
-            }
+            defaultSettings={{
+              centerCoordinate: defaultCameraCenter,
+              heading: 0,
+              pitch: 0,
+              zoomLevel: DEFAULT_ZOOM_LEVEL,
+            }}
           />
 
           {visibleMarkers.map((marker) => (
@@ -361,37 +373,6 @@ export default function MapScreen({
               onPress={() => handleMarkerPress(marker)}
             />
           ))}
-
-          {isSatellite3D && (
-            <Mapbox.FillExtrusionLayer
-              id="event-map-buildings-3d"
-              sourceID="composite"
-              sourceLayerID="building"
-              minZoomLevel={13}
-              maxZoomLevel={22}
-              style={{
-                fillExtrusionBase: ["coalesce", ["get", "min_height"], 0],
-                fillExtrusionBaseAlignment: "terrain",
-                fillExtrusionColor: "#0D1117",
-                fillExtrusionEdgeRadius: 0.28,
-                fillExtrusionHeight: [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  13,
-                  0,
-                  15.5,
-                  ["coalesce", ["get", "height"], 26],
-                ],
-                fillExtrusionHeightAlignment: "terrain",
-                fillExtrusionOpacity: 0.72,
-                fillExtrusionVerticalGradient: true,
-                fillExtrusionAmbientOcclusionIntensity: 0.45,
-                fillExtrusionAmbientOcclusionRadius: 4,
-                fillExtrusionRoundedRoof: true,
-              }}
-            />
-          )}
 
           <Mapbox.UserLocation
             visible={true}
@@ -406,13 +387,25 @@ export default function MapScreen({
           />
         </Mapbox.MapView>
 
+        <View pointerEvents="none" style={[styles.mapShade, mapShadeStyle]} />
+
         <View style={styles.mapControlsLeft}>
           <CinematicButton icon={Add01Icon} onPress={handleZoomIn} />
           <CinematicButton icon={Remove01Icon} onPress={handleZoomOut} />
         </View>
 
         <View style={styles.mapControlsRight}>
-          <CinematicButton icon={SatelliteIcon} onPress={toggleMapStyle} />
+          <TouchableOpacity
+            activeOpacity={0.86}
+            onPress={toggleMapStyle}
+            style={styles.viewModeButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Switch map mode. Current mode: ${mapModeLabel}`}
+          >
+            <View style={styles.viewModeIcon}>
+              <HugeiconsIcon icon={mapModeIcon} size={20} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
           <CinematicButton icon={Target01Icon} onPress={handleMyLocation} />
         </View>
       </View>
@@ -434,6 +427,8 @@ export default function MapScreen({
         attendeesCount={selectedMarker?.attendeesCount}
         ageLimit={selectedMarker?.ageLimit ?? undefined}
         price={selectedMarker?.price ?? undefined}
+        ticketsAvailable={selectedMarker?.ticketsAvailable ?? undefined}
+        ticketSalesEndDate={selectedMarker?.ticketSalesEndDate ?? undefined}
         onAddToCalendar={handleAddToCalendar}
         onViewEvent={handleViewEvent}
         isAddedToCalendar={!!existingPlan}
@@ -485,6 +480,15 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#000000",
   },
+  mapShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mapShadeTraffic: {
+    backgroundColor: "rgba(0,0,0,0.48)",
+  },
+  mapShadeSatellite: {
+    backgroundColor: "rgba(0,0,0,0.26)",
+  },
   categoriesScroll: {
     paddingHorizontal: 16,
     gap: 8,
@@ -523,5 +527,32 @@ const styles = StyleSheet.create({
     bottom: 20,
     right: 20,
     gap: 12,
+    alignItems: "flex-end",
+  },
+  viewModeButton: {
+    height: 42,
+    width: 42,
+    borderRadius: 21,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(5,5,6,0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.36,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  viewModeIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
   },
 });

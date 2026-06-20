@@ -1,8 +1,8 @@
 import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
 import { useTheme } from "@/hooks/useTheme";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -13,28 +13,127 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+const getParam = (value: string | string[] | undefined, fallback: string) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  return source?.trim() || fallback;
+};
+
+const computeTicketNo = (orderId?: string, createdAt?: string): string | null => {
+  if (!orderId || !createdAt) return null;
+  try {
+    const year = new Date(createdAt).getFullYear();
+    if (Number.isNaN(year)) return null;
+    return `MOM-${year}-${orderId.slice(-4).toUpperCase()}`;
+  } catch {
+    return null;
+  }
+};
+
+const formatAmount = (amount?: string, currency?: string, isFree?: string): string => {
+  if (isFree === "true") return "Free";
+  const parsed = Number.parseFloat(amount ?? "");
+  if (!Number.isFinite(parsed) || parsed <= 0) return "Free";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: (currency?.trim().toUpperCase()) || "USD",
+      minimumFractionDigits: Number.isInteger(parsed) ? 0 : 2,
+      maximumFractionDigits: Number.isInteger(parsed) ? 0 : 2,
+    }).format(parsed);
+  } catch {
+    return `$${parsed.toFixed(2)}`;
+  }
+};
+
 const PaymentSuccessScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const params = useLocalSearchParams<{
+    orderId?: string;
+    eventId?: string;
+    ticketId?: string;
+    ticketName?: string;
+    eventName?: string;
+    eventDateDisplay?: string;
+    hostName?: string;
+    venue?: string;
+    address?: string;
+    quantity?: string;
+    amount?: string;
+    currency?: string;
+    createdAt?: string;
+    isFree?: string;
+  }>();
+
   const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowConfetti(true);
-    }, 400);
+    const timer = setTimeout(() => setShowConfetti(true), 400);
     return () => clearTimeout(timer);
   }, []);
 
-  const details = [
-    { label: "Ticket No", value: "MOM-2024-8575" },
-    { label: "Host", value: "DJ Koko" },
-    { label: "Venue", value: "Rooftop Sessions Vol. 4" },
-    { label: "Address", value: "Sky Terrace, NY" },
-    { label: "Ticket", value: "Ticket x 1" },
-    { label: "Date/Time", value: "Sat, Sep 9 • 9pm" },
-    { label: "Amount Paid", value: "$45", isPrice: true },
-  ];
+  const orderId = getParam(params.orderId, "");
+  const eventId = getParam(params.eventId, "");
+  const ticketName = getParam(params.ticketName, "Ticket");
+  const eventName = getParam(params.eventName, "Event");
+  const eventDateDisplay = getParam(params.eventDateDisplay, "");
+  const hostName = getParam(params.hostName, "");
+  const venue = getParam(params.venue, "");
+  const address = getParam(params.address, "");
+  const quantity = getParam(params.quantity, "1");
+  const isFree = getParam(params.isFree, "");
+  const ticketNo = useMemo(
+    () => computeTicketNo(orderId, params.createdAt ? getParam(params.createdAt, "") : undefined),
+    [orderId, params.createdAt],
+  );
+  const formattedAmount = useMemo(
+    () => formatAmount(params.amount, params.currency, isFree),
+    [params.amount, params.currency, isFree],
+  );
+  const isAmountPaid = isFree !== "true" && Number.parseFloat(getParam(params.amount, "0")) > 0;
+
+  const details = useMemo(() => {
+    const rows: { label: string; value: string; isPrice?: boolean }[] = [];
+    if (ticketNo) rows.push({ label: "Ticket No", value: ticketNo });
+    if (hostName) rows.push({ label: "Host", value: hostName });
+    if (venue) rows.push({ label: "Venue", value: venue });
+    if (address) rows.push({ label: "Address", value: address });
+    rows.push({ label: "Ticket", value: `${ticketName} x ${quantity}` });
+    if (eventDateDisplay) rows.push({ label: "Date/Time", value: eventDateDisplay });
+    rows.push({ label: isAmountPaid ? "Amount Paid" : "Total", value: formattedAmount, isPrice: isAmountPaid });
+    return rows;
+  }, [ticketNo, hostName, venue, address, ticketName, quantity, eventDateDisplay, formattedAmount, isAmountPaid]);
+
+  const handleViewTicket = () => {
+    router.push({
+      pathname: "/event-screen/qr-code",
+      params: {
+        type: "event",
+        ticketNo: ticketNo ?? "",
+        eventName,
+        hostName,
+        venue,
+        address,
+        dateTime: eventDateDisplay,
+        ticketName,
+        quantity,
+        amount: getParam(params.amount, "0"),
+        currency: getParam(params.currency, "usd"),
+      },
+    });
+  };
+
+  const handleBackToEvent = () => {
+    if (eventId) {
+      router.replace({
+        pathname: "/event-screen/event",
+        params: { eventId },
+      });
+    } else {
+      router.back();
+    }
+  };
 
   return (
     <View
@@ -44,17 +143,15 @@ const PaymentSuccessScreen = () => {
       ]}
     >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      {/* Confetti Animation */}
       <ConfettiOverlay
         visible={showConfetti}
         onFinish={() => setShowConfetti(false)}
       />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={[styles.closeBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.back()}
+          onPress={handleBackToEvent}
         >
           <Feather name="x" size={20} color={colors.text} />
         </TouchableOpacity>
@@ -64,7 +161,6 @@ const PaymentSuccessScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Success Animation Placeholder */}
         <View style={styles.successIconWrapper}>
           <View
             style={[
@@ -87,23 +183,21 @@ const PaymentSuccessScreen = () => {
                 },
               ]}
             >
-              <Ionicons
-                name="checkmark-sharp"
-                size={40}
-                color={colors.success}
-              />
+              <Ionicons name="checkmark-sharp" size={40} color={colors.success} />
             </View>
           </View>
         </View>
 
         <Text style={[styles.title, { color: colors.text }]}>
-          Payment successful
+          {isFree === "true" ? "Ticket confirmed!" : "Payment successful"}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Your ticket is confirmed.{"\n"}Have a great time at the event.
+          {eventName
+            ? `You're going to ${eventName}.`
+            : "Your ticket is confirmed."}
+          {"\n"}Have a great time at the event.
         </Text>
 
-        {/* Details Card */}
         <View
           style={[
             styles.detailsCard,
@@ -111,11 +205,9 @@ const PaymentSuccessScreen = () => {
           ]}
         >
           {details.map((item, index) => (
-            <View key={index}>
+            <View key={item.label}>
               <View style={styles.detailRow}>
-                <Text
-                  style={[styles.detailLabel, { color: colors.textSecondary }]}
-                >
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
                   {item.label}
                 </Text>
                 <Text
@@ -124,14 +216,13 @@ const PaymentSuccessScreen = () => {
                     { color: colors.text },
                     item.isPrice && { color: colors.success },
                   ]}
+                  numberOfLines={2}
                 >
                   {item.value}
                 </Text>
               </View>
               {index < details.length - 1 && (
-                <View
-                  style={[styles.divider, { backgroundColor: colors.border }]}
-                />
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
               )}
             </View>
           ))}
@@ -140,16 +231,10 @@ const PaymentSuccessScreen = () => {
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      {/* Footer Buttons */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity
           style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          onPress={() =>
-            router.push({
-              pathname: "/event-screen/qr-code",
-              params: { type: "event" },
-            })
-          }
+          onPress={handleViewTicket}
         >
           <Text style={[styles.primaryBtnText, { color: colors.background }]}>
             View my ticket
@@ -161,7 +246,7 @@ const PaymentSuccessScreen = () => {
             styles.secondaryBtn,
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
-          onPress={() => router.replace("/event-screen/event")}
+          onPress={handleBackToEvent}
         >
           <Text style={[styles.secondaryBtnText, { color: colors.text }]}>
             Back to event
@@ -232,15 +317,21 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 12,
+    gap: 16,
   },
   detailLabel: {
     fontSize: 14,
+    lineHeight: 20,
+    flexShrink: 0,
   },
   detailValue: {
     fontSize: 14,
     fontWeight: "600",
+    flex: 1,
+    textAlign: "right",
+    lineHeight: 20,
   },
   divider: {
     height: 1,

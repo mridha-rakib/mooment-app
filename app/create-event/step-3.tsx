@@ -8,9 +8,12 @@ import {
   Platform,
   StatusBar,
   Alert,
+  ScrollView,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { z } from 'zod';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,14 +22,32 @@ import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import { reverseGeocodeLocation } from '@/lib/locationSearch';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
+const createEventStepThreeSchema = z
+  .object({
+    searchLabel: z.string().nullable().optional(),
+    venue: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+  })
+  .refine(
+    (loc) => Boolean(loc.searchLabel?.trim() || loc.venue?.trim() || loc.address?.trim()),
+    { message: 'Please add a location for your event.' },
+  );
+
+type CreateEventStepThreeErrors = { location?: string };
+
 export default function CreateEventStep3() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const draftLocation = useEventDraftStore((state) => state.location);
   const setStepThree = useEventDraftStore((state) => state.setStepThree);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
   const [venue, setVenue] = useState(draftLocation.venue ?? '');
   const [address, setAddress] = useState(draftLocation.address ?? '');
+  const [additionalInfo, setAdditionalInfo] = useState(draftLocation.additionalInfo ?? '');
+  const [errors, setErrors] = useState<CreateEventStepThreeErrors>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedLabel, setSavedLabel] = useState(false);
   const searchLabel = draftLocation.searchLabel ?? address;
 
   useEffect(() => {
@@ -36,6 +57,10 @@ export default function CreateEventStep3() {
   useEffect(() => {
     setAddress(draftLocation.address ?? '');
   }, [draftLocation.address]);
+
+  useEffect(() => {
+    setAdditionalInfo(draftLocation.additionalInfo ?? '');
+  }, [draftLocation.additionalInfo]);
 
   useEffect(() => {
     const hasDraftLocation = Boolean(
@@ -91,6 +116,7 @@ export default function CreateEventStep3() {
   const persistStepThree = () => {
     const trimmedAddress = address.trim();
     const trimmedVenue = venue.trim();
+    const trimmedAdditionalInfo = additionalInfo.trim();
     const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
 
     setStepThree({
@@ -99,102 +125,161 @@ export default function CreateEventStep3() {
         address: trimmedAddress || null,
         searchLabel: nextSearchLabel || null,
         venue: trimmedVenue || null,
+        additionalInfo: trimmedAdditionalInfo || null,
       },
     });
   };
 
   const handleSaveDraft = async () => {
+    if (isSaving) return;
     persistStepThree();
+    setIsSaving(true);
 
     try {
       await saveDraft();
+      setSavedLabel(true);
+      setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
       Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleNext = () => {
+    const trimmedAddress = address.trim();
+    const trimmedVenue = venue.trim();
+    const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
+
+    const result = createEventStepThreeSchema.safeParse({
+      searchLabel: nextSearchLabel || null,
+      venue: trimmedVenue || null,
+      address: trimmedAddress || null,
+    });
+
+    if (!result.success) {
+      setErrors({ location: result.error.errors[0]?.message });
+      return;
+    }
+
+    setErrors({});
     persistStepThree();
     router.push('/create-event/step-4');
   };
 
   const handleOpenLocationPicker = () => {
     persistStepThree();
+    setErrors({});
     router.push('/create-event/location-picker');
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity onPress={handleSaveDraft}>
-          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        {isEditingPublished ? (
+          <View style={{ width: 60 }} />
+        ) : (
+          <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
+            <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
+              {isSaving ? 'Saving…' : savedLabel ? 'Saved ✓' : 'Save Draft'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
         <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 3</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>3 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>3 out of 5</Text>
       </View>
 
-      {/* Form Content */}
-      <View style={styles.formContainer}>
-        {/* Location Search */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>LOCATION</Text>
-          <TouchableOpacity 
-            style={[styles.searchBox, { borderColor: colors.border }]}
-            onPress={handleOpenLocationPicker}
+      {/* Form Content + Footer */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        style={styles.body}
+      >
+        <ScrollView
+          contentContainerStyle={styles.formContainer}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Location Search */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>LOCATION</Text>
+            <TouchableOpacity
+              style={[
+                styles.searchBox,
+                { borderColor: errors.location ? colors.danger : colors.border },
+              ]}
+              onPress={handleOpenLocationPicker}
+            >
+              <Ionicons name="location-outline" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
+              <Text style={[styles.searchText, { color: searchLabel ? colors.text : colors.textSecondary }]}>
+                {searchLabel || 'Search location'}
+              </Text>
+            </TouchableOpacity>
+            {errors.location ? (
+              <Text style={[styles.errorText, { color: colors.danger }]}>{errors.location}</Text>
+            ) : null}
+          </View>
+
+          {/* Venue */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>VENUE</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+              placeholder="Venue Name"
+              placeholderTextColor={colors.textSecondary}
+              value={venue}
+              onChangeText={(v) => { setVenue(v); if (errors.location) setErrors({}); }}
+            />
+          </View>
+
+          {/* Address */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>ADDRESS</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+              placeholder="Full Address"
+              placeholderTextColor={colors.textSecondary}
+              value={address}
+              onChangeText={(v) => { setAddress(v); if (errors.location) setErrors({}); }}
+            />
+          </View>
+
+          {/* Additional Info */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>ADDITIONAL INFO</Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text }]}
+              placeholder="Any extra details about the location…"
+              placeholderTextColor={colors.textSecondary}
+              value={additionalInfo}
+              onChangeText={setAdditionalInfo}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+        </ScrollView>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.nextButton, { backgroundColor: colors.primary }]}
+            onPress={handleNext}
           >
-            <Ionicons name="location-outline" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
-            <Text style={[styles.searchText, { color: searchLabel ? colors.text : colors.textSecondary }]}>
-              {searchLabel}
-            </Text>
+            <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Venue */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>VENUE</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
-            placeholder="Venue Name"
-            placeholderTextColor={colors.textSecondary}
-            value={venue}
-            onChangeText={setVenue}
-          />
-        </View>
-
-        {/* Address */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>ADDRESS</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
-            placeholder="Full Address"
-            placeholderTextColor={colors.textSecondary}
-            value={address}
-            onChangeText={setAddress}
-          />
-        </View>
-      </View>
-
-      {/* Spacer to push footer down */}
-      <View style={{ flex: 1 }} />
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.nextButton, { backgroundColor: colors.primary }]}
-          onPress={handleNext}
-        >
-          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
-        </TouchableOpacity>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -232,8 +317,12 @@ const styles = StyleSheet.create({
   stepText: {
     fontSize: 13,
   },
+  body: {
+    flex: 1,
+  },
   formContainer: {
     paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   inputGroup: {
     marginBottom: 24,
@@ -255,12 +344,21 @@ const styles = StyleSheet.create({
   },
   searchText: {
     fontSize: 15,
+    flex: 1,
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 6,
   },
   input: {
     borderRadius: 12,
     fontSize: 15,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  textArea: {
+    minHeight: 88,
+    paddingTop: 14,
   },
   footer: {
     paddingHorizontal: 16,

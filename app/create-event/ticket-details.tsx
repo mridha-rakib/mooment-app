@@ -8,13 +8,13 @@ import {
   Platform,
   StatusBar,
   ScrollView,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { z } from 'zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -23,7 +23,75 @@ import { Spinner } from '@/components/ui/spinner';
 import { useTheme } from '@/hooks/useTheme';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
-import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getAuthErrorDetails, getAuthErrorMessage } from '@/lib/authErrors';
+
+const ticketSchema = z
+  .object({
+    name: z
+      .string({ required_error: 'Ticket name is required', invalid_type_error: 'Ticket name is required' })
+      .trim()
+      .min(1, 'Ticket name is required')
+      .max(120, 'Ticket name cannot exceed 120 characters'),
+    description: z
+      .string({ required_error: 'Description is required', invalid_type_error: 'Description is required' })
+      .trim()
+      .min(1, 'Description is required')
+      .max(1000, 'Description cannot exceed 1000 characters'),
+    capacity: z
+      .number({ required_error: 'Capacity is required', invalid_type_error: 'Enter a valid capacity' })
+      .int('Capacity must be a whole number')
+      .min(1, 'Capacity must be at least 1')
+      .max(1_000_000, 'Capacity cannot exceed 1,000,000'),
+    price: z.number().positive().optional(),
+    type: z.enum(['free', 'pay'] as const),
+  })
+  .refine((data) => data.type !== 'pay' || (typeof data.price === 'number' && data.price > 0), {
+    message: 'Price must be greater than 0',
+    path: ['price'],
+  });
+
+type TicketErrors = Partial<{
+  name: string;
+  description: string;
+  capacity: string;
+  price: string;
+  form: string;
+}>;
+
+const BACKEND_FIELD_MAP: Record<string, keyof TicketErrors> = {
+  name: 'name',
+  description: 'description',
+  capacity: 'capacity',
+  price: 'price',
+};
+
+const parseBackendTicketErrors = (error: unknown): TicketErrors => {
+  const details = getAuthErrorDetails(error);
+
+  if (!details) {
+    return { form: getAuthErrorMessage(error, 'Please try saving the ticket again.') };
+  }
+
+  const errors: TicketErrors = {};
+
+  if (details.fields) {
+    for (const [field, messages] of Object.entries(details.fields)) {
+      const key = BACKEND_FIELD_MAP[field];
+
+      if (key) {
+        errors[key] = (messages as string[])[0];
+      }
+    }
+  }
+
+  const unmappedMessages = (details.issues ?? []).map((i) => i.message).filter(Boolean) as string[];
+
+  if (Object.keys(errors).length === 0 || unmappedMessages.length > 0) {
+    errors.form = unmappedMessages[0] ?? getAuthErrorMessage(error, 'Please try saving the ticket again.');
+  }
+
+  return errors;
+};
 
 const startOfToday = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
 const isSameCalendarDay = (first: Date, second: Date) =>
@@ -85,35 +153,53 @@ export default function TicketDetailsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<TicketErrors>({});
   const pickerButtonColors = {
     negativeButton: { label: 'Cancel', textColor: colors.textSecondary },
     positiveButton: { label: 'OK', textColor: colors.primary },
   };
 
+  const clearFieldError = (field: keyof TicketErrors) => {
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
   const ensureFieldVisible = useCallback(
-    (field: string) => {
+    (field: string, delay = 0) => {
       const fieldRef = fieldRefs.current[field];
 
       if (!fieldRef) {
         return;
       }
 
-      requestAnimationFrame(() => {
-        fieldRef.measureInWindow((_, fieldY, __, fieldHeight) => {
-          const keyboardTop = windowHeight - keyboardHeightRef.current;
-          const footerTop = windowHeight - footerHeightRef.current;
-          const visibleBottom = Math.min(keyboardTop, footerTop) - 16;
-          const fieldBottom = fieldY + fieldHeight + 20;
-          const delta = fieldBottom - visibleBottom;
+      const measure = () => {
+        requestAnimationFrame(() => {
+          fieldRef.measureInWindow((_, fieldY, __, fieldHeight) => {
+            const keyboardTop = windowHeight - keyboardHeightRef.current;
+            const footerTop = windowHeight - footerHeightRef.current;
+            const visibleBottom = Math.min(keyboardTop, footerTop) - 16;
+            const fieldBottom = fieldY + fieldHeight + 20;
+            const delta = fieldBottom - visibleBottom;
 
-          if (delta > 0) {
-            scrollViewRef.current?.scrollTo({
-              animated: true,
-              y: Math.max(0, scrollOffsetRef.current + delta),
-            });
-          }
+            if (delta > 0) {
+              scrollViewRef.current?.scrollTo({
+                animated: true,
+                y: Math.max(0, scrollOffsetRef.current + delta),
+              });
+            }
+          });
         });
-      });
+      };
+
+      if (delay > 0) {
+        setTimeout(measure, delay);
+      } else {
+        measure();
+      }
     },
     [windowHeight],
   );
@@ -133,15 +219,13 @@ export default function TicketDetailsScreen() {
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
       keyboardHeightRef.current = event.endCoordinates.height;
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const field = activeFieldRef.current;
+      const field = activeFieldRef.current;
 
-          if (field) {
-            ensureFieldVisible(field);
-          }
-        });
-      });
+      if (field) {
+        // On Android the keyboard animation finishes after keyboardDidShow fires,
+        // so we give it a short extra delay before measuring.
+        ensureFieldVisible(field, Platform.OS === 'android' ? 150 : 0);
+      }
     });
 
     const hideSubscription = Keyboard.addListener(hideEvent, () => {
@@ -159,31 +243,50 @@ export default function TicketDetailsScreen() {
       return;
     }
 
+    const parsedCapacity = Number.parseInt(capacity, 10);
+    const parsedPrice = Number.parseFloat(ticketPrice);
+    const type = ticketType === 'Free' ? 'free' : 'pay';
+
+    const result = ticketSchema.safeParse({
+      name: ticketName,
+      description: ticketDescription,
+      capacity: Number.isNaN(parsedCapacity) ? undefined : parsedCapacity,
+      price: type === 'pay' ? (Number.isFinite(parsedPrice) ? parsedPrice : undefined) : undefined,
+      type,
+    });
+
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+
+      setErrors({
+        name: fieldErrors.name?.[0],
+        description: fieldErrors.description?.[0],
+        capacity: fieldErrors.capacity?.[0],
+        price: fieldErrors.price?.[0],
+      });
+
+      return;
+    }
+
+    setErrors({});
     setIsSaving(true);
 
     try {
-      const parsedPrice = Number.parseFloat(ticketPrice);
-      const price = ticketType === 'Free'
-        ? 0
-        : Number.isFinite(parsedPrice) && parsedPrice > 0
-          ? parsedPrice
-          : defaultTicketPrice;
-
       await saveTicket({
-        capacity: Number.parseInt(capacity, 10) || 0,
-        description: ticketDescription.trim() || selectedTicket?.description || 'Entry from 9pm. Standing only.',
+        capacity: result.data.capacity,
+        description: result.data.description,
         localId: ticketLocalIdRef.current,
-        name: ticketName.trim() || selectedTicket?.name || 'General Ticket',
-        price,
+        name: result.data.name,
+        price: result.data.type === 'free' ? 0 : (result.data.price ?? 0),
         salesEndAt: date.toISOString(),
-        type: ticketType === 'Free' ? 'free' : 'pay',
+        type: result.data.type,
       });
       setShowConfetti(true);
       setTimeout(() => {
         router.back();
       }, 2500);
     } catch (error) {
-      Alert.alert('Unable to save ticket', getAuthErrorMessage(error, 'Please try saving the ticket again.'));
+      setErrors(parseBackendTicketErrors(error));
     } finally {
       setIsSaving(false);
     }
@@ -229,13 +332,13 @@ export default function TicketDetailsScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
+
       {/* Success Animation */}
-      <ConfettiOverlay 
-        visible={showConfetti} 
-        onFinish={() => setShowConfetti(false)} 
+      <ConfettiOverlay
+        visible={showConfetti}
+        onFinish={() => setShowConfetti(false)}
       />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <BackButton iconName={Cancel01Icon} size={24} />
@@ -259,37 +362,55 @@ export default function TicketDetailsScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
+        {/* Form-level backend error */}
+        {errors.form ? (
+          <View style={[styles.formErrorBanner, { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}40` }]}>
+            <Ionicons name="alert-circle-outline" size={16} color={colors.danger} style={{ marginRight: 8 }} />
+            <Text style={[styles.formErrorText, { color: colors.danger }]}>{errors.form}</Text>
+          </View>
+        ) : null}
+
         {/* Ticket Name */}
         <View ref={(node) => { fieldRefs.current.ticketName = node; }} style={styles.inputGroup}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>TICKET NAME</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+            style={[
+              styles.input,
+              { backgroundColor: colors.card, color: colors.text },
+              errors.name ? [styles.inputError, { borderColor: colors.danger }] : null,
+            ]}
             placeholder="Name"
             placeholderTextColor={colors.textSecondary}
             value={ticketName}
-            onChangeText={setTicketName}
+            onChangeText={(v) => { setTicketName(v); clearFieldError('name'); }}
             onFocus={() => focusField('ticketName')}
           />
+          {errors.name ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.name}</Text> : null}
         </View>
 
         {/* Description */}
         <View ref={(node) => { fieldRefs.current.ticketDescription = node; }} style={styles.inputGroup}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+            style={[
+              styles.input,
+              { backgroundColor: colors.card, color: colors.text },
+              errors.description ? [styles.inputError, { borderColor: colors.danger }] : null,
+            ]}
             placeholder="Detail about ticket"
             placeholderTextColor={colors.textSecondary}
             value={ticketDescription}
-            onChangeText={setTicketDescription}
+            onChangeText={(v) => { setTicketDescription(v); clearFieldError('description'); }}
             onFocus={() => focusField('ticketDescription')}
           />
+          {errors.description ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.description}</Text> : null}
         </View>
 
         {/* Date and Time Row */}
         <View style={styles.row}>
           <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.selector, { backgroundColor: colors.card }]}
               onPress={() => setShowDatePicker(true)}
             >
@@ -300,7 +421,7 @@ export default function TicketDetailsScreen() {
 
           <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.selector, { backgroundColor: colors.card }]}
               onPress={() => setShowTimePicker(true)}
             >
@@ -339,9 +460,9 @@ export default function TicketDetailsScreen() {
 
         {/* Ticket Type (Free/Pay) */}
         <View style={styles.radioRow}>
-          <TouchableOpacity 
-            style={styles.radioItem} 
-            onPress={() => setTicketType('Free')}
+          <TouchableOpacity
+            style={styles.radioItem}
+            onPress={() => { setTicketType('Free'); clearFieldError('price'); }}
           >
             <View style={[styles.radioOuter, { borderColor: colors.border }, ticketType === 'Free' && { borderColor: colors.primary }]}>
               {ticketType === 'Free' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
@@ -349,8 +470,8 @@ export default function TicketDetailsScreen() {
             <Text style={[styles.radioLabel, { color: colors.text }]}>Free</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.radioItem} 
+          <TouchableOpacity
+            style={styles.radioItem}
             onPress={() => setTicketType('Pay')}
           >
             <View style={[styles.radioOuter, { borderColor: colors.border }, ticketType === 'Pay' && { borderColor: colors.primary }]}>
@@ -363,7 +484,13 @@ export default function TicketDetailsScreen() {
         {ticketType === 'Pay' && (
           <View ref={(node) => { fieldRefs.current.ticketPrice = node; }} style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>PRICE</Text>
-            <View style={[styles.priceInput, { backgroundColor: colors.card }]}>
+            <View
+              style={[
+                styles.priceInput,
+                { backgroundColor: colors.card },
+                errors.price ? [styles.inputError, { borderColor: colors.danger }] : null,
+              ]}
+            >
               <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>$</Text>
               <TextInput
                 style={[styles.priceField, { color: colors.text }]}
@@ -371,10 +498,11 @@ export default function TicketDetailsScreen() {
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="decimal-pad"
                 value={ticketPrice}
-                onChangeText={setTicketPrice}
+                onChangeText={(v) => { setTicketPrice(v); clearFieldError('price'); }}
                 onFocus={() => focusField('ticketPrice')}
               />
             </View>
+            {errors.price ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.price}</Text> : null}
           </View>
         )}
 
@@ -382,14 +510,19 @@ export default function TicketDetailsScreen() {
         <View ref={(node) => { fieldRefs.current.capacity = node; }} style={styles.inputGroup}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>CAPACITY</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+            style={[
+              styles.input,
+              { backgroundColor: colors.card, color: colors.text },
+              errors.capacity ? [styles.inputError, { borderColor: colors.danger }] : null,
+            ]}
             placeholder="185"
             placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             value={capacity}
-            onChangeText={setCapacity}
+            onChangeText={(v) => { setCapacity(v); clearFieldError('capacity'); }}
             onFocus={() => focusField('capacity')}
           />
+          {errors.capacity ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.capacity}</Text> : null}
         </View>
       </ScrollView>
 
@@ -400,14 +533,14 @@ export default function TicketDetailsScreen() {
         }}
         style={[styles.footer, { backgroundColor: colors.background }]}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.cancelButton, { backgroundColor: colors.card }]}
           disabled={isSaving}
           onPress={() => router.back()}
         >
           <Text style={[styles.cancelButtonText, { color: isSaving ? colors.textSecondary : colors.text }]}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.confirmButton, { backgroundColor: colors.primary }]}
           disabled={isSaving}
           onPress={handleConfirm}
@@ -448,8 +581,22 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 120,
     paddingTop: 16,
+  },
+  formErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 20,
+  },
+  formErrorText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   inputGroup: {
     marginBottom: 24,
@@ -465,6 +612,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  inputError: {
+    borderWidth: 1,
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 6,
   },
   priceInput: {
     borderRadius: 12,
@@ -472,6 +628,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   currencyPrefix: {
     fontSize: 15,

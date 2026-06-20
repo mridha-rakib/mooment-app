@@ -21,7 +21,7 @@ export const Colors = {
     text: '#FFFFFF',
     textSecondary: '#8E8E9B',
     border: 'rgba(255,255,255,0.1)',
-    card: '#1A1A1A',
+    card: '#121212',
     icon: '#FFFFFF',
     tabBar: '#0e0d12',
     tabBarActive: '#FFFFFF',

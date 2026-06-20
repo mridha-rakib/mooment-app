@@ -18,8 +18,11 @@ export type CheckoutOrder = {
   currency: string;
   subtotalAmount: number;
   platformFeeAmount: number;
+  taxAmount: number;
   totalAmount: number;
   stripePaymentIntentId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type CreateTicketCheckoutIntentPayload = {

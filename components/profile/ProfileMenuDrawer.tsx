@@ -30,6 +30,7 @@ import { Modal,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { useAuthStore } from "@/stores/authStore";
 
 type MenuDrawerProps = {
@@ -69,6 +70,9 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const logout = useAuthStore((state) => state.logout);
+  const user = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
 
   const handleLogout = async () => {
     onClose();
@@ -126,6 +130,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 router.push('/event-screen/event-drafts');
               }}
             />
+            {/* 
             <MenuItem 
               icon={Calendar01Icon} 
               label="My Plan" 
@@ -135,15 +140,24 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 router.push('/profile-screen/my-plan');
               }} 
             />
+            */}
             <MenuItem
               icon={Analytics01Icon}
               label="Creator Dashboard"
               colors={colors}
               onPress={() => {
                 onClose();
-                router.push('/profile-screen/creator-dashboard');
+                requireBusinessAccountForEvent({
+                  user,
+                  completedProfileTypes,
+                  updateProfile,
+                  router,
+                  onReady: () => router.push('/profile-screen/creator-dashboard'),
+                });
               }}
+              hideSeparator
             />
+            {/* 
             <MenuItem
               icon={ShoppingCart01Icon}
               label="My Cart"
@@ -154,6 +168,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }}
               hideSeparator
             />
+            */}
 
             <SectionLabel label="WALLET" colors={colors} />
             <MenuItem
@@ -191,7 +206,10 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/wallet');
               }}
+              hideSeparator
             />
+            {/* Product Wallet is temporarily hidden */}
+            {/* 
             <MenuItem
               icon={ShoppingBag01Icon}
               label="Product Wallet"
@@ -202,7 +220,10 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }}
               hideSeparator
             />
+            */}
 
+            {/* PRODUCT section is temporarily hidden */}
+            {/* 
             <SectionLabel label="PRODUCT" colors={colors} />
             <MenuItem icon={Add01Icon} label="Add Product" colors={colors} onPress={onAddProductPress} />
             <MenuItem
@@ -215,6 +236,7 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }}
               hideSeparator
             />
+            */}
 
             <View style={{ height: 30 }} />
 

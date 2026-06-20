@@ -8,6 +8,7 @@ const AUTH_TOKEN_KEY = "xenog.mobile.accessToken";
 const AUTH_REFRESH_TOKEN_KEY = "xenog.mobile.refreshToken";
 const AUTH_USER_KEY = "xenog.mobile.user";
 const PENDING_VERIFICATION_EMAIL_KEY = "xenog.mobile.pendingVerificationEmail";
+const COMPLETED_PROFILE_TYPES_KEY = "xenog.mobile.completedProfileTypes";
 
 export type AuthUser = {
   id: string;
@@ -84,6 +85,7 @@ type AuthState = {
   accessToken: string | null;
   refreshToken: string | null;
   pendingVerificationEmail: string | null;
+  completedProfileTypes: ('personal' | 'business')[];
   isAuthenticated: boolean;
   isLoading: boolean;
   isRestoring: boolean;
@@ -189,7 +191,28 @@ const clearStoredAuthState = async () => {
     deleteStoredValue(AUTH_TOKEN_KEY),
     deleteStoredValue(AUTH_REFRESH_TOKEN_KEY),
     deleteStoredValue(AUTH_USER_KEY),
+    deleteStoredValue(COMPLETED_PROFILE_TYPES_KEY),
   ]);
+};
+
+const readCompletedProfileTypes = async (): Promise<('personal' | 'business')[]> => {
+  const stored = await readStoredValue(COMPLETED_PROFILE_TYPES_KEY);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored) as ('personal' | 'business')[];
+  } catch {
+    return [];
+  }
+};
+
+const persistCompletedProfileType = async (
+  type: 'personal' | 'business',
+  current: ('personal' | 'business')[],
+): Promise<('personal' | 'business')[]> => {
+  if (current.includes(type)) return current;
+  const updated = [...current, type];
+  await writeStoredValue(COMPLETED_PROFILE_TYPES_KEY, JSON.stringify(updated));
+  return updated;
 };
 
 const setStoredPendingVerificationEmail = async (email: string | null) => {
@@ -229,6 +252,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: null,
   refreshToken: null,
   pendingVerificationEmail: null,
+  completedProfileTypes: [],
   isAuthenticated: false,
   isLoading: false,
   isRestoring: true,
@@ -251,11 +275,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error("The sign in response was incomplete.");
       }
 
+      await deleteStoredValue(COMPLETED_PROFILE_TYPES_KEY);
+      const completedProfileTypes = await persistCompletedProfileType(user.accountType, []);
       await persistAuthState(user, { accessToken, refreshToken });
       set({
         user,
         accessToken,
         refreshToken,
+        completedProfileTypes,
         isAuthenticated: true,
         isLoading: false,
         isRestoring: false,
@@ -344,12 +371,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error("The verification response was incomplete.");
       }
 
+      await deleteStoredValue(COMPLETED_PROFILE_TYPES_KEY);
+      const completedProfileTypes = await persistCompletedProfileType(user.accountType, []);
       await persistAuthState(user, { accessToken, refreshToken });
       await setStoredPendingVerificationEmail(null);
       set({
         user,
         accessToken,
         refreshToken,
+        completedProfileTypes,
         pendingVerificationEmail: null,
         isAuthenticated: true,
         isLoading: false,
@@ -409,9 +439,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error("The profile update response was incomplete.");
       }
 
+      let completedProfileTypes = get().completedProfileTypes;
+      if (payload.accountType) {
+        completedProfileTypes = await persistCompletedProfileType(payload.accountType, completedProfileTypes);
+      }
       await writeStoredValue(AUTH_USER_KEY, JSON.stringify(user));
       set({
         user,
+        completedProfileTypes,
         isLoading: false,
         error: null,
         authErrorCode: null,
@@ -513,11 +548,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     set({ isRestoring: true, error: null, authErrorCode: null });
-    const [accessToken, refreshToken, pendingVerificationEmail, storedUser] = await Promise.all([
+    const [accessToken, refreshToken, pendingVerificationEmail, storedUser, existingCompletedTypes] = await Promise.all([
       readStoredValue(AUTH_TOKEN_KEY),
       readStoredValue(AUTH_REFRESH_TOKEN_KEY),
       readStoredValue(PENDING_VERIFICATION_EMAIL_KEY),
       readStoredUser(),
+      readCompletedProfileTypes(),
     ]);
 
     if (!accessToken && !refreshToken) {
@@ -555,12 +591,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const currentAccessToken = get().accessToken ?? accessToken;
       const currentRefreshToken = get().refreshToken ?? refreshToken;
+      const completedProfileTypes = await persistCompletedProfileType(user.accountType, existingCompletedTypes);
 
       await persistRestoredAuthState(user, currentAccessToken, currentRefreshToken);
       set({
         user,
         accessToken: currentAccessToken,
         refreshToken: currentRefreshToken,
+        completedProfileTypes,
         isAuthenticated: Boolean(currentAccessToken),
         isRestoring: false,
         hasRestored: true,
@@ -583,6 +621,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: null,
       accessToken: null,
       refreshToken: null,
+      completedProfileTypes: [],
       isAuthenticated: false,
       error: null,
       authErrorCode: null,

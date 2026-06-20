@@ -20,15 +20,18 @@ export type ProfileStats = {
   following: number;
 };
 
+const BUSINESS_RING_COLOR = '#FFD700';
+
 type ProfileHeaderProps = {
   userId: string;
   avatar: string;
   stats: ProfileStats;
+  accountType?: 'personal' | 'business';
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
 };
 
-export default function ProfileHeader({ userId, avatar, stats, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
+export default function ProfileHeader({ userId, avatar, stats, accountType, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
@@ -94,7 +97,10 @@ export default function ProfileHeader({ userId, avatar, stats, isOwnProfile = tr
       />
 
       <View style={styles.infoRow}>
-        <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
+        <View
+        style={[styles.avatarBorder, { borderColor: accountType === 'business' ? BUSINESS_RING_COLOR : colors.primary }]}
+        accessibilityLabel={accountType === 'business' ? 'Business account avatar' : 'Personal account avatar'}
+      >
           {!avatarLoadFailed ? (
             <Image
               source={{ uri: avatar }}

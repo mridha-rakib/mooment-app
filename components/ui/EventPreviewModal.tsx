@@ -18,6 +18,8 @@ type EventPreviewModalProps = {
   attendeesCount?: number;
   ageLimit?: string;
   price?: string;
+  ticketsAvailable?: string;
+  ticketSalesEndDate?: string;
   onAddToCalendar?: () => void;
   onViewEvent?: () => void;
   isAddedToCalendar?: boolean;
@@ -38,6 +40,8 @@ export default function EventPreviewModal({
   attendeesCount = 0,
   ageLimit = "All Ages",
   price = "Free",
+  ticketsAvailable = "Tickets TBA",
+  ticketSalesEndDate = "Sales end TBA",
   onAddToCalendar,
   onViewEvent,
   isAddedToCalendar = false,
@@ -45,6 +49,7 @@ export default function EventPreviewModal({
 }: EventPreviewModalProps) {
   const { colors, isDark } = useTheme();
   const distanceLabel = distance === "nearby" ? "nearby" : `${distance} away`;
+  const showCalendarAction = false;
 
   return (
     <Modal
@@ -121,17 +126,30 @@ export default function EventPreviewModal({
             </View>
           </View>
 
+          <View style={styles.ticketInfoRow}>
+            <View style={styles.ticketInfoItem}>
+              <Feather name="tag" size={15} color={colors.textSecondary} />
+              <Text style={[styles.ticketInfoText, { color: colors.text }]}>{ticketsAvailable}</Text>
+            </View>
+            <View style={styles.ticketInfoItem}>
+              <Feather name="calendar" size={15} color={colors.textSecondary} />
+              <Text style={[styles.ticketInfoText, { color: colors.text }]}>{ticketSalesEndDate}</Text>
+            </View>
+          </View>
+
           {/* Buttons */}
           <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[styles.secondaryBtn, { backgroundColor: isAddedToCalendar ? 'rgba(142,84,233,0.2)' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') }]}
-              onPress={isAddedToCalendar ? onViewInCalendar : onAddToCalendar}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.secondaryBtnText, { color: isAddedToCalendar ? '#8E54E9' : colors.text }]}>
-                {isAddedToCalendar ? 'View in Calendar' : 'Add To Calendar'}
-              </Text>
-            </TouchableOpacity>
+            {showCalendarAction && (
+              <TouchableOpacity
+                style={[styles.secondaryBtn, { backgroundColor: isAddedToCalendar ? 'rgba(142,84,233,0.2)' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') }]}
+                onPress={isAddedToCalendar ? onViewInCalendar : onAddToCalendar}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.secondaryBtnText, { color: isAddedToCalendar ? '#8E54E9' : colors.text }]}>
+                  {isAddedToCalendar ? 'View in Calendar' : 'Add To Calendar'}
+                </Text>
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity 
               style={[styles.primaryBtn, { backgroundColor: themeColor }]}
@@ -242,7 +260,7 @@ const styles = StyleSheet.create({
   badgesRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   badge: {
     flexDirection: 'row',
@@ -253,6 +271,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   badgeText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  ticketInfoRow: {
+    gap: 8,
+    marginBottom: 18,
+  },
+  ticketInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ticketInfoText: {
     fontSize: 13,
     fontWeight: '500',
   },

@@ -1,54 +1,58 @@
 import AboutTab from "@/components/eventTabs/AboutTab";
 import AccessTab from "@/components/eventTabs/AccessTab";
-import ProductTab from "@/components/eventTabs/ProductTab";
+import ChatTab from "@/components/eventTabs/ChatTab";
+// ProductTab hidden — preserved for future restoration
+// import ProductTab from "@/components/eventTabs/ProductTab";
 import VibeTab from "@/components/eventTabs/VibeTab";
 import BackButton from "@/components/ui/BackButton";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import {
-  claimEventReward,
-  deleteEvent,
-  deleteEventReward,
-  deleteEventTicket,
-  getEventById,
-  getMyEventRewardClaims,
-  type EventResponse,
-  type EventRewardPayload,
-  type EventRewardType,
-  type EventTicketPayload,
+    claimEventReward,
+    deleteEvent,
+    deleteEventReward,
+    deleteEventTicket,
+    getEventById,
+    getMyEventRewardClaims,
+    updateEvent,
+    type EventResponse,
+    type EventRewardPayload,
+    type EventRewardType,
+    type EventTicketPayload,
 } from "@/lib/events";
 import { getMyTicketPurchaseCounts } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
+import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import { Feather } from "@expo/vector-icons";
-import { HugeiconsIcon } from "@hugeicons/react-native";
 import {
-  Comment02Icon,
-  Delete02Icon,
-  FavouriteIcon,
-  Flag01Icon,
-  Bookmark01Icon,
-  MoreHorizontalIcon,
-  Share01Icon,
+    Bookmark01Icon,
+    Comment02Icon,
+    Delete02Icon,
+    FavouriteIcon,
+    Flag01Icon,
+    MoreHorizontalIcon,
+    Share01Icon,
 } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -224,8 +228,11 @@ const getHeroCategoryTags = (event?: EventResponse | null) => {
   return tags.slice(0, 2);
 };
 
-const getPrivacyLabel = (privacy?: EventResponse["privacy"]) =>
-  privacy === "private" ? "Private Event" : "Public Event";
+const getPrivacyLabel = (privacy?: EventResponse["privacy"]) => {
+  if (privacy === "private") return "Private Event";
+  if (privacy === "locked") return "Locked Event";
+  return "Public Event";
+};
 
 const isSameId = (left?: string | null, right?: string | null) =>
   Boolean(left && right && left.toLowerCase() === right.toLowerCase());
@@ -245,10 +252,14 @@ const EventScreen = () => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const currentUser = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
   const draftId = useEventDraftStore((state) => state.draftId);
   const loadEventForEdit = useEventDraftStore((state) => state.loadFromEvent);
   const [activeTab, setActiveTab] = useState("About");
   const [menuVisible, setMenuVisible] = useState(false);
+  const [privacyDropdownVisible, setPrivacyDropdownVisible] = useState(false);
+  const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
@@ -262,6 +273,7 @@ const EventScreen = () => {
   const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
   const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
+  const [isEventStarted, setIsEventStarted] = useState(false);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -480,8 +492,16 @@ const EventScreen = () => {
       return;
     }
 
-    loadEventForEdit(event);
-    router.push("/create-event");
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        loadEventForEdit(event);
+        router.push("/create-event");
+      },
+    });
   };
 
   const handleDelete = () => {
@@ -491,29 +511,127 @@ const EventScreen = () => {
       return;
     }
 
-    Alert.alert(
-      "Delete Event",
-      "Are you sure you want to delete this event?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setIsDeletingEvent(true);
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        Alert.alert(
+          "Delete Event",
+          "Are you sure you want to delete this event?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: async () => {
+                setIsDeletingEvent(true);
 
-            try {
-              await deleteEvent(event.id);
-              router.back();
-            } catch (error) {
-              Alert.alert("Unable to delete event", getAuthErrorMessage(error, "Please try again."));
-            } finally {
-              setIsDeletingEvent(false);
-            }
-          },
-        },
-      ],
-    );
+                try {
+                  await deleteEvent(event.id);
+                  router.back();
+                } catch (error) {
+                  Alert.alert("Unable to delete event", getAuthErrorMessage(error, "Please try again."));
+                } finally {
+                  setIsDeletingEvent(false);
+                }
+              },
+            },
+          ],
+        );
+      },
+    });
+  };
+
+  const handleCancelEvent = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        Alert.alert(
+          "Cancel Event",
+          "Are you sure you want to cancel this event? This action cannot be undone.",
+          [
+            { text: "No, Go Back", style: "cancel" },
+            {
+              text: "Yes, Cancel Event",
+              style: "destructive",
+              onPress: () => {
+                // TODO: wire up cancel-event API call
+                console.log("Event cancelled");
+              },
+            },
+          ],
+        );
+      },
+    });
+  };
+
+  const handleStartEvent = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        Alert.alert(
+          "Start Event",
+          "Are you ready to start this event? Attendees will be notified.",
+          [
+            { text: "Not Yet", style: "cancel" },
+            {
+              text: "Start Now",
+              onPress: () => {
+                setIsEventStarted(true);
+                router.push("/profile-screen/event-dashboard");
+              },
+            },
+          ],
+        );
+      },
+    });
+  };
+
+  const handleEndEvent = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        Alert.alert(
+          "End Event",
+          "Mark this event as successfully completed? This action cannot be undone.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "End Event",
+              style: "destructive",
+              onPress: () => {
+                setIsEventStarted(false);
+                // TODO: wire up end-event API call
+                console.log("Event ended successfully");
+              },
+            },
+          ],
+        );
+      },
+    });
   };
 
   const mergeUpdatedEvent = (updatedEvent: EventResponse) => {
@@ -630,6 +748,10 @@ const EventScreen = () => {
         eventId: event.id,
         eventName: event.name ?? "Event",
         eventDateTime: `${eventDate} • ${eventTime} • ${hostName}`,
+        eventDateDisplay: `${eventDate} • ${eventTime}`,
+        hostName,
+        venue: event.location?.venue ?? event.location?.searchLabel ?? "",
+        address: event.location?.address ?? event.location?.searchLabel ?? "",
         ticketId,
         ticketKey: selectedTicketKey,
         ticketName: selectedTicket.name,
@@ -777,12 +899,53 @@ const EventScreen = () => {
   };
 
   const handleAddMembers = () => {
-    Alert.alert("Add Members", "Member selection is not available yet.");
+    if (!event) return;
+    router.push({
+      pathname: "/event-screen/members",
+      params: { eventId: event.id },
+    });
+  };
+
+  const handlePrivacyChange = async (newPrivacy: "public" | "locked") => {
+    setPrivacyDropdownVisible(false);
+
+    if (!event || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
+      return;
+    }
+
+    setIsUpdatingPrivacy(true);
+
+    try {
+      const updatedEvent = await updateEvent(event.id, { privacy: newPrivacy });
+      mergeUpdatedEvent(updatedEvent);
+    } catch (error) {
+      Alert.alert("Unable to update privacy", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsUpdatingPrivacy(false);
+    }
   };
 
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={colors.text} onPress={() => router.back()} />
+      {isHostMode && event?.privacy !== "private" && (
+        <TouchableOpacity
+          style={styles.privacyPill}
+          activeOpacity={0.8}
+          onPress={() => setPrivacyDropdownVisible(true)}
+          disabled={isUpdatingPrivacy}
+        >
+          <Feather
+            name={event?.privacy === "locked" ? "lock" : "globe"}
+            size={13}
+            color="#FFFFFF"
+          />
+          <Text style={styles.privacyPillText}>
+            {event?.privacy === "locked" ? "Locked" : "Public"}
+          </Text>
+          <Feather name="chevron-down" size={13} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
       <BackButton
         iconName={MoreHorizontalIcon}
         onPress={() => setMenuVisible(true)}
@@ -802,7 +965,7 @@ const EventScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       {renderHeader()}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.imageContainer}>
@@ -831,7 +994,7 @@ const EventScreen = () => {
                   </View>
                 ))}
               </View>
-              {isHostMode && (
+              {isHostMode && event?.privacy === "private" && (
                 <TouchableOpacity
                   style={styles.addMembersBtn}
                   activeOpacity={0.85}
@@ -857,7 +1020,7 @@ const EventScreen = () => {
                   {!!hostHandle && <Text style={[styles.hostUser, { color: colors.textSecondary }]}>{hostHandle}</Text>}
                   {!!hostHandle && <Text style={[styles.dotSeparator, { color: colors.textSecondary }]}> • </Text>}
                   <Feather
-                    name={event?.privacy === "private" ? "lock" : "globe"}
+                    name={event?.privacy === "private" || event?.privacy === "locked" ? "lock" : "globe"}
                     size={10}
                     color={colors.textSecondary}
                   />
@@ -928,7 +1091,7 @@ const EventScreen = () => {
         </View>
 
         <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-          {["About", "Access", "Vibe", "Product"].map((tab) => (
+          {["About", "Access", "Mooments", "Chat"].map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
@@ -989,14 +1152,24 @@ const EventScreen = () => {
               onClaimReward={handleClaimReward}
             />
           )}
-          {activeTab === "Vibe" && eventId && (
+          {activeTab === "Mooments" && eventId && (
             <VibeTab
               eventId={eventId}
               eventName={event?.name ?? "Event"}
               isHostMode={isHostMode}
+              isParticipant={Object.values(purchasedTicketCounts).some((count) => count > 0)}
               scheduledAt={event?.scheduledAt}
             />
           )}
+          {activeTab === "Chat" && eventId && (
+            <ChatTab
+              eventId={eventId}
+              eventName={event?.name ?? "Event"}
+              scheduledAt={event?.scheduledAt ?? null}
+              isHostMode={isHostMode}
+            />
+          )}
+          {/* ProductTab hidden — preserved for future restoration
           {activeTab === "Product" && (
             <ProductTab
               creatorId={event?.userId ?? null}
@@ -1004,9 +1177,10 @@ const EventScreen = () => {
               isHostMode={isHostMode}
             />
           )}
+          */}
         </View>
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 220 }} />
       </ScrollView>
 
       <View
@@ -1020,13 +1194,35 @@ const EventScreen = () => {
         ]}
       >
         {isHostMode ? (
-          <TouchableOpacity
-            style={[styles.startEventBtn, { backgroundColor: colors.primary }]}
-            activeOpacity={0.85}
-            onPress={() => router.push("/profile-screen/event-dashboard")}
-          >
-            <Text style={[styles.buyBtnText, { color: colors.background }]}>Start The Event</Text>
-          </TouchableOpacity>
+          <View style={styles.hostFooterBtns}>
+            <TouchableOpacity
+              style={styles.cancelEventBtn}
+              activeOpacity={0.8}
+              onPress={handleCancelEvent}
+            >
+              <Feather name="x-circle" size={18} color="#D44343" />
+              <Text style={styles.cancelEventBtnText}>Cancel Event</Text>
+            </TouchableOpacity>
+            {isEventStarted ? (
+              <TouchableOpacity
+                style={styles.endEventBtn}
+                activeOpacity={0.85}
+                onPress={handleEndEvent}
+              >
+                <Feather name="check-circle" size={18} color="#FFFFFF" />
+                <Text style={[styles.buyBtnText, { color: "#FFFFFF" }]}>End Event</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.startEventBtn}
+                activeOpacity={0.85}
+                onPress={handleStartEvent}
+              >
+                <Feather name="play-circle" size={18} color="#111111" />
+                <Text style={[styles.buyBtnText, { color: "#111111" }]}>Start The Event</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ) : (
           <>
             <View style={styles.priceContainer}>
@@ -1051,6 +1247,49 @@ const EventScreen = () => {
           </>
         )}
       </View>
+
+      <Modal
+        visible={privacyDropdownVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPrivacyDropdownVisible(false)}
+      >
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setPrivacyDropdownVisible(false)}>
+          <View
+            style={[
+              styles.privacyDropdown,
+              {
+                backgroundColor: isDark ? "#2A2A2A" : colors.card,
+                top: insets.top + 55,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.privacyDropdownItem,
+                event?.privacy === "public" && { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" },
+              ]}
+              onPress={() => handlePrivacyChange("public")}
+              activeOpacity={0.7}
+            >
+              <Feather name="globe" size={16} color="#FFFFFF" />
+              <Text style={styles.privacyDropdownText}>Public</Text>
+            </TouchableOpacity>
+            <View style={styles.menuSeparator} />
+            <TouchableOpacity
+              style={[
+                styles.privacyDropdownItem,
+                event?.privacy === "locked" && { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" },
+              ]}
+              onPress={() => handlePrivacyChange("locked")}
+              activeOpacity={0.7}
+            >
+              <Feather name="lock" size={16} color="#FFFFFF" />
+              <Text style={styles.privacyDropdownText}>Locked</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={menuVisible}
@@ -1348,15 +1587,86 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
+  hostFooterBtns: {
+    flex: 1,
+    flexDirection: "column",
+    gap: 10,
+  },
   startEventBtn: {
     alignItems: "center",
+    backgroundColor: "#B2ABBA",
     borderRadius: 12,
-    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
     paddingVertical: 14,
+  },
+  endEventBtn: {
+    alignItems: "center",
+    backgroundColor: "#E65100",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 14,
+  },
+  cancelEventBtn: {
+    alignItems: "center",
+    backgroundColor: "#150B0B",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 14,
+  },
+  cancelEventBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#D44343",
   },
   buyBtnText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  privacyPill: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 20,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  privacyPillText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  privacyDropdown: {
+    borderRadius: 14,
+    elevation: 8,
+    minWidth: 130,
+    overflow: "hidden",
+    paddingVertical: 4,
+    position: "absolute",
+    right: "50%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    transform: [{ translateX: 65 }],
+  },
+  privacyDropdownItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  privacyDropdownText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
   menuOverlay: {
     flex: 1,

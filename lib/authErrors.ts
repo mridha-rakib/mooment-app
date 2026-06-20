@@ -47,3 +47,7 @@ export const getAuthErrorMessage = (error: unknown, fallback = "Something went w
 
 export const getAuthErrorDetails = (error: unknown) =>
   (error as { response?: { data?: ApiErrorResponse } })?.response?.data?.details;
+
+export const isBusinessAccountRequiredError = (error: unknown): boolean =>
+  (error as { response?: { data?: ApiErrorResponse } })?.response?.data?.details?.code ===
+  "BUSINESS_ACCOUNT_REQUIRED";

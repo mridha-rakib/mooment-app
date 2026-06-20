@@ -16,8 +16,11 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { getMyProfileEvents } from '@/lib/events';
+import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
+import { useAuthStore } from '@/stores/authStore';
 
 interface AddOptionsModalProps {
   visible: boolean;
@@ -27,7 +30,7 @@ interface AddOptionsModalProps {
 const OPTIONS = [
   {
     id: 'moment',
-    label: 'Mooment',
+    label: 'New Mooment',
     description: 'Share one to your followers in just about on event you\'re attending',
     icon: PencilEdit01Icon,
     color: '#54268F',
@@ -36,7 +39,7 @@ const OPTIONS = [
   },
   {
     id: 'event',
-    label: 'Create Event',
+    label: 'New Event',
     description: 'Post a real-world experience',
     icon: Ticket02Icon,
     color: '#631C1C',
@@ -58,6 +61,10 @@ const OPTIONS = [
 export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const user = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
   const [canScanQr, setCanScanQr] = React.useState(false);
   const visibleOptions = React.useMemo(
     () => OPTIONS.filter((option) => option.id !== 'scan' || canScanQr),
@@ -93,7 +100,18 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
     };
   }, [visible]);
 
-  const handleOption = (route: string) => {
+  const handleOption = (optionId: string, route: string) => {
+    if (optionId === 'event') {
+      onClose();
+      requireBusinessAccountForEvent({
+        user,
+        completedProfileTypes,
+        updateProfile,
+        router,
+        onReady: () => router.push(route as any),
+      });
+      return;
+    }
     onClose();
     router.push(route as any);
   };
@@ -112,7 +130,17 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
       >
         <BlurView intensity={60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
         
-        <TouchableOpacity activeOpacity={1} style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
+        <TouchableOpacity 
+          activeOpacity={1} 
+          style={[
+            styles.sheet, 
+            { 
+              backgroundColor: colors.background, 
+              borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 16) + 12
+            }
+          ]}
+        >
           <View style={[styles.handle, { backgroundColor: colors.text }]} />
           <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
 
@@ -121,7 +149,7 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
               <TouchableOpacity
                 key={opt.id}
                 style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => handleOption(opt.route)}
+                onPress={() => handleOption(opt.id, opt.route)}
                 activeOpacity={0.75}
               >
                 <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
@@ -137,8 +165,6 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
               </TouchableOpacity>
             ))}
           </View>
-
-          <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -155,7 +181,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingTop: 12,
     paddingHorizontal: 16,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
     borderWidth: 1,
   },
   handle: {

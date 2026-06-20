@@ -13,8 +13,10 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
-import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getAuthErrorMessage, isBusinessAccountRequiredError } from '@/lib/authErrors';
+import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
+import { useAuthStore } from '@/stores/authStore';
 import type { EventPrivacy } from '@/lib/events';
 
 export default function CreateEventStep5() {
@@ -25,8 +27,14 @@ export default function CreateEventStep5() {
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const publishEvent = useEventDraftStore((state) => state.publish);
   const resetDraft = useEventDraftStore((state) => state.resetDraft);
-  const [privacy, setPrivacy] = useState<EventPrivacy>(draftPrivacy); // 'public' or 'private'
+  const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const currentUser = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const [privacy, setPrivacy] = useState<EventPrivacy>(draftPrivacy);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedLabel, setSavedLabel] = useState(false);
 
   const handlePrivacyChange = (value: EventPrivacy) => {
     setPrivacy(value);
@@ -34,12 +42,18 @@ export default function CreateEventStep5() {
   };
 
   const handleSaveDraft = async () => {
+    if (isSaving) return;
     setDraftPrivacy(privacy);
+    setIsSaving(true);
 
     try {
       await saveDraft();
+      setSavedLabel(true);
+      setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
       Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -60,7 +74,20 @@ export default function CreateEventStep5() {
       });
     } catch (error) {
       setIsPublishing(false);
-      Alert.alert('Unable to publish event', getAuthErrorMessage(error, 'Please check the event details and try again.'));
+      if (isBusinessAccountRequiredError(error)) {
+        requireBusinessAccountForEvent({
+          user: currentUser,
+          completedProfileTypes,
+          updateProfile,
+          router,
+          onReady: handlePublish,
+        });
+        return;
+      }
+      Alert.alert(
+        isEditingPublished ? 'Unable to update event' : 'Unable to publish event',
+        getAuthErrorMessage(error, 'Please check the event details and try again.'),
+      );
     }
   };
 
@@ -71,16 +98,22 @@ export default function CreateEventStep5() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity onPress={handleSaveDraft}>
-          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        {isEditingPublished ? (
+          <View style={{ width: 60 }} />
+        ) : (
+          <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
+            <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
+              {isSaving ? 'Saving…' : savedLabel ? 'Saved ✓' : 'Save Draft'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
         <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 5</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>6 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>5 out of 5</Text>
       </View>
 
       {/* Form Content */}
@@ -155,14 +188,16 @@ export default function CreateEventStep5() {
         >
           <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.publishButton, { backgroundColor: colors.primary }]}
           onPress={handlePublish}
           disabled={isPublishing}
           activeOpacity={0.85}
         >
           <Text style={[styles.publishButtonText, { color: colors.background }]}>
-            {isPublishing ? 'Publishing...' : 'Publish Event'}
+            {isPublishing
+              ? (isEditingPublished ? 'Saving...' : 'Publishing...')
+              : (isEditingPublished ? 'Save Changes' : 'Publish Event')}
           </Text>
         </TouchableOpacity>
       </View>

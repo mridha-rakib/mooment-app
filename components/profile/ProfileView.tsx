@@ -21,6 +21,7 @@ export type UserProfileData = {
   avatar: string;
   bio: string;
   stats: ProfileStats;
+  accountType?: 'personal' | 'business';
   isFollowing?: boolean;
 };
 
@@ -54,17 +55,19 @@ export default function ProfileView({
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <ProfileHeader 
+        <ProfileHeader
           userId={user.id}
-          avatar={user.avatar} 
-          stats={user.stats} 
-          isOwnProfile={isOwnProfile} 
+          avatar={user.avatar}
+          stats={user.stats}
+          accountType={user.accountType}
+          isOwnProfile={isOwnProfile}
           onMenuPress={() => setMenuVisible(true)}
         />
-        <ProfileBio 
-          name={user.name} 
-          handle={user.handle} 
-          bio={user.bio} 
+        <ProfileBio
+          name={user.name}
+          handle={user.handle}
+          bio={user.bio}
+          accountType={user.accountType}
           isOwnProfile={isOwnProfile}
           actions={<ProfileActions isOwnProfile={isOwnProfile} onlyButtons={true} initialIsFollowing={user.isFollowing} />}
         />

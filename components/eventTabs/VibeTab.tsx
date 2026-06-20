@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   StyleSheet,
   Text,
@@ -15,7 +16,8 @@ import {
   View,
 } from "react-native";
 import CinematicButton from "../ui/CinematicButton";
-import SegmentedControl from "../ui/SegmentedControl";
+// SegmentedControl hidden — preserved for future restoration
+// import SegmentedControl from "../ui/SegmentedControl";
 const { width } = Dimensions.get("window");
 
 const NOW_MODE_LOOKAHEAD_MS = 3 * 60 * 60 * 1000;
@@ -82,18 +84,19 @@ type VibeTabProps = {
   eventId: string;
   eventName: string;
   isHostMode: boolean;
+  isParticipant?: boolean;
   scheduledAt?: string | null;
 };
 
-const VibeTab = ({ eventId, eventName, scheduledAt }: VibeTabProps) => {
+const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, scheduledAt }: VibeTabProps) => {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const [vibeSubTab, setVibeSubTab] = useState("Live");
   const [moments, setMoments] = useState<Moment[]>([]);
   const [isMomentsLoading, setIsMomentsLoading] = useState(false);
 
   const postTagStatus = computePostTagStatus(scheduledAt);
-  const canPost = postTagStatus === "live" || postTagStatus === "active" || postTagStatus === "upcoming";
+  const eventHasStarted = postTagStatus === "live" || postTagStatus === "active";
+  const canPost = eventHasStarted && (isParticipant || isHostMode);
 
   const loadMoments = useCallback(async () => {
     setIsMomentsLoading(true);
@@ -108,11 +111,26 @@ const VibeTab = ({ eventId, eventName, scheduledAt }: VibeTabProps) => {
   }, [eventId]);
 
   useEffect(() => {
-    if (vibeSubTab !== "Mooments") return;
     void loadMoments();
-  }, [vibeSubTab, loadMoments]);
+  }, [loadMoments]);
 
   const handlePostMooment = () => {
+    if (!eventHasStarted) {
+      Alert.alert(
+        "Event not started",
+        "You can post moments once the event begins.",
+      );
+      return;
+    }
+
+    if (!isParticipant && !isHostMode) {
+      Alert.alert(
+        "Join the event",
+        "Purchase a ticket to share moments from this event.",
+      );
+      return;
+    }
+
     router.push({
       pathname: "/post-screen/create-post",
       params: { eventId, eventName },
@@ -208,39 +226,35 @@ const VibeTab = ({ eventId, eventName, scheduledAt }: VibeTabProps) => {
 
   const renderMooments = () => (
     <View style={{ marginTop: 20 }}>
-      {canPost && (
-        <TouchableOpacity
-          style={[
-            styles.postBtn,
-            {
-              backgroundColor: isDark
-                ? "rgba(255, 255, 255, 0.1)"
-                : "rgba(0, 0, 0, 0.05)",
-            },
-          ]}
-          onPress={handlePostMooment}
-          activeOpacity={0.85}
-        >
-          <Feather name="plus" size={20} color={colors.textSecondary} />
-          <Text style={[styles.postBtnText, { color: colors.textSecondary }]}>
-            Post Mooment
-          </Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={[
+          styles.postBtn,
+          {
+            backgroundColor: isDark
+              ? "rgba(255, 255, 255, 0.1)"
+              : "rgba(0, 0, 0, 0.05)",
+          },
+        ]}
+        onPress={handlePostMooment}
+        activeOpacity={0.85}
+      >
+        <Feather name="camera" size={20} color={colors.primary} />
+        <Text style={[styles.postBtnText, { color: colors.text }]}>
+          Share a Mooment
+        </Text>
+      </TouchableOpacity>
 
       {isMomentsLoading ? (
         <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} />
       ) : moments.length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="image" size={32} color={colors.textSecondary} />
+          <Feather name="camera" size={32} color={colors.textSecondary} />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             No mooments yet
           </Text>
-          {canPost && (
-            <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
-              Be the first to share a moment from this event
-            </Text>
-          )}
+          <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
+            Be the first to share a moment from this event
+          </Text>
         </View>
       ) : (
         <>
@@ -324,14 +338,8 @@ const VibeTab = ({ eventId, eventName, scheduledAt }: VibeTabProps) => {
 
   return (
     <View>
-      <SegmentedControl
-        options={["Live", "Mooments"]}
-        selectedOption={vibeSubTab}
-        onSelect={setVibeSubTab}
-        containerStyle={{ marginTop: 10, marginBottom: 10 }}
-      />
-
-      {vibeSubTab === "Live" ? renderLive() : renderMooments()}
+      {/* Live section hidden — SegmentedControl and renderLive() preserved for future restoration */}
+      {renderMooments()}
     </View>
   );
 };

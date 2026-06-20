@@ -203,6 +203,14 @@ export default function EventMapScreen() {
         pitchEnabled
         onDidFinishLoadingMap={() => setMapLoaded(true)}
       >
+        <Mapbox.RasterLayer
+          id="satellite"
+          existing
+          style={{
+            rasterBrightnessMax: 0.4,
+            rasterSaturation: -0.15,
+          }}
+        />
         <Mapbox.Camera
           ref={cameraRef}
           animationDuration={0}

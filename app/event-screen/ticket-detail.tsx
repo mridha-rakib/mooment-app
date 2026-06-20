@@ -461,11 +461,18 @@ const TicketDetailScreen = () => {
             <View style={walletCanShare ? styles.walletDualActions : styles.walletSingleActions}>
               {walletCanShare && (
                 <TouchableOpacity
-                  style={styles.walletShareButton}
+                  style={[
+                    styles.walletShareButton,
+                    currentShare ? styles.walletShareButtonActive : undefined,
+                  ]}
                   activeOpacity={0.85}
                   onPress={() => void handleOpenShareModal()}
                 >
-                  <Text style={styles.walletShareButtonText}>Share QR</Text>
+                  <Text style={styles.walletShareButtonText}>
+                    {currentShare
+                      ? `Shared · ${currentShare.friend?.name ?? "Friend"}`
+                      : "Share QR"}
+                  </Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -477,7 +484,19 @@ const TicketDetailScreen = () => {
                 onPress={() =>
                   router.push({
                     pathname: "/event-screen/qr-code",
-                    params: { type: "event" },
+                    params: {
+                      type: "event",
+                      ticketNo: walletTicketNo,
+                      eventName: walletEventTitle,
+                      hostName: walletHostName,
+                      venue: walletLocation,
+                      address: walletAddress,
+                      dateTime: walletDateTime,
+                      ticketName: walletTicketName,
+                      quantity: String(walletPurchaseCount),
+                      amount: getParamValue(params.amount, "0"),
+                      currency: getParamValue(params.currency, "usd"),
+                    },
                   })
                 }
               >
@@ -1097,6 +1116,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     justifyContent: "center",
+  },
+  walletShareButtonActive: {
+    backgroundColor: "#1B2B1F",
+    borderColor: "rgba(22,216,105,0.28)",
+    borderWidth: 1,
   },
   walletShareButtonText: {
     color: "#C9C1CF",

@@ -104,8 +104,9 @@ export default function ProfileTab() {
       avatar: avatarUri,
       bio: user?.bio?.trim() || DEFAULT_BIO,
       stats: profileStats,
+      accountType: user?.accountType,
     };
-  }, [avatarUri, profileStats, user?.bio, user?.email, user?.id, user?.name, user?.username]);
+  }, [avatarUri, profileStats, user?.accountType, user?.bio, user?.email, user?.id, user?.name, user?.username]);
 
   const handleRepost = useCallback(
     async (post: PostData) => {

@@ -186,6 +186,14 @@ const EventLocationMap = ({
         pitchEnabled={false}
         rotateEnabled={false}
       >
+        <Mapbox.RasterLayer
+          id="satellite"
+          existing
+          style={{
+            rasterBrightnessMax: 0.4,
+            rasterSaturation: -0.15,
+          }}
+        />
         <Mapbox.Camera
           ref={cameraRef}
           animationDuration={0}
@@ -410,6 +418,7 @@ const AboutTab = ({
                 location?.venue ? `Venue: ${location.venue}` : null,
                 location?.address ? `Address: ${location.address}` : null,
                 formatAgeLabel(ageRestriction),
+                location?.additionalInfo?.trim() || null,
               ].filter(isNonEmptyString).map((item) => (
                 <Text key={item} style={[styles.bulletItem, { color: colors.textSecondary }]}>
                   -{item}

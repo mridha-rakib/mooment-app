@@ -7,11 +7,16 @@ import React from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function CreatorDashboardScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const user = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
 
   return (
     <View style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -28,14 +33,28 @@ export default function CreatorDashboardScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() =>
+              requireBusinessAccountForEvent({
+                user,
+                completedProfileTypes,
+                updateProfile,
+                router,
+                onReady: () => router.push("/create-event"),
+              })
+            }
+          >
             <HugeiconsIcon icon={Calendar01Icon} size={20} color={colors.textSecondary} />
             <Text style={[styles.actionText, { color: colors.text }]}>Create Event</Text>
           </TouchableOpacity>
+          {/* Add Product button is temporarily removed */}
+          {/* 
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <HugeiconsIcon icon={ShoppingBag01Icon} size={20} color={colors.textSecondary} />
             <Text style={[styles.actionText, { color: colors.text }]}>Add Product</Text>
           </TouchableOpacity>
+          */}
         </View>
 
         {/* Main Balance */}

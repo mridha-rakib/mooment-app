@@ -118,6 +118,39 @@ const formatPrice = (event: EventResponse) => {
   })}`;
 };
 
+const formatTicketsAvailable = (event: EventResponse) => {
+  const ticketsLeft = event.tickets.reduce((total, ticket) => total + Math.max(0, ticket.capacity), 0);
+
+  if (event.tickets.length === 0) {
+    return "Tickets TBA";
+  }
+
+  if (ticketsLeft === 0) {
+    return "Sold out";
+  }
+
+  return `${ticketsLeft} ${ticketsLeft === 1 ? "ticket" : "tickets"} left`;
+};
+
+const formatTicketSalesEndDate = (event: EventResponse) => {
+  const salesEndTimes = event.tickets
+    .map((ticket) => (ticket.salesEndAt ? new Date(ticket.salesEndAt).getTime() : NaN))
+    .filter((time) => Number.isFinite(time));
+
+  if (salesEndTimes.length === 0) {
+    return "Sales end TBA";
+  }
+
+  const lastSalesEndDate = new Date(Math.max(...salesEndTimes));
+  const formattedDate = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(lastSalesEndDate);
+
+  return `Buy by ${formattedDate}`;
+};
+
 const isLiveEvent = (scheduledAt?: string | null) => {
   if (!scheduledAt) {
     return false;
@@ -158,6 +191,8 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
     attendeesCount: 0,
     ageLimit: formatAgeLimit(event.ageRestriction),
     price: formatPrice(event),
+    ticketsAvailable: formatTicketsAvailable(event),
+    ticketSalesEndDate: formatTicketSalesEndDate(event),
   };
 };
 

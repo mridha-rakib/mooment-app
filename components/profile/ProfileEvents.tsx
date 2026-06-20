@@ -2,6 +2,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { BlurView } from "expo-blur";
 import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { getMyProfileEvents, type EventResponse, type ProfileEventGroups } from "@/lib/events";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
@@ -247,14 +248,20 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
             onPress={() => setFilter('active')}
             activeOpacity={0.8}
           >
-            <Text style={[styles.toggleText, filter === 'active' && styles.toggleTextActive]}>Active</Text>
+            <View style={styles.toggleInner}>
+              <Feather name="zap" size={14} color={filter === 'active' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.6)'} />
+              <Text style={[styles.toggleText, filter === 'active' && styles.toggleTextActive]}>Active</Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.toggleBtn, filter === 'past' && styles.toggleBtnActive]} 
             onPress={() => setFilter('past')}
             activeOpacity={0.8}
           >
-            <Text style={[styles.toggleText, filter === 'past' && styles.toggleTextActive]}>Past</Text>
+            <View style={styles.toggleInner}>
+              <Feather name="clock" size={14} color={filter === 'past' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.6)'} />
+              <Text style={[styles.toggleText, filter === 'past' && styles.toggleTextActive]}>Past</Text>
+            </View>
           </TouchableOpacity>
         </BlurView>
       </View>
@@ -298,6 +305,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
+  },
+  toggleInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   toggleBtnActive: {
     backgroundColor: 'rgba(104, 104, 104, 0.4)', // #686868 at 40%

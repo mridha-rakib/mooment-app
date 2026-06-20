@@ -20,11 +20,55 @@ const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 40, 401);
 const QR_SIZE = CONTENT_WIDTH - 32;
 
+const getParam = (value: string | string[] | undefined, fallback: string) => {
+  const source = Array.isArray(value) ? value[0] : value;
+  return source?.trim() || fallback;
+};
+
+const formatDisplayAmount = (amount?: string, currency?: string): string => {
+  const parsed = Number.parseFloat(amount ?? "");
+  if (!Number.isFinite(parsed) || parsed <= 0) return "Free";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: (currency?.trim().toUpperCase()) || "USD",
+      minimumFractionDigits: Number.isInteger(parsed) ? 0 : 2,
+      maximumFractionDigits: Number.isInteger(parsed) ? 0 : 2,
+    }).format(parsed);
+  } catch {
+    return `$${parsed.toFixed(2)}`;
+  }
+};
+
 export default function QRCodeScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const params = useLocalSearchParams<{ type?: string }>();
-  const type = params.type ?? 'event'; // 'product' | 'event'
+  const params = useLocalSearchParams<{
+    type?: string;
+    // Event ticket params
+    ticketNo?: string;
+    eventName?: string;
+    hostName?: string;
+    venue?: string;
+    address?: string;
+    dateTime?: string;
+    ticketName?: string;
+    quantity?: string;
+    amount?: string;
+    currency?: string;
+  }>();
+
+  const type = getParam(params.type, 'event');
+  const ticketNo = getParam(params.ticketNo, '');
+  const eventName = getParam(params.eventName, 'Event');
+  const hostName = getParam(params.hostName, '');
+  const venue = getParam(params.venue, '');
+  const address = getParam(params.address, '');
+  const dateTime = getParam(params.dateTime, '');
+  const ticketName = getParam(params.ticketName, 'Ticket');
+  const quantity = getParam(params.quantity, '1');
+  const displayAmount = formatDisplayAmount(params.amount, params.currency);
+  const qrValue = ticketNo || 'INVALID';
 
   const handleCopy = () => {
     Alert.alert('Copied', 'Order number copied to clipboard');
@@ -34,7 +78,6 @@ export default function QRCodeScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -49,9 +92,7 @@ export default function QRCodeScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {type === 'product' ? (
-          /* ── Product QR ── */
           <>
-            {/* Product card */}
             <View style={[styles.productCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
               <Image
                 source={{ uri: 'https://images.unsplash.com/photo-1631390164305-9c6a5e4c3f5f?q=80&w=120&auto=format&fit=crop' }}
@@ -64,7 +105,6 @@ export default function QRCodeScreen() {
               </View>
             </View>
 
-            {/* Location */}
             <View style={[styles.infoSection, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
               <View style={styles.infoRow}>
                 <Feather name="map-pin" size={15} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -84,20 +124,20 @@ export default function QRCodeScreen() {
               </View>
             </View>
 
-            {/* Order number */}
-            <View style={styles.orderRow}>
-              <Text style={[styles.orderLabel, { color: colors.textSecondary }]}>Order No:</Text>
-              <Text style={[styles.orderNumber, { color: colors.textSecondary }]}>MOM-2026-8741</Text>
-              <TouchableOpacity onPress={handleCopy} activeOpacity={0.8} style={{ marginLeft: 8 }}>
-                <Feather name="copy" size={15} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
+            {!!ticketNo && (
+              <View style={styles.orderRow}>
+                <Text style={[styles.orderLabel, { color: colors.textSecondary }]}>Order No:</Text>
+                <Text style={[styles.orderNumber, { color: colors.textSecondary }]}>{ticketNo}</Text>
+                <TouchableOpacity onPress={handleCopy} activeOpacity={0.8} style={{ marginLeft: 8 }}>
+                  <Feather name="copy" size={15} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
 
-            {/* QR Code */}
             <View style={styles.qrWrapper}>
               <View style={[styles.qrContainer, { backgroundColor: '#FFFFFF' }]}>
                 <QRCode
-                  value="MOM-2026-8741"
+                  value={qrValue}
                   size={QR_SIZE}
                   backgroundColor="white"
                   color="black"
@@ -105,7 +145,6 @@ export default function QRCodeScreen() {
               </View>
             </View>
 
-            {/* Success message */}
             <View style={styles.instructionBanner}>
               <Ionicons name="information-circle-outline" size={20} color="#E75737" />
               <Text style={styles.instructionText}>
@@ -124,62 +163,72 @@ export default function QRCodeScreen() {
             </TouchableOpacity>
           </>
         ) : (
-          /* ── Event Ticket QR ── */
           <>
             <View style={[styles.ticketSummaryCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
               <View style={[styles.ticketIconBox, { backgroundColor: colors.primary + "1A" }]}>
                 <Ionicons name="ticket-outline" size={28} color={colors.primary} />
               </View>
               <View style={styles.ticketSummaryInfo}>
-                <Text style={[styles.ticketSummaryTitle, { color: colors.text }]} numberOfLines={1}>
-                  Rooftop Sessions Vol. 4
+                <Text style={[styles.ticketSummaryTitle, { color: colors.text }]} numberOfLines={2}>
+                  {eventName}
                 </Text>
-                <Text style={[styles.ticketSummaryMeta, { color: colors.textSecondary }]}>
-                  @dj_koko  •  QTY: 1
-                </Text>
-                <Text style={[styles.ticketSummaryPrice, { color: colors.primary }]}>Paid $45</Text>
+                {!!hostName && (
+                  <Text style={[styles.ticketSummaryMeta, { color: colors.textSecondary }]}>
+                    {hostName}  •  QTY: {quantity}
+                  </Text>
+                )}
+                {displayAmount !== "Free" && (
+                  <Text style={[styles.ticketSummaryPrice, { color: colors.primary }]}>
+                    Paid {displayAmount}
+                  </Text>
+                )}
               </View>
               <View style={styles.confirmedBadge}>
                 <Text style={styles.confirmedText}>Confirmed</Text>
               </View>
             </View>
 
-            <View style={[styles.eventInfoCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
-              <View style={styles.eventInfoTitleRow}>
-                <Feather name="map-pin" size={18} color={colors.textSecondary} />
-                <Text style={[styles.eventInfoTitle, { color: colors.text }]}>New York City</Text>
+            {(venue || address || dateTime) && (
+              <View style={[styles.eventInfoCard, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card }]}>
+                {!!venue && (
+                  <View style={styles.eventInfoTitleRow}>
+                    <Feather name="map-pin" size={18} color={colors.textSecondary} />
+                    <Text style={[styles.eventInfoTitle, { color: colors.text }]}>{venue}</Text>
+                  </View>
+                )}
+                <View style={styles.eventInfoDetails}>
+                  {!!address && (
+                    <View style={styles.infoDetail}>
+                      <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Address:</Text>
+                      <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]} numberOfLines={2}>
+                        {address}
+                      </Text>
+                    </View>
+                  )}
+                  {!!dateTime && (
+                    <View style={styles.infoDetail}>
+                      <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Time:</Text>
+                      <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]}>{dateTime}</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-              <View style={styles.eventInfoDetails}>
-                <View style={styles.infoDetail}>
-                  <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Venue:</Text>
-                  <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                    The Rooftop Lounge
-                  </Text>
-                </View>
-                <View style={styles.infoDetail}>
-                  <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Address:</Text>
-                  <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                    123 Main Street, New York, NY 1001
-                  </Text>
-                </View>
-                <View style={styles.infoDetail}>
-                  <Text style={[styles.infoDetailLabel, { color: colors.text }]}>Time:</Text>
-                  <Text style={[styles.infoDetailValue, { color: colors.textSecondary }]}>Tonight • 9pm</Text>
-                </View>
+            )}
+
+            {!!ticketNo && (
+              <View style={styles.ticketIdRow}>
+                <Text style={[styles.ticketIdLabel, { color: colors.textSecondary }]}>Order No:</Text>
+                <Text style={[styles.ticketIdText, { color: colors.textSecondary }]}>{ticketNo}</Text>
+                <TouchableOpacity onPress={handleCopy} activeOpacity={0.8} style={{ marginLeft: 4 }}>
+                  <Feather name="copy" size={13} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
-            </View>
+            )}
 
-            {/* Ticket ID */}
-            <View style={styles.ticketIdRow}>
-              <Text style={[styles.ticketIdLabel, { color: colors.textSecondary }]}>Order No:</Text>
-              <Text style={[styles.ticketIdText, { color: colors.textSecondary }]}>MOM-2026-8741</Text>
-            </View>
-
-            {/* QR Code */}
             <View style={styles.qrWrapper}>
               <View style={[styles.qrContainer, { backgroundColor: '#FFFFFF' }]}>
                 <QRCode
-                  value="MOM-2026-8741"
+                  value={qrValue}
                   size={QR_SIZE}
                   backgroundColor="white"
                   color="black"
@@ -213,7 +262,6 @@ export default function QRCodeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
 
-  /* Header */
   header: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
@@ -238,7 +286,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  /* Product card */
   productCard: {
     flexDirection: 'row', alignItems: 'center',
     width: CONTENT_WIDTH,
@@ -251,15 +298,13 @@ const styles = StyleSheet.create({
   productMeta: { fontSize: 12, marginBottom: 6 },
   productPrice: { fontWeight: '700', fontSize: 18 },
 
-  /* Info section */
   infoSection: { width: CONTENT_WIDTH, borderRadius: 12, padding: 12, gap: 8 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   infoLabel: { fontWeight: '700', fontSize: 16 },
-  infoDetail: { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  infoDetailLabel: { fontSize: 13, fontWeight: '600' },
+  infoDetail: { flexDirection: 'row', gap: 4, alignItems: 'flex-start', flex: 1 },
+  infoDetailLabel: { fontSize: 13, fontWeight: '600', flexShrink: 0 },
   infoDetailValue: { fontSize: 13, flex: 1, fontWeight: '600' },
 
-  /* Order */
   orderRow: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center',
@@ -268,7 +313,6 @@ const styles = StyleSheet.create({
   orderLabel: { fontSize: 14 },
   orderNumber: { fontSize: 14, fontWeight: '600' },
 
-  /* QR */
   qrWrapper: {
     alignItems: 'center',
   },
@@ -279,9 +323,6 @@ const styles = StyleSheet.create({
     height: QR_SIZE + 32,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  qrImage: {
-    width: QR_SIZE, height: QR_SIZE,
   },
 
   instructionBanner: {
@@ -322,7 +363,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  /* Event ticket */
   ticketSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -373,7 +413,7 @@ const styles = StyleSheet.create({
   },
   eventInfoCard: {
     borderRadius: 12,
-    gap: 16,
+    gap: 12,
     padding: 12,
     width: CONTENT_WIDTH,
   },
@@ -386,6 +426,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     lineHeight: 22,
+    flex: 1,
   },
   eventInfoDetails: {
     gap: 8,
@@ -395,7 +436,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 12,
+    marginTop: 4,
   },
   ticketIdLabel: {
     fontSize: 14,

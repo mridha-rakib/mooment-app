@@ -19,8 +19,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { z } from 'zod';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
-import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getAuthErrorMessage, isBusinessAccountRequiredError } from '@/lib/authErrors';
+import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
+import { useAuthStore } from '@/stores/authStore';
 
 const requiredText = (label: string, maxLength: number) =>
   z
@@ -56,12 +58,18 @@ export default function CreateEventScreen() {
   const fieldPositions = useRef<Partial<Record<FocusableField, number>>>({});
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
   const draftName = useEventDraftStore((state) => state.name);
   const draftDescription = useEventDraftStore((state) => state.description);
   const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
   const draftBannerOriginalImageUri = useEventDraftStore((state) => state.bannerOriginalImageUri);
   const setStepOne = useEventDraftStore((state) => state.setStepOne);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const discardDraft = useEventDraftStore((state) => state.discardDraft);
+  const currentUser = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
   const [name, setName] = useState(draftName);
   const [description, setDescription] = useState(draftDescription);
   const [bannerImage, setBannerImage] = useState<string | null>(draftBannerImageUri);
@@ -69,6 +77,8 @@ export default function CreateEventScreen() {
     draftBannerOriginalImageUri ?? draftBannerImageUri,
   );
   const [errors, setErrors] = useState<CreateEventStepOneErrors>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedLabel, setSavedLabel] = useState(false);
 
   const clearFieldError = (field: keyof CreateEventStepOneErrors) => {
     setErrors((currentErrors) => {
@@ -134,12 +144,86 @@ export default function CreateEventScreen() {
   };
 
   const handleSaveDraft = async () => {
+    if (isSaving) return;
     persistStepOne();
+    setIsSaving(true);
 
     try {
       await saveDraft();
+      setSavedLabel(true);
+      setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
-      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+      if (isBusinessAccountRequiredError(error)) {
+        requireBusinessAccountForEvent({
+          user: currentUser,
+          completedProfileTypes,
+          updateProfile,
+          router,
+          onReady: handleSaveDraft,
+        });
+      } else {
+        Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    Alert.alert(
+      'Discard Draft',
+      'This will permanently delete your draft and all entered data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await discardDraft();
+              router.back();
+            } catch (error) {
+              Alert.alert('Unable to discard draft', getAuthErrorMessage(error, 'Please try again.'));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBack = () => {
+    const hasLocalData = name.trim().length > 0 || description.trim().length > 0 || bannerImage !== null;
+
+    if (!hasLocalData && !draftId) {
+      router.back();
+      return;
+    }
+
+    if (draftId && !isEditingPublished) {
+      Alert.alert(
+        'Save your progress?',
+        'You have an unsaved draft.',
+        [
+          { text: 'Discard Draft', style: 'destructive', onPress: handleDiscard },
+          {
+            text: 'Save Draft',
+            onPress: async () => {
+              await handleSaveDraft();
+              router.back();
+            },
+          },
+          { text: 'Continue Editing', style: 'cancel' },
+        ],
+      );
+    } else {
+      Alert.alert(
+        'Leave without saving?',
+        'Your changes will not be saved.',
+        [
+          { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+          { text: 'Continue Editing', style: 'cancel' },
+        ],
+      );
     }
   };
 
@@ -173,11 +257,17 @@ export default function CreateEventScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity onPress={handleSaveDraft}>
-          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
-        </TouchableOpacity>
+        <BackButton onPress={handleBack} />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        {isEditingPublished ? (
+          <View style={{ width: 60 }} />
+        ) : (
+          <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
+            <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
+              {isSaving ? 'Saving…' : savedLabel ? 'Saved ✓' : 'Save Draft'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <KeyboardAvoidingView
@@ -194,7 +284,7 @@ export default function CreateEventScreen() {
           {/* Steps */}
           <View style={styles.stepContainer}>
             <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 1</Text>
-            <Text style={[styles.stepText, { color: colors.textSecondary }]}>1 out of 6</Text>
+            <Text style={[styles.stepText, { color: colors.textSecondary }]}>1 out of 5</Text>
           </View>
 
           {/* Form Content */}

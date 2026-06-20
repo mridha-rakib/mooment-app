@@ -149,7 +149,7 @@ const CustomInput = ({
       onChangeText={onChangeText}
       placeholder={placeholder}
       placeholderTextColor={colors.textSecondary}
-      style={[styles.input, { color: colors.text }, multiline && styles.inputMultiline]}
+      style={[styles.input, { color: editable ? colors.text : colors.textSecondary }, multiline && styles.inputMultiline]}
       textAlignVertical={multiline ? "top" : "center"}
       value={value}
     />
@@ -162,7 +162,8 @@ const CustomInput = ({
 export default function EditProfileScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const { type } = useLocalSearchParams<{ type?: ProfileType }>();
+  const { type, mode } = useLocalSearchParams<{ type?: ProfileType; mode?: string }>();
+  const isSwitchMode = mode === 'switch';
   const user = useAuthStore((state) => state.user);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const restoreAuthSession = useAuthStore((state) => state.restoreAuthSession);
@@ -542,7 +543,7 @@ export default function EditProfileScreen() {
                 <CustomInput
                   autoCapitalize="none"
                   colors={colors}
-                  editable={!isBusy}
+                  editable={!isBusy && !isSwitchMode}
                   icon="at-sign"
                   onChangeText={setUsername}
                   placeholder="username"
@@ -551,7 +552,7 @@ export default function EditProfileScreen() {
                 <CustomInput
                   autoCapitalize="none"
                   colors={colors}
-                  editable={!isBusy}
+                  editable={!isBusy && !isSwitchMode}
                   icon="mail"
                   keyboardType="email-address"
                   onChangeText={setEmail}

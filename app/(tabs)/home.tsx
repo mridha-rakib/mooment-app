@@ -147,6 +147,7 @@ export default function HomeFeed() {
 
           setFeedMomentPosts(
             moments
+              .filter((moment) => moment.mode !== "event")
               .map((moment) => mapMomentToPost(moment, {
                 fallbackAvatar: STORY_FALLBACK_AVATAR,
                 storageUrlResolver: getStorageFileUrl,

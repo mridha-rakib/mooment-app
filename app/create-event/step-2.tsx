@@ -1,26 +1,26 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  StatusBar,
-  Modal,
-  ScrollView,
-  TouchableWithoutFeedback,
-  Alert,
-} from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { z } from 'zod';
 import BackButton from '@/components/ui/BackButton';
 import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constants/eventCategories';
 import { useTheme } from '@/hooks/useTheme';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { fromAgeRestriction, toAgeRestriction, useEventDraftStore } from '@/stores/eventDraftStore';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import {
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { z } from 'zod';
 
 const AGE_OPTIONS = ['All Ages', '18+', '21+'] as const;
 
@@ -53,12 +53,16 @@ type CreateEventStepTwoErrors = Partial<Record<keyof CreateEventStepTwoValues, s
 export default function CreateEventStep2() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const draftAgeRestriction = useEventDraftStore((state) => state.ageRestriction);
   const draftCategory = useEventDraftStore((state) => state.category);
   const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
   const draftEndAt = useEventDraftStore((state) => state.endAt);
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedLabel, setSavedLabel] = useState(false);
   const [selectedAge, setSelectedAge] = useState<AgeOption>(() => {
     const initialAge = fromAgeRestriction(draftAgeRestriction);
 
@@ -182,12 +186,18 @@ export default function CreateEventStep2() {
   };
 
   const handleSaveDraft = async () => {
+    if (isSaving) return;
     persistStepTwo();
+    setIsSaving(true);
 
     try {
       await saveDraft();
+      setSavedLabel(true);
+      setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
       Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -224,16 +234,22 @@ export default function CreateEventStep2() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity onPress={handleSaveDraft}>
-          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        {isEditingPublished ? (
+          <View style={{ width: 60 }} />
+        ) : (
+          <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
+            <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
+              {isSaving ? 'Saving…' : savedLabel ? 'Saved ✓' : 'Save Draft'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
         <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 2</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>2 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>2 out of 5</Text>
       </View>
 
       {/* Form Content */}
@@ -418,7 +434,7 @@ export default function CreateEventStep2() {
             ))}
           </ScrollView>
 
-          <View style={styles.sheetFooter}>
+          <View style={[styles.sheetFooter, { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 20 }]}>
             <TouchableOpacity 
               style={styles.cancelButton}
               onPress={() => setIsCategorySheetVisible(false)}

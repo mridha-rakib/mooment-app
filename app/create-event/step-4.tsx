@@ -24,19 +24,22 @@ export default function CreateEventStep4() {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = React.useState(false);
   const [isDeletingTicket, setIsDeletingTicket] = React.useState(false);
   const [ticketToDeleteId, setTicketToDeleteId] = React.useState<string | null>(null);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [savedLabel, setSavedLabel] = React.useState(false);
   const tickets = useEventDraftStore((state) => state.tickets);
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
 
   const formatTicketExpiry = (value?: string | null) => {
     if (!value) {
-      return 'Expires in • Sat, Sep 9 • 4:00 PM';
+      return 'Sales end • Sat, Sep 9 • 4:00 PM';
     }
 
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
-      return 'Expires in • Sat, Sep 9 • 4:00 PM';
+      return 'Sales end • Sat, Sep 9 • 4:00 PM';
     }
 
     const dateLabel = date.toLocaleDateString('en-US', {
@@ -50,7 +53,7 @@ export default function CreateEventStep4() {
       minute: '2-digit',
     });
 
-    return `Expires in • ${dateLabel} • ${timeLabel}`;
+    return `Sales end • ${dateLabel} • ${timeLabel}`;
   };
 
   const getTicketDescriptionPreview = (value?: string | null) => {
@@ -66,10 +69,17 @@ export default function CreateEventStep4() {
     })}`;
 
   const handleSaveDraft = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
     try {
       await saveDraft();
+      setSavedLabel(true);
+      setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
       Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -100,16 +110,22 @@ export default function CreateEventStep4() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Event</Text>
-        <TouchableOpacity onPress={handleSaveDraft}>
-          <Text style={[styles.saveDraft, { color: colors.primary }]}>Save Draft</Text>
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        {isEditingPublished ? (
+          <View style={{ width: 60 }} />
+        ) : (
+          <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
+            <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
+              {isSaving ? 'Saving…' : savedLabel ? 'Saved ✓' : 'Save Draft'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Steps */}
       <View style={styles.stepContainer}>
         <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 4</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>4 out of 6</Text>
+        <Text style={[styles.stepText, { color: colors.textSecondary }]}>4 out of 5</Text>
       </View>
 
       {/* Form Content */}

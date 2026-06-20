@@ -5,7 +5,7 @@ import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
-export type ProfileTabType = 'feed' | 'events' | 'shop';
+export type ProfileTabType = 'feed' | 'events';
 
 type ProfileTabsProps = {
   activeTab: ProfileTabType;
@@ -33,6 +33,7 @@ export default function ProfileTabs({ activeTab, onTabChange, isOwnProfile = tru
         </Svg>
       </TouchableOpacity>
 
+      {/* Shop tab hidden — preserved for future restoration
       {isOwnProfile && (
         <TouchableOpacity
           style={[styles.tab, activeTab === 'shop' && [styles.activeTab, { borderBottomColor: colors.text }]]}
@@ -41,6 +42,7 @@ export default function ProfileTabs({ activeTab, onTabChange, isOwnProfile = tru
           <HugeiconsIcon icon={ShoppingBag01Icon} size={22} color={activeTab === 'shop' ? colors.text : colors.textSecondary} />
         </TouchableOpacity>
       )}
+      */}
     </View>
   );
 }

@@ -3,7 +3,7 @@ import type { EventCategory } from "@/constants/eventCategories";
 
 export type EventStatus = "draft" | "published";
 export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
-export type EventPrivacy = "public" | "private";
+export type EventPrivacy = "public" | "locked" | "private";
 export type EventTicketType = "free" | "pay";
 export type EventRewardType = "ticket" | "product";
 
@@ -13,6 +13,7 @@ export type EventLocation = {
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  additionalInfo?: string | null;
 };
 
 export type EventTicketPayload = {
@@ -51,6 +52,14 @@ export type EventHost = {
   followersCount?: number;
   eventsCount?: number;
   isFollowing?: boolean;
+};
+
+export type EventMemberResponse = {
+  id: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
 };
 
 export type EventImageDisplay = {
@@ -341,6 +350,11 @@ export const getMyEvents = async (): Promise<EventResponse[]> => {
   return getEventsFromResponse(response);
 };
 
+export const getMyDraftEvents = async (): Promise<EventResponse[]> => {
+  const response = await api.get("/events/mine/drafts");
+  return getEventsFromResponse(response);
+};
+
 export const getMyPostTagEvents = async (): Promise<PostTagEvent[]> => {
   const response = await api.get("/events/mine/post-tag");
   const events = response.data?.data?.events;
@@ -405,4 +419,24 @@ export const getMyEventRewardClaims = async (eventId: string): Promise<RewardCla
   const claims = (response as { data?: { data?: { claims?: RewardClaim[] } } })?.data?.data?.claims;
 
   return Array.isArray(claims) ? claims : [];
+};
+
+const getMembersFromResponse = (response: unknown): EventMemberResponse[] => {
+  const members = (response as { data?: { data?: { members?: EventMemberResponse[] } } })?.data?.data?.members;
+  return Array.isArray(members) ? members : [];
+};
+
+export const getEventMembers = async (eventId: string): Promise<EventMemberResponse[]> => {
+  const response = await api.get(`/events/${encodeURIComponent(eventId)}/members`);
+  return getMembersFromResponse(response);
+};
+
+export const addEventMember = async (eventId: string, userId: string): Promise<EventMemberResponse[]> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/members`, { userId });
+  return getMembersFromResponse(response);
+};
+
+export const removeEventMember = async (eventId: string, userId: string): Promise<EventMemberResponse[]> => {
+  const response = await api.delete(`/events/${encodeURIComponent(eventId)}/members/${encodeURIComponent(userId)}`);
+  return getMembersFromResponse(response);
 };

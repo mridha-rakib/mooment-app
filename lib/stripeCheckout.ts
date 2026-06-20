@@ -33,6 +33,7 @@ const loadStripeSdk = async () => {
 
 export const startStripeCheckout = async (
   payload: CreateCheckoutIntentPayload,
+  options?: { isDark?: boolean },
 ): Promise<CheckoutOrder> => {
   if (payload.paymentMethod === "apple_pay" && Platform.OS !== "ios") {
     throw new Error("Apple Pay is only available on iOS devices.");
@@ -58,7 +59,7 @@ export const startStripeCheckout = async (
     merchantDisplayName: checkout.merchantDisplayName,
     paymentIntentClientSecret: checkout.paymentIntentClientSecret,
     returnURL: Linking.createURL("stripe-redirect"),
-    style: "alwaysDark",
+    style: options?.isDark === false ? "automatic" : "alwaysDark",
     allowsDelayedPaymentMethods: false,
     primaryButtonLabel: "Pay now",
     ...(payload.paymentMethod === "apple_pay" && Platform.OS === "ios"

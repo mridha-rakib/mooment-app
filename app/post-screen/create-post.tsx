@@ -1540,7 +1540,7 @@ export default function CreateMomentScreen() {
       const mediaItems = await buildMediaItems();
 
       await createMoment({
-        mode: 'feed',
+        mode: selectedEventId ? 'event' : 'feed',
         caption: trimmedCaption || null,
         audience: normalizeAudience(audience),
         taggedPeople,
