@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, StatusBar } from "react-native";
+import React, { useCallback, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, View, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import type { MomentInteractionSummary } from "@/lib/moments";
@@ -32,6 +32,7 @@ type ProfileViewProps = {
   onRepost?: (post: PostData) => Promise<void> | void;
   onDeletePost?: (post: PostData) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
+  onRefresh?: () => Promise<void>;
 };
 
 export default function ProfileView({
@@ -41,9 +42,21 @@ export default function ProfileView({
   onRepost,
   onDeletePost,
   onInteractionChange,
+  onRefresh,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh) return;
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [onRefresh]);
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
@@ -54,7 +67,18 @@ export default function ProfileView({
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          ) : undefined
+        }
+      >
         <ProfileHeader
           userId={user.id}
           avatar={user.avatar}

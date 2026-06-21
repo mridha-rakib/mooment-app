@@ -20,17 +20,18 @@ const CheckIcon = () => (
   </Svg>
 );
 
-const INITIAL_USERS = [
-  { id: '1', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop', isFollowing: false },
-  { id: '2', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop', isFollowing: false },
-  { id: '3', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop', isFollowing: false },
-];
-
-const FALLBACK_AVATARS = INITIAL_USERS.map((user) => user.avatar);
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
+type PeopleToFollowUser = {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string | null;
+  isFollowing: boolean;
+};
+
 export default function PeopleToFollowScreen() {
-  const [users, setUsers] = useState(INITIAL_USERS);
+  const [users, setUsers] = useState<PeopleToFollowUser[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
   const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
@@ -45,16 +46,16 @@ export default function PeopleToFollowScreen() {
           return;
         }
 
-        setUsers(suggestedUsers.map((user, index) => ({
+        setUsers(suggestedUsers.map((user) => ({
           id: user.id,
           name: user.name,
           handle: user.username ? `@${user.username}` : '@xenog',
-          avatar: user.avatarKey ? getStorageFileUrl(user.avatarKey) : (user.avatarUrl ?? FALLBACK_AVATARS[index % FALLBACK_AVATARS.length]),
+          avatar: user.avatarUrl?.trim() || (user.avatarKey ? getStorageFileUrl(user.avatarKey) : null),
           isFollowing: user.isFollowing,
         })));
       } catch {
         if (isMounted) {
-          setUsers(INITIAL_USERS);
+          setUsers([]);
         }
       }
     };
@@ -124,7 +125,7 @@ export default function PeopleToFollowScreen() {
           {users.map((user, index) => (
             <View key={user.id}>
               <View style={styles.listItem}>
-                {!failedAvatarIds.has(user.id) ? (
+                {user.avatar && !failedAvatarIds.has(user.id) ? (
                   <Image
                     source={{ uri: user.avatar }}
                     style={styles.avatar}

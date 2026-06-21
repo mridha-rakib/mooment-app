@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
 // Components
@@ -101,6 +101,7 @@ export default function HomeFeed() {
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const params = useLocalSearchParams();
 
   useEffect(() => {
@@ -115,59 +116,49 @@ export default function HomeFeed() {
     }
   }, [params.showSuccess, params.view]);
 
+  const loadStories = useCallback(async () => {
+    try {
+      const [feedStories, seenStoryIds] = await Promise.all([
+        getFeedStories(),
+        getSeenStoryIds(),
+      ]);
+      setStories([
+        { id: 'add-story', type: 'add' },
+        ...groupStoriesByAuthor(feedStories, seenStoryIds),
+      ]);
+    } catch {
+      setStories([{ id: 'add-story', type: 'add' }]);
+    }
+  }, []);
+
+  const loadFeedMoments = useCallback(async () => {
+    try {
+      const moments = await getFeedMoments();
+      setFeedMomentPosts(
+        moments
+          .filter((moment) => moment.mode !== "event")
+          .map((moment) => mapMomentToPost(moment, {
+            fallbackAvatar: STORY_FALLBACK_AVATAR,
+            storageUrlResolver: getStorageFileUrl,
+          }))
+          .filter((post): post is PostData => Boolean(post)),
+      );
+    } catch {
+      setFeedMomentPosts([]);
+    }
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([loadStories(), loadFeedMoments()]);
+    setIsRefreshing(false);
+  }, [loadFeedMoments, loadStories]);
+
   useFocusEffect(
     useCallback(() => {
-      let isActive = true;
-
-      const loadStories = async () => {
-        try {
-          const [feedStories, seenStoryIds] = await Promise.all([
-            getFeedStories(),
-            getSeenStoryIds(),
-          ]);
-
-          if (!isActive) return;
-
-          setStories([
-            { id: 'add-story', type: 'add' },
-            ...groupStoriesByAuthor(feedStories, seenStoryIds),
-          ]);
-        } catch {
-          if (isActive) {
-            setStories([{ id: 'add-story', type: 'add' }]);
-          }
-        }
-      };
-
-      const loadFeedMoments = async () => {
-        try {
-          const moments = await getFeedMoments();
-
-          if (!isActive) return;
-
-          setFeedMomentPosts(
-            moments
-              .filter((moment) => moment.mode !== "event")
-              .map((moment) => mapMomentToPost(moment, {
-                fallbackAvatar: STORY_FALLBACK_AVATAR,
-                storageUrlResolver: getStorageFileUrl,
-              }))
-              .filter((post): post is PostData => Boolean(post)),
-          );
-        } catch {
-          if (isActive) {
-            setFeedMomentPosts([]);
-          }
-        }
-      };
-
       void loadStories();
       void loadFeedMoments();
-
-      return () => {
-        isActive = false;
-      };
-    }, []),
+    }, [loadFeedMoments, loadStories]),
   );
 
   useEffect(() => {
@@ -182,7 +173,7 @@ export default function HomeFeed() {
         setSuggestedUsers(users.map((user) => ({
           id: user.id,
           name: user.name,
-          avatarUri: user.avatarKey ? getStorageFileUrl(user.avatarKey) : (user.avatarUrl?.trim() || STORY_FALLBACK_AVATAR),
+          avatarUri: user.avatarUrl?.trim() || (user.avatarKey ? getStorageFileUrl(user.avatarKey) : null),
           isFollowing: user.isFollowing,
         })));
       } catch {
@@ -292,7 +283,16 @@ export default function HomeFeed() {
         <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
 
         {selectedType === 'Feed' ? (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={colors.primary}
+              />
+            }
+          >
             <StoryCarousel stories={stories} />
 
             {feedItems.map((item) => {

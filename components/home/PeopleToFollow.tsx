@@ -9,7 +9,7 @@ import { followUser, unfollowUser } from '@/lib/users';
 export type SuggestedUser = {
   id: string;
   name: string;
-  avatarUri: string;
+  avatarUri: string | null;
   isFollowing?: boolean;
 };
 
@@ -70,6 +70,10 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
     }
   };
 
+  if (users.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -98,12 +102,12 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
                 params: { 
                   userId: user.id,
                   name: user.name,
-                  avatar: user.avatarUri
+                  ...(user.avatarUri ? { avatar: user.avatarUri } : {}),
                 }
               } as any)}
               style={styles.avatarContainer}
             >
-              {!failedAvatarIds.has(user.id) ? (
+              {user.avatarUri && !failedAvatarIds.has(user.id) ? (
                 <Image
                   source={{ uri: user.avatarUri }}
                   style={styles.avatar}
@@ -122,7 +126,7 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
                 params: { 
                   userId: user.id,
                   name: user.name,
-                  avatar: user.avatarUri
+                  ...(user.avatarUri ? { avatar: user.avatarUri } : {}),
                 }
               } as any)}
             >
@@ -200,6 +204,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
     lineHeight: 16,
+    height: 32,
   },
   followBtn: {
     borderWidth: 1,

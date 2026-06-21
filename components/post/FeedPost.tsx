@@ -11,7 +11,7 @@ import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Te
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { toggleMomentReaction, type MomentInteractionSummary } from '@/lib/moments';
+import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
 import { followUser, unfollowUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
@@ -95,6 +95,7 @@ export type PostData = {
   productDetails?: ProductDetails;
   isExpandable?: boolean;
   isLiked?: boolean;
+  isSaved?: boolean;
 };
 
 function VideoFeedMedia({ uri }: { uri: string }) {
@@ -364,10 +365,12 @@ export default function FeedPost({
 
   // Dynamic Interaction State
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
+  const [isSaved, setIsSaved] = useState(post.isSaved || false);
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
   const [commentsCount, setCommentsCount] = useState(post.commentsCount || 0);
   const [sharesCount, setSharesCount] = useState(post.sharesCount || 0);
   const [isLikePending, setIsLikePending] = useState(false);
+  const [isSavePending, setIsSavePending] = useState(false);
   const mediaItems = post.mediaItems ?? post.mediaUris?.map((uri) => ({ uri, type: 'image' as const, fullUri: uri })) ?? [];
   const fullScreenMediaUris = post.mediaUris || mediaItems.map((item) => item.fullUri || item.uri);
   const resolvedEventId = useMemo(() => {
@@ -393,10 +396,11 @@ export default function FeedPost({
 
   useEffect(() => {
     setIsLiked(Boolean(post.isLiked));
+    setIsSaved(Boolean(post.isSaved));
     setLikesCount(post.likesCount || 0);
     setCommentsCount(post.commentsCount || 0);
     setSharesCount(post.sharesCount || 0);
-  }, [post.id, post.isLiked, post.likesCount, post.commentsCount, post.sharesCount]);
+  }, [post.id, post.isLiked, post.isSaved, post.likesCount, post.commentsCount, post.sharesCount]);
 
   // Reanimated Shared Values
   const heartScale = useSharedValue(1);
@@ -445,6 +449,28 @@ export default function FeedPost({
       Alert.alert('Unable to update reaction', getAuthErrorMessage(error, 'Please try again.'));
     } finally {
       setIsLikePending(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (isSavePending || !MONGO_OBJECT_ID_PATTERN.test(post.id)) {
+      return;
+    }
+
+    const wasSaved = isSaved;
+
+    setIsSaved(!wasSaved);
+    setIsSavePending(true);
+
+    try {
+      const summary = await toggleMomentSave(post.id);
+
+      setIsSaved(summary.isSaved);
+    } catch (error) {
+      setIsSaved(wasSaved);
+      Alert.alert('Unable to save post', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsSavePending(false);
     }
   };
 
@@ -824,7 +850,8 @@ export default function FeedPost({
           onClose={() => setShowMoreMenu(false)}
           showDelete={canDeletePost}
           onReport={!isPostByCurrentUser ? () => setShowReportModal(true) : undefined}
-          onSave={!isPostByCurrentUser ? () => console.log('Saved post') : undefined}
+          onSave={!isPostByCurrentUser ? handleSave : undefined}
+          isSaved={!isPostByCurrentUser ? isSaved : undefined}
           onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
           top={menuTop}
         />

@@ -171,6 +171,7 @@ export default function ProfileTab() {
         onRepost={handleRepost}
         onDeletePost={handleDeletePost}
         onInteractionChange={handleInteractionChange}
+        onRefresh={loadTimeline}
       />
     </View>
   );

@@ -29,6 +29,7 @@ type AccessTabProps = {
   onEditTicket?: (ticket: EventTicketPayload) => void;
   onDeleteTicket?: (ticket: EventTicketPayload) => void;
   onCreateReward?: () => void;
+  onViewReward?: (reward: EventRewardPayload) => void;
   onEditReward?: (reward: EventRewardPayload) => void;
   onDeleteReward?: (reward: EventRewardPayload) => void;
   onClaimReward?: (reward: EventRewardPayload) => void;
@@ -128,6 +129,7 @@ const AccessTab = ({
   onEditTicket,
   onDeleteTicket,
   onCreateReward,
+  onViewReward,
   onEditReward,
   onDeleteReward,
   onClaimReward,
@@ -502,12 +504,14 @@ const AccessTab = ({
           const isDeleting = deletingRewardId === rewardKey || deletingRewardId === item.id;
 
           return (
-            <View
+            <TouchableOpacity
               key={rewardKey}
               style={[
                 styles.creatorRewardCard,
                 hasImage ? styles.creatorRewardCardWithImage : styles.creatorRewardCardCompact,
               ]}
+              activeOpacity={0.82}
+              onPress={() => onViewReward?.(item)}
             >
               <View style={hasImage ? styles.creatorRewardImageRow : styles.creatorRewardTopBlock}>
                 {hasImage && (
@@ -572,7 +576,7 @@ const AccessTab = ({
                   <Feather name="edit-2" size={20} color="#B3B3B3" />
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })
         ) : (

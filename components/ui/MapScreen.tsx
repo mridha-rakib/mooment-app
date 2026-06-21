@@ -94,7 +94,7 @@ const MapMarker = ({
 
   if (isSatellite) {
     return (
-      <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.15, y: 1 }}>
+      <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.15, y: 1 }} allowOverlap allowOverlapWithPuck>
         <TouchableOpacity
           style={styles.satMarkerContainer}
           onPress={onPress}
@@ -182,7 +182,7 @@ const MapMarker = ({
   }
 
   return (
-    <Mapbox.MarkerView coordinate={coordinate}>
+    <Mapbox.MarkerView coordinate={coordinate} allowOverlap allowOverlapWithPuck>
       <TouchableOpacity
         style={styles.markerContent}
         onPress={onPress}
@@ -260,10 +260,17 @@ export default function MapScreen({
   const [userLocation, setUserLocation] = useState<[number, number] | null>(
     null,
   );
+  const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const isSatellite = mapMode === "satellite";
   const currentMapStyle = isSatellite
     ? SATELLITE_STYLE_URL
     : TRAFFIC_DARK_STYLE_URL;
+
+  // Reset the loaded flag whenever the style URL changes so markers are
+  // held back until Mapbox has fully applied the new style.
+  React.useEffect(() => {
+    setIsStyleLoaded(false);
+  }, [currentMapStyle]);
   const mapModeLabel = {
     traffic: "Traffic View",
     satellite: "Satellite View",
@@ -428,7 +435,7 @@ export default function MapScreen({
 
   const handleZoomOut = () => {
     userHasExploredMapRef.current = true;
-    const nextZoom = Math.max(currentZoomRef.current - 1, 1);
+    const nextZoom = Math.max(currentZoomRef.current - 1, 0);
     currentZoomRef.current = nextZoom;
     cameraRef.current?.zoomTo(nextZoom, 250);
   };
@@ -506,6 +513,7 @@ export default function MapScreen({
           pitchEnabled={true}
           rotateEnabled={true}
           onCameraChanged={handleCameraChanged}
+          onDidFinishLoadingStyle={() => setIsStyleLoaded(true)}
         >
           <Mapbox.Camera
             ref={cameraRef}
@@ -517,9 +525,9 @@ export default function MapScreen({
             }}
           />
 
-          {visibleMarkers.map((marker) => (
+          {isStyleLoaded && visibleMarkers.map((marker) => (
             <MapMarker
-              key={marker.id}
+              key={`${marker.id}-${mapMode}`}
               coordinate={[marker.longitude, marker.latitude]}
               image={marker.image}
               label={marker.label}
@@ -531,6 +539,7 @@ export default function MapScreen({
 
           <Mapbox.UserLocation
             visible={true}
+            renderMode={Mapbox.UserLocationRenderMode.Native}
             onUpdate={(location) => {
               if (location.coords) {
                 applyUserLocation([

@@ -133,6 +133,7 @@ export default function UserProfileScreen() {
         posts={posts}
         isOwnProfile={false}
         onInteractionChange={handleInteractionChange}
+        onRefresh={loadProfile}
       />
     </View>
   );

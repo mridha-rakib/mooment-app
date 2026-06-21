@@ -469,9 +469,7 @@ const TicketDetailScreen = () => {
                   onPress={() => void handleOpenShareModal()}
                 >
                   <Text style={styles.walletShareButtonText}>
-                    {currentShare
-                      ? `Shared · ${currentShare.friend?.name ?? "Friend"}`
-                      : "Share QR"}
+                    {currentShare ? "Shared" : "Share QR"}
                   </Text>
                 </TouchableOpacity>
               )}

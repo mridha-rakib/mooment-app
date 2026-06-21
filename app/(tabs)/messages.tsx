@@ -1,28 +1,34 @@
+import CinematicButton from '@/components/ui/CinematicButton';
+import SegmentedControl from '@/components/ui/SegmentedControl';
 import {
-  useTheme } from '@/hooks/useTheme';
-import { Feather,
-  Ionicons } from '@expo/vector-icons';
+    useTheme
+} from '@/hooks/useTheme';
+import type { DirectMessageConversationResponse, GroupConversationResponse } from '@/lib/chat';
+import { getDirectMessageConversations, getGroupConversations } from '@/lib/chat';
+import {
+    Feather,
+    Ionicons
+} from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React,
-  { useEffect,
-  useState } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useState
+} from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  Image,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    Image,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import SegmentedControl from '@/components/ui/SegmentedControl';
-import CinematicButton from '@/components/ui/CinematicButton';
-import { getDirectMessageConversations } from '@/lib/chat';
-import type { DirectMessageConversationResponse } from '@/lib/chat';
 
 const { width } = Dimensions.get('window');
 const DEFAULT_DM_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
@@ -68,6 +74,18 @@ const toConversationData = (dm: DirectMessageConversationResponse): Conversation
   isOnline: dm.isOnline ?? false,
   isGroup: false,
   isBlocked: dm.isBlocked ?? false,
+});
+
+const toGroupConversationData = (group: GroupConversationResponse): ConversationData => ({
+  id: group.id,
+  name: group.name,
+  avatar: group.avatarUrl ?? '',
+  lastMessage: group.lastMessage ?? 'No messages yet',
+  time: formatConversationTime(group.lastMessageAt),
+  unread: group.unreadCount ?? 0,
+  isOnline: false,
+  isGroup: true,
+  isBlocked: false,
 });
 
 export type ConversationData = {
@@ -169,6 +187,10 @@ export default function MessagesScreen() {
   const [dmConversations, setDmConversations] = useState<ConversationData[]>([]);
   const [isDmsLoading, setIsDmsLoading] = useState(false);
   const [dmsError, setDmsError] = useState<string | null>(null);
+  const [groupConversations, setGroupConversations] = useState<ConversationData[]>([]);
+  const [isGroupsLoading, setIsGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -194,20 +216,58 @@ export default function MessagesScreen() {
       }
     };
 
+    const loadGroups = async () => {
+      setIsGroupsLoading(true);
+      setGroupsError(null);
+
+      try {
+        const groups = await getGroupConversations();
+
+        if (isMounted) {
+          setGroupConversations(groups.map(toGroupConversationData));
+        }
+      } catch {
+        if (isMounted) {
+          setGroupsError('Unable to load groups.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsGroupsLoading(false);
+        }
+      }
+    };
+
     void loadDirectMessages();
+    void loadGroups();
 
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const sourceConversations = subTab === 'DMs'
-    ? dmConversations
-    : CONVERSATIONS.filter((conversation) => conversation.isGroup);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    setDmsError(null);
+    setGroupsError(null);
+    try {
+      const [dms, groups] = await Promise.all([
+        getDirectMessageConversations(),
+        getGroupConversations(),
+      ]);
+      setDmConversations(dms.map(toConversationData));
+      setGroupConversations(groups.map(toGroupConversationData));
+    } catch {
+      setDmsError('Unable to load conversations.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  const sourceConversations = subTab === 'DMs' ? dmConversations : groupConversations;
 
   const filtered = sourceConversations.filter(c => {
     if (topTab === 'Unread') return c.unread > 0;
-    if (topTab === 'Blocked') return subTab === 'DMs' ? Boolean(c.isBlocked) : c.isGroup;
+    if (topTab === 'Blocked') return Boolean(c.isBlocked);
     return true;
   });
 
@@ -273,10 +333,16 @@ export default function MessagesScreen() {
   const renderGroupItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
       style={[styles.groupCard, { backgroundColor: colors.card }]}
-      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar, isGroup: 'true' } })}
       activeOpacity={0.85}
     >
-      <Image source={{ uri: item.avatar }} style={styles.groupCardAvatar} />
+      {item.avatar ? (
+        <Image source={{ uri: item.avatar }} style={styles.groupCardAvatar} />
+      ) : (
+        <View style={[styles.groupCardAvatar, styles.groupCardAvatarFallback]}>
+          <Text style={styles.groupCardAvatarLetter}>{item.name.charAt(0).toUpperCase()}</Text>
+        </View>
+      )}
       <View style={styles.groupCardMeta}>
         <View style={styles.groupCardTopRow}>
           <Text style={[styles.groupCardName, { color: colors.text }]} numberOfLines={1}>
@@ -442,9 +508,16 @@ export default function MessagesScreen() {
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            {subTab === 'DMs' && isDmsLoading ? (
+            {(subTab === 'DMs' && isDmsLoading) || (subTab === 'Groups' && isGroupsLoading) ? (
               <ActivityIndicator color={colors.textSecondary} />
             ) : (
               <>
@@ -452,7 +525,7 @@ export default function MessagesScreen() {
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   {subTab === 'DMs'
                     ? dmsError ?? (topTab === 'Unread' ? 'No unread DMs' : 'No friends found')
-                    : 'No conversations found'}
+                    : groupsError ?? (topTab === 'Unread' ? 'No unread groups' : 'No groups yet')}
                 </Text>
               </>
             )}
@@ -479,9 +552,9 @@ export default function MessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
+  safe: { flex: 1, backgroundColor: '#0e0d12' },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 4, paddingBottom: 14 },
   headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
@@ -587,6 +660,8 @@ const styles = StyleSheet.create({
   /* Group Card */
   groupCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#13131A', borderRadius: 20, marginHorizontal: 16, marginBottom: 12, padding: 16 },
   groupCardAvatar: { width: 44, height: 44, borderRadius: 22, marginRight: 16, backgroundColor: '#1A1A2E' },
+  groupCardAvatarFallback: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#2A1A3E' },
+  groupCardAvatarLetter: { color: '#D4B0EB', fontSize: 18, fontWeight: 'bold' },
   groupCardMeta: { flex: 1 },
   groupCardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   groupCardName: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },

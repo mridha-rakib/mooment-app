@@ -129,6 +129,7 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     commentsCount: moment.commentsCount,
     sharesCount: moment.sharesCount,
     isLiked: moment.isLiked,
+    isSaved: moment.isSaved,
   };
 
   if (audioMedia && visualMedia.length === 0) {

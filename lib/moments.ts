@@ -39,6 +39,7 @@ export type Moment = {
   commentsCount: number;
   sharesCount: number;
   isLiked: boolean;
+  isSaved: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -80,6 +81,8 @@ export type MomentComment = {
   parentCommentId?: string | null;
   author?: MomentCommentAuthor | null;
   text: string;
+  likesCount: number;
+  isLiked: boolean;
   createdAt: string;
   updatedAt: string;
   replies: MomentComment[];
@@ -162,10 +165,48 @@ export const toggleMomentReaction = async (momentId: string): Promise<MomentInte
   return summary;
 };
 
+export const toggleCommentReaction = async (
+  momentId: string,
+  commentId: string,
+): Promise<{ isLiked: boolean; likesCount: number }> => {
+  const response = await api.post(
+    `/moments/${encodeURIComponent(momentId)}/comments/${encodeURIComponent(commentId)}/reaction`,
+  );
+  const data = response.data?.data as { isLiked: boolean; likesCount: number } | undefined;
+
+  if (!data) {
+    throw new Error("The comment reaction response was incomplete.");
+  }
+
+  return data;
+};
+
 export const getMomentComments = async (momentId: string): Promise<MomentComment[]> => {
   const response = await api.get(`/moments/${encodeURIComponent(momentId)}/comments`);
 
   return (response.data?.data?.comments ?? []) as MomentComment[];
+};
+
+export type MomentSaveSummary = {
+  momentId: string;
+  isSaved: boolean;
+};
+
+export const toggleMomentSave = async (momentId: string): Promise<MomentSaveSummary> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/save`);
+  const summary = response.data?.data?.summary as MomentSaveSummary | undefined;
+
+  if (!summary) {
+    throw new Error("The save response was incomplete.");
+  }
+
+  return summary;
+};
+
+export const getSavedMoments = async (): Promise<Moment[]> => {
+  const response = await api.get("/moments/saved");
+
+  return (response.data?.data?.moments ?? []) as Moment[];
 };
 
 export const createMomentComment = async (

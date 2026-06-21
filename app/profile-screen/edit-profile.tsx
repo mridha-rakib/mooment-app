@@ -29,7 +29,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200";
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,40}$/;
@@ -161,6 +161,7 @@ const CustomInput = ({
 
 export default function EditProfileScreen() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { type, mode } = useLocalSearchParams<{ type?: ProfileType; mode?: string }>();
   const isSwitchMode = mode === 'switch';
@@ -686,7 +687,7 @@ export default function EditProfileScreen() {
           </View>
 
           <Modal
-            animationType="fade"
+            animationType="slide"
             transparent
             visible={isGenderDropdownVisible}
             onRequestClose={() => setIsGenderDropdownVisible(false)}
@@ -694,24 +695,51 @@ export default function EditProfileScreen() {
             <TouchableWithoutFeedback onPress={() => setIsGenderDropdownVisible(false)}>
               <View style={styles.dropdownOverlay}>
                 <TouchableWithoutFeedback>
-                  <View style={[styles.dropdownSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    {GENDER_OPTIONS.map((option) => (
+                  <View style={[styles.dropdownSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }]}>
+                    {/* Drag handle */}
+                    <View style={styles.dropdownHandle}>
+                      <View style={[styles.dropdownHandleBar, { backgroundColor: colors.border }]} />
+                    </View>
+
+                    {/* Title */}
+                    <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
+                      <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Gender</Text>
+                    </View>
+
+                    {/* Options */}
+                    {GENDER_OPTIONS.map((option, index) => (
                       <TouchableOpacity
                         key={option}
-                        activeOpacity={0.75}
+                        activeOpacity={0.7}
                         onPress={() => handleGenderSelect(option)}
-                        style={styles.dropdownOption}
+                        style={[
+                          styles.dropdownOption,
+                          index < GENDER_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                        ]}
                       >
                         <Text
                           style={[
                             styles.dropdownOptionText,
-                            { color: gender === option ? colors.text : colors.textSecondary },
+                            { color: gender === option ? colors.primary : colors.text },
+                            gender === option && styles.dropdownOptionSelected,
                           ]}
                         >
                           {option}
                         </Text>
+                        {gender === option ? (
+                          <Feather name="check" size={16} color={colors.primary} />
+                        ) : null}
                       </TouchableOpacity>
                     ))}
+
+                    {/* Cancel button */}
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => setIsGenderDropdownVisible(false)}
+                      style={[styles.dropdownCancel, { borderTopColor: colors.border }]}
+                    >
+                      <Text style={[styles.dropdownCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
                   </View>
                 </TouchableWithoutFeedback>
               </View>
@@ -919,24 +947,64 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   dropdownOverlay: {
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
     flex: 1,
     justifyContent: "flex-end",
-    padding: 20,
   },
   dropdownSheet: {
-    borderRadius: 14,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderWidth: 1,
+    borderBottomWidth: 0,
     overflow: "hidden",
   },
+  dropdownHandle: {
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  dropdownHandleBar: {
+    borderRadius: 3,
+    height: 4,
+    width: 40,
+  },
+  dropdownHeader: {
+    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    paddingTop: 6,
+  },
+  dropdownTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
   dropdownOption: {
-    minHeight: 52,
-    justifyContent: "center",
-    paddingHorizontal: 18,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 54,
+    paddingHorizontal: 20,
   },
   dropdownOptionText: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "500",
+  },
+  dropdownOptionSelected: {
+    fontWeight: "700",
+  },
+  dropdownCancel: {
+    alignItems: "center",
+    borderTopWidth: 1,
+    justifyContent: "center",
+    marginTop: 4,
+    minHeight: 54,
+  },
+  dropdownCancelText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
   footer: {
     borderTopWidth: 1,

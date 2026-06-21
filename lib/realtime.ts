@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { NotificationItem } from "@/lib/notifications";
 
 export type DirectRealtimeMessage = {
   clientMessageId?: string | null;
@@ -30,11 +31,23 @@ export type LiveRealtimeMessage = {
   text: string;
 };
 
+export type GroupRealtimeMessage = {
+  clientMessageId?: string | null;
+  groupId: string;
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: string;
+};
+
 type RealtimeEvent =
   | { type: "ready"; user: { id: string; name: string } }
   | { type: "dm:message"; message: DirectRealtimeMessage }
   | { type: "dm:typing"; typing: DirectTypingRealtimeEvent }
+  | { type: "group:message"; message: GroupRealtimeMessage }
   | { type: "live:message"; roomId: string; message: LiveRealtimeMessage }
+  | { type: "notification:new"; notification: NotificationItem }
   | { type: "error"; code: string; message: string }
   | { type: "pong" };
 
@@ -43,7 +56,9 @@ type RealtimeSocketOptions = {
   onDirectMessage?: (message: DirectRealtimeMessage) => void;
   onDirectTyping?: (typing: DirectTypingRealtimeEvent) => void;
   onError?: (error: { code?: string; message: string }) => void;
+  onGroupMessage?: (message: GroupRealtimeMessage) => void;
   onLiveMessage?: (roomId: string, message: LiveRealtimeMessage) => void;
+  onNotification?: (notification: NotificationItem) => void;
   onReady?: () => void;
 };
 
@@ -69,7 +84,9 @@ export const createRealtimeSocket = ({
   onDirectMessage,
   onDirectTyping,
   onError,
+  onGroupMessage,
   onLiveMessage,
+  onNotification,
   onReady,
 }: RealtimeSocketOptions) => {
   const socket = new WebSocket(buildRealtimeUrl(accessToken));
@@ -115,8 +132,18 @@ export const createRealtimeSocket = ({
         return;
       }
 
+      if (payload.type === "group:message") {
+        onGroupMessage?.(payload.message);
+        return;
+      }
+
       if (payload.type === "live:message") {
         onLiveMessage?.(payload.roomId, payload.message);
+        return;
+      }
+
+      if (payload.type === "notification:new") {
+        onNotification?.(payload.notification);
         return;
       }
 
@@ -148,6 +175,13 @@ export const createRealtimeSocket = ({
         isTyping,
         recipientId,
         type: "dm:typing",
+      }),
+    sendGroupMessage: (groupId: string, text: string, clientMessageId?: string) =>
+      sendPayload({
+        clientMessageId,
+        groupId,
+        text,
+        type: "group:message",
       }),
     sendLiveMessage: (roomId: string, text: string, clientMessageId?: string) =>
       sendPayload({
