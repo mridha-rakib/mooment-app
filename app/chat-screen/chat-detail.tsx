@@ -1,4 +1,5 @@
 import BackButton from '@/components/ui/BackButton';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Feather,
   Ionicons } from '@expo/vector-icons';
@@ -25,10 +26,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDirectMessageHistory } from '@/lib/chat';
-import type { DirectChatMessageResponse } from '@/lib/chat';
+import { getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
+import type { DirectChatMessageResponse, GroupMessageResponse } from '@/lib/chat';
 import { createRealtimeSocket } from '@/lib/realtime';
-import type { DirectRealtimeMessage } from '@/lib/realtime';
+import type { DirectRealtimeMessage, GroupRealtimeMessage } from '@/lib/realtime';
 import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
@@ -107,6 +108,29 @@ const toApiTextMessage = (message: DirectChatMessageResponse, currentUserId?: st
   fromMe: message.senderId === currentUserId,
   id: message.id,
   senderId: message.senderId,
+  text: message.text,
+  time: formatRealtimeTime(message.createdAt),
+  type: 'text',
+});
+
+const toGroupApiTextMessage = (message: GroupMessageResponse, currentUserId?: string): Message => ({
+  delivered: message.senderId === currentUserId,
+  fromMe: message.senderId === currentUserId,
+  id: message.id,
+  senderId: message.senderId,
+  senderName: message.senderName,
+  text: message.text,
+  time: formatRealtimeTime(message.createdAt),
+  type: 'text',
+});
+
+const toGroupRealtimeTextMessage = (message: GroupRealtimeMessage, currentUserId?: string): Message => ({
+  clientMessageId: message.clientMessageId ?? null,
+  delivered: message.senderId === currentUserId,
+  fromMe: message.senderId === currentUserId,
+  id: message.id,
+  senderId: message.senderId,
+  senderName: message.senderName,
   text: message.text,
   time: formatRealtimeTime(message.createdAt),
   type: 'text',
@@ -216,11 +240,12 @@ function EventBubble({ msg }: { msg: Message }) {
 // ── Main Screen ────────────────────────────────────────────────────────────
 export default function ChatDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; name: string; avatar: string }>();
+  const params = useLocalSearchParams<{ id: string; name: string; avatar: string; isGroup?: string }>();
   const accessToken = useAuthStore((state) => state.accessToken);
   const currentUser = useAuthStore((state) => state.user);
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [showAttach, setShowAttach] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
@@ -234,6 +259,7 @@ export default function ChatDetailScreen() {
   const name = params.name || 'Eleanor Pena';
   const avatar = params.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop';
   const friendId = params.id;
+  const isGroup = params.isGroup === 'true';
 
   const clearOwnTypingStopTimer = () => {
     if (ownTypingStopTimerRef.current) {
@@ -269,7 +295,7 @@ export default function ChatDetailScreen() {
   const handleInputTextChange = (value: string) => {
     setInputText(value);
 
-    if (!isObjectId(friendId)) {
+    if (!isObjectId(friendId) || isGroup) {
       return;
     }
 
@@ -304,24 +330,36 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     if (!isObjectId(friendId)) {
       setMessages(MOCK_MESSAGES);
+      setIsLoadingMessages(false);
       return;
     }
 
     let isMounted = true;
+    setIsLoadingMessages(true);
 
     const loadMessageHistory = async () => {
       try {
-        const history = await getDirectMessageHistory(friendId);
+        if (isGroup) {
+          const history = await getGroupMessages(friendId);
 
-        if (!isMounted) {
-          return;
+          if (!isMounted) return;
+
+          setMessages(history.map((message) => toGroupApiTextMessage(message, currentUser?.id)));
+        } else {
+          const history = await getDirectMessageHistory(friendId);
+
+          if (!isMounted) return;
+
+          setMessages(history.map((message) => toApiTextMessage(message, currentUser?.id)));
         }
-
-        setMessages(history.map((message) => toApiTextMessage(message, currentUser?.id)));
         setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
       } catch {
         if (isMounted) {
-          setMessages(MOCK_MESSAGES);
+          setMessages([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingMessages(false);
         }
       }
     };
@@ -331,7 +369,7 @@ export default function ChatDetailScreen() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.id, friendId]);
+  }, [currentUser?.id, friendId, isGroup]);
 
   useEffect(() => {
     if (!accessToken || !isObjectId(friendId)) {
@@ -340,67 +378,94 @@ export default function ChatDetailScreen() {
 
     const realtime = createRealtimeSocket({
       accessToken,
-      onDirectMessage: (realtimeMessage) => {
-        const isCurrentConversation =
-          realtimeMessage.senderId === friendId || realtimeMessage.recipientId === friendId;
+      onDirectMessage: isGroup
+        ? undefined
+        : (realtimeMessage) => {
+            const isCurrentConversation =
+              realtimeMessage.senderId === friendId || realtimeMessage.recipientId === friendId;
 
-        if (!isCurrentConversation) {
-          return;
-        }
+            if (!isCurrentConversation) {
+              return;
+            }
 
-        setMessages((prev) => {
-          const alreadyExists = prev.some(
-            (message) =>
-              message.id === realtimeMessage.id ||
-              (Boolean(realtimeMessage.clientMessageId) &&
-                message.clientMessageId === realtimeMessage.clientMessageId),
-          );
+            setMessages((prev) => {
+              const alreadyExists = prev.some(
+                (message) =>
+                  message.id === realtimeMessage.id ||
+                  (Boolean(realtimeMessage.clientMessageId) &&
+                    message.clientMessageId === realtimeMessage.clientMessageId),
+              );
 
-          if (alreadyExists) {
-            return prev;
+              if (alreadyExists) {
+                return prev;
+              }
+
+              return [...prev, toRealtimeTextMessage(realtimeMessage, currentUser?.id)];
+            });
+            if (realtimeMessage.senderId === friendId) {
+              if (friendTypingTimeoutRef.current) {
+                clearTimeout(friendTypingTimeoutRef.current);
+                friendTypingTimeoutRef.current = null;
+              }
+
+              setIsFriendTyping(false);
+            }
+            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+          },
+      onDirectTyping: isGroup
+        ? undefined
+        : (typing) => {
+            const isCurrentConversation =
+              typing.senderId === friendId && (!currentUser?.id || typing.recipientId === currentUser.id);
+
+            if (!isCurrentConversation) {
+              return;
+            }
+
+            if (friendTypingTimeoutRef.current) {
+              clearTimeout(friendTypingTimeoutRef.current);
+              friendTypingTimeoutRef.current = null;
+            }
+
+            setIsFriendTyping(typing.isTyping);
+
+            if (typing.isTyping) {
+              friendTypingTimeoutRef.current = setTimeout(() => {
+                setIsFriendTyping(false);
+                friendTypingTimeoutRef.current = null;
+              }, 3500);
+            }
+          },
+      onGroupMessage: isGroup
+        ? (realtimeMessage) => {
+            if (realtimeMessage.groupId !== friendId) {
+              return;
+            }
+
+            setMessages((prev) => {
+              const alreadyExists = prev.some(
+                (message) =>
+                  message.id === realtimeMessage.id ||
+                  (Boolean(realtimeMessage.clientMessageId) &&
+                    message.clientMessageId === realtimeMessage.clientMessageId),
+              );
+
+              if (alreadyExists) {
+                return prev;
+              }
+
+              return [...prev, toGroupRealtimeTextMessage(realtimeMessage, currentUser?.id)];
+            });
+            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
           }
-
-          return [...prev, toRealtimeTextMessage(realtimeMessage, currentUser?.id)];
-        });
-        if (realtimeMessage.senderId === friendId) {
-          if (friendTypingTimeoutRef.current) {
-            clearTimeout(friendTypingTimeoutRef.current);
-            friendTypingTimeoutRef.current = null;
-          }
-
-          setIsFriendTyping(false);
-        }
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-      },
-      onDirectTyping: (typing) => {
-        const isCurrentConversation =
-          typing.senderId === friendId && (!currentUser?.id || typing.recipientId === currentUser.id);
-
-        if (!isCurrentConversation) {
-          return;
-        }
-
-        if (friendTypingTimeoutRef.current) {
-          clearTimeout(friendTypingTimeoutRef.current);
-          friendTypingTimeoutRef.current = null;
-        }
-
-        setIsFriendTyping(typing.isTyping);
-
-        if (typing.isTyping) {
-          friendTypingTimeoutRef.current = setTimeout(() => {
-            setIsFriendTyping(false);
-            friendTypingTimeoutRef.current = null;
-          }, 3500);
-        }
-      },
+        : undefined,
     });
 
     realtimeRef.current = realtime;
 
     return () => {
       clearOwnTypingStopTimer();
-      if (isObjectId(friendId) && isSendingTypingRef.current) {
+      if (!isGroup && isObjectId(friendId) && isSendingTypingRef.current) {
         realtime.sendDirectTyping(friendId, false);
         isSendingTypingRef.current = false;
       }
@@ -409,12 +474,12 @@ export default function ChatDetailScreen() {
         realtimeRef.current = null;
       }
     };
-  }, [accessToken, currentUser?.id, friendId]);
+  }, [accessToken, currentUser?.id, friendId, isGroup]);
 
   const sendMessage = () => {
     if (!inputText.trim()) return;
     const text = inputText.trim();
-    const clientMessageId = `dm-${Date.now()}`;
+    const clientMessageId = `${isGroup ? 'gm' : 'dm'}-${Date.now()}`;
     const newMsg: Message = {
       clientMessageId,
       id: clientMessageId,
@@ -426,9 +491,15 @@ export default function ChatDetailScreen() {
     };
     setMessages(prev => [...prev, newMsg]);
     setInputText('');
-    stopOwnTyping();
-    if (isObjectId(friendId)) {
-      realtimeRef.current?.sendDirectMessage(friendId, text, clientMessageId);
+    if (isGroup) {
+      if (isObjectId(friendId)) {
+        realtimeRef.current?.sendGroupMessage(friendId, text, clientMessageId);
+      }
+    } else {
+      stopOwnTyping();
+      if (isObjectId(friendId)) {
+        realtimeRef.current?.sendDirectMessage(friendId, text, clientMessageId);
+      }
     }
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   };
@@ -484,6 +555,11 @@ export default function ChatDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
+        {isLoadingMessages ? (
+          <View style={styles.loadingContainer}>
+            <Spinner size="large" color="#8E8E9B" />
+          </View>
+        ) : (
         <FlatList
           ref={listRef}
           data={messages}
@@ -538,6 +614,7 @@ export default function ChatDetailScreen() {
             ) : null
           }
         />
+        )}
 
         {/* ── Attachment Options ── */}
         {showAttach && (
@@ -641,7 +718,8 @@ export default function ChatDetailScreen() {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: 60 },
+  safe: { flex: 1, backgroundColor: '#0e0d12' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   /* Header */
   header: {
@@ -649,7 +727,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     marginHorizontal: 16,
-    marginTop: 20,
+    marginTop: 4,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 16,

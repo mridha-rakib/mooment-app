@@ -199,6 +199,17 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
 export default function MapContainer({ onBack, logoText = "Mooment" }: MapContainerProps) {
   const [markers, setMarkers] = React.useState<MapMarkerData[]>([]);
   const [userLocation, setUserLocation] = React.useState<[number, number] | null>(null);
+
+  // Keep a ref so the async fetch always reads the latest location without
+  // being listed as an effect dependency (which would re-trigger fetches on
+  // every raw GPS update even when the rounded query coords are unchanged).
+  const userLocationRef = React.useRef<[number, number] | null>(null);
+  React.useEffect(() => {
+    userLocationRef.current = userLocation;
+  }, [userLocation]);
+
+  // Round to 3 decimal places (~111 m precision) so the effect only
+  // re-fires when the user has moved far enough to warrant a new query.
   const queryLongitude = userLocation ? Number(userLocation[0].toFixed(3)) : undefined;
   const queryLatitude = userLocation ? Number(userLocation[1].toFixed(3)) : undefined;
 
@@ -222,11 +233,13 @@ export default function MapContainer({ onBack, logoText = "Mooment" }: MapContai
           return;
         }
 
-        setMarkers(events.map((event) => toMapMarker(event, userLocation)).filter((marker): marker is MapMarkerData => Boolean(marker)));
+        setMarkers(
+          events
+            .map((event) => toMapMarker(event, userLocationRef.current))
+            .filter((marker): marker is MapMarkerData => Boolean(marker)),
+        );
       } catch {
-        if (isMounted) {
-          setMarkers([]);
-        }
+        // Leave existing markers visible; don't wipe them on a failed refetch.
       }
     };
 
@@ -235,7 +248,10 @@ export default function MapContainer({ onBack, logoText = "Mooment" }: MapContai
     return () => {
       isMounted = false;
     };
-  }, [queryLatitude, queryLongitude, userLocation]);
+  // Intentionally omitting userLocation — it is read through userLocationRef
+  // so the fetch only re-runs when the rounded query coordinates change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryLatitude, queryLongitude]);
 
   const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
     setUserLocation(coordinate);

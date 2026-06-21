@@ -1,7 +1,8 @@
 import BackButton from "@/components/ui/BackButton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
-import { getAuthErrorMessage } from "@/lib/authErrors";
+import { getAuthErrorMessage, isBusinessAccountRequiredError } from "@/lib/authErrors";
+import { useAuthStore } from "@/stores/authStore";
 import {
   createEventReward,
   getEventById,
@@ -41,19 +42,61 @@ const isRewardType = (value: unknown): value is EventRewardType =>
 
 const startOfToday = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
 
-const getInitialRewardDate = (reward?: EventRewardPayload | null, event?: EventResponse | null) => {
+const clampDate = (value: Date, max?: Date | null) => {
+  if (!max || Number.isNaN(max.getTime())) {
+    return value;
+  }
+
+  return value > max ? new Date(max) : value;
+};
+
+const getSalesEndDate = (event?: EventResponse | null, ticketId?: string | null): Date | null => {
+  if (!event) {
+    return null;
+  }
+
+  if (ticketId) {
+    const ticket = event.tickets.find((t) => t.id === ticketId);
+    if (ticket?.salesEndAt) {
+      const parsed = new Date(ticket.salesEndAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+
+  // Fallback: use the latest salesEndAt across all tickets, or event scheduledAt
+  const allSalesEnds = event.tickets
+    .map((t) => (t.salesEndAt ? new Date(t.salesEndAt).getTime() : NaN))
+    .filter((t) => !Number.isNaN(t));
+
+  if (allSalesEnds.length > 0) {
+    return new Date(Math.max(...allSalesEnds));
+  }
+
+  if (event.scheduledAt) {
+    const parsed = new Date(event.scheduledAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const getInitialRewardDate = (reward?: EventRewardPayload | null, event?: EventResponse | null, maxDate?: Date | null) => {
   const source = reward?.expiresAt ?? event?.scheduledAt ?? null;
   const parsed = source ? new Date(source) : null;
 
   if (parsed && !Number.isNaN(parsed.getTime())) {
-    return parsed;
+    return clampDate(parsed, maxDate);
   }
 
   const fallback = new Date();
   fallback.setDate(fallback.getDate() + 7);
   fallback.setSeconds(0, 0);
 
-  return fallback;
+  return clampDate(fallback, maxDate);
 };
 
 const formatDate = (value: Date) =>
@@ -94,6 +137,14 @@ type SelectorItem = {
 export default function RewardDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ eventId?: string; rewardId?: string; rewardType?: string }>();
+
+  const safeBack = () => {
+    if (router.canGoBack()) {
+      safeBack();
+    } else {
+      router.replace("/(tabs)/home");
+    }
+  };
   const { colors, isDark } = useTheme();
   const { height: windowHeight } = useWindowDimensions();
   const eventId = typeof params.eventId === "string" ? params.eventId : null;
@@ -109,10 +160,10 @@ export default function RewardDetailsScreen() {
   const [offerName, setOfferName] = useState("");
   const [description, setDescription] = useState("");
   const [expiresAt, setExpiresAt] = useState(() => getInitialRewardDate());
-  const [discountPercent, setDiscountPercent] = useState("4");
-  const [buyQuantity, setBuyQuantity] = useState("1");
-  const [freeQuantity, setFreeQuantity] = useState("1");
-  const [capacity, setCapacity] = useState("185");
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [buyQuantity, setBuyQuantity] = useState("");
+  const [freeQuantity, setFreeQuantity] = useState("");
+  const [capacity, setCapacity] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -125,9 +176,18 @@ export default function RewardDetailsScreen() {
   const keyboardTopRef = useRef(windowHeight);
   const footerHeightRef = useRef(0);
 
+  const authUser = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+
   const reward = useMemo(
     () => event?.rewards.find((item) => item.id === rewardId) ?? null,
     [event?.rewards, rewardId],
+  );
+
+  const salesEndDate = useMemo(
+    () => (isProductReward ? null : getSalesEndDate(event, selectedTargetId)),
+    [event, isProductReward, selectedTargetId],
   );
 
   const selectorItems: SelectorItem[] = useMemo(() => {
@@ -150,6 +210,13 @@ export default function RewardDetailsScreen() {
   const selectedTarget = useMemo(
     () => selectorItems.find((item) => item.id === selectedTargetId) ?? null,
     [selectedTargetId, selectorItems],
+  );
+
+  const selectedTicket = useMemo(
+    () => (!isProductReward && selectedTargetId
+      ? (event?.tickets ?? []).find((t) => t.id === selectedTargetId) ?? null
+      : null),
+    [event?.tickets, isProductReward, selectedTargetId],
   );
 
   const ensureFieldVisible = useCallback(
@@ -223,7 +290,7 @@ export default function RewardDetailsScreen() {
     const loadData = async () => {
       if (!eventId) {
         Alert.alert("Unable to load reward", "Missing event id.");
-        router.back();
+        safeBack();
         return;
       }
 
@@ -247,7 +314,7 @@ export default function RewardDetailsScreen() {
         }
 
         Alert.alert("Unable to load reward", getAuthErrorMessage(error, "Please try again."));
-        router.back();
+        safeBack();
       } finally {
         if (isActive) {
           setIsLoading(false);
@@ -267,11 +334,13 @@ export default function RewardDetailsScreen() {
       return;
     }
 
+    const maxDate = isProductReward ? null : getSalesEndDate(event, reward?.ticketId ?? null);
+
     if (reward) {
       setSelectedTargetId(isProductReward ? reward.productId ?? null : reward.ticketId ?? null);
       setOfferName(reward.name);
       setDescription(reward.description ?? "");
-      setExpiresAt(getInitialRewardDate(reward, event));
+      setExpiresAt(getInitialRewardDate(reward, event, maxDate));
       setDiscountPercent(String(reward.discountPercent));
       setBuyQuantity(String(reward.buyQuantity));
       setFreeQuantity(String(reward.freeQuantity));
@@ -280,9 +349,9 @@ export default function RewardDetailsScreen() {
     }
 
     setSelectedTargetId((current) => current ?? selectorItems[0]?.id ?? null);
-    setOfferName(isProductReward ? "Buy 1 product get 1 free" : "Buy 1 ticket get 1 free");
+    setOfferName("");
     setDescription("");
-    setExpiresAt(getInitialRewardDate(null, event));
+    setExpiresAt(getInitialRewardDate(null, event, maxDate));
   }, [event, isLoading, isProductReward, reward, selectorItems]);
 
   const parseWholeNumber = (value: string, fallback: number, minimum: number) => {
@@ -336,9 +405,48 @@ export default function RewardDetailsScreen() {
         await createEventReward(eventId, payload);
       }
 
-      router.back();
+      safeBack();
     } catch (error) {
-      Alert.alert("Unable to save reward", getAuthErrorMessage(error, "Please try again."));
+      if (isBusinessAccountRequiredError(error)) {
+        if (completedProfileTypes.includes("business")) {
+          Alert.alert(
+            "Business Account Required",
+            "Rewards can only be managed from a Business Account. Switch to your Business Account now?",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Switch Account",
+                onPress: async () => {
+                  try {
+                    await updateProfile({ accountType: "business" });
+                  } catch {
+                    Alert.alert("Switch Failed", "Unable to switch account. Please try again.");
+                  }
+                },
+              },
+            ],
+          );
+        } else {
+          Alert.alert(
+            "Business Account Required",
+            "Rewards can only be managed from a Business Account. Set up your Business Account first.",
+            [
+              { text: "Not Now", style: "cancel" },
+              {
+                text: "Set Up Business Account",
+                onPress: () => {
+                  router.push({
+                    pathname: "/profile-screen/edit-profile",
+                    params: { type: "business", mode: "switch" },
+                  });
+                },
+              },
+            ],
+          );
+        }
+      } else {
+        Alert.alert("Unable to save reward", getAuthErrorMessage(error, "Please try again."));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -351,7 +459,7 @@ export default function RewardDetailsScreen() {
       const nextDate = new Date(expiresAt);
       nextDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
       nextDate.setSeconds(0, 0);
-      setExpiresAt(nextDate);
+      setExpiresAt(clampDate(nextDate, salesEndDate));
     }
   };
 
@@ -361,7 +469,7 @@ export default function RewardDetailsScreen() {
     if (selectedTime) {
       const nextDate = new Date(expiresAt);
       nextDate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-      setExpiresAt(nextDate);
+      setExpiresAt(clampDate(nextDate, salesEndDate));
     }
   };
 
@@ -446,8 +554,45 @@ export default function RewardDetailsScreen() {
             </TouchableOpacity>
           </View>
 
-          {renderInput("offerName", "OFFER NAME", offerName, setOfferName, "Name")}
-          {renderInput("description", "DESCRIPTION", description, setDescription, "Detail about ticket")}
+          {selectedTicket && (
+            <View style={[styles.ticketCard, { backgroundColor: colors.card }]}>
+              <View style={styles.ticketCardRow}>
+                <View style={[styles.ticketTypeBadge, { backgroundColor: selectedTicket.type === "free" ? colors.primary + "22" : colors.textSecondary + "22" }]}>
+                  <Text style={[styles.ticketTypeBadgeText, { color: selectedTicket.type === "free" ? colors.primary : colors.textSecondary }]}>
+                    {selectedTicket.type === "free" ? "Free" : "Paid"}
+                  </Text>
+                </View>
+                <Text style={[styles.ticketPrice, { color: colors.text }]}>
+                  {selectedTicket.type === "free" ? "Free" : `$${selectedTicket.price.toFixed(2)}`}
+                </Text>
+              </View>
+
+              <View style={styles.ticketCardRow}>
+                <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
+                <Text style={[styles.ticketInfoText, { color: colors.textSecondary }]}>
+                  {selectedTicket.capacity > 0 ? `${selectedTicket.capacity} capacity` : "Unlimited capacity"}
+                </Text>
+                {selectedTicket.salesEndAt && (
+                  <>
+                    <Text style={[styles.ticketInfoDot, { color: colors.textSecondary }]}>·</Text>
+                    <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.ticketInfoText, { color: colors.textSecondary }]}>
+                      {`Sales end ${formatDate(new Date(selectedTicket.salesEndAt))}`}
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {!!selectedTicket.description && (
+                <Text style={[styles.ticketDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {selectedTicket.description}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {renderInput("offerName", "OFFER NAME", offerName, setOfferName, "e.g. Buy 1 get 1 free")}
+          {renderInput("description", "DESCRIPTION", description, setDescription, isProductReward ? "Detail about product" : "Detail about ticket")}
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, styles.rowItemLeft]}>
@@ -484,6 +629,7 @@ export default function RewardDetailsScreen() {
               value={expiresAt}
               mode="date"
               minimumDate={startOfToday(new Date())}
+              maximumDate={salesEndDate ?? undefined}
               display={Platform.OS === "ios" ? "spinner" : "default"}
               onChange={onDateChange}
             />
@@ -499,17 +645,17 @@ export default function RewardDetailsScreen() {
             />
           )}
 
-          {renderInput("discount", "DISCOUNT", discountPercent, setDiscountPercent, "4", "decimal-pad")}
-          {isProductReward && renderInput("buyQuantity", "HOW MANY TO BUY", buyQuantity, setBuyQuantity, "1", "number-pad")}
+          {renderInput("discount", "DISCOUNT (%)", discountPercent, setDiscountPercent, "e.g. 10", "decimal-pad")}
+          {isProductReward && renderInput("buyQuantity", "HOW MANY TO BUY", buyQuantity, setBuyQuantity, "e.g. 2", "number-pad")}
           {renderInput(
             "freeQuantity",
             isProductReward ? "HOW MANY FREE" : "BUY 1 HOW MANY FREE",
             freeQuantity,
             setFreeQuantity,
-            "1",
+            "e.g. 1",
             "number-pad",
           )}
-          {renderInput("capacity", "CAPACITY", capacity, setCapacity, "185", "number-pad")}
+          {renderInput("capacity", "CAPACITY (0 = unlimited)", capacity, setCapacity, "e.g. 100", "number-pad")}
         </ScrollView>
 
         <View
@@ -524,7 +670,7 @@ export default function RewardDetailsScreen() {
           <TouchableOpacity
             style={[styles.cancelButton, { backgroundColor: colors.card }]}
             disabled={isSaving}
-            onPress={() => router.back()}
+            onPress={() => safeBack()}
           >
             <Text style={[styles.cancelButtonText, { color: isSaving ? colors.textSecondary : colors.text }]}>Cancel</Text>
           </TouchableOpacity>
@@ -561,6 +707,14 @@ export default function RewardDetailsScreen() {
                     onPress={() => {
                       setSelectedTargetId(item.id);
                       setSelectorVisible(false);
+
+                      // Clamp the expiry date to the new ticket's sales end date
+                      if (!isProductReward) {
+                        const nextSalesEnd = getSalesEndDate(event, item.id);
+                        if (nextSalesEnd) {
+                          setExpiresAt((current) => clampDate(current, nextSalesEnd));
+                        }
+                      }
                     }}
                   >
                     {item.imageUri ? (
@@ -768,5 +922,44 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     marginBottom: 10,
+  },
+  ticketCard: {
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ticketCardRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  ticketDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  ticketInfoDot: {
+    fontSize: 13,
+  },
+  ticketInfoText: {
+    fontSize: 13,
+  },
+  ticketPrice: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+  ticketTypeBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  ticketTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

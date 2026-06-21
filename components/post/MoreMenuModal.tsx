@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
@@ -8,16 +8,18 @@ type MoreMenuModalProps = {
   onClose: () => void;
   onReport?: () => void;
   onSave?: () => void;
+  isSaved?: boolean;
   onDelete?: () => void;
   showDelete?: boolean;
   top?: number;
 };
 
-export default function MoreMenuModal({ 
-  visible, 
-  onClose, 
-  onReport, 
-  onSave, 
+export default function MoreMenuModal({
+  visible,
+  onClose,
+  onReport,
+  onSave,
+  isSaved = false,
   onDelete,
   showDelete = false,
   top
@@ -54,16 +56,22 @@ export default function MoreMenuModal({
 
               {onSave && (
                 <>
-                  <TouchableOpacity 
-                    style={styles.menuItem} 
-                    activeOpacity={0.7} 
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    activeOpacity={0.7}
                     onPress={() => {
                       onSave?.();
                       onClose();
                     }}
                   >
-                    <Feather name="bookmark" size={20} color={colors.text} style={styles.menuIcon} />
-                    <Text style={[styles.menuText, { color: colors.text }]}>Save</Text>
+                    {isSaved ? (
+                      <Ionicons name="bookmark" size={20} color={colors.primary} style={styles.menuIcon} />
+                    ) : (
+                      <Feather name="bookmark" size={20} color={colors.text} style={styles.menuIcon} />
+                    )}
+                    <Text style={[styles.menuText, { color: isSaved ? colors.primary : colors.text }]}>
+                      {isSaved ? "Saved" : "Save"}
+                    </Text>
                   </TouchableOpacity>
                   {showDelete && onDelete && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>

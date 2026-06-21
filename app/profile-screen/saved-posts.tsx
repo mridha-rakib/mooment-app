@@ -2,46 +2,54 @@ import CommentsModal from "@/components/post/CommentsModal";
 import FeedPost, { PostData } from '@/components/post/FeedPost';
 import ShareModal from "@/components/post/ShareModal";
 import { useTheme } from '@/hooks/useTheme';
+import { getSavedMoments } from '@/lib/moments';
+import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const MOCK_SAVED_POSTS: PostData[] = [
-  {
-    id: '1',
-    postType: 'standard',
-    authorName: 'Dj Koko',
-    authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=200&auto=format&fit=crop',
-    timeAgo: '2 min ago',
-    caption: 'Setting up for tonight. The view from up here is unreal',
-    mediaUris: ['https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop'],
-    likesCount: 25,
-    commentsCount: 25,
-    sharesCount: 25,
-  },
-  {
-    id: '2',
-    postType: 'standard',
-    authorName: 'Dj Koko',
-    authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=200&auto=format&fit=crop',
-    timeAgo: '2 min ago',
-    caption: 'Setting up for tonight. The view from up here is unreal',
-    mediaUris: ['https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop'],
-    likesCount: 25,
-    commentsCount: 25,
-    sharesCount: 25,
-  }
-];
+const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=User&background=888&color=fff&size=200';
 
 export default function SavedPostsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [commentModalVisible, setCommentModalVisible] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [posts, setPosts] = useState<PostData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activePost, setActivePost] = useState<PostData | null>(null);
 
-  const handleCommentPress = () => setCommentModalVisible(true);
-  const handleSharePress = () => setShareModalVisible(true);
+  const loadSavedPosts = useCallback(async () => {
+    setIsLoading(true);
+
+    try {
+      const moments = await getSavedMoments();
+      const mapped = moments
+        .map((moment) => mapMomentToPost(moment, { fallbackAvatar: FALLBACK_AVATAR }))
+        .filter((post): post is PostData => post !== null);
+
+      setPosts(mapped);
+    } catch {
+      setPosts([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSavedPosts();
+  }, [loadSavedPosts]);
+
+  const handleCommentPress = (post: PostData) => {
+    setActivePost(post);
+    setCommentModalVisible(true);
+  };
+
+  const handleSharePress = (post: PostData) => {
+    setActivePost(post);
+    setShareModalVisible(true);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -54,20 +62,32 @@ export default function SavedPostsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {MOCK_SAVED_POSTS.map(post => (
-          <View key={post.id} style={styles.postWrapper}>
-            <FeedPost
-              post={post}
-              onCommentPress={handleCommentPress}
-              onSharePress={handleSharePress}
-            />
+        {isLoading ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
-        ))}
+        ) : posts.length === 0 ? (
+          <View style={styles.centerState}>
+            <Feather name="bookmark" size={40} color={colors.textSecondary} />
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No saved posts yet</Text>
+          </View>
+        ) : (
+          posts.map(post => (
+            <View key={post.id} style={styles.postWrapper}>
+              <FeedPost
+                post={post}
+                onCommentPress={handleCommentPress}
+                onSharePress={handleSharePress}
+              />
+            </View>
+          ))
+        )}
       </ScrollView>
 
       <CommentsModal
         visible={commentModalVisible}
         onClose={() => setCommentModalVisible(false)}
+        momentId={activePost?.id}
       />
 
       <ShareModal
@@ -108,5 +128,14 @@ const styles = StyleSheet.create({
   },
   postWrapper: {
     marginBottom: 0,
-  }
+  },
+  centerState: {
+    alignItems: 'center',
+    paddingTop: 80,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
 });

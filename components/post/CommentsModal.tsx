@@ -2,14 +2,12 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { createMomentComment, getMomentComments, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
+import { createMomentComment, getMomentComments, toggleCommentReaction, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
-
-const { height } = Dimensions.get('window');
 
 type CommentType = {
   id: string;
@@ -105,7 +103,8 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
   authorAvatar: (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null) ?? comment.author?.avatarUrl ?? DEFAULT_COMMENT_AVATAR,
   text: comment.text,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
-  likesCount: 0,
+  likesCount: comment.likesCount,
+  isLiked: comment.isLiked,
   replies: comment.replies.map(momentCommentToComment),
 });
 
@@ -132,38 +131,11 @@ export default function CommentsModal({
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const isInputFocusedRef = useRef(false);
+  const wasKeyboardVisibleRef = useRef(false);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const canUseCommentsApi = Boolean(momentId && MONGO_OBJECT_ID_PATTERN.test(momentId));
-
-  const keyboardHeight = useSharedValue(0);
-
-  useEffect(() => {
-    const showSubscription = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => {
-        keyboardHeight.value = withTiming(e.endCoordinates.height, {
-          duration: 250,
-        });
-      }
-    );
-    const hideSubscription = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => {
-        keyboardHeight.value = withTiming(0, { duration: 250 });
-      }
-    );
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, [keyboardHeight]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      paddingBottom: keyboardHeight.value > 0 ? keyboardHeight.value : 0,
-    };
-  });
 
   const loadComments = useCallback(async () => {
     if (!momentId || !MONGO_OBJECT_ID_PATTERN.test(momentId)) {
@@ -193,27 +165,72 @@ export default function CommentsModal({
     }
   }, [loadComments, visible]);
 
-  const toggleCommentLike = (commentId: string) => {
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !visible) {
+      return;
+    }
+
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      wasKeyboardVisibleRef.current = true;
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      const shouldClose = isInputFocusedRef.current && wasKeyboardVisibleRef.current;
+      wasKeyboardVisibleRef.current = false;
+
+      // Android sends Back to the IME before the Modal. Close the sheet when
+      // that Back press dismisses the keyboard from the focused comment input.
+      if (shouldClose) {
+        inputRef.current?.blur();
+        onClose();
+      }
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      isInputFocusedRef.current = false;
+      wasKeyboardVisibleRef.current = false;
+    };
+  }, [onClose, visible]);
+
+  const toggleCommentLike = async (commentId: string) => {
+    if (!canUseCommentsApi) return;
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    const updateLikes = (items: CommentType[]): CommentType[] => {
-      return items.map(item => {
-        if (item.id === commentId) {
-          const isLiked = !item.isLiked;
-          return {
-            ...item,
-            isLiked,
-            likesCount: isLiked ? (item.likesCount + 1) : (item.likesCount - 1)
-          };
-        }
-        if (item.replies) {
-          return { ...item, replies: updateLikes(item.replies) };
-        }
-        return item;
-      });
+
+    const findInTree = (items: CommentType[], id: string): CommentType | undefined => {
+      for (const item of items) {
+        if (item.id === id) return item;
+        const found = item.replies ? findInTree(item.replies, id) : undefined;
+        if (found) return found;
+      }
+      return undefined;
     };
 
-    setComments(prev => updateLikes(prev));
+    const target = findInTree(comments, commentId);
+    if (!target) return;
+
+    const prevIsLiked = target.isLiked ?? false;
+    const prevLikesCount = target.likesCount;
+
+    const applyUpdate = (items: CommentType[], isLiked: boolean, likesCount: number): CommentType[] =>
+      items.map(item => {
+        if (item.id === commentId) return { ...item, isLiked, likesCount };
+        if (item.replies?.length) return { ...item, replies: applyUpdate(item.replies, isLiked, likesCount) };
+        return item;
+      });
+
+    // Optimistic update
+    const newIsLiked = !prevIsLiked;
+    const newLikesCount = newIsLiked ? prevLikesCount + 1 : Math.max(0, prevLikesCount - 1);
+    setComments(prev => applyUpdate(prev, newIsLiked, newLikesCount));
+
+    try {
+      const { isLiked, likesCount } = await toggleCommentReaction(momentId!, commentId);
+      setComments(prev => applyUpdate(prev, isLiked, likesCount));
+    } catch {
+      setComments(prev => applyUpdate(prev, prevIsLiked, prevLikesCount));
+    }
   };
 
   const handleReplyPress = (id: string, name: string) => {
@@ -328,7 +345,10 @@ export default function CommentsModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Animated.View style={[styles.modalOverlay, animatedStyle]}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         {/* Clickable background to dismiss */}
         <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
         
@@ -353,7 +373,11 @@ export default function CommentsModal({
           </View>
 
           {/* Comments List */}
-          <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.scrollList}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="always"
+          >
             {isLoadingComments ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator color={colors.primary} />
@@ -386,7 +410,16 @@ export default function CommentsModal({
           </ScrollView>
 
           {/* Bottom Input */}
-          <View style={[styles.inputSection, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <View
+            style={[
+              styles.inputSection,
+              {
+                backgroundColor: colors.card,
+                borderTopColor: colors.border,
+                paddingBottom: Platform.OS === 'android' ? insets.bottom + 12 : 12,
+              },
+            ]}
+          >
             {replyingTo && (
               <View style={[styles.replyContextBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}>
                 <Text style={[styles.replyContextText, { color: colors.textSecondary }]}>
@@ -406,6 +439,12 @@ export default function CommentsModal({
                   placeholderTextColor={colors.textSecondary}
                   value={commentText}
                   onChangeText={setCommentText}
+                  onFocus={() => {
+                    isInputFocusedRef.current = true;
+                  }}
+                  onBlur={() => {
+                    isInputFocusedRef.current = false;
+                  }}
                 />
               </View>
               <TouchableOpacity
@@ -427,7 +466,7 @@ export default function CommentsModal({
             </View>
           </View>
         </View>
-      </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -450,10 +489,11 @@ const styles = StyleSheet.create({
     fontWeight: 'normal',
   },
   modalContainer: {
-    height: height * 0.85,
+    height: '85%',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: Platform.OS === 'ios' ? 24 : 0,
+    overflow: 'hidden',
   },
   grabberContainer: {
     alignItems: 'center',

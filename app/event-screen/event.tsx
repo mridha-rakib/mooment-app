@@ -274,6 +274,7 @@ const EventScreen = () => {
   const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
   const [isEventStarted, setIsEventStarted] = useState(false);
+  const [selectedReward, setSelectedReward] = useState<EventRewardPayload | null>(null);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -829,7 +830,7 @@ const EventScreen = () => {
       "Create Reward",
       "Choose the reward type.",
       [
-        { text: "Product reward", onPress: () => openRewardForm("product") },
+        // { text: "Product reward", onPress: () => openRewardForm("product") },
         { text: "Ticket reward", onPress: () => openRewardForm("ticket") },
         { text: "Cancel", style: "cancel" },
       ],
@@ -838,6 +839,10 @@ const EventScreen = () => {
 
   const handleEditReward = (reward: EventRewardPayload) => {
     openRewardForm(reward.rewardType, reward);
+  };
+
+  const handleViewReward = (reward: EventRewardPayload) => {
+    setSelectedReward(reward);
   };
 
   const handleDeleteReward = (reward: EventRewardPayload) => {
@@ -1147,6 +1152,7 @@ const EventScreen = () => {
               onEditTicket={handleEditTicket}
               onDeleteTicket={handleDeleteTicket}
               onCreateReward={handleCreateReward}
+              onViewReward={handleViewReward}
               onEditReward={handleEditReward}
               onDeleteReward={handleDeleteReward}
               onClaimReward={handleClaimReward}
@@ -1359,6 +1365,112 @@ const EventScreen = () => {
             )}
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={selectedReward !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedReward(null)}
+      >
+        <View style={styles.rewardDetailOverlay}>
+          <TouchableOpacity
+            style={styles.rewardDetailBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedReward(null)}
+          />
+          <View style={[styles.rewardDetailSheet, { backgroundColor: isDark ? "#1E1E1E" : colors.card }]}>
+            <View style={styles.rewardDetailHandle} />
+
+            <View style={styles.rewardDetailHeader}>
+              <View style={styles.rewardDetailTitleBlock}>
+                <Text style={[styles.rewardDetailName, { color: colors.text }]} numberOfLines={2}>
+                  {selectedReward?.name}
+                </Text>
+                <View style={[styles.rewardDetailTypeBadge, { backgroundColor: `${colors.primary}22` }]}>
+                  <Text style={[styles.rewardDetailTypeBadgeText, { color: colors.primary }]}>
+                    {selectedReward?.rewardType === "ticket" ? "Ticket Offer" : "Product Offer"}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.rewardDetailCloseBtn}
+                activeOpacity={0.7}
+                onPress={() => setSelectedReward(null)}
+              >
+                <Feather name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedReward?.targetName ? (
+              <View style={styles.rewardDetailRow}>
+                <Feather name="tag" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+                <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Applies to</Text>
+                <Text style={[styles.rewardDetailValue, { color: colors.text }]} numberOfLines={1}>
+                  {selectedReward.targetName}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.rewardDetailDivider, { backgroundColor: colors.border }]} />
+
+            {(selectedReward?.discountPercent ?? 0) > 0 && (
+              <View style={styles.rewardDetailRow}>
+                <Feather name="percent" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+                <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Discount</Text>
+                <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
+                  {selectedReward?.discountPercent}% off
+                </Text>
+              </View>
+            )}
+
+            {(selectedReward?.freeQuantity ?? 0) > 0 && (
+              <View style={styles.rewardDetailRow}>
+                <Feather name="gift" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+                <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>BOGO</Text>
+                <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
+                  Buy {selectedReward?.buyQuantity}, get {selectedReward?.freeQuantity} free
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.rewardDetailRow}>
+              <Feather name="users" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+              <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Capacity</Text>
+              <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
+                {(selectedReward?.capacity ?? 0) === 0 ? "Unlimited" : `${selectedReward?.capacity} available`}
+              </Text>
+            </View>
+
+            <View style={styles.rewardDetailRow}>
+              <Feather name="clock" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+              <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Expires</Text>
+              <Text style={[styles.rewardDetailValue, { color: colors.text }]} numberOfLines={1}>
+                {(() => {
+                  const src = selectedReward?.expiresAt ?? event?.scheduledAt ?? null;
+                  if (!src) return "Date TBA";
+                  const d = new Date(src);
+                  if (Number.isNaN(d.getTime())) return "Date TBA";
+                  return (
+                    d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+                    " • " +
+                    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                  );
+                })()}
+              </Text>
+            </View>
+
+            {selectedReward?.description?.trim() ? (
+              <>
+                <View style={[styles.rewardDetailDivider, { backgroundColor: colors.border }]} />
+                <Text style={[styles.rewardDetailDescLabel, { color: colors.textSecondary }]}>Description</Text>
+                <Text style={[styles.rewardDetailDesc, { color: colors.text }]}>
+                  {selectedReward.description.trim()}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1700,5 +1812,98 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     marginHorizontal: 8,
+  },
+  rewardDetailOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  rewardDetailBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  rewardDetailSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  rewardDetailHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(128,128,128,0.35)",
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  rewardDetailHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    gap: 12,
+  },
+  rewardDetailTitleBlock: {
+    flex: 1,
+    gap: 8,
+  },
+  rewardDetailName: {
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 26,
+  },
+  rewardDetailTypeBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  rewardDetailTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  rewardDetailCloseBtn: {
+    padding: 4,
+    marginTop: 2,
+  },
+  rewardDetailDivider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  rewardDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 10,
+  },
+  rewardDetailRowIcon: {
+    width: 20,
+    textAlign: "center",
+  },
+  rewardDetailLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    width: 80,
+    flexShrink: 0,
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
+  rewardDetailValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  rewardDetailDescLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  rewardDetailDesc: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

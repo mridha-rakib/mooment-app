@@ -1,5 +1,5 @@
 import { OleoScript_400Regular, useFonts } from '@expo-google-fonts/oleo-script';
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
@@ -16,6 +16,7 @@ installLogBoxStackGuard();
 function AuthSessionGate() {
   const router = useRouter();
   const segments = useSegments();
+  const rootNavigationState = useRootNavigationState();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isRestoring = useAuthStore((state) => state.isRestoring);
   const hasRestored = useAuthStore((state) => state.hasRestored);
@@ -26,9 +27,8 @@ function AuthSessionGate() {
   }, [restoreAuthSession]);
 
   useEffect(() => {
-    if (isRestoring || !hasRestored) {
-      return;
-    }
+    if (!rootNavigationState?.key) return;
+    if (isRestoring || !hasRestored) return;
 
     const firstSegment = segments[0];
     const secondSegment = segments[1];
@@ -44,7 +44,7 @@ function AuthSessionGate() {
     if (isAuthenticated && isAuthRoute && !isPostVerificationRoute) {
       router.replace('/(tabs)/home' as any);
     }
-  }, [hasRestored, isAuthenticated, isRestoring, router, segments]);
+  }, [hasRestored, isAuthenticated, isRestoring, rootNavigationState, router, segments]);
 
   return null;
 }
@@ -127,11 +127,11 @@ export default function RootLayout() {
 
   return (
     <Provider store={store}>
+      <Stack screenOptions={{ headerShown: false }} />
       <ThemePreferenceGate />
       <AuthSessionGate />
       <LocationSharingGate />
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }} />
     </Provider>
   );
 }

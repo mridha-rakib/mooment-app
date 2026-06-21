@@ -1,146 +1,360 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "expo-router";
+import { useAuthStore } from "@/stores/authStore";
+import { createRealtimeSocket } from "@/lib/realtime";
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  type NotificationItem,
+} from "@/lib/notifications";
+import { followUser, unfollowUser } from "@/lib/users";
 
-type ActivityItem = {
-  id: string;
-  type: 'follow' | 'ticket';
-  user?: {
-    name: string;
-    avatar: string;
-  };
-  event?: string;
-  time: string;
+const isToday = (dateStr: string): boolean => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
 };
 
-const TODAY_DATA: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'follow',
-    user: {
-      name: '@catfish',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop'
-    },
-    time: '2 hr ago',
-  },
-  {
-    id: '2',
-    type: 'ticket',
-    event: 'Rooftop Sessions Vol.4',
-    time: '2 hr ago',
-  },
-];
+const formatTime = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
 
-const LAST_WEEK_DATA: ActivityItem[] = [
-  {
-    id: '3',
-    type: 'follow',
-    user: {
-      name: '@catfish',
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=200&auto=format&fit=crop'
-    },
-    time: '2 hr ago',
-  },
-  {
-    id: '4',
-    type: 'ticket',
-    event: 'Rooftop Sessions Vol.4',
-    time: '2 hr ago',
-  },
-];
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs} hr ago`;
+
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return date.toLocaleDateString();
+};
 
 export default function Explore() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const [isEmpty, setIsEmpty] = useState(false);
-  const [followedUsers, setFollowedUsers] = useState<string[]>([]);
+  const { accessToken } = useAuthStore();
 
-  const toggleFollow = (id: string) => {
-    setFollowedUsers(prev => prev.includes(id) ? prev.filter(uid => uid !== id) : [...prev, id]);
-  };
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
 
-  const renderItem = (item: ActivityItem) => {
-     if (item.type === 'follow') {
-      return (
-        <View key={item.id} style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <TouchableOpacity 
-            style={styles.cardContent} 
-            activeOpacity={0.7}
-            onPress={() => router.push('/profile-screen/user-profile')}
-          >
-            <Image source={{ uri: item.user?.avatar }} style={styles.avatar} />
-            <View style={styles.textContainer}>
-              <Text style={[styles.mainText, { color: colors.textSecondary }]}>
-                <Text style={[styles.boldText, { color: colors.text }]}>{item.user?.name}</Text> started following you
-              </Text>
-              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{item.time}</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[
-              styles.followBtn, 
-              followedUsers.includes(item.id) 
-                ? { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border } 
-                : { backgroundColor: colors.primary }
-            ]} 
-            activeOpacity={0.8}
-            onPress={() => toggleFollow(item.id)}
-          >
-            <Text style={[
-              styles.followBtnText, 
-              { color: followedUsers.includes(item.id) ? colors.text : colors.background }
-            ]}>
-              {followedUsers.includes(item.id) ? 'Following' : 'Follow'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      );
-    } else {
-      return (
-        <TouchableOpacity 
-          key={item.id} 
-          style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          activeOpacity={0.7}
-          onPress={() => router.push('/event-screen/event')}
-        >
-          <View style={styles.cardContent}>
-            <View style={[styles.ticketIconContainer, { backgroundColor: isDark ? 'rgba(212, 176, 235, 0.1)' : 'rgba(212, 176, 235, 0.2)' }]}>
-              <Ionicons name="ticket" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
-                Ticket confirmed for <Text style={[styles.boldText, { color: colors.text }]}>{item.event}</Text>
-              </Text>
-              <Text style={[styles.timeText, { color: colors.textSecondary }]}>{item.time}</Text>
-            </View>
-          </View>
-          <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
-      );
+  const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const data = await getNotifications();
+      setNotifications(data);
+    } catch {
+      // silently ignore load errors
     }
+  }, []);
+
+  useEffect(() => {
+    setIsLoading(true);
+    loadNotifications().finally(() => setIsLoading(false));
+  }, [loadNotifications]);
+
+  // Real-time WebSocket connection
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const socket = createRealtimeSocket({
+      accessToken,
+      onNotification: (notification) => {
+        setNotifications((prev) => [notification, ...prev]);
+      },
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, [accessToken]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await loadNotifications();
+    setIsRefreshing(false);
+  }, [loadNotifications]);
+
+  const handleMarkAllRead = useCallback(async () => {
+    try {
+      await markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch {
+      // silently ignore
+    }
+  }, []);
+
+  const handleFollow = useCallback(async (actorId: string) => {
+    if (followLoadingIds.has(actorId)) return;
+
+    setFollowLoadingIds((prev) => new Set(prev).add(actorId));
+
+    try {
+      if (followingIds.has(actorId)) {
+        await unfollowUser(actorId);
+        setFollowingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(actorId);
+          return next;
+        });
+      } else {
+        await followUser(actorId);
+        setFollowingIds((prev) => new Set(prev).add(actorId));
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setFollowLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(actorId);
+        return next;
+      });
+    }
+  }, [followingIds, followLoadingIds]);
+
+  const todayNotifications = notifications.filter((n) => isToday(n.createdAt));
+  const earlierNotifications = notifications.filter((n) => !isToday(n.createdAt));
+  const hasAnyNotification = notifications.length > 0;
+  const hasUnread = notifications.some((n) => !n.isRead);
+
+  const renderFollowCard = (item: NotificationItem) => {
+    const actorId = item.actorId ?? "";
+    const isFollowing = followingIds.has(actorId);
+    const isLoadingFollow = followLoadingIds.has(actorId);
+
+    return (
+      <View
+        key={item.id}
+        style={[
+          styles.activityCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
+          !item.isRead && styles.unreadCard,
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.cardContent}
+          activeOpacity={0.7}
+          onPress={() => router.push("/profile-screen/user-profile")}
+        >
+          {item.actorAvatarUrl ? (
+            <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.card }]}>
+              <Feather name="user" size={20} color={colors.textSecondary} />
+            </View>
+          )}
+          <View style={styles.textContainer}>
+            <Text style={[styles.mainText, { color: colors.textSecondary }]}>
+              <Text style={[styles.boldText, { color: colors.text }]}>
+                {item.actorUsername ? `@${item.actorUsername}` : (item.actorName ?? "Someone")}
+              </Text>{" "}
+              started following you
+            </Text>
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        {actorId ? (
+          <TouchableOpacity
+            style={[
+              styles.followBtn,
+              isFollowing
+                ? { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }
+                : { backgroundColor: colors.primary },
+            ]}
+            activeOpacity={0.8}
+            onPress={() => handleFollow(actorId)}
+            disabled={isLoadingFollow}
+          >
+            {isLoadingFollow ? (
+              <ActivityIndicator size="small" color={isFollowing ? colors.text : colors.background} />
+            ) : (
+              <Text
+                style={[
+                  styles.followBtnText,
+                  { color: isFollowing ? colors.text : colors.background },
+                ]}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
   };
 
-  if (isEmpty) {
+  const renderTicketCard = (item: NotificationItem) => {
+    const isCreatorNotif = item.type === "ticket_creator";
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.activityCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
+          !item.isRead && styles.unreadCard,
+        ]}
+        activeOpacity={0.7}
+        onPress={() => item.eventId && router.push("/event-screen/event")}
+      >
+        <View style={styles.cardContent}>
+          <View
+            style={[
+              styles.ticketIconContainer,
+              {
+                backgroundColor: isDark
+                  ? "rgba(212, 176, 235, 0.1)"
+                  : "rgba(212, 176, 235, 0.2)",
+              },
+            ]}
+          >
+            <Ionicons name="ticket" size={20} color={colors.primary} />
+          </View>
+          <View style={styles.textContainer}>
+            {isCreatorNotif ? (
+              <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                <Text style={[styles.boldText, { color: colors.text }]}>
+                  {item.actorUsername ? `@${item.actorUsername}` : (item.actorName ?? "Someone")}
+                </Text>{" "}
+                purchased a ticket for{" "}
+                <Text style={[styles.boldText, { color: colors.text }]}>
+                  {item.eventName ?? "your event"}
+                </Text>
+              </Text>
+            ) : (
+              <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                Ticket confirmed for{" "}
+                <Text style={[styles.boldText, { color: colors.text }]}>
+                  {item.eventName ?? "your event"}
+                </Text>
+              </Text>
+            )}
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
+        <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTicketShareCard = (item: NotificationItem) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.activityCard,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        !item.isRead && styles.unreadCard,
+      ]}
+      activeOpacity={0.7}
+      onPress={() => item.eventName && router.push("/event-screen/event")}
+    >
+      <View style={styles.cardContent}>
+        {item.actorAvatarUrl ? (
+          <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.card }]}>
+            <Feather name="user" size={20} color={colors.textSecondary} />
+          </View>
+        )}
+        <View style={styles.textContainer}>
+          <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+            <Text style={[styles.boldText, { color: colors.text }]}>
+              {item.actorUsername ? `@${item.actorUsername}` : (item.actorName ?? "Someone")}
+            </Text>{" "}
+            shared a ticket with you
+            {item.eventName ? (
+              <>
+                {" "}for{" "}
+                <Text style={[styles.boldText, { color: colors.text }]}>{item.eventName}</Text>
+              </>
+            ) : null}
+          </Text>
+          <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+            {formatTime(item.createdAt)}
+          </Text>
+        </View>
+      </View>
+      <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
+  const renderItem = (item: NotificationItem) => {
+    if (item.type === "follow") return renderFollowCard(item);
+    if (item.type === "ticket_share") return renderTicketShareCard(item);
+    return renderTicketCard(item);
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hasAnyNotification) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <Text style={[styles.headerTitleCentered, { color: colors.text }]}>Activity</Text>
         </View>
-        <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIconBox, { backgroundColor: colors.card }]}>
-            <Feather name="star" size={32} color={colors.textSecondary} />
+        <ScrollView
+          contentContainerStyle={styles.emptyScrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+        >
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconBox, { backgroundColor: colors.card }]}>
+              <Feather name="star" size={32} color={colors.textSecondary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activity yet</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Likes, comments, follows, tickets and rewards will show up here
+            </Text>
           </View>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activity yet</Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            Likes, comments, follows, tickets and rewards will show up here
-          </Text>
-          <TouchableOpacity style={[styles.discoverBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={() => setIsEmpty(false)}>
-            <Text style={[styles.discoverBtnText, { color: colors.background }]}>Go discover something</Text>
-          </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -149,17 +363,45 @@ export default function Explore() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
-        <TouchableOpacity onPress={() => setIsEmpty(true)}>
-          <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
-        </TouchableOpacity>
+        {hasUnread && (
+          <TouchableOpacity onPress={handleMarkAllRead}>
+            <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Today</Text>
-        {TODAY_DATA.map(renderItem)}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {todayNotifications.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Today</Text>
+            {todayNotifications.map(renderItem)}
+          </>
+        )}
 
-        <Text style={[styles.sectionTitle, { marginTop: 32, color: colors.textSecondary }]}>Last week</Text>
-        {LAST_WEEK_DATA.map(renderItem)}
+        {earlierNotifications.length > 0 && (
+          <>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.textSecondary },
+                todayNotifications.length > 0 && { marginTop: 32 },
+              ]}
+            >
+              Earlier
+            </Text>
+            {earlierNotifications.map(renderItem)}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -168,7 +410,6 @@ export default function Explore() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
   },
   header: {
     flexDirection: "row",
@@ -176,7 +417,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
-    marginTop: 10,
   },
   headerTitle: {
     fontSize: 18,
@@ -196,6 +436,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
+  emptyScrollContent: {
+    flexGrow: 1,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
@@ -209,6 +452,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 12,
   },
+  unreadCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: "rgba(212, 176, 235, 0.6)",
+  },
   cardContent: {
     flexDirection: "row",
     alignItems: "center",
@@ -219,6 +466,10 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     marginRight: 12,
+  },
+  avatarPlaceholder: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   ticketIconContainer: {
     width: 44,
@@ -247,12 +498,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
+    minWidth: 80,
+    alignItems: "center",
   },
   followBtnText: {
     fontSize: 13,
     fontWeight: "bold",
   },
-  /* Empty State Styles */
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
@@ -278,14 +535,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 32,
-  },
-  discoverBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  discoverBtnText: {
-    fontSize: 15,
-    fontWeight: "bold",
   },
 });
