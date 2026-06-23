@@ -18,9 +18,20 @@ import SegmentedControl from "../ui/SegmentedControl";
 const { width } = Dimensions.get("window");
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const DEFAULT_HOST_AVATAR =
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop";
 const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
+
+const isDirectMediaUrl = (value?: string | null) =>
+  Boolean(value && /^(https?:|data:|file:|content:)/i.test(value.trim()));
+
+const getNonEmptyString = (...values: (string | null | undefined)[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+};
 
 type AboutTabProps = {
   description?: string | null;
@@ -103,19 +114,29 @@ const isFiniteCoordinate = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
 const resolveHostAvatar = (host?: EventHost | null) => {
-  if (host?.avatarUrl) {
-    return host.avatarUrl;
-  }
+  const avatarKey = getNonEmptyString(host?.avatarKey);
 
-  if (host?.avatarKey) {
+  if (avatarKey) {
     try {
-      return getStorageFileUrl(host.avatarKey);
+      return getStorageFileUrl(avatarKey);
     } catch {
-      return "";
+      // Fall through to avatarUrl below.
     }
   }
 
+  const avatarUrl = getNonEmptyString(host?.avatarUrl);
+
+  if (avatarUrl) {
+    return isDirectMediaUrl(avatarUrl) ? avatarUrl : "";
+  }
+
   return "";
+};
+
+const getHostInitial = (host?: EventHost | null) => {
+  const source = host?.name?.trim() || host?.username?.trim() || "H";
+
+  return source.charAt(0).toUpperCase();
 };
 
 type LocationLineProps = {
@@ -239,8 +260,10 @@ const AboutTab = ({
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [hostFollowerDelta, setHostFollowerDelta] = useState(0);
   const [showMapsModal, setShowMapsModal] = useState(false);
+  const [hostAvatarFailed, setHostAvatarFailed] = useState(false);
 
   const hostAvatar = useMemo(() => resolveHostAvatar(host), [host]);
+  const hostInitial = useMemo(() => getHostInitial(host), [host]);
   const hostFollowers = useMemo(() => {
     const baseFollowers = typeof host?.followersCount === "number" ? host.followersCount : 0;
 
@@ -305,6 +328,10 @@ const AboutTab = ({
     setIsHostFollowing(Boolean(host?.isFollowing));
     setHostFollowerDelta(0);
   }, [host?.id, host?.isFollowing]);
+
+  useEffect(() => {
+    setHostAvatarFailed(false);
+  }, [hostAvatar]);
 
   const toggleHostFollow = async () => {
     if (!host?.id || isHostMode || isFollowPending) {
@@ -492,10 +519,18 @@ const AboutTab = ({
                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Host</Text>
                 <View style={[styles.hostCard, { backgroundColor: cardBackground }]}>
                   <View style={styles.hostCardHeader}>
-                    <Image
-                      source={{ uri: hostAvatar || DEFAULT_HOST_AVATAR }}
-                      style={styles.hostCardAvatar}
-                    />
+                    {hostAvatar && !hostAvatarFailed ? (
+                      <Image
+                        source={{ uri: hostAvatar }}
+                        style={styles.hostCardAvatar}
+                        contentFit="cover"
+                        onError={() => setHostAvatarFailed(true)}
+                      />
+                    ) : (
+                      <View style={[styles.hostCardAvatar, styles.hostCardAvatarFallback]}>
+                        <Text style={styles.hostCardAvatarFallbackText}>{hostInitial}</Text>
+                      </View>
+                    )}
                     <View style={styles.hostCardInfo}>
                       <Text style={[styles.hostCardName, { color: colors.text }]}>{host?.name ?? "Host"}</Text>
                       {!!host?.username && (
@@ -690,6 +725,17 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     borderColor: "#C05178",
     borderWidth: 2,
+  },
+  hostCardAvatarFallback: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  hostCardAvatarFallbackText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "800",
   },
   hostCardInfo: {
     flex: 1,

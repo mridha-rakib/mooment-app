@@ -72,6 +72,19 @@ const DEFAULT_BANNER =
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
+const isDirectMediaUrl = (value?: string | null) =>
+  Boolean(value && /^(https?:|data:|file:|content:)/i.test(value.trim()));
+
+const getNonEmptyString = (...values: (string | null | undefined)[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+};
+
 const isFiniteCoordinate = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
@@ -131,6 +144,10 @@ const formatEventTime = (scheduledAt?: string | null) => {
 const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_AVATAR) => {
   if (!key) {
     return fallback;
+  }
+
+  if (isDirectMediaUrl(key)) {
+    return key.trim();
   }
 
   try {
@@ -215,13 +232,32 @@ const getEventBannerImageUris = (event?: EventResponse | null) => {
   return [...new Set(urls)];
 };
 
-const getHostAvatarUri = (event?: EventResponse | null) =>
-  resolveStorageUrl(event?.host?.avatarUrl ?? event?.host?.avatarKey, DEFAULT_AVATAR);
+const getHostAvatarUri = (event?: EventResponse | null) => {
+  const avatarKey = getNonEmptyString(event?.host?.avatarKey);
+
+  if (avatarKey) {
+    return resolveStorageUrl(avatarKey, DEFAULT_AVATAR);
+  }
+
+  const avatarUrl = getNonEmptyString(event?.host?.avatarUrl);
+
+  if (avatarUrl) {
+    return resolveStorageUrl(avatarUrl, DEFAULT_AVATAR);
+  }
+
+  return DEFAULT_AVATAR;
+};
 
 const getHostHandle = (event?: EventResponse | null) => {
   const handle = event?.host?.username?.trim().replace(/^@+/, "");
 
   return handle ? `@${handle}` : "";
+};
+
+const getHostInitial = (event?: EventResponse | null) => {
+  const source = event?.host?.name?.trim() || event?.host?.username?.trim() || "H";
+
+  return source.charAt(0).toUpperCase();
 };
 
 const getHeroCategoryTags = (event?: EventResponse | null) => {
@@ -297,6 +333,7 @@ const EventScreen = () => {
   const [isLikePending, setIsLikePending] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [hostAvatarFailed, setHostAvatarFailed] = useState(false);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -372,7 +409,7 @@ const EventScreen = () => {
     return () => {
       isActive = false;
     };
-  }, [eventId, router]);
+  }, [currentUser?.id, eventId, router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -478,6 +515,11 @@ const EventScreen = () => {
   const hostName = event?.host?.name ?? "Host";
   const hostHandle = getHostHandle(event);
   const hostAvatarUri = getHostAvatarUri(event);
+  const hostInitial = getHostInitial(event);
+
+  useEffect(() => {
+    setHostAvatarFailed(false);
+  }, [hostAvatarUri]);
   const bannerImageUri = getBannerImageUri(event);
   const eventImageUris = useMemo(() => {
     const bannerUris = getEventBannerImageUris(event);
@@ -1189,13 +1231,27 @@ const EventScreen = () => {
             </View>
 
             <View style={styles.hostRow}>
-              <Image
-                source={{ uri: hostAvatarUri }}
-                style={[
-                  styles.hostAvatar,
-                  { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
-                ]}
-              />
+              {hostAvatarUri && !hostAvatarFailed ? (
+                <Image
+                  source={{ uri: hostAvatarUri }}
+                  style={[
+                    styles.hostAvatar,
+                    { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
+                  ]}
+                  contentFit="cover"
+                  onError={() => setHostAvatarFailed(true)}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.hostAvatar,
+                    styles.hostAvatarFallback,
+                    { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
+                  ]}
+                >
+                  <Text style={styles.hostAvatarFallbackText}>{hostInitial}</Text>
+                </View>
+              )}
               <View style={styles.hostInfo}>
                 <Text style={[styles.hostName, { color: colors.text }]}>{hostName}</Text>
                 <View style={styles.hostSubRow}>
@@ -1779,6 +1835,17 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     borderWidth: 2,
+  },
+  hostAvatarFallback: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  hostAvatarFallbackText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
   },
   hostInfo: {
     flex: 1,
