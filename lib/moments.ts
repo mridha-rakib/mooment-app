@@ -29,6 +29,7 @@ export type Moment = {
   author?: MomentAuthor | null;
   mode: MomentMode;
   caption?: string | null;
+  hashtags: string[];
   audience: MomentAudience;
   taggedPeople: string[];
   eventTitle?: string | null;
@@ -121,9 +122,19 @@ export const getMyMoments = async (): Promise<Moment[]> => {
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 
-export const getFeedMoments = async (): Promise<Moment[]> => {
-  const response = await api.get("/moments");
+export const getFeedMoments = async (options: { hashtags?: string[]; limit?: number } = {}): Promise<Moment[]> => {
+  const response = await api.get("/moments", {
+    params: {
+      ...(options.hashtags?.length ? { hashtags: options.hashtags.join(',') } : {}),
+      ...(options.limit ? { limit: options.limit } : {}),
+    },
+  });
 
+  return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+export const getHashtagMoments = async (hashtag: string, limit = 100): Promise<Moment[]> => {
+  const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, { params: { limit } });
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 

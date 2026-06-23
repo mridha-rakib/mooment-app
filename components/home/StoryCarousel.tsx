@@ -9,6 +9,7 @@ import { getCachedStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSo
 export type StoryData = {
   id: string;
   type: 'add' | 'live' | 'standard' | 'muted';
+  isOwnStory?: boolean;
   imageUri?: string;
   mediaUri?: string | null;
   storyItems?: StorySequenceItem[];
@@ -148,6 +149,11 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
               style={styles.storyItem}
               activeOpacity={0.8}
               onPress={() => {
+                if (story.isOwnStory) {
+                  router.push('/post-screen/add-story');
+                  return;
+                }
+
                 if (story.storyItems?.length || story.mediaUri) {
                   const storyItems = story.storyItems ?? (
                     story.mediaUri

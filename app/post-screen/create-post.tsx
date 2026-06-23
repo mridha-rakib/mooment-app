@@ -44,7 +44,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { createMoment } from '@/lib/moments';
 import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
-import { getStorageDownloadUrl, uploadFileToStorage } from '@/lib/storage';
+import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
@@ -1223,35 +1223,24 @@ export default function CreateMomentScreen() {
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [showAudienceModal, setShowAudienceModal] = useState(false);
   const [authorAvatar, setAuthorAvatar] = useState(DEFAULT_AVATAR);
+  const [avatarError, setAvatarError] = useState(false);
   const authorName = user?.name?.trim() || FALLBACK_AUTHOR_NAME;
 
   useEffect(() => {
-    let isMounted = true;
+    setAvatarError(false);
 
-    const loadAuthorAvatar = async () => {
-      if (!user?.avatarKey) {
-        setAuthorAvatar(DEFAULT_AVATAR);
-        return;
-      }
+    if (!user?.avatarKey) {
+      setAuthorAvatar(DEFAULT_AVATAR);
+      return;
+    }
 
-      try {
-        const url = await getStorageDownloadUrl(user.avatarKey);
-
-        if (isMounted) {
-          setAuthorAvatar(url);
-        }
-      } catch {
-        if (isMounted) {
-          setAuthorAvatar(DEFAULT_AVATAR);
-        }
-      }
-    };
-
-    void loadAuthorAvatar();
-
-    return () => {
-      isMounted = false;
-    };
+    try {
+      // The API proxy is reachable from physical devices; direct presigned
+      // MinIO URLs may resolve to localhost and fail outside the dev machine.
+      setAuthorAvatar(getStorageFileUrl(user.avatarKey));
+    } catch {
+      setAuthorAvatar(DEFAULT_AVATAR);
+    }
   }, [user?.avatarKey]);
 
   const handleImageSelect = (
@@ -1615,10 +1604,21 @@ export default function CreateMomentScreen() {
         >
           {/* ── Author Row ── */}
           <View style={styles.authorRow}>
-            <Image
-              source={{ uri: authorAvatar }}
-              style={styles.avatar}
-            />
+            <View style={styles.avatarRing}>
+              {!avatarError && authorAvatar ? (
+                <Image
+                  source={{ uri: authorAvatar }}
+                  style={styles.avatar}
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitials}>
+                    {authorName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
             <View style={styles.authorInfo}>
               <Text style={styles.authorNameFull} numberOfLines={2}>
                 <Text style={styles.authorBold}>{authorName}</Text>
@@ -1711,7 +1711,7 @@ export default function CreateMomentScreen() {
 
           <TextInput
             style={styles.stitchInput}
-            placeholder="Write your stitch here. . ."
+            placeholder="Write your thoughts"
             placeholderTextColor={screenColors.bodyText}
             value={caption}
             onChangeText={setCaption}
@@ -1889,7 +1889,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     marginBottom: 20,
   },
-  avatar: { width: 24, height: 24, borderRadius: 12, marginRight: 12 },
+  avatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#16D869',
+    padding: 2,
+    marginRight: 12,
+    shadowColor: '#16D869',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarFallback: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#16D869',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: { color: '#000', fontSize: 16, fontWeight: '700' },
   authorInfo: { flex: 1 },
   authorNameFull: { color: CREATE_MOMENT_COLORS.text, fontSize: 14, lineHeight: 18 },
   authorBold: { color: CREATE_MOMENT_COLORS.text, fontWeight: '600' },

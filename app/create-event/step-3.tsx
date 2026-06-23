@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,10 @@ const createEventStepThreeSchema = z
     { message: 'Please add a location for your event.' },
   );
 
-type CreateEventStepThreeErrors = { location?: string };
+const ADDITIONAL_INFO_MAX = 500;
+const ADDITIONAL_INFO_WARN = 400;
+
+type CreateEventStepThreeErrors = { location?: string; additionalInfo?: string };
 
 export default function CreateEventStep3() {
   const router = useRouter();
@@ -46,9 +49,21 @@ export default function CreateEventStep3() {
   const [address, setAddress] = useState(draftLocation.address ?? '');
   const [additionalInfo, setAdditionalInfo] = useState(draftLocation.additionalInfo ?? '');
   const [errors, setErrors] = useState<CreateEventStepThreeErrors>({});
+  const additionalInfoLength = additionalInfo.length;
+  const additionalInfoCounterColor =
+    additionalInfoLength >= ADDITIONAL_INFO_MAX
+      ? colors.danger
+      : additionalInfoLength >= ADDITIONAL_INFO_WARN
+        ? '#F59E0B'
+        : colors.textSecondary;
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
+  const isMountedRef = useRef(true);
   const searchLabel = draftLocation.searchLabel ?? address;
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
 
   useEffect(() => {
     setVenue(draftLocation.venue ?? '');
@@ -146,7 +161,8 @@ export default function CreateEventStep3() {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (isSaving) return;
     const trimmedAddress = address.trim();
     const trimmedVenue = venue.trim();
     const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
@@ -157,14 +173,38 @@ export default function CreateEventStep3() {
       address: trimmedAddress || null,
     });
 
+    const nextErrors: CreateEventStepThreeErrors = {};
+
     if (!result.success) {
-      setErrors({ location: result.error.errors[0]?.message });
+      nextErrors.location = result.error.errors[0]?.message;
+    }
+
+    if (additionalInfo.length > ADDITIONAL_INFO_MAX) {
+      nextErrors.additionalInfo = `Additional info cannot exceed ${ADDITIONAL_INFO_MAX} characters`;
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
     setErrors({});
     persistStepThree();
-    router.push('/create-event/step-4');
+    setIsSaving(true);
+
+    try {
+      await saveDraft();
+      if (isMountedRef.current) {
+        router.push('/create-event/step-4');
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
+    }
   };
 
   const handleOpenLocationPicker = () => {
@@ -179,7 +219,7 @@ export default function CreateEventStep3() {
 
       {/* Header */}
       <View style={styles.header}>
-        <BackButton />
+        <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-2')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
@@ -258,15 +298,37 @@ export default function CreateEventStep3() {
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>ADDITIONAL INFO</Text>
             <TextInput
-              style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text }]}
+              style={[
+                styles.input,
+                styles.textArea,
+                { backgroundColor: colors.card, color: colors.text },
+                additionalInfoLength >= ADDITIONAL_INFO_WARN && {
+                  borderWidth: 1,
+                  borderColor: additionalInfoLength >= ADDITIONAL_INFO_MAX ? colors.danger : '#F59E0B',
+                },
+              ]}
               placeholder="Any extra details about the location…"
               placeholderTextColor={colors.textSecondary}
               value={additionalInfo}
-              onChangeText={setAdditionalInfo}
+              onChangeText={(v) => {
+                setAdditionalInfo(v);
+                if (errors.additionalInfo) setErrors((prev) => ({ ...prev, additionalInfo: undefined }));
+              }}
               multiline
               numberOfLines={3}
               textAlignVertical="top"
+              maxLength={ADDITIONAL_INFO_MAX}
             />
+            <View style={styles.counterRow}>
+              {errors.additionalInfo ? (
+                <Text style={[styles.errorText, { color: colors.danger }]}>{errors.additionalInfo}</Text>
+              ) : (
+                <Text />
+              )}
+              <Text style={[styles.charCounter, { color: additionalInfoCounterColor }]}>
+                {additionalInfoLength} / {ADDITIONAL_INFO_MAX}
+              </Text>
+            </View>
           </View>
         </ScrollView>
 
@@ -275,8 +337,9 @@ export default function CreateEventStep3() {
           <TouchableOpacity
             style={[styles.nextButton, { backgroundColor: colors.primary }]}
             onPress={handleNext}
+            disabled={isSaving}
           >
-            <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
+            <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -349,6 +412,17 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     marginTop: 6,
+    flex: 1,
+  },
+  counterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  charCounter: {
+    fontSize: 12,
+    textAlign: 'right',
   },
   input: {
     borderRadius: 12,

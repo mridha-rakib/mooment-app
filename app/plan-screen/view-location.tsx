@@ -60,6 +60,15 @@ export default function ViewLocationScreen() {
   const [distance, setDistance] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<"loading" | "denied" | "ready">("loading");
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace("/(tabs)/home");
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -96,7 +105,7 @@ export default function ViewLocationScreen() {
         ]}
       >
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           activeOpacity={0.8}
         >

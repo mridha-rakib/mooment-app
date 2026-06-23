@@ -8,17 +8,24 @@ import BackButton from "@/components/ui/BackButton";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import {
+    acceptJoinRequest,
     claimEventReward,
+    declineJoinRequest,
     deleteEvent,
     deleteEventReward,
     deleteEventTicket,
     getEventById,
+    getJoinRequests,
     getMyEventRewardClaims,
+    submitJoinRequest,
+    ticketAlreadyHasReward,
     updateEvent,
     type EventResponse,
     type EventRewardPayload,
     type EventRewardType,
     type EventTicketPayload,
+    type JoinRequest,
+    type JoinRequestStatus,
 } from "@/lib/events";
 import { getMyTicketPurchaseCounts } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -219,13 +226,13 @@ const getHeroCategoryTags = (event?: EventResponse | null) => {
     return [];
   }
 
-  const tags: string[] = [];
+  const tags = event.categories?.length
+    ? event.categories
+    : event.category
+      ? [event.category]
+      : [];
 
-  if (event.category) {
-    tags.push(event.category);
-  }
-
-  return tags.slice(0, 2);
+  return tags.slice(0, 3);
 };
 
 const getPrivacyLabel = (privacy?: EventResponse["privacy"]) => {
@@ -275,6 +282,11 @@ const EventScreen = () => {
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [selectedReward, setSelectedReward] = useState<EventRewardPayload | null>(null);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [submittingJoinRequest, setSubmittingJoinRequest] = useState(false);
+  const [acceptingJoinRequestId, setAcceptingJoinRequestId] = useState<string | null>(null);
+  const [decliningJoinRequestId, setDecliningJoinRequestId] = useState<string | null>(null);
+  const [myJoinRequestStatus, setMyJoinRequestStatus] = useState<JoinRequestStatus | null>(null);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -322,6 +334,15 @@ const EventScreen = () => {
         setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
         setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
         setPurchasedTicketCounts(loadedCounts);
+        setMyJoinRequestStatus(loadedEvent.myJoinRequestStatus ?? null);
+
+        const isEventOwner =
+          currentUser?.id &&
+          (loadedEvent.userId === currentUser.id || loadedEvent.host?.id === currentUser.id);
+
+        if (loadedEvent.privacy === "locked" && isEventOwner) {
+          getJoinRequests(eventId).then(setJoinRequests).catch(() => {});
+        }
       } catch {
         if (!isActive) {
           return;
@@ -826,6 +847,26 @@ const EventScreen = () => {
       return;
     }
 
+    if (event.tickets.length === 0) {
+      Alert.alert(
+        "Create a ticket first",
+        "A ticket reward must be linked to a ticket. Create a ticket before adding a reward.",
+      );
+      return;
+    }
+
+    const hasAvailableTicket = event.tickets.some(
+      (ticket) => !ticketAlreadyHasReward(event.rewards, ticket.id ?? ticket.name),
+    );
+
+    if (!hasAvailableTicket) {
+      Alert.alert(
+        "All tickets already have rewards",
+        "Each ticket can have only one reward. Edit or delete an existing reward, or create another ticket before adding a new reward.",
+      );
+      return;
+    }
+
     Alert.alert(
       "Create Reward",
       "Choose the reward type.",
@@ -909,6 +950,61 @@ const EventScreen = () => {
       pathname: "/event-screen/members",
       params: { eventId: event.id },
     });
+  };
+
+  const handleSubmitJoinRequest = async () => {
+    if (!event || submittingJoinRequest) {
+      return;
+    }
+
+    setSubmittingJoinRequest(true);
+
+    try {
+      const result = await submitJoinRequest(event.id);
+      setMyJoinRequestStatus(result.status);
+    } catch {
+      Alert.alert("Unable to submit request", "Please try again.");
+    } finally {
+      setSubmittingJoinRequest(false);
+    }
+  };
+
+  const handleAcceptJoinRequest = async (userId: string) => {
+    if (!event || acceptingJoinRequestId) {
+      return;
+    }
+
+    setAcceptingJoinRequestId(userId);
+
+    try {
+      await acceptJoinRequest(event.id, userId);
+      setJoinRequests((prev) =>
+        prev.map((r) => (r.userId === userId ? { ...r, status: "accepted" as JoinRequestStatus } : r)),
+      );
+    } catch {
+      Alert.alert("Unable to accept request", "Please try again.");
+    } finally {
+      setAcceptingJoinRequestId(null);
+    }
+  };
+
+  const handleDeclineJoinRequest = async (userId: string) => {
+    if (!event || decliningJoinRequestId) {
+      return;
+    }
+
+    setDecliningJoinRequestId(userId);
+
+    try {
+      await declineJoinRequest(event.id, userId);
+      setJoinRequests((prev) =>
+        prev.map((r) => (r.userId === userId ? { ...r, status: "declined" as JoinRequestStatus } : r)),
+      );
+    } catch {
+      Alert.alert("Unable to decline request", "Please try again.");
+    } finally {
+      setDecliningJoinRequestId(null);
+    }
   };
 
   const handlePrivacyChange = async (newPrivacy: "public" | "locked") => {
@@ -1126,7 +1222,7 @@ const EventScreen = () => {
               host={event?.host ?? null}
               eventImageUris={eventImageUris}
               isHostMode={isHostMode}
-              category={event?.category ?? null}
+              category={event?.categories?.[0] ?? event?.category ?? null}
               onHostFollowChange={updateHostFollowState}
             />
           )}
@@ -1135,6 +1231,7 @@ const EventScreen = () => {
               tickets={event?.tickets ?? []}
               rewards={event?.rewards ?? []}
               scheduledAt={event?.scheduledAt ?? null}
+              privacy={event?.privacy}
               purchasedTicketCounts={purchasedTicketCounts}
               isHostMode={isHostMode}
               deletingTicketId={deletingTicketId}
@@ -1144,9 +1241,17 @@ const EventScreen = () => {
               selectedTicketKey={selectedTicketKey}
               selectedTicketQuantity={selectedTicketQuantity}
               selectedAccessSubTab={accessSubTab}
+              joinRequests={joinRequests}
+              myJoinRequestStatus={myJoinRequestStatus}
+              submittingJoinRequest={submittingJoinRequest}
+              acceptingJoinRequestId={acceptingJoinRequestId}
+              decliningJoinRequestId={decliningJoinRequestId}
               onSelectAccessSubTab={setAccessSubTab}
               onSelectTicket={handleSelectTicket}
               onTicketQuantityChange={handleTicketQuantityChange}
+              onSubmitJoinRequest={handleSubmitJoinRequest}
+              onAcceptJoinRequest={handleAcceptJoinRequest}
+              onDeclineJoinRequest={handleDeclineJoinRequest}
               onCreateTicket={handleCreateTicket}
               onViewTicket={handleViewTicket}
               onEditTicket={handleEditTicket}

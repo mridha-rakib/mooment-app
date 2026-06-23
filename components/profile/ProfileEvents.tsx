@@ -1,17 +1,16 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { BlurView } from "expo-blur";
 import React, { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { getMyProfileEvents, type EventResponse, type ProfileEventGroups } from "@/lib/events";
+import { cancelEvent, getMyProfileEvents, type EventResponse, type ProfileEventGroups } from "@/lib/events";
+import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import FeedPost, { PostData } from "../post/FeedPost";
 
 const ACTIVE_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
-const FALLBACK_EVENT_IMAGE =
-  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop";
 
 const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
   active: [],
@@ -129,13 +128,13 @@ const formatDistanceOrLocation = (event: EventResponse, userLocation: [number, n
 
 const resolveStorageUrl = (key?: string | null, fallback?: string) => {
   if (!key) {
-    return fallback ?? DEFAULT_AVATAR;
+    return fallback;
   }
 
   try {
     return getStorageFileUrl(key);
   } catch {
-    return fallback ?? DEFAULT_AVATAR;
+    return fallback;
   }
 };
 
@@ -145,18 +144,29 @@ const mapEventToPost = (
   fallbackAuthor: { name: string; avatar: string },
 ): PostData => {
   const isLive = isLiveEvent(event.scheduledAt);
+  const categoryTags = (event.categories?.length ? event.categories : event.category ? [event.category] : ["Event"])
+    .map((category) => ({ label: category, bg: "#FFFFFF", color: "#000000" }));
   const tags = [
-    event.category
-      ? { label: event.category, bg: "#FFFFFF", color: "#000000" }
-      : { label: "Event", bg: "#FFFFFF", color: "#000000" },
+    ...categoryTags,
     {
       label: isLive ? "Live" : "Upcoming",
       bg: isLive ? "rgba(22, 216, 105, 0.2)" : "rgba(255, 125, 84, 0.2)",
       color: isLive ? "#16D869" : "#FF7D54",
     },
   ];
-  const bannerPreviewUri = resolveStorageUrl(event.bannerImageKey, FALLBACK_EVENT_IMAGE);
-  const bannerFullUri = resolveStorageUrl(event.bannerOriginalImageKey ?? event.bannerImageKey, FALLBACK_EVENT_IMAGE);
+  const bannerPreviewUri = event.bannerImageKey ? resolveStorageUrl(event.bannerImageKey) : null;
+  const bannerFullUri = event.bannerOriginalImageKey
+    ? resolveStorageUrl(event.bannerOriginalImageKey)
+    : bannerPreviewUri;
+  const mediaUris = bannerFullUri ? [bannerFullUri] : [];
+  const mediaItems = bannerPreviewUri
+    ? [{
+        uri: bannerPreviewUri,
+        fullUri: bannerFullUri ?? bannerPreviewUri,
+        type: "image" as const,
+        displayCrop: event.bannerImageDisplay,
+      }]
+    : [];
 
   return {
     id: `event-${event.id}`,
@@ -164,19 +174,14 @@ const mapEventToPost = (
     postType: "event",
     authorId: event.userId,
     authorName: event.host?.name || fallbackAuthor.name,
-    authorAvatar: resolveStorageUrl(event.host?.avatarKey, fallbackAuthor.avatar),
+    authorAvatar: resolveStorageUrl(event.host?.avatarKey, fallbackAuthor.avatar) ?? fallbackAuthor.avatar,
     timeAgo: formatTimeAgo(event.publishedAt ?? event.createdAt),
     isPublic: event.privacy === "public",
     likesCount: 0,
     commentsCount: 0,
     sharesCount: 0,
-    mediaUris: [bannerFullUri],
-    mediaItems: [{
-      uri: bannerPreviewUri,
-      fullUri: bannerFullUri,
-      type: "image",
-      displayCrop: event.bannerImageDisplay,
-    }],
+    mediaUris,
+    mediaItems,
     eventDetails: {
       isLive,
       title: event.name || "Event",
@@ -203,13 +208,44 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
   const fallbackAuthor = useMemo(
     () => ({
       name: user?.name?.trim() || "Mooment User",
-      avatar: resolveStorageUrl(user?.avatarKey, DEFAULT_AVATAR),
+      avatar: resolveStorageUrl(user?.avatarKey, DEFAULT_AVATAR) ?? DEFAULT_AVATAR,
     }),
     [user?.avatarKey, user?.name],
   );
   const eventPosts = useMemo(
     () => events[filter].map((event) => mapEventToPost(event, userLocation, fallbackAuthor)),
     [events, fallbackAuthor, filter, userLocation],
+  );
+
+  const handleCancelEventPost = useCallback(
+    (post: PostData) => {
+      const eventId = post.eventId;
+      if (!eventId) return;
+
+      Alert.alert(
+        "Cancel Event",
+        "Are you sure you want to cancel this event? This cannot be undone.",
+        [
+          { text: "Keep Event", style: "cancel" },
+          {
+            text: "Cancel Event",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await cancelEvent(eventId);
+                setEvents((prev) => ({
+                  active: prev.active.filter((e) => e.id !== eventId),
+                  past: prev.past.filter((e) => e.id !== eventId),
+                }));
+              } catch (error) {
+                Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
+              }
+            },
+          },
+        ],
+      );
+    },
+    [],
   );
 
   useFocusEffect(
@@ -269,12 +305,13 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
       {/* Events List */}
       <View style={styles.list}>
         {eventPosts.map((event) => (
-          <FeedPost 
-            key={event.id} 
-            post={event} 
-            onCommentPress={onCommentPress} 
-            onSharePress={onSharePress} 
+          <FeedPost
+            key={event.id}
+            post={event}
+            onCommentPress={onCommentPress}
+            onSharePress={onSharePress}
             isOwnPost={isOwnProfile}
+            onDeletePress={isOwnProfile && filter === 'active' ? handleCancelEventPost : undefined}
           />
         ))}
       </View>

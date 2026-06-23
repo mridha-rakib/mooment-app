@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Linking, View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, ActivityIndicator } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import BackButton from '@/components/ui/BackButton';
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
+import { Camera, CameraView } from 'expo-camera';
+import type { PermissionResponse } from 'expo-modules-core';
 import { useTheme } from '@/hooks/useTheme';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -11,6 +13,7 @@ import { createStory } from '@/lib/stories';
 import { generateStoryThumbnail, setCachedStoryThumbnail } from '@/lib/storyThumbnails';
 import { uploadFileToStorage } from '@/lib/storage';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { compressStoryVideoIfNeeded } from '@/lib/videoCompressor';
 
 const MAX_STORY_SECONDS = 15;
 
@@ -43,6 +46,7 @@ const getVideoExtension = (contentType: string) => {
 export default function AddStoryScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const cameraRef = useRef<CameraView>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
@@ -50,8 +54,130 @@ export default function AddStoryScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
+  const [publishStage, setPublishStage] = useState('');
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraInstanceKey, setCameraInstanceKey] = useState(0);
+  const [permissionLoadTimedOut, setPermissionLoadTimedOut] = useState(false);
+  const [isRequestingPermissions, setIsRequestingPermissions] = useState(false);
+  const [cameraPermission, setCameraPermission] = useState<PermissionResponse | null>(null);
+  const [microphonePermission, setMicrophonePermission] = useState<PermissionResponse | null>(null);
+  const hasRequestedPermissions = useRef(false);
+
+  const refreshPermissions = useCallback(async () => {
+    // Keep native camera-module calls serialized. Some Android camera providers
+    // leave concurrent permission calls pending indefinitely.
+    const nextCameraPermission = await Camera.getCameraPermissionsAsync();
+    setCameraPermission(nextCameraPermission);
+    const nextMicrophonePermission = await Camera.getMicrophonePermissionsAsync();
+    setMicrophonePermission(nextMicrophonePermission);
+
+    return {
+      camera: nextCameraPermission,
+      microphone: nextMicrophonePermission,
+    };
+  }, []);
+
+  const requestRequiredPermissions = useCallback(async () => {
+    if (isRequestingPermissions) {
+      return false;
+    }
+
+    setIsRequestingPermissions(true);
+
+    try {
+      // Android cannot reliably present two native permission activities at once.
+      // Request camera first, then microphone only after the first prompt settles.
+      const nextCameraPermission = cameraPermission?.granted
+        ? cameraPermission
+        : await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(nextCameraPermission);
+
+      if (!nextCameraPermission.granted) {
+        return false;
+      }
+
+      const nextMicrophonePermission = microphonePermission?.granted
+        ? microphonePermission
+        : await Camera.requestMicrophonePermissionsAsync();
+      setMicrophonePermission(nextMicrophonePermission);
+
+      return nextMicrophonePermission.granted;
+    } catch (error) {
+      Alert.alert(
+        'Unable to request permissions',
+        getAuthErrorMessage(error, 'Please try again or enable camera access in Settings.'),
+      );
+      return false;
+    } finally {
+      setIsRequestingPermissions(false);
+    }
+  }, [
+    cameraPermission,
+    isRequestingPermissions,
+    microphonePermission,
+  ]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void refreshPermissions().catch(() => {
+      if (isMounted) {
+        setPermissionLoadTimedOut(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshPermissions]);
+
+  useEffect(() => {
+    if (!cameraPermission || !microphonePermission) return;
+    if (cameraPermission.granted && microphonePermission.granted) return;
+    if (hasRequestedPermissions.current) return;
+
+    hasRequestedPermissions.current = true;
+
+    void requestRequiredPermissions().then((granted) => {
+      if (!granted && (!cameraPermission.canAskAgain || !microphonePermission.canAskAgain)) {
+        Alert.alert(
+          'Camera access required',
+          'Please enable camera and microphone access in your device settings to create stories.',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => router.back() },
+            { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+          ],
+        );
+      }
+    });
+  }, [cameraPermission, microphonePermission, requestRequiredPermissions, router]);
+
+  useEffect(() => {
+    if (cameraPermission && microphonePermission) {
+      setPermissionLoadTimedOut(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => setPermissionLoadTimedOut(true), 4000);
+    return () => clearTimeout(timeout);
+  }, [cameraPermission, microphonePermission]);
+
+  useEffect(() => () => {
+    cameraRef.current?.stopRecording();
+  }, []);
+
+  useEffect(() => {
+    if (!isFocused || isCameraReady || cameraError || !cameraPermission?.granted || !microphonePermission?.granted) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setCameraError('The camera took too long to start. Close other apps using the camera and try again.');
+    }, 10000);
+
+    return () => clearTimeout(timeout);
+  }, [cameraError, cameraPermission?.granted, isCameraReady, isFocused, microphonePermission?.granted]);
 
   useEffect(() => {
     if (recordingFrameRef.current !== null) {
@@ -109,20 +235,30 @@ export default function AddStoryScreen() {
     }
 
     setIsPublishing(true);
+    setPublishStage('');
 
     try {
-      const thumbnailPromise = generateStoryThumbnail(uri);
-      const extension = getVideoExtension(contentType);
-      const storageKey = await uploadFileToStorage({
+      // Compress to ≤ 5 MB before uploading; skip if already under limit
+      const compressed = await compressStoryVideoIfNeeded(
         uri,
+        durationSeconds,
+        (stage, pct) => setPublishStage(pct > 0 ? `${stage} ${Math.round(pct)}%` : stage),
+      );
+
+      setPublishStage('Uploading...');
+      const thumbnailPromise = generateStoryThumbnail(compressed.uri);
+      const extension = getVideoExtension(compressed.contentType);
+      const storageKey = await uploadFileToStorage({
+        uri: compressed.uri,
         key: `stories/${Date.now()}.${extension}`,
-        contentType,
+        contentType: compressed.contentType,
       });
 
+      setPublishStage('Creating story...');
       const story = await createStory({
         mediaSource: source,
         storageKey,
-        contentType,
+        contentType: compressed.contentType,
         durationSeconds: Math.max(0.1, durationSeconds),
       });
 
@@ -140,6 +276,7 @@ export default function AddStoryScreen() {
       );
     } finally {
       setIsPublishing(false);
+      setPublishStage('');
     }
   };
 
@@ -154,18 +291,20 @@ export default function AddStoryScreen() {
     }
 
     if (!cameraPermission?.granted || !microphonePermission?.granted) {
-      const [nextCameraPermission, nextMicrophonePermission] = await Promise.all([
-        cameraPermission?.granted ? Promise.resolve(cameraPermission) : requestCameraPermission(),
-        microphonePermission?.granted ? Promise.resolve(microphonePermission) : requestMicrophonePermission(),
-      ]);
+      const granted = await requestRequiredPermissions();
 
-      if (!nextCameraPermission.granted || !nextMicrophonePermission.granted) {
+      if (!granted) {
         Alert.alert(
           'Permission needed',
           'Camera and microphone permissions are required to record a story video.',
         );
         return;
       }
+    }
+
+    if (!isCameraReady || !cameraRef.current) {
+      Alert.alert('Camera is starting', 'Wait a moment for the camera preview, then try again.');
+      return;
     }
 
     try {
@@ -218,6 +357,9 @@ export default function AddStoryScreen() {
       mediaTypes: ['videos'],
       quality: 0.9,
       videoMaxDuration: MAX_STORY_SECONDS,
+      // iOS only: transcode to 720p H.264 via AVFoundation before we receive
+      // the file. This is built into expo-image-picker — no extra native module.
+      videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
     });
 
     if (result.canceled || !result.assets[0]) {
@@ -236,23 +378,59 @@ export default function AddStoryScreen() {
   };
 
   if (!cameraPermission || !microphonePermission) {
-    return <View style={[styles.container, { backgroundColor: colors.background }]} />;
+    return (
+      <View style={[styles.permissionContainer, { backgroundColor: '#000000' }]}>
+        <BackButton />
+        {permissionLoadTimedOut ? (
+          <>
+            <Feather name="camera-off" size={44} color="#FFFFFF" />
+            <Text style={[styles.permissionText, styles.permissionLoadText]}>
+              Camera permissions could not be loaded.
+            </Text>
+            <TouchableOpacity
+              onPress={async () => {
+                setPermissionLoadTimedOut(false);
+                try {
+                  await refreshPermissions();
+                } catch {
+                  setPermissionLoadTimedOut(true);
+                }
+              }}
+              style={styles.permissionRetryBtn}
+            >
+              <Text style={styles.permissionRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <ActivityIndicator size="large" color="#FFFFFF" />
+        )}
+      </View>
+    );
   }
 
   if (!cameraPermission.granted || !microphonePermission.granted) {
+    const canAskAgain = cameraPermission.canAskAgain && microphonePermission.canAskAgain;
+
     return (
       <View style={[styles.permissionContainer, { backgroundColor: colors.background }]}>
+        <BackButton />
         <Text style={[styles.permissionText, { color: colors.text }]}>
           Camera and microphone permissions are needed to record story videos.
         </Text>
         <TouchableOpacity
+          disabled={isRequestingPermissions}
           onPress={async () => {
-            await requestCameraPermission();
-            await requestMicrophonePermission();
+            if (canAskAgain) {
+              await requestRequiredPermissions();
+            } else {
+              await Linking.openSettings();
+            }
           }}
           style={[styles.permissionBtn, { backgroundColor: colors.primary }]}
         >
-          <Text style={[styles.permissionBtnText, { color: colors.background }]}>Grant Permissions</Text>
+          <Text style={[styles.permissionBtnText, { color: colors.background }]}>
+            {isRequestingPermissions ? 'Requesting...' : canAskAgain ? 'Grant Permissions' : 'Open Settings'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -262,7 +440,45 @@ export default function AddStoryScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" hidden />
 
-      <CameraView ref={cameraRef} style={styles.cameraBackground} facing="back" mode="video" />
+      <CameraView
+        key={cameraInstanceKey}
+        ref={cameraRef}
+        active={isFocused}
+        style={styles.cameraBackground}
+        facing="back"
+        mode="video"
+        onCameraReady={() => {
+          setCameraError(null);
+          setIsCameraReady(true);
+        }}
+        onMountError={({ message }) => {
+          setIsCameraReady(false);
+          setCameraError(message || 'The camera could not start.');
+        }}
+      />
+
+      {!isCameraReady && (
+        <View style={styles.cameraStatusOverlay} pointerEvents={cameraError ? 'auto' : 'none'}>
+          {cameraError ? (
+            <>
+              <Feather name="camera-off" size={44} color="#FFFFFF" />
+              <Text style={styles.cameraStatusText}>{cameraError}</Text>
+              <TouchableOpacity
+                style={styles.cameraRetryBtn}
+                onPress={() => {
+                  setCameraError(null);
+                  setIsCameraReady(false);
+                  setCameraInstanceKey((key) => key + 1);
+                }}
+              >
+                <Text style={styles.cameraRetryText}>Retry camera</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          )}
+        </View>
+      )}
 
       {/* Gradient Overlay for Top Nav Visibility */}
       <View style={styles.topGradient} />
@@ -305,12 +521,16 @@ export default function AddStoryScreen() {
             style={[styles.captureBtnOuter, isRecording && styles.captureBtnOuterRecording]}
             onPress={handleRecordPress}
             activeOpacity={0.9}
-            disabled={isPublishing}
+            disabled={isPublishing || !isCameraReady}
           >
             <View style={[styles.captureBtnInner, isRecording && styles.captureBtnInnerRecording]} />
           </TouchableOpacity>
           <Text style={styles.helperText}>
-            {isPublishing ? 'Publishing story...' : isRecording ? 'Tap to stop' : 'Hold your story to 15 seconds'}
+            {isPublishing
+              ? (publishStage || 'Publishing story...')
+              : isRecording
+              ? 'Tap to stop'
+              : 'Hold your story to 15 seconds'}
           </Text>
         </View>
       </SafeAreaView>
@@ -334,6 +554,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 16,
   },
+  permissionLoadText: {
+    color: '#FFFFFF',
+    marginTop: 16,
+  },
+  permissionRetryBtn: {
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  permissionRetryText: {
+    color: '#000000',
+    fontWeight: '700',
+  },
   permissionBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -344,6 +578,30 @@ const styles = StyleSheet.create({
   },
   cameraBackground: {
     ...StyleSheet.absoluteFillObject,
+  },
+  cameraStatusOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  cameraStatusText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  cameraRetryBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  cameraRetryText: {
+    color: '#000000',
+    fontWeight: '700',
   },
   topGradient: {
     position: 'absolute',

@@ -1,11 +1,12 @@
 import BackButton from "@/components/ui/BackButton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
-import { getAuthErrorMessage, isBusinessAccountRequiredError } from "@/lib/authErrors";
+import { getAuthErrorMessage, isBusinessAccountRequiredError, isTicketRewardConflictError } from "@/lib/authErrors";
 import { useAuthStore } from "@/stores/authStore";
 import {
   createEventReward,
   getEventById,
+  ticketAlreadyHasReward,
   updateEventReward,
   type EventResponse,
   type EventRewardPayload,
@@ -140,7 +141,7 @@ export default function RewardDetailsScreen() {
 
   const safeBack = () => {
     if (router.canGoBack()) {
-      safeBack();
+      router.back();
     } else {
       router.replace("/(tabs)/home");
     }
@@ -200,12 +201,14 @@ export default function RewardDetailsScreen() {
       }));
     }
 
-    return (event?.tickets ?? []).map((ticket) => ({
-      id: ticket.id ?? ticket.name,
-      title: ticket.name,
-      subtitle: ticket.description,
-    }));
-  }, [event?.tickets, isProductReward, products]);
+    return (event?.tickets ?? [])
+      .filter((ticket) => !ticketAlreadyHasReward(event?.rewards, ticket.id ?? ticket.name, rewardId))
+      .map((ticket) => ({
+        id: ticket.id ?? ticket.name,
+        title: ticket.name,
+        subtitle: ticket.description,
+      }));
+  }, [event?.rewards, event?.tickets, isProductReward, products, rewardId]);
 
   const selectedTarget = useMemo(
     () => selectorItems.find((item) => item.id === selectedTargetId) ?? null,
@@ -370,6 +373,13 @@ export default function RewardDetailsScreen() {
     return Math.min(100, Math.max(0, parsed));
   };
 
+  const discountedPrice = useMemo(() => {
+    if (!selectedTicket || selectedTicket.type === "free") return null;
+    const pct = parseDiscount(discountPercent);
+    if (pct <= 0) return null;
+    return selectedTicket.price * (1 - pct / 100);
+  }, [selectedTicket, discountPercent]);
+
   const handleConfirm = async () => {
     if (!eventId || isSaving) {
       return;
@@ -379,6 +389,18 @@ export default function RewardDetailsScreen() {
       Alert.alert(
         isProductReward ? "Select product" : "Select ticket",
         isProductReward ? "Choose a product for this reward." : "Choose a ticket for this reward.",
+      );
+      return;
+    }
+
+    if (
+      !isProductReward
+      && event
+      && ticketAlreadyHasReward(event.rewards, selectedTargetId, rewardId)
+    ) {
+      Alert.alert(
+        "Reward already exists",
+        "This ticket already has a reward. Each ticket can have only one reward. Edit or delete the existing reward before creating another.",
       );
       return;
     }
@@ -444,6 +466,14 @@ export default function RewardDetailsScreen() {
             ],
           );
         }
+      } else if (isTicketRewardConflictError(error)) {
+        Alert.alert(
+          "Reward already exists",
+          getAuthErrorMessage(
+            error,
+            "This ticket already has a reward. Choose another ticket or edit the existing reward.",
+          ),
+        );
       } else {
         Alert.alert("Unable to save reward", getAuthErrorMessage(error, "Please try again."));
       }
@@ -562,9 +592,22 @@ export default function RewardDetailsScreen() {
                     {selectedTicket.type === "free" ? "Free" : "Paid"}
                   </Text>
                 </View>
-                <Text style={[styles.ticketPrice, { color: colors.text }]}>
-                  {selectedTicket.type === "free" ? "Free" : `$${selectedTicket.price.toFixed(2)}`}
-                </Text>
+                {selectedTicket.type === "free" ? (
+                  <Text style={[styles.ticketPrice, { color: colors.text }]}>Free</Text>
+                ) : discountedPrice !== null ? (
+                  <View style={styles.priceContainer}>
+                    <Text style={[styles.ticketPriceStrike, { color: colors.textSecondary }]}>
+                      ${selectedTicket.price.toFixed(2)}
+                    </Text>
+                    <Text style={[styles.ticketPriceDiscounted, { color: colors.primary }]}>
+                      ${discountedPrice.toFixed(2)}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.ticketPrice, { color: colors.text }]}>
+                    ${selectedTicket.price.toFixed(2)}
+                  </Text>
+                )}
               </View>
 
               <View style={styles.ticketCardRow}>
@@ -961,5 +1004,19 @@ const styles = StyleSheet.create({
   ticketTypeBadgeText: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  priceContainer: {
+    alignItems: "flex-end",
+    flex: 1,
+    gap: 1,
+  },
+  ticketPriceStrike: {
+    fontSize: 12,
+    fontWeight: "500",
+    textDecorationLine: "line-through",
+  },
+  ticketPriceDiscounted: {
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

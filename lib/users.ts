@@ -159,6 +159,34 @@ export const getUserReviews = async (userId: string): Promise<UserReviewResponse
   return Array.isArray(reviews) ? (reviews as UserReviewResponse[]) : [];
 };
 
+export type BlockStatusResponse = {
+  userId: string;
+  isBlocked: boolean;
+};
+
+const parseBlockStatus = (payload: unknown, fallbackUserId: string): BlockStatusResponse => {
+  const block = payload as Partial<BlockStatusResponse> | undefined;
+
+  if (typeof block?.isBlocked !== "boolean") {
+    throw new Error("The block response was incomplete.");
+  }
+
+  return {
+    userId: typeof block.userId === "string" ? block.userId : fallbackUserId,
+    isBlocked: block.isBlocked,
+  };
+};
+
+export const blockUser = async (userId: string): Promise<BlockStatusResponse> => {
+  const response = await api.post(`/users/${encodeURIComponent(userId)}/block`);
+  return parseBlockStatus(response.data?.data?.block, userId);
+};
+
+export const unblockUser = async (userId: string): Promise<BlockStatusResponse> => {
+  const response = await api.delete(`/users/${encodeURIComponent(userId)}/block`);
+  return parseBlockStatus(response.data?.data?.block, userId);
+};
+
 export const followUser = async (userId: string): Promise<FollowStatusResponse> => {
   const response = await api.post(`/users/${encodeURIComponent(userId)}/follow`);
 

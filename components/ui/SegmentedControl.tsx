@@ -16,7 +16,9 @@ interface SegmentedControlProps {
   selectedOption: string;
   onSelect: (option: string) => void;
   containerStyle?: object;
+  activeSegmentStyle?: object;
   renderOption?: (option: string, isSelected: boolean) => React.ReactNode;
+  flat?: boolean;
 }
 
 interface GappedBorderProps {
@@ -87,7 +89,9 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
   selectedOption,
   onSelect,
   containerStyle,
+  activeSegmentStyle,
   renderOption,
+  flat = false,
 }) => {
   const { colors, isDark } = useTheme();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
@@ -104,8 +108,15 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
   };
 
   return (
-    <View style={[styles.wrapper, containerStyle]} onLayout={onLayout}>
-      {layout.width > 0 && (
+    <View
+      style={[
+        styles.wrapper,
+        flat && styles.flatWrapper,
+        containerStyle,
+      ]}
+      onLayout={onLayout}
+    >
+      {layout.width > 0 && !flat && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Canvas style={{ width: layout.width, height: layout.height }}>
             <RoundedRect
@@ -129,7 +140,7 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
         </View>
       )}
 
-      <View style={styles.container}>
+      <View style={[styles.container, flat && styles.flatContainer]}>
         {options.map((option) => (
           <TouchableOpacity
             key={option}
@@ -137,13 +148,17 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
             onLayout={selectedOption === option ? onSegmentLayout : undefined}
             style={[
               styles.segmentItem,
-              selectedOption === option && {
-                backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#FFF",
-              },
+              flat && styles.flatSegmentItem,
+              selectedOption === option && (
+                flat
+                  ? { backgroundColor: "rgba(104, 104, 104, 0.4)" }
+                  : { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#FFF" }
+              ),
+              selectedOption === option && activeSegmentStyle,
             ]}
             onPress={() => onSelect(option)}
           >
-            {selectedOption === option && segmentLayout.width > 0 && (
+            {selectedOption === option && segmentLayout.width > 0 && !flat && (
               <View style={StyleSheet.absoluteFill} pointerEvents="none">
                 <Canvas style={{ width: segmentLayout.width, height: segmentLayout.height }}>
                   <GappedBorder 
@@ -188,9 +203,18 @@ const styles = StyleSheet.create({
     minHeight: 46,
     justifyContent: "center",
   },
+  flatWrapper: {
+    backgroundColor: "rgba(104, 104, 104, 0.1)",
+    borderRadius: 12,
+    minHeight: 40,
+    height: 40,
+  },
   container: {
     flexDirection: "row",
     padding: 5,
+  },
+  flatContainer: {
+    padding: 4,
   },
   segmentItem: {
     flex: 1,
@@ -199,6 +223,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     position: "relative",
     overflow: "hidden",
+  },
+  flatSegmentItem: {
+    paddingVertical: 0,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 12,
   },
   segmentLabel: {
     fontSize: 13,

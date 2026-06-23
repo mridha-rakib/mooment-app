@@ -85,7 +85,16 @@ const resolveApiBaseUrl = () => {
     const url = new URL(configuredUrl);
 
     if (Platform.OS === "android" && LOCAL_HOSTS.has(url.hostname)) {
-      url.hostname = getExpoDevServerHost() ?? "10.0.2.2";
+      const devServerHost = getExpoDevServerHost();
+
+      // A LAN-hosted Expo session needs the computer's LAN address. When the
+      // session itself uses localhost, keep localhost so `adb reverse` (set up
+      // by the Android start/reload scripts) can carry API traffic to port 4000.
+      // Replacing it with 10.0.2.2 breaks physical Android devices because that
+      // alias exists only inside the Android emulator.
+      if (devServerHost) {
+        url.hostname = devServerHost;
+      }
     }
 
     return url.toString().replace(/\/$/, "");

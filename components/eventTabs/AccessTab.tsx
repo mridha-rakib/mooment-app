@@ -2,9 +2,10 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
-import type { EventRewardPayload, EventTicketPayload } from "@/lib/events";
+import type { EventPrivacy, EventRewardPayload, EventTicketPayload, JoinRequest, JoinRequestStatus } from "@/lib/events";
 import { getStorageFileUrl } from "@/lib/storage";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import SegmentedControl from "../ui/SegmentedControl";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -12,6 +13,7 @@ type AccessTabProps = {
   tickets?: EventTicketPayload[];
   rewards?: EventRewardPayload[];
   scheduledAt?: string | null;
+  privacy?: EventPrivacy;
   purchasedTicketCounts?: Record<string, number>;
   isHostMode?: boolean;
   selectedTicketKey?: string | null;
@@ -21,9 +23,17 @@ type AccessTabProps = {
   claimingRewardId?: string | null;
   claimedRewardIds?: string[];
   selectedAccessSubTab?: string;
+  joinRequests?: JoinRequest[];
+  myJoinRequestStatus?: JoinRequestStatus | null;
+  submittingJoinRequest?: boolean;
+  acceptingJoinRequestId?: string | null;
+  decliningJoinRequestId?: string | null;
   onSelectAccessSubTab?: (subTab: string) => void;
   onSelectTicket?: (ticket: EventTicketPayload, ticketKey: string) => void;
   onTicketQuantityChange?: (ticket: EventTicketPayload, ticketKey: string, quantity: number) => void;
+  onSubmitJoinRequest?: () => void;
+  onAcceptJoinRequest?: (userId: string) => void;
+  onDeclineJoinRequest?: (userId: string) => void;
   onCreateTicket?: () => void;
   onViewTicket?: (ticket: EventTicketPayload) => void;
   onEditTicket?: (ticket: EventTicketPayload) => void;
@@ -112,6 +122,7 @@ const AccessTab = ({
   tickets = [],
   rewards = [],
   scheduledAt,
+  privacy,
   purchasedTicketCounts = {},
   isHostMode = false,
   selectedTicketKey = null,
@@ -121,9 +132,17 @@ const AccessTab = ({
   claimingRewardId = null,
   claimedRewardIds = [],
   selectedAccessSubTab,
+  joinRequests = [],
+  myJoinRequestStatus = null,
+  submittingJoinRequest = false,
+  acceptingJoinRequestId = null,
+  decliningJoinRequestId = null,
   onSelectAccessSubTab,
   onSelectTicket,
   onTicketQuantityChange,
+  onSubmitJoinRequest,
+  onAcceptJoinRequest,
+  onDeclineJoinRequest,
   onCreateTicket,
   onViewTicket,
   onEditTicket,
@@ -135,8 +154,11 @@ const AccessTab = ({
   onClaimReward,
 }: AccessTabProps) => {
   const { colors, isDark } = useTheme();
+  const isLocked = privacy === "locked";
+  const showRequestTab = isLocked && isHostMode;
   const [localAccessSubTab, setLocalAccessSubTab] = useState("Tickets");
-  const accessSubTab = selectedAccessSubTab ?? localAccessSubTab;
+  const rawSubTab = selectedAccessSubTab ?? localAccessSubTab;
+  const accessSubTab = rawSubTab === "Requests" && !showRequestTab ? "Tickets" : rawSubTab;
   const handleSelectAccessSubTab = (subTab: string) => {
     if (selectedAccessSubTab === undefined) {
       setLocalAccessSubTab(subTab);
@@ -150,171 +172,450 @@ const AccessTab = ({
     [tickets],
   );
 
-  const renderTickets = () => (
-    <View style={{ marginTop: 20 }}>
-      <View style={styles.alertBanner}>
-        <Feather name="info" size={16} color="#FF6B3D" />
-        <Text style={styles.alertText}>Maximum 2 tickets of each type per person</Text>
-      </View>
-
-      <View style={styles.availabilityRow}>
-        <View style={styles.availabilityLabel}>
-          <View style={[styles.greenDot, { backgroundColor: colors.success }]} />
-          <Text style={[styles.availabilityText, { color: colors.success }]}>Tickets available</Text>
+  const renderRequestButton = () => {
+    if (myJoinRequestStatus === "pending") {
+      return (
+        <View style={[styles.requestBtn, styles.requestBtnPending]}>
+          <Feather name="clock" size={13} color="#888" />
+          <Text style={[styles.requestBtnText, { color: "#888" }]}>Requested</Text>
         </View>
-        <Text style={[styles.availabilityCount, { color: colors.success }]}>
-          {totalTicketsLeft} left
-        </Text>
-      </View>
+      );
+    }
 
-      {tickets.length > 0 ? (
-        tickets.map((ticket, index) => {
-          const ticketKey = getTicketKey(ticket, index);
-          const ticketId = ticket.id ?? ticketKey;
-          const isSelected = selectedTicketKey === ticketKey;
-          const isFreeTicket = ticket.type === "free" || ticket.price <= 0;
-          const isSoldOut = ticket.capacity <= 0;
-          const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
-          const remainingAllowed = Math.max(0, 2 - alreadyPurchased);
-          const isLimitReached = !isSoldOut && alreadyPurchased >= 2;
-          const maxQuantity = Math.min(remainingAllowed, Math.max(0, ticket.capacity));
-          const isUnavailable = isSoldOut || isLimitReached;
-          const quantity = isSelected ? Math.min(Math.max(1, selectedTicketQuantity), maxQuantity || 1) : 0;
+    if (myJoinRequestStatus === "declined") {
+      return (
+        <View style={[styles.requestBtn, styles.requestBtnPending]}>
+          <Text style={[styles.requestBtnText, { color: "#888" }]}>Declined</Text>
+        </View>
+      );
+    }
 
-          return (
-            <TouchableOpacity
-              key={ticketKey}
-              style={[
-                styles.ticketCard,
-                {
-                  backgroundColor: isDark ? "#161521" : colors.backgroundSecondary,
-                  borderColor: isSelected ? colors.primary : colors.border,
-                  opacity: isUnavailable ? 0.55 : 1,
-                },
-              ]}
-              activeOpacity={0.86}
-              onPress={() => {
-                if (!isUnavailable) {
-                  onSelectTicket?.(ticket, ticketKey);
-                }
-              }}
-            >
-              <View style={[styles.ticketInnerCard, { backgroundColor: isDark ? "#0F0E13" : colors.card }]}>
-                <View style={styles.ticketHeader}>
-                  <Text style={[styles.ticketType, { color: colors.text }]}>{ticket.name}</Text>
-                  <View style={styles.ticketBadges}>
-                    {isSelected && !isLimitReached && (
-                      <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
-                        <Feather name="check" size={12} color={colors.background} />
-                      </View>
-                    )}
-                    {isLimitReached ? (
-                      <View style={[styles.limitBadge]}>
-                        <Feather name="slash" size={11} color="#FF6B3D" />
-                        <Text style={styles.limitBadgeText}>Limit reached</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
-                        <Text style={[styles.countBadgeText, { color: colors.text }]}>
-                          {isSoldOut ? "Sold out" : `${ticket.capacity} left`}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
+    return (
+      <TouchableOpacity
+        style={[styles.requestBtn, { backgroundColor: colors.primary, opacity: submittingJoinRequest ? 0.7 : 1 }]}
+        disabled={submittingJoinRequest}
+        onPress={onSubmitJoinRequest}
+        activeOpacity={0.8}
+      >
+        {submittingJoinRequest ? (
+          <ActivityIndicator size="small" color={colors.background} />
+        ) : (
+          <Text style={[styles.requestBtnText, { color: colors.background }]}>Request</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
-                {isLimitReached && (
-                  <Text style={styles.limitReachedText}>
-                    You've purchased the maximum of 2 tickets of this type.
-                  </Text>
-                )}
-
-                <Text style={[styles.ticketDesc, { color: colors.textSecondary }]} numberOfLines={2}>
-                  {getTicketDescriptionPreview(ticket.description)}
-                </Text>
-                <View style={styles.ticketMetaRow}>
-                  <Text style={[styles.expiryText, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {formatExpiry(ticket.salesEndAt, scheduledAt)}
-                  </Text>
-                  {!!onViewTicket && (
-                    <TouchableOpacity
-                      style={styles.viewDetailsButton}
-                      activeOpacity={0.75}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        onViewTicket(ticket);
-                      }}
-                    >
-                      <Feather name="info" size={13} color={colors.primary} />
-                      <Text style={[styles.viewDetailsText, { color: colors.primary }]}>Details</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <View style={styles.ticketFooter}>
-                  <View>
-                    <Text style={[styles.ticketPrice, { color: colors.text }]}>{formatPrice(ticket)}</Text>
-                    {!isFreeTicket && (
-                      alreadyPurchased > 0 && !isLimitReached ? (
-                        <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>
-                          {alreadyPurchased} purchased • {remainingAllowed} left
-                        </Text>
-                      ) : (
-                        <Text style={[styles.perTicketText, { color: colors.textSecondary }]}>per ticket</Text>
-                      )
-                    )}
-                  </View>
-                  <View style={[styles.counter, { backgroundColor: isDark ? "#222129" : colors.backgroundSecondary }]}>
-                    <TouchableOpacity
-                      style={[
-                        styles.counterBtn,
-                        { backgroundColor: isDark ? "#313036" : colors.border },
-                        (!isSelected || quantity <= 1 || isUnavailable) && styles.counterBtnDisabled,
-                      ]}
-                      disabled={!isSelected || quantity <= 1 || isUnavailable}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        onTicketQuantityChange?.(ticket, ticketKey, quantity - 1);
-                      }}
-                    >
-                      <Feather name="minus" size={14} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={[styles.counterValue, { color: colors.text }]}>{quantity}</Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.counterBtn,
-                        { backgroundColor: isDark ? "#313036" : colors.border },
-                        (isUnavailable || (isSelected && quantity >= maxQuantity)) && styles.counterBtnDisabled,
-                      ]}
-                      disabled={isUnavailable || (isSelected && quantity >= maxQuantity)}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        onTicketQuantityChange?.(ticket, ticketKey, isSelected ? quantity + 1 : 1);
-                      }}
-                    >
-                      <Feather name="plus" size={14} color={colors.text} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })
-      ) : (
-        <View style={[styles.ticketCard, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border }]}>
-          <View style={[styles.ticketInnerCard, { backgroundColor: isDark ? "#0F0E13" : colors.card }]}>
-            <Text style={[styles.ticketType, { color: colors.text }]}>Tickets not available</Text>
-            <Text style={[styles.ticketDesc, { color: colors.textSecondary }]}>
-              Ticket data has not been added for this event yet.
+  const renderTicketInner = (
+    ticket: EventTicketPayload,
+    ticketKey: string,
+    quantity: number,
+    maxQuantity: number,
+    isSelected: boolean,
+    isFreeTicket: boolean,
+    isSoldOut: boolean,
+    isLimitReached: boolean,
+    isUnavailable: boolean,
+    alreadyPurchased: number,
+    remainingAllowed: number,
+    hasAcceptedRequest: boolean,
+  ) => {
+    return (
+      <>
+        <View style={styles.ticketHeader}>
+          <Text style={[styles.ticketType, { color: isSoldOut ? "#B3B3B3" : "#FFFFFF" }]}>
+            {ticket.name}
+          </Text>
+          <View style={[
+            styles.countBadge,
+            isLimitReached
+              ? { backgroundColor: "rgba(255, 107, 61, 0.15)" }
+              : isSoldOut
+                ? { backgroundColor: "#2D1B1B" }
+                : { backgroundColor: "#666666" }
+          ]}>
+            <Text style={[
+              styles.countBadgeText,
+              isLimitReached
+                ? { color: "#FF6B3D" }
+                : isSoldOut
+                  ? { color: "#E83030" }
+                  : { color: "#FFFFFF" }
+            ]}>
+              {isLimitReached ? "Limit reached" : isSoldOut ? "Sold Out" : `${ticket.capacity} left`}
             </Text>
           </View>
         </View>
-      )}
 
-      <View style={[styles.secureBadge, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.05)" : "rgba(22, 216, 105, 0.02)" }]}>
-        <Feather name="shield" size={14} color={colors.success} />
-        <Text style={[styles.secureText, { color: colors.success }]}>Payment held securely until event completes</Text>
+        {isLimitReached && (
+          <Text style={styles.limitReachedText}>
+            You've purchased the maximum of 2 tickets of this type.
+          </Text>
+        )}
+
+        <Text style={styles.ticketDesc} numberOfLines={2}>
+          {getTicketDescriptionPreview(ticket.description)}
+        </Text>
+
+        <View style={styles.ticketMetaRow}>
+          {(() => {
+            const source = ticket.salesEndAt ?? scheduledAt;
+            if (!source) {
+              return <Text style={styles.expiryText}>Expires in • Date TBA</Text>;
+            }
+            const dateVal = new Date(source);
+            if (Number.isNaN(dateVal.getTime())) {
+              return <Text style={styles.expiryText}>Expires in • Date TBA</Text>;
+            }
+            const dateLabel = dateVal.toLocaleDateString("en-US", {
+              day: "numeric",
+              month: "short",
+              weekday: "short",
+            });
+            const timeLabel = dateVal.toLocaleTimeString("en-US", {
+              hour: "numeric",
+              hour12: true,
+              minute: "2-digit",
+            });
+            return (
+              <View style={styles.expiryRow}>
+                <Text style={styles.expiryText}>Expires in</Text>
+                <View style={styles.expiryDot} />
+                <Text style={styles.expiryText}>{dateLabel}</Text>
+                <View style={styles.expiryDot} />
+                <Text style={styles.expiryText}>{timeLabel}</Text>
+              </View>
+            );
+          })()}
+          {!!onViewTicket && (
+            <TouchableOpacity
+              style={styles.viewDetailsButton}
+              activeOpacity={0.75}
+              onPress={(event) => {
+                event.stopPropagation();
+                onViewTicket(ticket);
+              }}
+            >
+              <Feather name="info" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+              <Text style={[styles.viewDetailsText, { color: colors.primary }]}>Details</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.ticketFooter}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.ticketPrice}>{formatPrice(ticket)}</Text>
+            {!isFreeTicket && (
+              alreadyPurchased > 0 && !isLimitReached ? (
+                <Text style={styles.perTicketText}>
+                  {alreadyPurchased} purchased • {remainingAllowed} left
+                </Text>
+              ) : (
+                <Text style={styles.perTicketText}>per ticket</Text>
+              )
+            )}
+          </View>
+
+          {isLocked && !hasAcceptedRequest ? (
+            renderRequestButton()
+          ) : (
+            <View style={styles.counter}>
+              <TouchableOpacity
+                style={[
+                  styles.counterBtn,
+                  (!isSelected || quantity <= 1 || isUnavailable) && styles.counterBtnDisabled,
+                ]}
+                disabled={!isSelected || quantity <= 1 || isUnavailable}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onTicketQuantityChange?.(ticket, ticketKey, quantity - 1);
+                }}
+              >
+                <Feather name="minus" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.counterValue}>{quantity}</Text>
+              <TouchableOpacity
+                style={[
+                  styles.counterBtn,
+                  (isUnavailable || (isSelected && quantity >= maxQuantity)) && styles.counterBtnDisabled,
+                ]}
+                disabled={isUnavailable || (isSelected && quantity >= maxQuantity)}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onTicketQuantityChange?.(ticket, ticketKey, isSelected ? quantity + 1 : 1);
+                }}
+              >
+                <Feather name="plus" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </>
+    );
+  };
+
+  const renderTickets = () => {
+    const hasAcceptedRequest = myJoinRequestStatus === "accepted";
+
+    return (
+      <View style={{ marginTop: 20 }}>
+        {(!isLocked || hasAcceptedRequest) && (
+          <View style={styles.alertBanner}>
+            <Feather name="info" size={24} color="#BB5E30" />
+            <Text style={styles.alertText}>You can only buy maximum of 2 tickets</Text>
+          </View>
+        )}
+
+        {isLocked && !hasAcceptedRequest && (
+          <View style={[styles.alertBanner, { backgroundColor: "rgba(130, 100, 255, 0.1)" }]}>
+            <Feather name="lock" size={24} color="#8264FF" />
+            <Text style={[styles.alertText, { color: "#8264FF" }]}>
+              {myJoinRequestStatus === "pending"
+                ? "Your request is pending approval from the host."
+                : myJoinRequestStatus === "declined"
+                  ? "Your request was declined by the host."
+                  : "Request access to join this locked event."}
+            </Text>
+          </View>
+        )}
+
+        {(!isLocked || hasAcceptedRequest) && (
+          <View style={styles.availabilityRow}>
+            <View style={styles.availabilityLabel}>
+              <View style={styles.greenDot} />
+              <Text style={styles.availabilityText}>Tickets available</Text>
+            </View>
+            <Text style={styles.availabilityCount}>
+              {totalTicketsLeft} left
+            </Text>
+          </View>
+        )}
+
+        {isLocked && hasAcceptedRequest && (
+          <View style={[styles.alertBanner, { backgroundColor: "rgba(22, 216, 105, 0.1)" }]}>
+            <Feather name="check-circle" size={24} color="#1D9E75" />
+            <Text style={[styles.alertText, { color: "#1D9E75" }]}>Your request was accepted. You can now purchase tickets.</Text>
+          </View>
+        )}
+
+        {tickets.length > 0 ? (
+          tickets.map((ticket, index) => {
+            const ticketKey = getTicketKey(ticket, index);
+            const ticketId = ticket.id ?? ticketKey;
+            const isSelected = selectedTicketKey === ticketKey;
+            const isFreeTicket = ticket.type === "free" || ticket.price <= 0;
+            const isSoldOut = ticket.capacity <= 0;
+            const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
+            const remainingAllowed = Math.max(0, 2 - alreadyPurchased);
+            const isLimitReached = !isSoldOut && alreadyPurchased >= 2;
+            const maxQuantity = Math.min(remainingAllowed, Math.max(0, ticket.capacity));
+            const isUnavailable = isSoldOut || isLimitReached;
+            const quantity = isSelected ? Math.min(Math.max(1, selectedTicketQuantity), maxQuantity || 1) : 0;
+
+            const linkedReward = rewards.find(
+              (r) => r.rewardType === "ticket" && r.ticketId === ticket.id,
+            );
+
+            const isRewardClaimed = linkedReward?.id ? claimedRewardIds.includes(linkedReward.id) : false;
+
+            return (
+              <View key={ticketKey}>
+                {linkedReward ? (
+                  <View style={[styles.gradientCardWrapper, isSelected && { borderColor: colors.primary }]}>
+                    <LinearGradient
+                      colors={["rgba(97, 44, 243, 0.1)", "rgba(51, 51, 51, 0.1)"]}
+                      start={{ x: 0.1182, y: 0.0014 }}
+                      end={{ x: 0.9883, y: 0.9883 }}
+                      style={StyleSheet.absoluteFillObject}
+                    />
+                    <View style={styles.rewardRow}>
+                      <View style={styles.rewardRowLeft}>
+                        <Text style={styles.rewardAppliedText}>Reward applied</Text>
+                        <Text style={styles.bogoDescText}>
+                          {`Buy ${linkedReward.buyQuantity} get ${linkedReward.freeQuantity} Free`}
+                        </Text>
+                      </View>
+                      {!isHostMode && !isLocked && (
+                        isRewardClaimed ? (
+                          <View style={styles.claimedRewardBannerBadge}>
+                            <Feather name="check" size={12} color="#26C08F" />
+                            <Text style={styles.claimedRewardBannerText}>Claimed</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.claimRewardBannerBtn}
+                            onPress={() => onClaimReward?.(linkedReward)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.claimRewardBannerText}>Claim Reward</Text>
+                          </TouchableOpacity>
+                        )
+                      )}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.ticketCardNested,
+                        {
+                          opacity: isUnavailable ? 0.55 : 1,
+                        },
+                      ]}
+                      activeOpacity={isLocked && !hasAcceptedRequest ? 1 : 0.86}
+                      onPress={() => {
+                        if (!isUnavailable && (!isLocked || hasAcceptedRequest)) {
+                          onSelectTicket?.(ticket, ticketKey);
+                        }
+                      }}
+                    >
+                      {renderTicketInner(
+                        ticket,
+                        ticketKey,
+                        quantity,
+                        maxQuantity,
+                        isSelected,
+                        isFreeTicket,
+                        isSoldOut,
+                        isLimitReached,
+                        isUnavailable,
+                        alreadyPurchased,
+                        remainingAllowed,
+                        hasAcceptedRequest,
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.ticketCardStandalone,
+                      {
+                        borderColor: isSelected && !isLocked ? colors.primary : "transparent",
+                        opacity: isUnavailable ? 0.55 : 1,
+                      },
+                    ]}
+                    activeOpacity={isLocked && !hasAcceptedRequest ? 1 : 0.86}
+                    onPress={() => {
+                      if (!isUnavailable && (!isLocked || hasAcceptedRequest)) {
+                        onSelectTicket?.(ticket, ticketKey);
+                      }
+                    }}
+                  >
+                    {renderTicketInner(
+                      ticket,
+                      ticketKey,
+                      quantity,
+                      maxQuantity,
+                      isSelected,
+                      isFreeTicket,
+                      isSoldOut,
+                      isLimitReached,
+                      isUnavailable,
+                      alreadyPurchased,
+                      remainingAllowed,
+                      hasAcceptedRequest,
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })
+        ) : (
+          <View style={[styles.ticketCardStandalone, { borderColor: colors.border }]}>
+            <Text style={[styles.ticketType, { color: colors.text, marginBottom: 8 }]}>Tickets not available</Text>
+            <Text style={styles.ticketDesc}>
+              Ticket data has not been added for this event yet.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.secureBadge}>
+          <Feather name="shield" size={24} color="#1D9E75" />
+          <Text style={styles.secureText}>Payment held securely until event completes</Text>
+        </View>
       </View>
+    );
+  };
+
+  const renderRequests = () => (
+    <View style={{ marginTop: 16 }}>
+      {joinRequests.length > 0 ? (
+        joinRequests.map((request) => {
+          const isAccepting = acceptingJoinRequestId === request.userId;
+          const isDeclining = decliningJoinRequestId === request.userId;
+          const isBusy = isAccepting || isDeclining;
+          const avatarUri = request.avatarUrl ?? request.avatarKey ?? null;
+
+          return (
+            <View
+              key={request.userId}
+              style={[styles.requestRow, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border }]}
+            >
+              <View style={styles.requestRowLeft}>
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={styles.requestAvatar} contentFit="cover" />
+                ) : (
+                  <View style={[styles.requestAvatar, styles.requestAvatarPlaceholder, { backgroundColor: isDark ? "#313036" : colors.border }]}>
+                    <Feather name="user" size={18} color={colors.textSecondary} />
+                  </View>
+                )}
+                <View style={styles.requestUserInfo}>
+                  <Text style={[styles.requestUserName, { color: colors.text }]} numberOfLines={1}>
+                    {request.name}
+                  </Text>
+                  {request.username ? (
+                    <Text style={[styles.requestUserHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                      @{request.username}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.requestActions}>
+                {request.status === "accepted" ? (
+                  <View style={[styles.requestStatusBadge, { backgroundColor: "rgba(22, 216, 105, 0.12)" }]}>
+                    <Feather name="check" size={12} color={colors.success} />
+                    <Text style={[styles.requestStatusText, { color: colors.success }]}>Accepted</Text>
+                  </View>
+                ) : request.status === "declined" ? (
+                  <View style={[styles.requestStatusBadge, { backgroundColor: "rgba(255, 107, 61, 0.12)" }]}>
+                    <Text style={[styles.requestStatusText, { color: "#FF6B3D" }]}>Declined</Text>
+                  </View>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.requestActionBtn, styles.requestAcceptBtn, { opacity: isBusy ? 0.6 : 1 }]}
+                      disabled={isBusy}
+                      activeOpacity={0.8}
+                      onPress={() => onAcceptJoinRequest?.(request.userId)}
+                    >
+                      {isAccepting ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.requestAcceptText}>Accept</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.requestActionBtn, styles.requestDeclineBtn, { opacity: isBusy ? 0.6 : 1 }]}
+                      disabled={isBusy}
+                      activeOpacity={0.8}
+                      onPress={() => onDeclineJoinRequest?.(request.userId)}
+                    >
+                      {isDeclining ? (
+                        <ActivityIndicator size="small" color="#FF6B3D" />
+                      ) : (
+                        <Text style={styles.requestDeclineText}>Decline</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </View>
+          );
+        })
+      ) : (
+        <View style={[styles.requestRow, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border }]}>
+          <Text style={[styles.requestUserName, { color: colors.textSecondary }]}>No join requests yet.</Text>
+        </View>
+      )}
     </View>
   );
 
@@ -594,34 +895,41 @@ const AccessTab = ({
   return (
     <View>
       <SegmentedControl
-        options={["Tickets", "Rewards"]}
+        options={showRequestTab ? ["Requests", "Tickets", "Rewards"] : ["Tickets", "Rewards"]}
         selectedOption={accessSubTab}
         onSelect={handleSelectAccessSubTab}
-        containerStyle={{ marginTop: 10, marginBottom: 10 }}
+        flat={true}
+        containerStyle={{ marginTop: 10, marginBottom: 16 }}
         renderOption={(option, isSelected) => (
           <Ionicons
             name={
-              option === "Tickets"
+              option === "Requests"
                 ? isSelected
-                  ? "ticket"
-                  : "ticket-outline"
-                : isSelected
-                  ? "gift"
-                  : "gift-outline"
+                  ? "person-add"
+                  : "person-add-outline"
+                : option === "Tickets"
+                  ? isSelected
+                    ? "ticket"
+                    : "ticket-outline"
+                  : isSelected
+                    ? "gift"
+                    : "gift-outline"
             }
             size={20}
-            color={isSelected ? colors.text : colors.textSecondary}
+            color={isSelected ? "#FFFFFF" : "rgba(255, 255, 255, 0.4)"}
           />
         )}
       />
 
-      {accessSubTab === "Tickets"
-        ? isHostMode
-          ? renderCreatorTickets()
-          : renderTickets()
-        : isHostMode
-          ? renderCreatorRewards()
-          : renderRewards()}
+      {accessSubTab === "Requests"
+        ? renderRequests()
+        : accessSubTab === "Tickets"
+          ? isHostMode
+            ? renderCreatorTickets()
+            : renderTickets()
+          : isHostMode
+            ? renderCreatorRewards()
+            : renderRewards()}
     </View>
   );
 };
@@ -877,74 +1185,88 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+    backgroundColor: "#1D9E75",
   },
   availabilityText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
+    color: "#1D9E75",
+    lineHeight: 22,
   },
   availabilityCount: {
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: "500",
+    color: "#1D9E75",
+    lineHeight: 22,
   },
-  ticketCard: {
-    borderRadius: 18,
-    marginBottom: 16,
+  gradientCardWrapper: {
+    borderRadius: 12,
     borderWidth: 1,
+    borderColor: "rgba(102, 102, 102, 0.2)",
+    marginBottom: 24,
     overflow: "hidden",
   },
-  ticketInnerCard: {
-    borderRadius: 16,
-    margin: 4,
-    padding: 14,
+  rewardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    height: 46,
+  },
+  rewardRowLeft: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  rewardAppliedText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  bogoDescText: {
+    color: "#B3B3B3",
+    fontSize: 14,
+    fontWeight: "400",
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  ticketCardNested: {
+    backgroundColor: "rgba(17, 17, 17, 0.8)",
+    borderRadius: 12,
+    padding: 12,
+  },
+  ticketCardStandalone: {
+    backgroundColor: "rgba(17, 17, 17, 0.8)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
+    padding: 12,
+    marginBottom: 24,
   },
   ticketHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    justifyContent: "space-between",
     marginBottom: 10,
   },
   ticketType: {
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "600",
     flex: 1,
-    lineHeight: 23,
-  },
-  ticketBadges: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  selectedBadge: {
-    alignItems: "center",
-    borderRadius: 10,
-    height: 20,
-    justifyContent: "center",
-    width: 20,
+    lineHeight: 24,
   },
   countBadge: {
-    backgroundColor: "#313036",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  countBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  limitBadge: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 107, 61, 0.12)",
-    borderRadius: 10,
-    flexDirection: "row",
-    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    height: 24,
   },
-  limitBadgeText: {
-    color: "#FF6B3D",
+  countBadgeText: {
     fontSize: 12,
     fontWeight: "600",
+    lineHeight: 16,
   },
   limitReachedText: {
     color: "#FF6B3D",
@@ -954,30 +1276,39 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   ticketDesc: {
-    color: "#8E8E9B",
-    fontSize: 13,
-    lineHeight: 18,
+    color: "#B3B3B3",
+    fontSize: 14,
+    lineHeight: 20,
     marginBottom: 8,
   },
   ticketMetaRow: {
-    alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 18,
+    width: "100%",
+  },
+  expiryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   expiryText: {
-    color: "#8E8E9B",
-    flex: 1,
+    color: "#B3B3B3",
     fontSize: 12,
+    fontWeight: "400",
     lineHeight: 16,
   },
+  expiryDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#B3B3B3",
+  },
   viewDetailsButton: {
-    alignItems: "center",
-    borderRadius: 10,
     flexDirection: "row",
+    alignItems: "center",
     gap: 4,
-    minHeight: 28,
-    paddingHorizontal: 6,
   },
   viewDetailsText: {
     fontSize: 12,
@@ -988,55 +1319,62 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  priceContainer: {
+    justifyContent: "center",
+  },
   ticketPrice: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: "500",
     lineHeight: 30,
+    color: "#FFFFFF",
   },
   perTicketText: {
-    color: "#8E8E9B",
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 1,
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+    marginTop: 4,
   },
   counter: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#222129",
-    borderRadius: 13,
-    padding: 5,
-    gap: 10,
+    gap: 12,
+    height: 40,
   },
   counterBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: "#313036",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(102, 102, 102, 0.4)",
     justifyContent: "center",
     alignItems: "center",
   },
   counterBtnDisabled: {
-    opacity: 0.35,
+    opacity: 0.2,
   },
   counterValue: {
-    fontSize: 20,
-    fontWeight: "600",
-    minWidth: 18,
+    fontSize: 24,
+    fontWeight: "500",
+    color: "#FFFFFF",
+    minWidth: 16,
     textAlign: "center",
   },
   secureBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(22, 216, 105, 0.05)",
+    gap: 12,
+    backgroundColor: "rgba(14, 198, 23, 0.1)",
     padding: 12,
     borderRadius: 12,
-    justifyContent: "center",
+    height: 46,
     marginTop: 10,
+    justifyContent: "center",
   },
   secureText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1D9E75",
+    lineHeight: 22,
   },
   rewardCard: {
     borderRadius: 16,
@@ -1105,5 +1443,160 @@ const styles = StyleSheet.create({
   claimedText: {
     fontSize: 11,
     fontWeight: "bold",
+  },
+  requestBtn: {
+    alignItems: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  requestBtnPending: {
+    backgroundColor: "rgba(140, 140, 140, 0.15)",
+  },
+  requestBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  rewardBanner: {
+    alignItems: "center",
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  rewardBannerLeft: {
+    flex: 1,
+    gap: 4,
+  },
+  rewardBannerBadge: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  rewardBannerLabel: {
+    color: "#8264FF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  rewardBannerDesc: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginLeft: 2,
+  },
+  claimRewardBannerBtn: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  claimRewardBannerText: {
+    color: "#111111",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  claimedRewardBannerBadge: {
+    backgroundColor: "#142922",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 24,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  claimedRewardBannerText: {
+    color: "#26C08F",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  requestRow: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    padding: 12,
+  },
+  requestRowLeft: {
+    alignItems: "center",
+    flexDirection: "row",
+    flex: 1,
+    gap: 12,
+    marginRight: 8,
+  },
+  requestAvatar: {
+    borderRadius: 20,
+    height: 40,
+    width: 40,
+  },
+  requestAvatarPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestUserInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  requestUserName: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  requestUserHandle: {
+    fontSize: 12,
+  },
+  requestActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  requestActionBtn: {
+    alignItems: "center",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 32,
+    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  requestAcceptBtn: {
+    backgroundColor: "#5C5CE0",
+  },
+  requestAcceptText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  requestDeclineBtn: {
+    backgroundColor: "rgba(255, 107, 61, 0.1)",
+  },
+  requestDeclineText: {
+    color: "#FF6B3D",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  requestStatusBadge: {
+    alignItems: "center",
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  requestStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

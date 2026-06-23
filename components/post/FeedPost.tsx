@@ -12,12 +12,13 @@ import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } 
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
-import { followUser, unfollowUser } from '@/lib/users';
+import { blockUser, followUser, unfollowUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
 import MoreMenuModal from "./MoreMenuModal";
+import HashtagText from './HashtagText';
 const { width } = Dimensions.get('window');
 
 // Hardcoded visual waveform for Audio posts
@@ -81,6 +82,7 @@ export type PostData = {
   isFollowing?: boolean;
   timeAgo: string;
   caption?: string;
+  hashtags?: string[];
   mediaUris?: string[];
   mediaItems?: PostMediaItem[];
   ticketsCount?: number;
@@ -355,6 +357,7 @@ export default function FeedPost({
   const [isFollowing, setIsFollowing] = useState(Boolean(post.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [authorAvatarError, setAuthorAvatarError] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const moreBtnRef = useRef<View>(null);
   const [menuTop, setMenuTop] = useState(0);
@@ -530,6 +533,31 @@ export default function FeedPost({
     }
   };
 
+  const handleBlock = () => {
+    const authorId = post.authorId;
+    if (!authorId || !MONGO_OBJECT_ID_PATTERN.test(authorId)) return;
+
+    Alert.alert(
+      "Block User",
+      "You won't see posts from this user in your feed anymore. They won't be notified.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            setIsHidden(true);
+            try {
+              await blockUser(authorId);
+            } catch {
+              setIsHidden(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleEventPress = () => {
     if (!resolvedEventId) {
       Alert.alert('Unable to load event', 'This event is missing its event id.');
@@ -541,6 +569,10 @@ export default function FeedPost({
       params: { eventId: resolvedEventId },
     });
   };
+
+  if (isHidden) {
+    return null;
+  }
 
   return (
     <View style={styles.postWrapper}>
@@ -646,7 +678,12 @@ export default function FeedPost({
 
         {/* Post Text */}
         {post.caption ? (
-          <Text style={[styles.postCaption, { color: colors.textSecondary }]}>{post.caption}</Text>
+          <HashtagText
+            style={[styles.postCaption, { color: colors.textSecondary }]}
+            hashtagStyle={{ color: colors.primary, fontWeight: '700' }}
+          >
+            {post.caption}
+          </HashtagText>
         ) : null}
 
         {/* Dynamic Media Section based on Post Type */}
@@ -849,9 +886,11 @@ export default function FeedPost({
           visible={showMoreMenu}
           onClose={() => setShowMoreMenu(false)}
           showDelete={canDeletePost}
+          deleteLabel={post.postType === 'event' ? 'Cancel Event' : 'Delete'}
           onReport={!isPostByCurrentUser ? () => setShowReportModal(true) : undefined}
           onSave={!isPostByCurrentUser ? handleSave : undefined}
           isSaved={!isPostByCurrentUser ? isSaved : undefined}
+          onBlock={!isPostByCurrentUser && Boolean(post.authorId) ? handleBlock : undefined}
           onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
           top={menuTop}
         />

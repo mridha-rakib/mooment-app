@@ -9,8 +9,10 @@ type MoreMenuModalProps = {
   onReport?: () => void;
   onSave?: () => void;
   isSaved?: boolean;
+  onBlock?: () => void;
   onDelete?: () => void;
   showDelete?: boolean;
+  deleteLabel?: string;
   top?: number;
 };
 
@@ -20,8 +22,10 @@ export default function MoreMenuModal({
   onReport,
   onSave,
   isSaved = false,
+  onBlock,
   onDelete,
   showDelete = false,
+  deleteLabel = "Delete",
   top
 }: MoreMenuModalProps) {
   const { colors } = useTheme();
@@ -50,7 +54,7 @@ export default function MoreMenuModal({
                     <Feather name="flag" size={20} color={colors.text} style={styles.menuIcon} />
                     <Text style={[styles.menuText, { color: colors.text }]}>Report</Text>
                   </TouchableOpacity>
-                  {(onSave || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                  {(onSave || onBlock || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
               )}
 
@@ -73,21 +77,38 @@ export default function MoreMenuModal({
                       {isSaved ? "Saved" : "Save"}
                     </Text>
                   </TouchableOpacity>
+                  {(onBlock || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                </>
+              )}
+
+              {onBlock && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      onBlock?.();
+                      onClose();
+                    }}
+                  >
+                    <Feather name="slash" size={20} color={colors.text} style={styles.menuIcon} />
+                    <Text style={[styles.menuText, { color: colors.text }]}>Block</Text>
+                  </TouchableOpacity>
                   {showDelete && onDelete && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
               )}
 
               {showDelete && onDelete && (
-                <TouchableOpacity 
-                  style={styles.menuItem} 
-                  activeOpacity={0.7} 
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  activeOpacity={0.7}
                   onPress={() => {
                     onDelete?.();
                     onClose();
                   }}
                 >
                   <Feather name="trash-2" size={20} color={colors.primary} style={styles.menuIcon} />
-                  <Text style={[styles.menuText, { color: colors.primary }]}>Delete</Text>
+                  <Text style={[styles.menuText, { color: colors.primary }]}>{deleteLabel}</Text>
                 </TouchableOpacity>
               )}
             </View>

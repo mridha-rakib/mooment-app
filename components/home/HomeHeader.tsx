@@ -10,9 +10,11 @@ import CinematicButton from '../ui/CinematicButton';
 interface HomeHeaderProps {
   selectedType: string;
   setSelectedType: (type: string) => void;
+  activeHashtags: string[];
+  onHashtagFilterChange: (hashtags: string[]) => void;
 }
 
-export default function HomeHeader({ selectedType, setSelectedType }: HomeHeaderProps) {
+export default function HomeHeader({ selectedType, setSelectedType, activeHashtags, onHashtagFilterChange }: HomeHeaderProps) {
   const router = useRouter();
   const { colors } = useTheme();
   const [filterVisible, setFilterVisible] = useState(false);
@@ -90,7 +92,12 @@ export default function HomeHeader({ selectedType, setSelectedType }: HomeHeader
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-      <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
+      <FilterModal
+        visible={filterVisible}
+        onClose={() => setFilterVisible(false)}
+        activeHashtags={activeHashtags}
+        onApply={onHashtagFilterChange}
+      />
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import type { EventCategory } from "@/constants/eventCategories";
 
-export type EventStatus = "draft" | "published";
+export type EventStatus = "draft" | "published" | "live" | "completed" | "cancelled";
 export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
 export type EventPrivacy = "public" | "locked" | "private";
 export type EventTicketType = "free" | "pay";
@@ -62,6 +62,18 @@ export type EventMemberResponse = {
   avatarUrl?: string | null;
 };
 
+export type JoinRequestStatus = "pending" | "accepted" | "declined";
+
+export type JoinRequest = {
+  userId: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
+  status: JoinRequestStatus;
+  createdAt: string;
+};
+
 export type EventImageDisplay = {
   crop?: {
     x: number;
@@ -81,6 +93,7 @@ export type EventPayload = {
   bannerImageDisplay?: EventImageDisplay | null;
   ageRestriction?: EventAgeRestriction | null;
   category?: EventCategory | null;
+  categories?: EventCategory[];
   scheduledAt?: string | null;
   endAt?: string | null;
   location?: EventLocation | null;
@@ -91,7 +104,7 @@ export type EventPayload = {
 export type PublishedEventPayload = EventPayload & {
   name: string;
   ageRestriction: EventAgeRestriction;
-  category: EventCategory;
+  categories: EventCategory[];
   scheduledAt: string;
   endAt: string;
   location: EventLocation;
@@ -103,6 +116,11 @@ export type EventResponse = {
   id: string;
   userId: string;
   host?: EventHost | null;
+  interactionMomentId?: string;
+  likesCount?: number;
+  commentsCount?: number;
+  sharesCount?: number;
+  isLiked?: boolean;
   status: EventStatus;
   name?: string | null;
   description?: string | null;
@@ -111,16 +129,31 @@ export type EventResponse = {
   bannerImageDisplay?: EventImageDisplay | null;
   ageRestriction?: EventAgeRestriction | null;
   category?: EventCategory | null;
+  categories: EventCategory[];
   scheduledAt?: string | null;
   endAt?: string | null;
   location?: EventLocation | null;
   tickets: EventTicketPayload[];
   rewards: EventRewardPayload[];
   privacy: EventPrivacy;
+  myJoinRequestStatus?: JoinRequestStatus | null;
   publishedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export const ticketAlreadyHasReward = (
+  rewards: EventRewardPayload[] | null | undefined,
+  ticketId: string,
+  excludeRewardId?: string | null,
+): boolean => (rewards ?? []).some((reward) => (
+  reward.id !== excludeRewardId
+  && reward.rewardType === "ticket"
+  && reward.ticketId === ticketId
+));
 
 export type EventMapQuery = {
   latitude?: number;
@@ -355,6 +388,11 @@ export const getMyDraftEvents = async (): Promise<EventResponse[]> => {
   return getEventsFromResponse(response);
 };
 
+export const getFeedEvents = async (): Promise<EventResponse[]> => {
+  const response = await api.get("/events/feed");
+  return getEventsFromResponse(response);
+};
+
 export const getMyPostTagEvents = async (): Promise<PostTagEvent[]> => {
   const response = await api.get("/events/mine/post-tag");
   const events = response.data?.data?.events;
@@ -439,4 +477,59 @@ export const addEventMember = async (eventId: string, userId: string): Promise<E
 export const removeEventMember = async (eventId: string, userId: string): Promise<EventMemberResponse[]> => {
   const response = await api.delete(`/events/${encodeURIComponent(eventId)}/members/${encodeURIComponent(userId)}`);
   return getMembersFromResponse(response);
+};
+
+export type EventSaveSummary = {
+  eventId: string;
+  isSaved: boolean;
+};
+
+export const toggleEventSave = async (eventId: string): Promise<EventSaveSummary> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/save`);
+  const summary = response.data?.data?.summary as EventSaveSummary | undefined;
+
+  if (!summary) {
+    throw new Error("The save response was incomplete.");
+  }
+
+  return summary;
+};
+
+export const startEvent = async (eventId: string): Promise<EventResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/start`);
+  return getEventFromResponse(response);
+};
+
+export const completeEvent = async (eventId: string): Promise<EventResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/complete`);
+  return getEventFromResponse(response);
+};
+
+export const cancelEvent = async (eventId: string): Promise<EventResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/cancel`);
+  return getEventFromResponse(response);
+};
+
+export const submitJoinRequest = async (eventId: string): Promise<{ status: JoinRequestStatus }> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/join-requests`);
+  const data = (response as { data?: { data?: { status?: JoinRequestStatus } } })?.data?.data;
+  return { status: data?.status ?? "pending" };
+};
+
+export const getJoinRequests = async (eventId: string): Promise<JoinRequest[]> => {
+  const response = await api.get(`/events/${encodeURIComponent(eventId)}/join-requests`);
+  const requests = (response as { data?: { data?: { requests?: JoinRequest[] } } })?.data?.data?.requests;
+  return Array.isArray(requests) ? requests : [];
+};
+
+export const acceptJoinRequest = async (eventId: string, requestUserId: string): Promise<void> => {
+  await api.post(
+    `/events/${encodeURIComponent(eventId)}/join-requests/${encodeURIComponent(requestUserId)}/accept`,
+  );
+};
+
+export const declineJoinRequest = async (eventId: string, requestUserId: string): Promise<void> => {
+  await api.post(
+    `/events/${encodeURIComponent(eventId)}/join-requests/${encodeURIComponent(requestUserId)}/decline`,
+  );
 };

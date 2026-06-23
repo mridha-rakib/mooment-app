@@ -16,19 +16,38 @@ const getBlobFromUri = (uri: string): Promise<Blob> =>
     request.onerror = () => {
       reject(new Error("Unable to read the selected file."));
     };
+    request.ontimeout = () => {
+      reject(new Error("Timed out while reading the selected file."));
+    };
+    request.timeout = 15000;
     request.responseType = "blob";
     request.open("GET", uri, true);
     request.send(null);
   });
 
-const uploadBlobWithFetch = async (url: string, blob: Blob, contentType: string) => {
-  const uploadResponse = await fetch(url, {
-    method: "PUT",
-    headers: {
-      "Content-Type": contentType,
-    },
-    body: blob,
-  });
+const uploadBlobWithFetch = async (url: string, blob: Blob, contentType: string, timeoutMs: number) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let uploadResponse: Response;
+
+  try {
+    uploadResponse = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": contentType,
+      },
+      body: blob,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("File upload timed out.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!uploadResponse.ok) {
     throw new Error("Unable to upload file.");
@@ -71,18 +90,14 @@ const getStorageUploadUrl = (key: string, contentType: string) => {
 };
 
 const shouldUseApiUploadProxy = (uploadUrl: string) => {
-  const apiBaseUrl = api.defaults.baseURL;
-
-  if (!apiBaseUrl) {
-    return false;
-  }
-
   try {
     const uploadHost = new URL(uploadUrl).hostname;
-    const apiHost = new URL(apiBaseUrl).hostname;
     const localUploadHosts = new Set(["localhost", "127.0.0.1", "10.0.2.2"]);
 
-    return localUploadHosts.has(uploadHost) && !localUploadHosts.has(apiHost);
+    // Local MinIO addresses are meaningful only on the development computer
+    // or emulator. Always use the API proxy so physical devices do not hang on
+    // an unreachable presigned URL/port.
+    return localUploadHosts.has(uploadHost);
   } catch {
     return false;
   }
@@ -107,12 +122,13 @@ export const uploadFileToStorage = async ({ uri, key, contentType }: UploadFileP
       throw new Error("Storage host is not reachable from this device.");
     }
 
-    await uploadBlobWithFetch(uploadUrl, blob, contentType);
+    await uploadBlobWithFetch(uploadUrl, blob, contentType, 15000);
   } catch {
     await uploadBlobWithFetch(
       getStorageUploadUrl(key, contentType),
       blob,
       "application/octet-stream",
+      30000,
     );
   }
 

@@ -124,6 +124,7 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     isFollowing: moment.author?.isFollowing ?? false,
     timeAgo: formatMomentTimeAgo(options.createdAt ?? moment.createdAt),
     caption: moment.caption ?? undefined,
+    hashtags: moment.hashtags ?? [],
     isPublic: moment.audience === "public",
     likesCount: moment.likesCount,
     commentsCount: moment.commentsCount,

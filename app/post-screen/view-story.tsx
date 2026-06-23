@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useVideoPlayer, VideoView, type VideoSource } from "expo-video";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Dimensions, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Dimensions, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { markStoriesSeen } from "@/lib/storySeen";
 
@@ -332,6 +332,12 @@ export default function ViewStoryScreen() {
           <Text style={styles.emptyText}>Story video unavailable</Text>
         </View>
       )}
+      {isLoadingStory && !loadFailed && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color="#FFFFFF" />
+        </View>
+      )}
+
       <StoryPreloader mediaUri={nextStory?.mediaUri} />
 
       <View style={styles.tapZones} pointerEvents="box-none">
@@ -531,5 +537,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     textAlign: "right",
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

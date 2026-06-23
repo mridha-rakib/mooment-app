@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -58,7 +58,6 @@ export default function CreateEventScreen() {
   const fieldPositions = useRef<Partial<Record<FocusableField, number>>>({});
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const draftId = useEventDraftStore((state) => state.draftId);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
   const draftName = useEventDraftStore((state) => state.name);
   const draftDescription = useEventDraftStore((state) => state.description);
@@ -66,7 +65,6 @@ export default function CreateEventScreen() {
   const draftBannerOriginalImageUri = useEventDraftStore((state) => state.bannerOriginalImageUri);
   const setStepOne = useEventDraftStore((state) => state.setStepOne);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
-  const discardDraft = useEventDraftStore((state) => state.discardDraft);
   const currentUser = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
@@ -79,6 +77,11 @@ export default function CreateEventScreen() {
   const [errors, setErrors] = useState<CreateEventStepOneErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
 
   const clearFieldError = (field: keyof CreateEventStepOneErrors) => {
     setErrors((currentErrors) => {
@@ -153,6 +156,7 @@ export default function CreateEventScreen() {
       setSavedLabel(true);
       setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
+      if (!isMountedRef.current) return;
       if (isBusinessAccountRequiredError(error)) {
         requireBusinessAccountForEvent({
           user: currentUser,
@@ -169,65 +173,8 @@ export default function CreateEventScreen() {
     }
   };
 
-  const handleDiscard = () => {
-    Alert.alert(
-      'Discard Draft',
-      'This will permanently delete your draft and all entered data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await discardDraft();
-              router.back();
-            } catch (error) {
-              Alert.alert('Unable to discard draft', getAuthErrorMessage(error, 'Please try again.'));
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleBack = () => {
-    const hasLocalData = name.trim().length > 0 || description.trim().length > 0 || bannerImage !== null;
-
-    if (!hasLocalData && !draftId) {
-      router.back();
-      return;
-    }
-
-    if (draftId && !isEditingPublished) {
-      Alert.alert(
-        'Save your progress?',
-        'You have an unsaved draft.',
-        [
-          { text: 'Discard Draft', style: 'destructive', onPress: handleDiscard },
-          {
-            text: 'Save Draft',
-            onPress: async () => {
-              await handleSaveDraft();
-              router.back();
-            },
-          },
-          { text: 'Continue Editing', style: 'cancel' },
-        ],
-      );
-    } else {
-      Alert.alert(
-        'Leave without saving?',
-        'Your changes will not be saved.',
-        [
-          { text: 'Leave', style: 'destructive', onPress: () => router.back() },
-          { text: 'Continue Editing', style: 'cancel' },
-        ],
-      );
-    }
-  };
-
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (isSaving) return;
     const result = createEventStepOneSchema.safeParse({
       name,
       description,
@@ -248,7 +195,31 @@ export default function CreateEventScreen() {
 
     setErrors({});
     persistStepOne(result.data);
-    router.push('/create-event/step-2');
+    setIsSaving(true);
+
+    try {
+      await saveDraft();
+      if (isMountedRef.current) {
+        router.push('/create-event/step-2');
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      if (isBusinessAccountRequiredError(error)) {
+        requireBusinessAccountForEvent({
+          user: currentUser,
+          completedProfileTypes,
+          updateProfile,
+          router,
+          onReady: handleNext,
+        });
+      } else {
+        Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
+    }
   };
 
   return (
@@ -257,7 +228,7 @@ export default function CreateEventScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <BackButton onPress={handleBack} />
+        <BackButton onPress={() => router.replace('/(tabs)/home')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
@@ -392,8 +363,9 @@ export default function CreateEventScreen() {
             <TouchableOpacity
               style={[styles.nextButton, { backgroundColor: colors.primary }]}
               onPress={handleNext}
+              disabled={isSaving}
             >
-              <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
+              <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

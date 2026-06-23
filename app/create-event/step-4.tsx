@@ -26,10 +26,15 @@ export default function CreateEventStep4() {
   const [ticketToDeleteId, setTicketToDeleteId] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
   const [savedLabel, setSavedLabel] = React.useState(false);
+  const isMountedRef = React.useRef(true);
   const tickets = useEventDraftStore((state) => state.tickets);
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+
+  React.useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
 
   const formatTicketExpiry = (value?: string | null) => {
     if (!value) {
@@ -103,13 +108,32 @@ export default function CreateEventStep4() {
     }
   };
 
+  const handleNext = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      await saveDraft();
+      if (isMountedRef.current) {
+        router.push('/create-event/step-5');
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       
       {/* Header */}
       <View style={styles.header}>
-        <BackButton />
+        <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-3')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
@@ -216,9 +240,10 @@ export default function CreateEventStep4() {
       <View style={[styles.footer, { backgroundColor: colors.background }]}>
         <TouchableOpacity 
           style={[styles.nextButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/create-event/step-5')}
+          onPress={handleNext}
+          disabled={isSaving}
         >
-          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
+          <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
         </TouchableOpacity>
       </View>
       <DeleteModal

@@ -4,7 +4,8 @@ import {
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React,
-  { useRef,
+  { useEffect,
+  useRef,
   useState } from 'react';
 import { Modal,
   PanResponder,
@@ -19,17 +20,20 @@ import { Modal,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { parseHashtagFilterInput } from '@/lib/hashtags';
 
 export type FilterModalProps = {
   visible: boolean;
   onClose: () => void;
+  activeHashtags?: string[];
+  onApply: (hashtags: string[]) => void;
 };
 
 const AGE_OPTIONS = ['All Ages', '18+', '21+'];
 const PRICE_OPTIONS = ['Free', '< $10', '< $50', '< $100', '$100+'];
 const TIME_OPTIONS = ['Morning', 'Noon', 'Evening', 'Late Night', 'Any'];
 
-export default function FilterModal({ visible, onClose }: FilterModalProps) {
+export default function FilterModal({ visible, onClose, activeHashtags = [], onApply }: FilterModalProps) {
   const { colors, isDark } = useTheme();
   const [activeAge, setActiveAge] = useState('All Ages');
   const [activePrice, setActivePrice] = useState('Free');
@@ -38,7 +42,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const [hashtags, setHashtags] = useState('#summer #party');
+  const [hashtags, setHashtags] = useState('');
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
 
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
@@ -46,6 +50,10 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
 
   const [radius, setRadius] = useState(75);
   const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    if (visible) setHashtags(activeHashtags.map((tag) => `#${tag}`).join(' '));
+  }, [activeHashtags, visible]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -79,6 +87,11 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
     setUseCurrentLocation(true);
     setSelectedLocation('Los Angeles, CA');
     setRadius(75);
+  };
+
+  const handleApply = () => {
+    onApply(parseHashtagFilterInput(hashtags));
+    onClose();
   };
 
   const renderPills = (options: string[], active: string, onSelect: (val: string) => void) => {
@@ -166,6 +179,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
                   style={[styles.inputText, { color: colors.text }]}
                   value={hashtags}
                   onChangeText={setHashtags}
+                  placeholder="#music #summer"
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
@@ -231,7 +245,7 @@ export default function FilterModal({ visible, onClose }: FilterModalProps) {
             <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: isDark ? '#3A3A44' : '#E0E0E0' }]} onPress={onClose} activeOpacity={0.8}>
               <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={onClose} activeOpacity={0.8}>
+            <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={handleApply} activeOpacity={0.8}>
               <Text style={[styles.applyBtnText, { color: colors.background }]}>Apply Filters</Text>
             </TouchableOpacity>
           </View>

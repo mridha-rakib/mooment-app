@@ -225,7 +225,7 @@ export default function Explore() {
           !item.isRead && styles.unreadCard,
         ]}
         activeOpacity={0.7}
-        onPress={() => item.eventId && router.push("/event-screen/event")}
+        onPress={() => item.eventId && router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } })}
       >
         <View style={styles.cardContent}>
           <View
@@ -278,7 +278,7 @@ export default function Explore() {
         !item.isRead && styles.unreadCard,
       ]}
       activeOpacity={0.7}
-      onPress={() => item.eventName && router.push("/event-screen/event")}
+      onPress={() => item.eventId && router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } })}
     >
       <View style={styles.cardContent}>
         {item.actorAvatarUrl ? (

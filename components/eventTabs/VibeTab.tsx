@@ -1,6 +1,7 @@
 import { useTheme } from "@/hooks/useTheme";
 import { getEventMoments } from "@/lib/moments";
 import type { Moment } from "@/lib/moments";
+import HashtagText from '@/components/post/HashtagText';
 import { getStorageFileUrl } from "@/lib/storage";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -297,9 +298,12 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
                 </View>
 
                 {!!item.caption && (
-                  <Text style={[styles.postText, { color: colors.text }]}>
+                  <HashtagText
+                    style={[styles.postText, { color: colors.text }]}
+                    hashtagStyle={{ color: colors.primary, fontWeight: '700' }}
+                  >
                     {item.caption}
-                  </Text>
+                  </HashtagText>
                 )}
 
                 {mediaUrl && item.mediaItems?.[0]?.type === "image" && (

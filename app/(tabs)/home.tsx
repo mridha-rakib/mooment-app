@@ -1,13 +1,14 @@
 import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
 // Components
 import HomeHeader from "@/components/home/HomeHeader";
 import MapContainer from "@/components/home/MapContainer";
+import EventFeedCard from "@/components/home/EventFeedCard";
 import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
 import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
 import CommentsModal from "@/components/post/CommentsModal";
@@ -23,12 +24,14 @@ import { getFeedStories } from "@/lib/stories";
 import type { Story } from "@/lib/stories";
 import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
+import { getFeedEvents, type EventResponse } from "@/lib/events";
+import { useAuthStore } from "@/stores/authStore";
 
 const STORY_FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
 
 const SUGGESTED_USERS_INSERT_AFTER = 4;
 
-const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>()): StoryData[] => {
+const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>(), currentUserId?: string): StoryData[] => {
   const groupedStories = new Map<string, Story[]>();
 
   feedStories.forEach((story) => {
@@ -58,6 +61,7 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
     return {
       id: `story-group-${authorId}`,
       type: 'standard' as const,
+      isOwnStory: currentUserId ? authorId === currentUserId : false,
       title,
       authorName: title,
       imageUri: latestStory.author?.avatarUrl ?? STORY_FALLBACK_AVATAR,
@@ -92,6 +96,7 @@ const buildFeedItems = (posts: PostData[], suggestedUsers: SuggestedUser[]): Fee
 
 export default function HomeFeed() {
   const { colors } = useTheme();
+  const userId = useAuthStore((state) => state.user?.id);
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -99,9 +104,12 @@ export default function HomeFeed() {
   const [stories, setStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
+  const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
+  const [activeHashtags, setActiveHashtags] = useState<string[]>([]);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const feedRequestIdRef = useRef(0);
   const params = useLocalSearchParams();
 
   useEffect(() => {
@@ -124,41 +132,49 @@ export default function HomeFeed() {
       ]);
       setStories([
         { id: 'add-story', type: 'add' },
-        ...groupStoriesByAuthor(feedStories, seenStoryIds),
+        ...groupStoriesByAuthor(feedStories, seenStoryIds, userId),
       ]);
     } catch {
       setStories([{ id: 'add-story', type: 'add' }]);
     }
-  }, []);
+  }, [userId]);
 
-  const loadFeedMoments = useCallback(async () => {
-    try {
-      const moments = await getFeedMoments();
+  const loadFeed = useCallback(async () => {
+    const requestId = ++feedRequestIdRef.current;
+    const [momentsResult, eventsResult] = await Promise.allSettled([
+      getFeedMoments({ hashtags: activeHashtags }),
+      getFeedEvents(),
+    ]);
+
+    if (requestId !== feedRequestIdRef.current) return;
+
+    if (momentsResult.status === "fulfilled") {
       setFeedMomentPosts(
-        moments
-          .filter((moment) => moment.mode !== "event")
+        momentsResult.value
           .map((moment) => mapMomentToPost(moment, {
             fallbackAvatar: STORY_FALLBACK_AVATAR,
             storageUrlResolver: getStorageFileUrl,
           }))
           .filter((post): post is PostData => Boolean(post)),
       );
-    } catch {
+    } else {
       setFeedMomentPosts([]);
     }
-  }, []);
+
+    setFeedEvents(activeHashtags.length === 0 && eventsResult.status === "fulfilled" ? eventsResult.value : []);
+  }, [activeHashtags]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([loadStories(), loadFeedMoments()]);
+    await Promise.all([loadStories(), loadFeed()]);
     setIsRefreshing(false);
-  }, [loadFeedMoments, loadStories]);
+  }, [loadFeed, loadStories]);
 
   useFocusEffect(
     useCallback(() => {
       void loadStories();
-      void loadFeedMoments();
-    }, [loadFeedMoments, loadStories]),
+      void loadFeed();
+    }, [loadFeed, loadStories]),
   );
 
   useEffect(() => {
@@ -280,7 +296,12 @@ export default function HomeFeed() {
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
-        <HomeHeader selectedType={selectedType} setSelectedType={setSelectedType} />
+        <HomeHeader
+          selectedType={selectedType}
+          setSelectedType={setSelectedType}
+          activeHashtags={activeHashtags}
+          onHashtagFilterChange={setActiveHashtags}
+        />
 
         {selectedType === 'Feed' ? (
           <ScrollView
@@ -294,6 +315,10 @@ export default function HomeFeed() {
             }
           >
             <StoryCarousel stories={stories} />
+
+            {feedEvents.map((event) => (
+              <EventFeedCard key={`event-${event.id}`} event={event} />
+            ))}
 
             {feedItems.map((item) => {
               if (item.type === 'post') {

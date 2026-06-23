@@ -97,7 +97,7 @@ export default function CreateEventStep5() {
       
       {/* Header */}
       <View style={styles.header}>
-        <BackButton />
+        <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-4')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />

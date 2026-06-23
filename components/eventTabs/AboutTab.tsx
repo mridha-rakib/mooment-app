@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import Mapbox from "@rnmapbox/maps";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Dimensions, Linking, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
@@ -101,8 +101,6 @@ const formatCompactCount = (value?: number | null) =>
 
 const isFiniteCoordinate = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
-
-const isNonEmptyString = (value: string | null): value is string => Boolean(value);
 
 const resolveHostAvatar = (host?: EventHost | null) => {
   if (host?.avatarUrl) {
@@ -240,6 +238,7 @@ const AboutTab = ({
   const [isHostFollowing, setIsHostFollowing] = useState(Boolean(host?.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [hostFollowerDelta, setHostFollowerDelta] = useState(0);
+  const [showMapsModal, setShowMapsModal] = useState(false);
 
   const hostAvatar = useMemo(() => resolveHostAvatar(host), [host]);
   const hostFollowers = useMemo(() => {
@@ -262,6 +261,20 @@ const AboutTab = ({
   const cardBackground = isDark ? "rgba(17, 17, 17, 0.8)" : colors.card;
   const mutedCardBackground = isDark ? "rgba(17, 17, 17, 0.8)" : "rgba(0, 0, 0, 0.03)";
   const isAgeRestricted = ageRestriction === "18_plus" || ageRestriction === "21_plus";
+
+  const openInGoogleMaps = () => {
+    setShowMapsModal(false);
+    const lat = location?.latitude;
+    const lng = location?.longitude;
+    let url: string;
+    if (isFiniteCoordinate(lat) && isFiniteCoordinate(lng)) {
+      url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    } else {
+      const query = location?.address || location?.venue || locationLabel;
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    }
+    Linking.openURL(url);
+  };
 
   const openEventMap = () => {
     if (!hasEventCoordinates) {
@@ -353,6 +366,55 @@ const AboutTab = ({
         onClose={() => setSelectedImage(null)}
       />
 
+      <Modal
+        visible={showMapsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMapsModal(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowMapsModal(false)}>
+          <View style={styles.mapsModalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.mapsModalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.mapsModalHeader}>
+                  <View style={[styles.mapsModalIconContainer, { backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)" }]}>
+                    <Ionicons name="map-outline" size={22} color={isDark ? colors.primary : colors.text} />
+                  </View>
+                  <Text style={[styles.mapsModalTitle, { color: colors.text }]}>Open in Google Maps?</Text>
+                </View>
+                <Text style={[styles.mapsModalDesc, { color: colors.textSecondary }]}>
+                  Do you want to open this event location in Google Maps?
+                </Text>
+                <View style={styles.mapsModalButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.mapsModalBtnOpen,
+                      {
+                        borderWidth: isDark ? 0 : 1,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={openInGoogleMaps}
+                  >
+                    <Feather name="map" size={16} color="#111111" />
+                    <Text style={styles.mapsModalBtnOpenText}>Open Google Maps</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.mapsModalBtnCancel}
+                    activeOpacity={0.8}
+                    onPress={() => setShowMapsModal(false)}
+                  >
+                    <Feather name="x-circle" size={16} color="#D44343" />
+                    <Text style={styles.mapsModalBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       <SegmentedControl
         options={["Description", "Gallery"]}
         selectedOption={subTab}
@@ -389,7 +451,11 @@ const AboutTab = ({
 
             <View style={styles.sectionBlock}>
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Location</Text>
-              <View style={[styles.locationCard, { backgroundColor: cardBackground }]}>
+              <TouchableOpacity
+                style={[styles.locationCard, { backgroundColor: cardBackground }]}
+                activeOpacity={0.8}
+                onPress={() => setShowMapsModal(true)}
+              >
                 <View style={styles.locationHeader}>
                   <Ionicons name="location-outline" size={20} color={colors.textSecondary} />
                   <Text style={[styles.locationCity, { color: colors.text }]} numberOfLines={1}>
@@ -400,7 +466,7 @@ const AboutTab = ({
                   <LocationLine label="Venue" value={location?.venue} labelColor={colors.text} valueColor={colors.textSecondary} />
                   <LocationLine label="Address" value={location?.address} labelColor={colors.text} valueColor={colors.textSecondary} />
                 </View>
-              </View>
+              </TouchableOpacity>
 
               <EventLocationMap
                 location={location}
@@ -412,19 +478,14 @@ const AboutTab = ({
               />
             </View>
 
-            <View style={[styles.additionalInfoCard, { backgroundColor: mutedCardBackground }]}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Additional Info</Text>
-              {[
-                location?.venue ? `Venue: ${location.venue}` : null,
-                location?.address ? `Address: ${location.address}` : null,
-                formatAgeLabel(ageRestriction),
-                location?.additionalInfo?.trim() || null,
-              ].filter(isNonEmptyString).map((item) => (
-                <Text key={item} style={[styles.bulletItem, { color: colors.textSecondary }]}>
-                  -{item}
+            {location?.additionalInfo?.trim() ? (
+              <View style={[styles.additionalInfoCard, { backgroundColor: mutedCardBackground }]}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Additional Info</Text>
+                <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>
+                  {location.additionalInfo.trim()}
                 </Text>
-              ))}
-            </View>
+              </View>
+            ) : null}
 
             {!isHostMode && (
               <>
@@ -723,5 +784,82 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
+  },
+  mapsModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  mapsModalCard: {
+    borderRadius: 24,
+    padding: 24,
+    gap: 16,
+    width: "100%",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  mapsModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  mapsModalIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  mapsModalTitle: {
+    fontSize: 19,
+    fontWeight: "700",
+    flex: 1,
+  },
+  mapsModalDesc: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  mapsModalButtons: {
+    flexDirection: "column",
+    gap: 10,
+    marginTop: 8,
+    width: "100%",
+  },
+  mapsModalBtnCancel: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#150B0B",
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  mapsModalBtnCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#D44343",
+  },
+  mapsModalBtnOpen: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  mapsModalBtnOpenText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111111",
+    textAlign: "center",
   },
 });

@@ -38,7 +38,7 @@ type EventDraftState = {
   bannerOriginalImageKey: string | null;
   bannerImageDisplay: EventImageDisplay | null;
   ageRestriction: EventAgeRestriction;
-  category: EventCategory | null;
+  categories: EventCategory[];
   scheduledAt: string;
   endAt: string;
   location: EventLocation;
@@ -53,7 +53,7 @@ type EventDraftState = {
   }) => void;
   setStepTwo: (payload: {
     ageRestriction: EventAgeRestriction;
-    category: EventCategory | null;
+    categories: EventCategory[];
     scheduledAt: string;
     endAt: string;
   }) => void;
@@ -106,7 +106,7 @@ const createInitialState = () => {
     bannerOriginalImageKey: null,
     bannerImageDisplay: null,
     ageRestriction: "all_ages" as EventAgeRestriction,
-    category: null,
+    categories: [],
     endAt: getDefaultEndAt(scheduledAt),
     location: {},
     tickets: [],
@@ -196,6 +196,21 @@ const isDraftNotFoundError = (error: unknown) => {
   return response?.status === 404 && message.includes("draft") && message.includes("not found");
 };
 
+const assertValidCategories = (categories: EventCategory[]) => {
+  if (categories.length === 0) {
+    throw new Error("Select at least 1 category before saving the event.");
+  }
+
+  if (categories.length > 3) {
+    throw new Error("You can select up to 3 categories.");
+  }
+};
+
+// Save calls can originate from different event steps before the previous
+// screen has fully unmounted. Serialize them so two calls cannot both POST a
+// new draft or let an older response race a newer update.
+let draftSaveQueue: Promise<unknown> = Promise.resolve();
+
 export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   ...createInitialState(),
 
@@ -212,12 +227,12 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     }));
   },
 
-  setStepTwo: ({ ageRestriction, category, scheduledAt, endAt }) => {
+  setStepTwo: ({ ageRestriction, categories, scheduledAt, endAt }) => {
     const currentTickets = get().tickets;
     const tickets = currentTickets.map((t) =>
       t.localId === DEFAULT_TICKET_ID && !t.id ? { ...t, salesEndAt: scheduledAt } : t
     );
-    set({ ageRestriction, category, scheduledAt, endAt, tickets });
+    set({ ageRestriction, categories, scheduledAt, endAt, tickets });
   },
 
   setStepThree: ({ location }) => {
@@ -345,30 +360,39 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     }
   },
 
-  saveDraft: async () => {
-    const payload = await buildEventPayload(get());
-    const state = get();
-    const event = state.isEditingPublishedEvent && state.draftId
-      ? await updateEvent(state.draftId, payload)
-      : await saveEventDraft(payload, state.draftId);
+  saveDraft: () => {
+    const operation = draftSaveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const payload = await buildEventPayload(get());
+        const state = get();
+        const event = state.isEditingPublishedEvent && state.draftId
+          ? await updateEvent(state.draftId, payload)
+          : await saveEventDraft(payload, state.draftId);
 
-    set({
-      ...getEventSyncState(event, get().tickets),
-      bannerImageKey: event.bannerImageKey ?? get().bannerImageKey,
-      bannerOriginalImageKey: event.bannerOriginalImageKey ?? get().bannerOriginalImageKey,
-      bannerImageDisplay: event.bannerImageDisplay ?? get().bannerImageDisplay,
-    });
+        set({
+          ...getEventSyncState(event, get().tickets),
+          bannerImageKey: event.bannerImageKey ?? get().bannerImageKey,
+          bannerOriginalImageKey: event.bannerOriginalImageKey ?? get().bannerOriginalImageKey,
+          bannerImageDisplay: event.bannerImageDisplay ?? get().bannerImageDisplay,
+        });
 
-    return event;
+        return event;
+      });
+
+    draftSaveQueue = operation;
+    return operation;
   },
 
   publish: async () => {
     const state = get();
+    assertValidCategories(state.categories);
     const payload = await buildEventPayload(state);
     const publishedPayload = {
       ...payload,
       ageRestriction: state.ageRestriction,
-      category: state.category || "Other",
+      category: state.categories[0],
+      categories: state.categories,
       location: state.location,
       name: state.name.trim() || "Untitled Event",
       privacy: state.privacy,
@@ -418,7 +442,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
       bannerImageDisplay: event.bannerImageDisplay ?? null,
       ageRestriction: event.ageRestriction ?? "all_ages",
-      category: event.category ?? null,
+      categories: event.categories?.length ? event.categories : event.category ? [event.category] : [],
       scheduledAt: event.scheduledAt ?? new Date().toISOString(),
       endAt: event.endAt ?? getDefaultEndAt(event.scheduledAt ?? new Date()),
       location: event.location ?? {},
@@ -443,39 +467,52 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
 const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> => {
   let bannerImageKey = state.bannerImageKey;
   let bannerOriginalImageKey = state.bannerOriginalImageKey;
+  const uploadBanner = async () => {
+    if (!state.bannerImageUri || isRemoteUri(state.bannerImageUri) || bannerImageKey) {
+      return bannerImageKey;
+    }
 
-  if (state.bannerImageUri && !isRemoteUri(state.bannerImageUri) && !bannerImageKey) {
     const contentType = getImageContentType(state.bannerImageUri);
     const extension = getImageExtension(contentType);
 
-    bannerImageKey = await uploadFileToStorage({
+    return uploadFileToStorage({
       contentType,
       key: `events/banners/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
       uri: state.bannerImageUri,
     });
-  }
+  };
 
-  if (state.bannerOriginalImageUri && !isRemoteUri(state.bannerOriginalImageUri) && !bannerOriginalImageKey) {
+  const uploadOriginalBanner = async () => {
+    if (!state.bannerOriginalImageUri || isRemoteUri(state.bannerOriginalImageUri) || bannerOriginalImageKey) {
+      return bannerOriginalImageKey;
+    }
+
     const contentType = getImageContentType(state.bannerOriginalImageUri);
     const extension = getImageExtension(contentType);
 
     try {
-      bannerOriginalImageKey = await uploadFileToStorage({
+      return await uploadFileToStorage({
         contentType,
         key: `events/banners/originals/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
         uri: state.bannerOriginalImageUri,
       });
     } catch {
-      bannerOriginalImageKey = bannerImageKey;
+      return null;
     }
-  }
+  };
+
+  [bannerImageKey, bannerOriginalImageKey] = await Promise.all([
+    uploadBanner(),
+    uploadOriginalBanner(),
+  ]);
 
   return {
     ageRestriction: state.ageRestriction,
     bannerImageKey,
     bannerOriginalImageKey: bannerOriginalImageKey ?? bannerImageKey,
     bannerImageDisplay: state.bannerImageDisplay,
-    category: state.category,
+    category: state.categories[0] ?? null,
+    categories: state.categories,
     description: state.description.trim() || null,
     location: state.location,
     name: state.name.trim() || null,

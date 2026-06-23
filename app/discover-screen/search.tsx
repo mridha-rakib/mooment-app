@@ -9,8 +9,9 @@ import { getMapEvents, type EventResponse } from '@/lib/events';
 import { getMyProducts, type Product } from '@/lib/products';
 import { getStorageFileUrl } from '@/lib/storage';
 import { getSuggestedUsers } from '@/lib/users';
+import { normalizeHashtag } from '@/lib/hashtags';
 
-type SearchFilter = 'All' | 'People' | 'Events' | 'Products';
+type SearchFilter = 'All' | 'People' | 'Events' | 'Products' | 'Hashtags';
 type SearchSection = {
   filter: Exclude<SearchFilter, 'All'>;
   resultCount: number;
@@ -35,7 +36,7 @@ type SearchProduct = {
   imageUrl?: string | null;
 };
 
-const FILTERS: SearchFilter[] = ['All', 'People', 'Events', 'Products'];
+const FILTERS: SearchFilter[] = ['All', 'People', 'Events', 'Products', 'Hashtags'];
 const SEARCH_RESULT_LIMIT = 50;
 
 const resolveStorageUrl = (key?: string | null) => {
@@ -120,6 +121,7 @@ export default function SearchScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   const query = searchQuery.toLowerCase().trim();
+  const hashtagQuery = normalizeHashtag(query);
 
   useEffect(() => {
     let isMounted = true;
@@ -177,6 +179,27 @@ export default function SearchScreen() {
   );
 
   const searchSections = useMemo<SearchSection[]>(() => [
+    {
+      filter: 'Hashtags',
+      resultCount: hashtagQuery ? 1 : 0,
+      render: () => (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Hashtag posts</Text>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => router.push({ pathname: '/discover-screen/hashtag', params: { tag: hashtagQuery } })}
+          >
+            <View style={[styles.hashtagIcon, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.hashtagIconText, { color: colors.primary }]}>#</Text>
+            </View>
+            <View style={styles.listTextContainer}>
+              <Text style={[styles.listTitle, { color: colors.text }]}>#{hashtagQuery}</Text>
+              <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>View related posts</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      ),
+    },
     {
       filter: 'People',
       resultCount: filteredPeople.length,
@@ -269,7 +292,7 @@ export default function SearchScreen() {
         </View>
       ),
     },
-  ], [colors.border, colors.text, colors.textSecondary, filteredEvents, filteredPeople, filteredProducts, router]);
+  ], [colors.border, colors.card, colors.primary, colors.text, colors.textSecondary, filteredEvents, filteredPeople, filteredProducts, hashtagQuery, router]);
 
   const visibleSections = searchSections.filter(
     section => activeFilter === 'All' || section.filter === activeFilter,
@@ -478,6 +501,19 @@ const styles = StyleSheet.create({
   squareImagePlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  hashtagIcon: {
+    alignItems: 'center',
+    borderRadius: 26,
+    borderWidth: 1,
+    height: 52,
+    justifyContent: 'center',
+    marginRight: 14,
+    width: 52,
+  },
+  hashtagIconText: {
+    fontSize: 24,
+    fontWeight: '800',
   },
   listTextContainer: {
     flex: 1,

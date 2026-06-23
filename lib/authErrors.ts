@@ -1,6 +1,7 @@
 type ApiErrorDetails = {
   code?: string;
   email?: string;
+  ticketId?: string | null;
   fields?: Record<string, string[]>;
   issues?: { message?: string }[];
 };
@@ -51,3 +52,7 @@ export const getAuthErrorDetails = (error: unknown) =>
 export const isBusinessAccountRequiredError = (error: unknown): boolean =>
   (error as { response?: { data?: ApiErrorResponse } })?.response?.data?.details?.code ===
   "BUSINESS_ACCOUNT_REQUIRED";
+
+export const isTicketRewardConflictError = (error: unknown): boolean =>
+  (error as { response?: { data?: ApiErrorResponse } })?.response?.data?.details?.code ===
+  "TICKET_REWARD_ALREADY_EXISTS";

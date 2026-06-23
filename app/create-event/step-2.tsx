@@ -2,11 +2,12 @@ import BackButton from '@/components/ui/BackButton';
 import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constants/eventCategories';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { combineLocalDateAndTime, getEventDateRangeError, getLocalCalendarDaySpan } from '@/lib/eventDateRange';
 import { fromAgeRestriction, toAgeRestriction, useEventDraftStore } from '@/stores/eventDraftStore';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Modal,
@@ -23,28 +24,42 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { z } from 'zod';
 
 const AGE_OPTIONS = ['All Ages', '18+', '21+'] as const;
+const MIN_CATEGORIES = 1;
+const MAX_CATEGORIES = 3;
+const REQUIRED_CATEGORY_MESSAGE = 'Select at least 1 category.';
+const MAX_CATEGORY_MESSAGE = 'You can select up to 3 categories.';
 
 type AgeOption = (typeof AGE_OPTIONS)[number];
 
 const isAgeOption = (value: string): value is AgeOption => (AGE_OPTIONS as readonly string[]).includes(value);
+
+const categorySelectionSchema = z
+  .array(z.custom<EventCategory>((value) => isEventCategory(value)))
+  .min(MIN_CATEGORIES, REQUIRED_CATEGORY_MESSAGE)
+  .max(MAX_CATEGORIES, MAX_CATEGORY_MESSAGE);
 
 const createEventStepTwoSchema = z.object({
   ageRestriction: z.enum(AGE_OPTIONS, {
     invalid_type_error: 'Choose an age restriction for this event.',
     required_error: 'Choose an age restriction for this event.',
   }),
-  category: z.custom<EventCategory>((value) => isEventCategory(value), {
-    message: 'Select a category before continuing.',
-  }),
+  categories: categorySelectionSchema,
   scheduledAt: z.custom<Date>((value) => value instanceof Date && !Number.isNaN(value.getTime()), {
     message: 'Choose a valid start date and time.',
   }),
   endAt: z.custom<Date>((value) => value instanceof Date && !Number.isNaN(value.getTime()), {
-    message: 'Choose a valid end time.',
+    message: 'Choose a valid end date and time.',
   }),
-}).refine((value) => value.endAt > value.scheduledAt, {
-  message: 'End time must be after the start time.',
-  path: ['endAt'],
+}).superRefine((value, ctx) => {
+  const message = getEventDateRangeError(value.scheduledAt, value.endAt);
+
+  if (message) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message,
+      path: ['endAt'],
+    });
+  }
 });
 
 type CreateEventStepTwoValues = z.infer<typeof createEventStepTwoSchema>;
@@ -55,7 +70,7 @@ export default function CreateEventStep2() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const draftAgeRestriction = useEventDraftStore((state) => state.ageRestriction);
-  const draftCategory = useEventDraftStore((state) => state.category);
+  const draftCategories = useEventDraftStore((state) => state.categories);
   const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
   const draftEndAt = useEventDraftStore((state) => state.endAt);
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
@@ -63,15 +78,21 @@ export default function CreateEventStep2() {
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
   const [selectedAge, setSelectedAge] = useState<AgeOption>(() => {
     const initialAge = fromAgeRestriction(draftAgeRestriction);
 
     return isAgeOption(initialAge) ? initialAge : 'All Ages';
   });
   const [isCategorySheetVisible, setIsCategorySheetVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<EventCategory | null>(
-    isEventCategory(draftCategory) ? draftCategory : null,
+  const [selectedCategories, setSelectedCategories] = useState<EventCategory[]>(
+    draftCategories.filter(isEventCategory).slice(0, MAX_CATEGORIES),
   );
+  const selectedCategoriesRef = useRef(selectedCategories);
   const [startAt, setStartAt] = useState(() => {
     const parsedDate = new Date(draftScheduledAt);
 
@@ -82,7 +103,8 @@ export default function CreateEventStep2() {
 
     return Number.isNaN(parsedDate.getTime()) ? new Date(Date.now() + 2 * 60 * 60 * 1000) : parsedDate;
   });
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [errors, setErrors] = useState<CreateEventStepTwoErrors>({});
@@ -103,21 +125,24 @@ export default function CreateEventStep2() {
     });
   };
 
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
+  const onStartDateChange = (event: any, selectedDate?: Date) => {
+    setShowStartDatePicker(false);
     if (selectedDate) {
-      const nextStartAt = new Date(startAt);
-      const nextEndAt = new Date(endAt);
+      const daySpan = getLocalCalendarDaySpan(startAt, endAt);
+      const nextStartAt = combineLocalDateAndTime(selectedDate, startAt);
+      const nextEndAt = combineLocalDateAndTime(selectedDate, endAt, daySpan);
 
-      nextStartAt.setFullYear(selectedDate.getFullYear());
-      nextStartAt.setMonth(selectedDate.getMonth());
-      nextStartAt.setDate(selectedDate.getDate());
-      nextEndAt.setFullYear(selectedDate.getFullYear());
-      nextEndAt.setMonth(selectedDate.getMonth());
-      nextEndAt.setDate(selectedDate.getDate());
       setStartAt(nextStartAt);
       setEndAt(nextEndAt);
       clearFieldError('scheduledAt');
+      clearFieldError('endAt');
+    }
+  };
+
+  const onEndDateChange = (event: any, selectedDate?: Date) => {
+    setShowEndDatePicker(false);
+    if (selectedDate) {
+      setEndAt(combineLocalDateAndTime(selectedDate, endAt));
       clearFieldError('endAt');
     }
   };
@@ -171,15 +196,56 @@ export default function CreateEventStep2() {
     clearFieldError('ageRestriction');
   };
 
-  const handleCategorySelect = (category: EventCategory) => {
-    setSelectedCategory(category);
-    clearFieldError('category');
+  const setCategoryError = (message?: string) => {
+    setErrors((currentErrors) => ({ ...currentErrors, categories: message }));
+  };
+
+  const handleCategoryToggle = (category: EventCategory) => {
+    const currentCategories = selectedCategoriesRef.current;
+
+    if (currentCategories.includes(category)) {
+      const nextCategories = currentCategories.filter((item) => item !== category);
+      selectedCategoriesRef.current = nextCategories;
+      setSelectedCategories(nextCategories);
+      setCategoryError(nextCategories.length === 0 ? REQUIRED_CATEGORY_MESSAGE : undefined);
+      return;
+    }
+
+    if (currentCategories.length >= MAX_CATEGORIES) {
+      setCategoryError(MAX_CATEGORY_MESSAGE);
+      return;
+    }
+
+    const nextCategories = [...currentCategories, category];
+    selectedCategoriesRef.current = nextCategories;
+    setSelectedCategories(nextCategories);
+    clearFieldError('categories');
+  };
+
+  const validateCategorySelection = () => {
+    const result = categorySelectionSchema.safeParse(selectedCategories);
+
+    if (!result.success) {
+      setCategoryError(result.error.errors[0]?.message ?? REQUIRED_CATEGORY_MESSAGE);
+      return false;
+    }
+
+    clearFieldError('categories');
+    return true;
+  };
+
+  const handleCategoryContinue = () => {
+    if (!validateCategorySelection()) {
+      return;
+    }
+
+    setIsCategorySheetVisible(false);
   };
 
   const persistStepTwo = (values?: CreateEventStepTwoValues) => {
     setStepTwo({
       ageRestriction: toAgeRestriction(values?.ageRestriction ?? selectedAge),
-      category: values?.category ?? selectedCategory,
+      categories: values?.categories ?? selectedCategories,
       scheduledAt: (values?.scheduledAt ?? startAt).toISOString(),
       endAt: (values?.endAt ?? endAt).toISOString(),
     });
@@ -187,6 +253,10 @@ export default function CreateEventStep2() {
 
   const handleSaveDraft = async () => {
     if (isSaving) return;
+    if (!validateCategorySelection()) {
+      setIsCategorySheetVisible(true);
+      return;
+    }
     persistStepTwo();
     setIsSaving(true);
 
@@ -201,10 +271,11 @@ export default function CreateEventStep2() {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (isSaving) return;
     const result = createEventStepTwoSchema.safeParse({
       ageRestriction: selectedAge,
-      category: selectedCategory,
+      categories: selectedCategories,
       scheduledAt: startAt,
       endAt,
     });
@@ -214,7 +285,7 @@ export default function CreateEventStep2() {
 
       setErrors({
         ageRestriction: fieldErrors.ageRestriction?.[0],
-        category: fieldErrors.category?.[0],
+        categories: fieldErrors.categories?.[0],
         scheduledAt: fieldErrors.scheduledAt?.[0],
         endAt: fieldErrors.endAt?.[0],
       });
@@ -224,7 +295,21 @@ export default function CreateEventStep2() {
 
     setErrors({});
     persistStepTwo(result.data);
-    router.push('/create-event/step-3');
+    setIsSaving(true);
+
+    try {
+      await saveDraft();
+      if (isMountedRef.current) {
+        router.push('/create-event/step-3');
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
+    }
   };
 
   return (
@@ -233,7 +318,7 @@ export default function CreateEventStep2() {
       
       {/* Header */}
       <View style={styles.header}>
-        <BackButton />
+        <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
@@ -282,40 +367,57 @@ export default function CreateEventStep2() {
           {errors.ageRestriction ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.ageRestriction}</Text> : null}
         </View>
 
-        {/* Category */}
+        {/* Categories */}
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>CATEGORY</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>CATEGORIES (1–3)</Text>
           <TouchableOpacity 
             style={[
               styles.selector,
-              { backgroundColor: colors.card, borderColor: errors.category ? colors.danger : 'transparent' },
+              { backgroundColor: colors.card, borderColor: errors.categories ? colors.danger : 'transparent' },
             ]}
             onPress={() => setIsCategorySheetVisible(true)}
           >
-            <Text style={selectedCategory ? [styles.selectorText, { color: colors.text }] : [styles.selectorPlaceholder, { color: colors.textSecondary }]}>
-              {selectedCategory || 'Select Category'}
+            <Text
+              numberOfLines={1}
+              style={selectedCategories.length ? [styles.categorySummary, { color: colors.text }] : [styles.selectorPlaceholder, { color: colors.textSecondary }]}
+            >
+              {selectedCategories.length ? selectedCategories.join(', ') : 'Select 1–3 categories'}
             </Text>
             <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
-          {errors.category ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.category}</Text> : null}
+          {errors.categories ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.categories}</Text> : null}
         </View>
 
-        {/* Date and Time Row */}
+        {/* Start/end dates and times */}
         <View style={styles.dateTimeGroup}>
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>DATE</Text>
-            <TouchableOpacity
-              style={[
-                styles.selector,
-                { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
-              ]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <View style={styles.selectorLeft}>
+          <View style={[styles.row, styles.dateRow]}>
+            <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>START DATE</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
+                ]}
+                onPress={() => setShowStartDatePicker(true)}
+              >
                 <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(startAt)}</Text>
-              </View>
-            </TouchableOpacity>
+                <Text style={[styles.compactSelectorText, { color: colors.text }]} numberOfLines={1}>{formatDate(startAt)}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.endAt ? colors.danger : 'transparent' },
+                ]}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.compactSelectorText, { color: colors.text }]} numberOfLines={1}>{formatDate(endAt)}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.row}>
@@ -351,14 +453,26 @@ export default function CreateEventStep2() {
           {errors.endAt ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endAt}</Text> : null}
         </View>
 
-        {showDatePicker && (
+        {showStartDatePicker && (
           <DateTimePicker
             value={startAt}
             mode="date"
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onDateChange}
+            onChange={onStartDateChange}
+          />
+        )}
+
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={endAt}
+            mode="date"
+            minimumDate={new Date(startAt.getFullYear(), startAt.getMonth(), startAt.getDate())}
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onEndDateChange}
           />
         )}
 
@@ -395,8 +509,9 @@ export default function CreateEventStep2() {
         <TouchableOpacity 
           style={[styles.nextButton, { backgroundColor: colors.primary }]}
           onPress={handleNext}
+          disabled={isSaving}
         >
-          <Text style={[styles.nextButtonText, { color: colors.background }]}>Next</Text>
+          <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -412,26 +527,41 @@ export default function CreateEventStep2() {
         </TouchableWithoutFeedback>
         <View style={[styles.bottomSheet, { backgroundColor: colors.card }]}>
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select Category</Text>
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select Categories</Text>
+          <Text style={[styles.categoryCount, { color: colors.textSecondary }]}>
+            {selectedCategories.length}/{MAX_CATEGORIES} selected
+          </Text>
+          {errors.categories ? (
+            <Text style={[styles.sheetError, { color: colors.danger }]}>{errors.categories}</Text>
+          ) : null}
           
           <ScrollView style={styles.categoryList} showsVerticalScrollIndicator={false}>
-            {EVENT_CATEGORIES.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={styles.categoryItem}
-                onPress={() => handleCategorySelect(item)}
-              >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    { color: colors.textSecondary },
-                    selectedCategory === item && [styles.categoryTextSelected, { color: colors.text }],
-                  ]}
+            {EVENT_CATEGORIES.map((item) => {
+              const isSelected = selectedCategories.includes(item);
+
+              return (
+                <TouchableOpacity
+                  key={item}
+                  style={styles.categoryItem}
+                  onPress={() => handleCategoryToggle(item)}
                 >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      { color: colors.textSecondary },
+                      isSelected && [styles.categoryTextSelected, { color: colors.text }],
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                  <Ionicons
+                    name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={22}
+                    color={isSelected ? colors.primary : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
           <View style={[styles.sheetFooter, { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 20 }]}>
@@ -443,7 +573,7 @@ export default function CreateEventStep2() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.continueButton, { backgroundColor: colors.primary }]}
-              onPress={() => setIsCategorySheetVisible(false)}
+              onPress={handleCategoryContinue}
             >
               <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
             </TouchableOpacity>
@@ -539,8 +669,20 @@ const styles = StyleSheet.create({
   selectorText: {
     fontSize: 15,
   },
+  categorySummary: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 10,
+  },
+  compactSelectorText: {
+    flex: 1,
+    fontSize: 13,
+  },
   dateTimeGroup: {
     marginBottom: 24,
+  },
+  dateRow: {
+    marginBottom: 20,
   },
   dateTimeColumn: {
     flex: 1,
@@ -589,12 +731,26 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  categoryCount: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  sheetError: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   categoryList: {
     marginBottom: 20,
   },
   categoryItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingVertical: 14,
   },
   categoryText: {
