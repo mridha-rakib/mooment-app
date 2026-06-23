@@ -90,14 +90,15 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   const authorAvatar = (moment.author?.avatarKey && options.storageUrlResolver)
     ? options.storageUrlResolver(moment.author.avatarKey)
     : (moment.author?.avatarUrl ?? options.fallbackAvatar);
-  const visualMedia = moment.mediaItems
+  const momentMediaItems = moment.mediaItems ?? [];
+  const visualMedia = momentMediaItems
     .filter(isVisualMediaItem)
     .map((mediaItem) => ({
       uri: resolveMediaUri(mediaItem, options.storageUrlResolver),
       type: mediaItem.type as "image" | "video",
     }))
     .filter((mediaItem): mediaItem is { uri: string; type: "image" | "video" } => Boolean(mediaItem.uri));
-  const audioMedia = moment.mediaItems.find(isAudioMediaItem);
+  const audioMedia = momentMediaItems.find(isAudioMediaItem);
   const audioUri = audioMedia ? resolveMediaUri(audioMedia, options.storageUrlResolver) : undefined;
   const taggedPeople = moment.taggedPeople ?? [];
   const authorContextNodes = [

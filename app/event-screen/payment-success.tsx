@@ -18,6 +18,11 @@ const getParam = (value: string | string[] | undefined, fallback: string) => {
   return source?.trim() || fallback;
 };
 
+const parsePositiveInteger = (value: string | string[] | undefined, fallback = 0) => {
+  const parsed = Number.parseInt(getParam(value, ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 const computeTicketNo = (orderId?: string, createdAt?: string): string | null => {
   if (!orderId || !createdAt) return null;
   try {
@@ -64,6 +69,9 @@ const PaymentSuccessScreen = () => {
     currency?: string;
     createdAt?: string;
     isFree?: string;
+    paidQuantity?: string;
+    freeQuantity?: string;
+    totalQuantity?: string;
   }>();
 
   const [showConfetti, setShowConfetti] = useState(false);
@@ -81,7 +89,10 @@ const PaymentSuccessScreen = () => {
   const hostName = getParam(params.hostName, "");
   const venue = getParam(params.venue, "");
   const address = getParam(params.address, "");
-  const quantity = getParam(params.quantity, "1");
+  const paidQuantity = parsePositiveInteger(params.paidQuantity, parsePositiveInteger(params.quantity, 1));
+  const freeQuantity = parsePositiveInteger(params.freeQuantity, 0);
+  const totalQuantity = parsePositiveInteger(params.totalQuantity, paidQuantity + freeQuantity);
+  const quantity = String(totalQuantity);
   const isFree = getParam(params.isFree, "");
   const ticketNo = useMemo(
     () => computeTicketNo(orderId, params.createdAt ? getParam(params.createdAt, "") : undefined),
@@ -99,11 +110,15 @@ const PaymentSuccessScreen = () => {
     if (hostName) rows.push({ label: "Host", value: hostName });
     if (venue) rows.push({ label: "Venue", value: venue });
     if (address) rows.push({ label: "Address", value: address });
-    rows.push({ label: "Ticket", value: `${ticketName} x ${quantity}` });
+    rows.push({ label: "Paid Tickets", value: `${ticketName} x ${paidQuantity}` });
+    if (freeQuantity > 0) {
+      rows.push({ label: "Rewarded Tickets", value: `${ticketName} x ${freeQuantity}` });
+    }
+    rows.push({ label: "Total Tickets", value: `${ticketName} x ${totalQuantity}` });
     if (eventDateDisplay) rows.push({ label: "Date/Time", value: eventDateDisplay });
     rows.push({ label: isAmountPaid ? "Amount Paid" : "Total", value: formattedAmount, isPrice: isAmountPaid });
     return rows;
-  }, [ticketNo, hostName, venue, address, ticketName, quantity, eventDateDisplay, formattedAmount, isAmountPaid]);
+  }, [ticketNo, hostName, venue, address, ticketName, paidQuantity, freeQuantity, totalQuantity, eventDateDisplay, formattedAmount, isAmountPaid]);
 
   const handleViewTicket = () => {
     router.push({
@@ -111,6 +126,9 @@ const PaymentSuccessScreen = () => {
       params: {
         type: "event",
         ticketNo: ticketNo ?? "",
+        orderId,
+        eventId,
+        ticketId: getParam(params.ticketId, ""),
         eventName,
         hostName,
         venue,
@@ -118,6 +136,9 @@ const PaymentSuccessScreen = () => {
         dateTime: eventDateDisplay,
         ticketName,
         quantity,
+        paidQuantity: String(paidQuantity),
+        freeQuantity: String(freeQuantity),
+        totalQuantity: String(totalQuantity),
         amount: getParam(params.amount, "0"),
         currency: getParam(params.currency, "usd"),
       },

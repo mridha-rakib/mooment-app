@@ -267,6 +267,8 @@ export default function EventFeedCard({ event }: Props) {
         locationName: locationName || "Event Location",
         latitude: event.location?.latitude?.toString() ?? "",
         longitude: event.location?.longitude?.toString() ?? "",
+        eventCategory: firstCategory ?? "",
+        markerImage: bannerUri ?? "",
       },
     });
   };

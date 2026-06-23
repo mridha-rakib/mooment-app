@@ -166,7 +166,7 @@ export default function CreateEventScreen() {
           onReady: handleSaveDraft,
         });
       } else {
-        Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+        Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Please try again.'));
       }
     } finally {
       setIsSaving(false);
@@ -213,7 +213,7 @@ export default function CreateEventScreen() {
           onReady: handleNext,
         });
       } else {
-        Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+        Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
       }
     } finally {
       if (isMountedRef.current) {

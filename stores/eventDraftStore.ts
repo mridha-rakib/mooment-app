@@ -403,9 +403,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     let event: EventResponse;
 
     try {
-      event = state.isEditingPublishedEvent && state.draftId
-        ? await updateEvent(state.draftId, publishedPayload)
-        : await publishEvent(publishedPayload, state.draftId);
+      event = await publishEvent(publishedPayload, state.draftId);
     } catch (error) {
       if (state.isEditingPublishedEvent || !state.draftId || !isDraftNotFoundError(error)) {
         throw error;

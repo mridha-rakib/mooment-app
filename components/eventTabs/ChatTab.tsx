@@ -2,6 +2,8 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -32,6 +34,9 @@ type ChatMessage = {
   time: string;
   fromMe: boolean;
 };
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const MESSAGES_LIST_HEIGHT = Math.max(280, SCREEN_HEIGHT * 0.43);
 
 const formatMessageTime = (value: string) =>
   new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -97,6 +102,7 @@ const ChatTab = ({
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
+  const messagesScrollRef = useRef<ScrollView>(null);
 
   const eventStarted = isEventStarted(scheduledAt);
 
@@ -195,6 +201,10 @@ const ChatTab = ({
     };
   }, [accessToken, currentUser?.id, eventId, eventStarted, hasAccess]);
 
+  const scrollToBottom = useCallback((animated = true) => {
+    messagesScrollRef.current?.scrollToEnd({ animated });
+  }, []);
+
   const sendMessage = () => {
     const text = inputText.trim();
 
@@ -219,6 +229,93 @@ const ChatTab = ({
     realtimeRef.current?.sendLiveMessage(eventId, text, clientMessageId);
   };
 
+  const renderMessage = useCallback(
+    ({ item, index }: { item: ChatMessage; index: number }) => {
+      const prevMsg = messages[index - 1];
+      const showSender =
+        !item.fromMe &&
+        (!prevMsg || prevMsg.fromMe || prevMsg.senderId !== item.senderId);
+
+      return (
+        <View
+          style={[
+            styles.msgWrapper,
+            item.fromMe ? styles.msgWrapperMe : styles.msgWrapperThem,
+            !prevMsg || prevMsg.fromMe !== item.fromMe
+              ? { marginTop: 12 }
+              : { marginTop: 4 },
+          ]}
+        >
+          {showSender && (
+            <View style={styles.senderRow}>
+              {item.senderAvatarUrl ? (
+                <Image
+                  source={{ uri: item.senderAvatarUrl }}
+                  style={styles.senderAvatar}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.senderAvatar,
+                    styles.senderAvatarPlaceholder,
+                    { backgroundColor: isDark ? "#222" : "#DDD" },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.senderAvatarInitial,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {item.senderName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text
+                style={[styles.senderName, { color: colors.textSecondary }]}
+              >
+                {item.senderName}
+              </Text>
+            </View>
+          )}
+          <View
+            style={[
+              styles.bubble,
+              item.fromMe
+                ? styles.bubbleMe
+                : [
+                    styles.bubbleThem,
+                    {
+                      borderColor: isDark
+                        ? "rgba(255,255,255,0.05)"
+                        : "rgba(0,0,0,0.08)",
+                    },
+                  ],
+            ]}
+          >
+            <Text
+              style={[
+                styles.bubbleText,
+                item.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem,
+              ]}
+            >
+              {item.text}
+            </Text>
+            <Text
+              style={[
+                styles.bubbleTime,
+                item.fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem,
+              ]}
+            >
+              {item.time}
+            </Text>
+          </View>
+        </View>
+      );
+    },
+    [messages, isDark, colors.textSecondary],
+  );
+
   if (isLoading) {
     return (
       <View style={styles.stateContainer}>
@@ -230,12 +327,28 @@ const ChatTab = ({
   if (!hasAccess) {
     return (
       <View style={styles.stateContainer}>
-        <View style={[styles.stateIconCircle, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }]}>
-          <Ionicons name="ticket-outline" size={28} color={colors.textSecondary} />
+        <View
+          style={[
+            styles.stateIconCircle,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(0,0,0,0.04)",
+            },
+          ]}
+        >
+          <Ionicons
+            name="ticket-outline"
+            size={28}
+            color={colors.textSecondary}
+          />
         </View>
-        <Text style={[styles.stateTitle, { color: colors.text }]}>Ticket Required</Text>
+        <Text style={[styles.stateTitle, { color: colors.text }]}>
+          Ticket Required
+        </Text>
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
-          Purchase a ticket for this event to join the group chat with other attendees.
+          Purchase a ticket for this event to join the group chat with other
+          attendees.
         </Text>
       </View>
     );
@@ -244,10 +357,25 @@ const ChatTab = ({
   if (!eventStarted) {
     return (
       <View style={styles.stateContainer}>
-        <View style={[styles.stateIconCircle, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }]}>
-          <Ionicons name="time-outline" size={28} color={colors.textSecondary} />
+        <View
+          style={[
+            styles.stateIconCircle,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(0,0,0,0.04)",
+            },
+          ]}
+        >
+          <Ionicons
+            name="time-outline"
+            size={28}
+            color={colors.textSecondary}
+          />
         </View>
-        <Text style={[styles.stateTitle, { color: colors.text }]}>Chat Opens Soon</Text>
+        <Text style={[styles.stateTitle, { color: colors.text }]}>
+          Chat Opens Soon
+        </Text>
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
           The group chat will be available once the event starts
           {scheduledAt ? ` on ${formatScheduledTime(scheduledAt)}` : ""}.
@@ -259,85 +387,98 @@ const ChatTab = ({
   return (
     <View style={styles.chatContainer}>
       {/* Chat Header */}
-      <View style={[styles.chatHeader, { backgroundColor: isDark ? "rgba(17,17,17,0.8)" : colors.card }]}>
+      <View
+        style={[
+          styles.chatHeader,
+          {
+            backgroundColor: isDark
+              ? "rgba(17,17,17,0.8)"
+              : colors.card,
+          },
+        ]}
+      >
         <View style={styles.chatHeaderLeft}>
           <Ionicons name="chatbubbles" size={18} color={colors.primary} />
-          <Text style={[styles.chatHeaderTitle, { color: colors.text }]} numberOfLines={1}>
+          <Text
+            style={[styles.chatHeaderTitle, { color: colors.text }]}
+            numberOfLines={1}
+          >
             {eventName ?? "Event"} Chat
           </Text>
         </View>
         <View style={styles.chatHeaderRight}>
           <View style={[styles.liveDot, { backgroundColor: "#16D869" }]} />
-          <Text style={[styles.liveText, { color: colors.textSecondary }]}>Live</Text>
+          <Text style={[styles.liveText, { color: colors.textSecondary }]}>
+            Live
+          </Text>
         </View>
       </View>
 
       {/* Messages */}
-      <View style={[styles.messagesContainer, { backgroundColor: isDark ? "rgba(10,10,14,0.6)" : "rgba(0,0,0,0.02)" }]}>
+      <ScrollView
+        ref={messagesScrollRef}
+        style={[
+          styles.messagesList,
+          {
+            backgroundColor: isDark
+              ? "rgba(10,10,14,0.6)"
+              : "rgba(0,0,0,0.02)",
+          },
+        ]}
+        contentContainerStyle={
+          messages.length === 0
+            ? styles.messagesEmpty
+            : styles.messagesContent
+        }
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => scrollToBottom(false)}
+        onLayout={() => scrollToBottom(false)}
+      >
         {messages.length === 0 ? (
           <View style={styles.emptyChat}>
-            <Ionicons name="chatbubble-ellipses-outline" size={32} color={colors.textSecondary} />
-            <Text style={[styles.emptyChatText, { color: colors.textSecondary }]}>
+            <Ionicons
+              name="chatbubble-ellipses-outline"
+              size={32}
+              color={colors.textSecondary}
+            />
+            <Text
+              style={[styles.emptyChatText, { color: colors.textSecondary }]}
+            >
               No messages yet
             </Text>
-            <Text style={[styles.emptyChatSubText, { color: colors.textSecondary }]}>
+            <Text
+              style={[
+                styles.emptyChatSubText,
+                { color: colors.textSecondary },
+              ]}
+            >
               Be the first to say something!
             </Text>
           </View>
         ) : (
-          messages.map((msg, index) => {
-            const prevMsg = messages[index - 1];
-            const showSender = !msg.fromMe && (!prevMsg || prevMsg.fromMe || prevMsg.senderId !== msg.senderId);
-
-            return (
-              <View
-                key={msg.id}
-                style={[
-                  styles.msgWrapper,
-                  msg.fromMe ? styles.msgWrapperMe : styles.msgWrapperThem,
-                  !prevMsg || prevMsg.fromMe !== msg.fromMe ? { marginTop: 12 } : { marginTop: 4 },
-                ]}
-              >
-                {showSender && (
-                  <View style={styles.senderRow}>
-                    {msg.senderAvatarUrl ? (
-                      <Image source={{ uri: msg.senderAvatarUrl }} style={styles.senderAvatar} />
-                    ) : (
-                      <View style={[styles.senderAvatar, styles.senderAvatarPlaceholder, { backgroundColor: isDark ? "#222" : "#DDD" }]}>
-                        <Text style={[styles.senderAvatarInitial, { color: colors.textSecondary }]}>
-                          {msg.senderName.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <Text style={[styles.senderName, { color: colors.textSecondary }]}>
-                      {msg.senderName}
-                    </Text>
-                  </View>
-                )}
-                <View
-                  style={[
-                    styles.bubble,
-                    msg.fromMe
-                      ? styles.bubbleMe
-                      : [styles.bubbleThem, { borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.08)" }],
-                  ]}
-                >
-                  <Text style={[styles.bubbleText, msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
-                    {msg.text}
-                  </Text>
-                  <Text style={[styles.bubbleTime, msg.fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
-                    {msg.time}
-                  </Text>
-                </View>
-              </View>
-            );
-          })
+          messages.map((message, index) => (
+            <React.Fragment key={message.id}>
+              {renderMessage({ item: message, index })}
+            </React.Fragment>
+          ))
         )}
-      </View>
+      </ScrollView>
 
       {/* Input Bar */}
-      <View style={[styles.inputBar, { backgroundColor: isDark ? "#0e0d12" : colors.card }]}>
-        <View style={[styles.inputWrap, { backgroundColor: isDark ? "#161616" : "rgba(0,0,0,0.05)" }]}>
+      <View
+        style={[
+          styles.inputBar,
+          { backgroundColor: isDark ? "#0e0d12" : colors.card },
+        ]}
+      >
+        <View
+          style={[
+            styles.inputWrap,
+            {
+              backgroundColor: isDark ? "#161616" : "rgba(0,0,0,0.05)",
+            },
+          ]}
+        >
           <TextInput
             style={[styles.input, { color: colors.text }]}
             placeholder="Type a message..."
@@ -346,15 +487,38 @@ const ChatTab = ({
             onChangeText={setInputText}
             multiline
             maxLength={500}
+            returnKeyType="send"
+            onSubmitEditing={sendMessage}
+            blurOnSubmit={false}
           />
         </View>
         <TouchableOpacity
-          style={[styles.sendBtn, { backgroundColor: inputText.trim() ? colors.primary : isDark ? "#222" : "#DDD" }]}
+          style={[
+            styles.sendBtn,
+            {
+              backgroundColor: inputText.trim()
+                ? colors.primary
+                : isDark
+                  ? "#222"
+                  : "#DDD",
+            },
+          ]}
           onPress={sendMessage}
           activeOpacity={0.8}
           disabled={!inputText.trim()}
         >
-          <Feather name="send" size={16} color={inputText.trim() ? (isDark ? "#0e0d12" : "#FFF") : colors.textSecondary} style={{ marginLeft: -1, marginTop: 1 }} />
+          <Feather
+            name="send"
+            size={16}
+            color={
+              inputText.trim()
+                ? isDark
+                  ? "#0e0d12"
+                  : "#FFF"
+                : colors.textSecondary
+            }
+            style={{ marginLeft: -1, marginTop: 1 }}
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -427,10 +591,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  messagesContainer: {
+  messagesList: {
     borderRadius: 12,
     marginTop: 8,
-    minHeight: 300,
+    height: MESSAGES_LIST_HEIGHT,
+  },
+  messagesContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+  },
+  messagesEmpty: {
+    flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 16,
   },

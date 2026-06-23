@@ -20,6 +20,19 @@ export type CheckoutOrder = {
   platformFeeAmount: number;
   taxAmount: number;
   totalAmount: number;
+  lineItems: {
+    itemType: "ticket" | "product" | "custom";
+    itemId?: string | null;
+    eventId?: string | null;
+    name: string;
+    quantity: number;
+    paidQuantity?: number;
+    freeQuantity?: number;
+    totalQuantity?: number;
+    rewardId?: string | null;
+    unitAmount: number;
+    totalAmount: number;
+  }[];
   stripePaymentIntentId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -71,6 +84,7 @@ export type CheckoutIntent = {
 
 export type TicketWalletStatus = "active" | "used" | "cancelled";
 export type TicketWalletSource = "owned" | "shared";
+export type TicketPassStatus = "active" | "used";
 
 export type TicketShare = {
   id: string;
@@ -79,6 +93,8 @@ export type TicketShare = {
   orderId: string;
   eventId: string;
   ticketId: string;
+  ticketIndex: number;
+  qrCode: string;
   status: "active" | "cancelled";
   sharedAt: string;
   cancelledAt?: string | null;
@@ -90,6 +106,30 @@ export type TicketShare = {
   } | null;
 };
 
+export type TicketWalletPass = {
+  orderId: string;
+  ticketNo: string;
+  ticketIndex: number;
+  qrCode: string;
+  status: TicketPassStatus;
+  usedAt?: string | null;
+  currentShare?: TicketShare | null;
+};
+
+export type ScannedTicket = {
+  eventId: string;
+  eventName: string;
+  ticketId: string;
+  ticketName: string;
+  orderId: string;
+  ticketIndex: number;
+  ticketNo: string;
+  source: TicketWalletSource;
+  holderUserId: string;
+  holderName: string;
+  usedAt: string;
+};
+
 export type TicketWalletItem = {
   id: string;
   source: TicketWalletSource;
@@ -98,12 +138,16 @@ export type TicketWalletItem = {
   ticketId: string;
   ticketName: string;
   quantity: number;
+  paidQuantity?: number;
+  freeQuantity?: number;
+  totalQuantity?: number;
   unitAmount: number;
   totalAmount: number;
   currency: string;
   paymentStatus: CheckoutPaymentStatus;
   walletStatus: TicketWalletStatus;
   purchasedAt?: string | null;
+  ticketPasses?: TicketWalletPass[];
   currentShare?: TicketShare | null;
   sharedBy?: {
     id: string;
@@ -184,15 +228,21 @@ export const getMyTicketWallet = async (): Promise<TicketWalletItem[]> => {
 export const shareTicketWithFriend = async ({
   eventId,
   ticketId,
+  orderId,
+  ticketIndex,
   friendId,
 }: {
   eventId: string;
   ticketId: string;
+  orderId: string;
+  ticketIndex: number;
   friendId: string;
 }): Promise<TicketShare> => {
   const response = await api.post("/payments/ticket-shares", {
     eventId,
     ticketId,
+    orderId,
+    ticketIndex,
     friendId,
   });
   const share = response.data?.data?.share as TicketShare | undefined;
@@ -213,6 +263,17 @@ export const cancelTicketShare = async (shareId: string): Promise<TicketShare> =
   }
 
   return share;
+};
+
+export const scanTicketQrCode = async (qrCode: string): Promise<ScannedTicket> => {
+  const response = await api.post("/payments/ticket-scans", { qrCode });
+  const ticket = response.data?.data?.ticket as ScannedTicket | undefined;
+
+  if (!ticket) {
+    throw new Error("The ticket scan response was incomplete.");
+  }
+
+  return ticket;
 };
 
 export const startMoomentCreditsCheckout = async (

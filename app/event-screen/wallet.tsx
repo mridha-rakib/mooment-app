@@ -85,6 +85,47 @@ const getLocationLabel = (item: TicketWalletItem) =>
 const getAddressLabel = (item: TicketWalletItem) =>
   item.event.location?.address || item.event.location?.searchLabel || "Address TBA";
 
+const getPassesForTab = (item: TicketWalletItem, tab: WalletTab) => {
+  const passes = item.ticketPasses ?? [];
+
+  switch (tab) {
+    case "Shared":
+      if (item.source === "shared") {
+        return passes.filter((pass) => pass.status !== "used");
+      }
+
+      return passes.filter((pass) => Boolean(pass.currentShare) && pass.status !== "used");
+    case "Active":
+      if (item.source !== "owned" || item.walletStatus === "cancelled") {
+        return [];
+      }
+
+      return passes.filter((pass) => !pass.currentShare && pass.status !== "used");
+    case "Used":
+      return passes.filter((pass) => pass.status === "used");
+    case "Canceled":
+      return item.walletStatus === "cancelled" ? passes : [];
+    default:
+      return [];
+  }
+};
+
+const toTabWalletItem = (item: TicketWalletItem, tab: WalletTab): TicketWalletItem | null => {
+  const passes = getPassesForTab(item, tab);
+
+  if (passes.length === 0) {
+    return null;
+  }
+
+  return {
+    ...item,
+    quantity: passes.length,
+    ticketPasses: passes,
+    currentShare: passes.find((pass) => pass.currentShare)?.currentShare ?? item.currentShare ?? null,
+    walletStatus: tab === "Canceled" ? "cancelled" : tab === "Used" ? "used" : "active",
+  };
+};
+
 const getTicketSections = (items: TicketWalletItem[]): WalletSection[] => {
   const now = new Date();
   const tonight: TicketWalletItem[] = [];
@@ -143,18 +184,9 @@ const TicketWalletScreen = () => {
   );
 
   const visibleTickets = useMemo(() => {
-    if (activeTab === "Shared") {
-      return tickets.filter(
-        (ticket) =>
-          ticket.walletStatus === "active" &&
-          (ticket.source === "shared" || Boolean(ticket.currentShare)),
-      );
-    }
-
-    const walletStatus: TicketWalletItem["walletStatus"] =
-      activeTab === "Canceled" ? "cancelled" : activeTab === "Used" ? "used" : "active";
-
-    return tickets.filter((ticket) => ticket.source === "owned" && ticket.walletStatus === walletStatus);
+    return tickets
+      .map((ticket) => toTabWalletItem(ticket, activeTab))
+      .filter((ticket): ticket is TicketWalletItem => Boolean(ticket));
   }, [activeTab, tickets]);
 
   const sections = useMemo(() => getTicketSections(visibleTickets), [visibleTickets]);
@@ -299,6 +331,9 @@ const TicketWalletScreen = () => {
                               source: "wallet",
                               walletSource: item.source,
                               purchaseCount: String(item.quantity),
+                              paidQuantity: String(item.paidQuantity ?? item.quantity),
+                              freeQuantity: String(item.freeQuantity ?? 0),
+                              totalQuantity: String(item.totalQuantity ?? item.quantity),
                               ticketNo: item.ticketNo,
                               orderId: item.orderId,
                               eventId: item.event.id,
@@ -316,6 +351,7 @@ const TicketWalletScreen = () => {
                               currentShareId: item.currentShare?.id ?? "",
                               currentShareFriendName: item.currentShare?.friend?.name ?? "",
                               currentShareFriendId: item.currentShare?.friend?.id ?? "",
+                              ticketPasses: JSON.stringify(item.ticketPasses ?? []),
                             },
                           })
                         }

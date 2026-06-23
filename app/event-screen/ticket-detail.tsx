@@ -30,6 +30,7 @@ import {
   cancelTicketShare,
   shareTicketWithFriend,
   type TicketShare,
+  type TicketWalletPass,
 } from "@/lib/payments";
 import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
 
@@ -132,6 +133,9 @@ const TicketDetailScreen = () => {
     mode?: string;
     source?: string;
     purchaseCount?: string;
+    paidQuantity?: string;
+    freeQuantity?: string;
+    totalQuantity?: string;
     ticketNo?: string;
     orderId?: string;
     eventTitle?: string;
@@ -148,6 +152,7 @@ const TicketDetailScreen = () => {
     currentShareId?: string;
     currentShareFriendName?: string;
     currentShareFriendId?: string;
+    ticketPasses?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -163,29 +168,6 @@ const TicketDetailScreen = () => {
   const [isFriendsLoading, setIsFriendsLoading] = useState(false);
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
-  const [currentShare, setCurrentShare] = useState<TicketShare | null>(() => {
-    const currentShareId = getParamValue(params.currentShareId, "");
-
-    if (!currentShareId) {
-      return null;
-    }
-
-    return {
-      id: currentShareId,
-      ownerUserId: "",
-      recipientUserId: getParamValue(params.currentShareFriendId, ""),
-      orderId: getParamValue(params.orderId, ""),
-      eventId: getParamValue(params.eventId, ""),
-      ticketId: getParamValue(params.ticketId, ""),
-      status: "active",
-      sharedAt: "",
-      cancelledAt: null,
-      friend: {
-        id: getParamValue(params.currentShareFriendId, ""),
-        name: getParamValue(params.currentShareFriendName, "Friend"),
-      },
-    };
-  });
 
   const eventId = typeof params.eventId === "string" ? params.eventId : null;
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : null;
@@ -287,7 +269,9 @@ const TicketDetailScreen = () => {
     { label: "Address", value: event?.location?.address ?? event?.location?.searchLabel ?? "Address TBA" },
   ];
 
-  const walletPurchaseCount = parsePositiveInteger(params.purchaseCount);
+  const walletPaidQuantity = parsePositiveInteger(params.paidQuantity, parsePositiveInteger(params.purchaseCount));
+  const walletFreeQuantity = parsePositiveInteger(params.freeQuantity, 0);
+  const walletPurchaseCount = parsePositiveInteger(params.totalQuantity, walletPaidQuantity + walletFreeQuantity);
   const walletHasShareQr = walletPurchaseCount >= 2;
   const walletTicketNo = getParamValue(params.ticketNo, "MOM-2024-8575");
   const walletEventTitle = getParamValue(params.eventTitle, "Ticket");
@@ -300,13 +284,107 @@ const TicketDetailScreen = () => {
   const walletDateTime = getParamValue(params.dateTime, "Date TBA");
   const walletAmount = formatWalletAmount(params.amount, params.currency);
   const walletSource = getParamValue(params.walletSource, "owned");
-  const walletCanShare = walletSource === "owned" && walletPurchaseCount >= 2;
+  const initialWalletTicketPasses = useMemo<TicketWalletPass[]>(() => {
+    const rawPasses = getParamValue(params.ticketPasses, "");
+    const currentShareId = getParamValue(params.currentShareId, "");
+    const fallbackCurrentShare: TicketShare | null = currentShareId
+      ? {
+          id: currentShareId,
+          ownerUserId: "",
+          recipientUserId: getParamValue(params.currentShareFriendId, ""),
+          orderId: getParamValue(params.orderId, ""),
+          eventId: getParamValue(params.eventId, ""),
+          ticketId: getParamValue(params.ticketId, ""),
+          ticketIndex: 1,
+          qrCode: "",
+          status: "active",
+          sharedAt: "",
+          cancelledAt: null,
+          friend: {
+            id: getParamValue(params.currentShareFriendId, ""),
+            name: getParamValue(params.currentShareFriendName, "Friend"),
+          },
+        }
+      : null;
+
+    if (rawPasses) {
+      try {
+        const parsed = JSON.parse(rawPasses) as TicketWalletPass[];
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (fallbackCurrentShare && !parsed.some((pass) => pass.currentShare)) {
+            return parsed.map((pass) => (
+              pass.ticketIndex === fallbackCurrentShare.ticketIndex
+                ? { ...pass, currentShare: fallbackCurrentShare }
+                : pass
+            ));
+          }
+
+          return parsed;
+        }
+      } catch {
+        // Fall through to deterministic local pass generation for older wallet payloads.
+      }
+    }
+
+    return Array.from({ length: walletPurchaseCount }, (_, index) => {
+      const ticketIndex = index + 1;
+      const orderId = getParamValue(params.orderId, "");
+
+      return {
+        orderId,
+        ticketNo: `${walletTicketNo}-${String(ticketIndex).padStart(2, "0")}`,
+        ticketIndex,
+        qrCode: JSON.stringify({
+          type: "event-ticket",
+          eventId: getParamValue(params.eventId, ""),
+          ticketId: getParamValue(params.ticketId, ""),
+          orderId,
+          ticketIndex,
+        }),
+        status: "active",
+        usedAt: null,
+        currentShare: fallbackCurrentShare?.ticketIndex === ticketIndex ? fallbackCurrentShare : null,
+      };
+    });
+  }, [
+    params.currentShareFriendId,
+    params.currentShareFriendName,
+    params.currentShareId,
+    params.eventId,
+    params.orderId,
+    params.ticketId,
+    params.ticketPasses,
+    walletPurchaseCount,
+    walletTicketNo,
+  ]);
+  const [walletTicketPasses, setWalletTicketPasses] = useState<TicketWalletPass[]>(initialWalletTicketPasses);
+  const [selectedSharePassIndex, setSelectedSharePassIndex] = useState(() => {
+    const firstUnsharedIndex = initialWalletTicketPasses.findIndex((pass) => !pass.currentShare && pass.status !== "used");
+    return firstUnsharedIndex >= 0 ? firstUnsharedIndex : 0;
+  });
+  const walletVisibleTicketPasses = useMemo(
+    () => (walletSource === "owned" ? walletTicketPasses.filter((pass) => !pass.currentShare) : walletTicketPasses),
+    [walletSource, walletTicketPasses],
+  );
+  const walletActiveVisiblePassCount = walletVisibleTicketPasses.filter((pass) => pass.status !== "used").length;
+  const walletCanShare = walletSource === "owned" && walletActiveVisiblePassCount >= 2;
+  const walletCanShowQr = walletVisibleTicketPasses.length > 0;
+  const selectedSharePass = walletTicketPasses[Math.min(selectedSharePassIndex, Math.max(0, walletTicketPasses.length - 1))] ?? null;
+  const selectedShare = selectedSharePass?.currentShare ?? null;
+  const hasAnySharedPass = walletTicketPasses.some((pass) => Boolean(pass.currentShare));
+  const hasAnyUsedPass = walletTicketPasses.some((pass) => pass.status === "used");
+  const walletStatusLabel = hasAnyUsedPass && walletActiveVisiblePassCount === 0 ? "Used" : hasAnySharedPass && !walletCanShowQr ? "Shared" : "Active";
   const walletDetails = [
     { label: "Ticket No", value: walletTicketNo },
     { label: "Host", value: walletHostName },
     { label: "Venue", value: walletEventTitle },
     { label: "Address", value: walletAddress },
-    { label: "Ticket", value: `${walletTicketName} x ${walletPurchaseCount}` },
+    { label: "Paid Tickets", value: `${walletTicketName} x ${walletPaidQuantity}` },
+    ...(walletFreeQuantity > 0
+      ? [{ label: "Rewarded Tickets", value: `${walletTicketName} x ${walletFreeQuantity}` }]
+      : []),
+    { label: "Total Tickets", value: `${walletTicketName} x ${walletPurchaseCount}` },
     { label: "Date and time", value: walletDateTime },
     {
       label: walletHasShareQr ? "Amount paid" : "Amount Pending",
@@ -330,21 +408,33 @@ const TicketDetailScreen = () => {
   };
 
   const handleOpenShareModal = async () => {
+    const firstUnsharedIndex = walletTicketPasses.findIndex((pass) => !pass.currentShare && pass.status !== "used");
+
+    if (firstUnsharedIndex >= 0) {
+      setSelectedSharePassIndex(firstUnsharedIndex);
+    }
+
     setIsShareModalVisible(true);
     setFriendSearch("");
     await loadFriends("");
   };
 
   const handleShareWithFriend = async (friend: FriendUserResponse) => {
-    if (currentShare) {
+    if (selectedShare) {
       setShareErrorMessage("Cancel the current share before choosing another friend.");
+      return;
+    }
+
+    if (selectedSharePass?.status === "used") {
+      setShareErrorMessage("Used tickets cannot be shared.");
       return;
     }
 
     const shareEventId = getParamValue(params.eventId, "");
     const shareTicketId = getParamValue(params.ticketId, "");
+    const sharePass = selectedSharePass;
 
-    if (!shareEventId || !shareTicketId) {
+    if (!shareEventId || !shareTicketId || !sharePass?.orderId) {
       setShareErrorMessage("Ticket share details are unavailable.");
       return;
     }
@@ -356,10 +446,18 @@ const TicketDetailScreen = () => {
       const share = await shareTicketWithFriend({
         eventId: shareEventId,
         ticketId: shareTicketId,
+        orderId: sharePass.orderId,
+        ticketIndex: sharePass.ticketIndex,
         friendId: friend.id,
       });
 
-      setCurrentShare(share);
+      setWalletTicketPasses((passes) =>
+        passes.map((pass) => (
+          pass.orderId === sharePass.orderId && pass.ticketIndex === sharePass.ticketIndex
+            ? { ...pass, currentShare: share }
+            : pass
+        )),
+      );
     } catch (error) {
       setShareErrorMessage(getAuthErrorMessage(error, "Unable to share ticket."));
     } finally {
@@ -368,7 +466,7 @@ const TicketDetailScreen = () => {
   };
 
   const handleCancelShare = async () => {
-    if (!currentShare) {
+    if (!selectedShare || !selectedSharePass) {
       return;
     }
 
@@ -376,8 +474,14 @@ const TicketDetailScreen = () => {
     setShareErrorMessage(null);
 
     try {
-      await cancelTicketShare(currentShare.id);
-      setCurrentShare(null);
+      await cancelTicketShare(selectedShare.id);
+      setWalletTicketPasses((passes) =>
+        passes.map((pass) => (
+          pass.orderId === selectedSharePass.orderId && pass.ticketIndex === selectedSharePass.ticketIndex
+            ? { ...pass, currentShare: null }
+            : pass
+        )),
+      );
       await loadFriends(friendSearch);
     } catch (error) {
       setShareErrorMessage(getAuthErrorMessage(error, "Unable to cancel ticket share."));
@@ -433,7 +537,8 @@ const TicketDetailScreen = () => {
                   <Text style={styles.walletEventCity}>{walletLocation}</Text>
                 </View>
                 <View style={styles.walletStatusBadge}>
-                  <Text style={styles.walletStatusText}>Active</Text>
+                  {walletStatusLabel === "Used" && <Feather name="check" size={12} color="#16D869" />}
+                  <Text style={styles.walletStatusText}>{walletStatusLabel}</Text>
                 </View>
               </View>
 
@@ -463,28 +568,32 @@ const TicketDetailScreen = () => {
                 <TouchableOpacity
                   style={[
                     styles.walletShareButton,
-                    currentShare ? styles.walletShareButtonActive : undefined,
+                    hasAnySharedPass ? styles.walletShareButtonActive : undefined,
                   ]}
                   activeOpacity={0.85}
                   onPress={() => void handleOpenShareModal()}
                 >
-                  <Text style={styles.walletShareButtonText}>
-                    {currentShare ? "Shared" : "Share QR"}
-                  </Text>
+                  <Text style={styles.walletShareButtonText}>Share QR</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
                 style={[
                   styles.walletShowButton,
                   walletCanShare ? styles.walletActionFlex : styles.walletShowButtonFull,
+                  !walletCanShowQr && styles.walletActionDisabled,
                 ]}
                 activeOpacity={0.85}
+                disabled={!walletCanShowQr}
                 onPress={() =>
                   router.push({
                     pathname: "/event-screen/qr-code",
                     params: {
                       type: "event",
                       ticketNo: walletTicketNo,
+                      orderId: getParamValue(params.orderId, ""),
+                      eventId: getParamValue(params.eventId, ""),
+                      ticketId: getParamValue(params.ticketId, ""),
+                      walletSource,
                       eventName: walletEventTitle,
                       hostName: walletHostName,
                       venue: walletLocation,
@@ -492,13 +601,17 @@ const TicketDetailScreen = () => {
                       dateTime: walletDateTime,
                       ticketName: walletTicketName,
                       quantity: String(walletPurchaseCount),
+                      paidQuantity: String(walletPaidQuantity),
+                      freeQuantity: String(walletFreeQuantity),
+                      totalQuantity: String(walletPurchaseCount),
                       amount: getParamValue(params.amount, "0"),
                       currency: getParamValue(params.currency, "usd"),
+                      ticketPasses: JSON.stringify(walletVisibleTicketPasses),
                     },
                   })
                 }
               >
-                <Text style={styles.walletShowButtonText}>Show QR</Text>
+                <Text style={styles.walletShowButtonText}>{walletCanShowQr ? "Show QR" : "No QR available"}</Text>
               </TouchableOpacity>
             </View>
 
@@ -523,8 +636,10 @@ const TicketDetailScreen = () => {
               <View style={styles.shareModalHeader}>
                 <View>
                   <Text style={styles.shareModalTitle}>Share QR</Text>
-                  <Text style={styles.shareModalSubtitle}>{walletTicketName}</Text>
-                </View>
+                  <Text style={styles.shareModalSubtitle}>
+                  {walletTicketName} • Ticket {selectedSharePass?.ticketIndex ?? 1} of {walletTicketPasses.length}
+                </Text>
+              </View>
                 <TouchableOpacity
                   style={styles.shareModalClose}
                   onPress={() => setIsShareModalVisible(false)}
@@ -534,19 +649,65 @@ const TicketDetailScreen = () => {
                 </TouchableOpacity>
               </View>
 
-              {currentShare && (
+              {walletTicketPasses.length > 1 && (
+                <View style={styles.sharePassSelector}>
+                  {walletTicketPasses.map((pass, index) => {
+                    const isSelected = index === selectedSharePassIndex;
+                    const isShared = Boolean(pass.currentShare);
+                    const isUsed = pass.status === "used";
+
+                    return (
+                      <TouchableOpacity
+                        key={`${pass.orderId}-${pass.ticketIndex}`}
+                        style={[
+                          styles.sharePassChip,
+                          isSelected && styles.sharePassChipSelected,
+                          isShared && styles.sharePassChipShared,
+                          isUsed && styles.sharePassChipUsed,
+                        ]}
+                        onPress={() => setSelectedSharePassIndex(index)}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.sharePassChipText,
+                            isSelected && styles.sharePassChipTextSelected,
+                          ]}
+                        >
+                          {pass.ticketIndex}
+                        </Text>
+                        {isUsed && (
+                          <View style={styles.sharePassCheck}>
+                            <Feather name="check" size={10} color="#101014" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              <Text style={styles.sharePassHint}>
+                {selectedSharePass?.status === "used"
+                  ? "Selected ticket is already used and cannot be shared again."
+                  : selectedSharePass?.currentShare
+                  ? "Selected QR is already shared. Cancel it to share with someone else."
+                  : "Select a ticket QR, then choose one friend to share that ticket with."}
+              </Text>
+
+              {selectedShare && (
                 <View style={styles.currentShareCard}>
                   <View>
                     <Text style={styles.currentShareLabel}>Currently shared with</Text>
-                    <Text style={styles.currentShareName}>{currentShare.friend?.name ?? "Friend"}</Text>
+                    <Text style={styles.currentShareName}>{selectedShare.friend?.name ?? "Friend"}</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.cancelShareButton}
                     onPress={() => void handleCancelShare()}
-                    disabled={isShareSubmitting}
+                    disabled={isShareSubmitting || selectedSharePass?.status === "used"}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.cancelShareButtonText}>Cancel</Text>
+                    <Text style={styles.cancelShareButtonText}>{selectedSharePass?.status === "used" ? "Used" : "Cancel"}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -570,7 +731,7 @@ const TicketDetailScreen = () => {
                 </View>
               ) : (
                 <FlatList
-                  data={friends.filter((friend) => friend.id !== currentShare?.friend?.id)}
+                  data={friends.filter((friend) => friend.id !== selectedShare?.friend?.id)}
                   keyExtractor={(item) => item.id}
                   style={styles.friendList}
                   contentContainerStyle={friends.length === 0 ? styles.friendState : undefined}
@@ -580,7 +741,7 @@ const TicketDetailScreen = () => {
                     <TouchableOpacity
                       style={styles.friendRow}
                       onPress={() => void handleShareWithFriend(item)}
-                      disabled={isShareSubmitting || Boolean(currentShare)}
+                      disabled={isShareSubmitting || Boolean(selectedShare) || selectedSharePass?.status === "used"}
                       activeOpacity={0.85}
                     >
                       <Image
@@ -592,8 +753,13 @@ const TicketDetailScreen = () => {
                         <Text style={styles.friendName}>{item.name}</Text>
                         {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
                       </View>
-                      <Text style={[styles.friendAction, currentShare && styles.friendActionDisabled]}>
-                        {currentShare ? "Cancel first" : "Share"}
+                      <Text
+                        style={[
+                          styles.friendAction,
+                          (selectedShare || selectedSharePass?.status === "used") && styles.friendActionDisabled,
+                        ]}
+                      >
+                        {selectedShare ? "Cancel first" : selectedSharePass?.status === "used" ? "Used" : "Share"}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -1055,10 +1221,13 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   walletStatusBadge: {
+    alignItems: "center",
     backgroundColor: "rgba(22,216,105,0.12)",
     borderColor: "rgba(22,216,105,0.42)",
     borderRadius: 6,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
@@ -1138,6 +1307,9 @@ const styles = StyleSheet.create({
   walletShowButtonFull: {
     width: "100%",
   },
+  walletActionDisabled: {
+    opacity: 0.45,
+  },
   walletShowButtonText: {
     color: "#17151A",
     fontSize: 12,
@@ -1196,6 +1368,60 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: "center",
     width: 32,
+  },
+  sharePassSelector: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  sharePassChip: {
+    alignItems: "center",
+    backgroundColor: "#1B1821",
+    borderColor: "#36313D",
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    minWidth: 44,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+  },
+  sharePassChipSelected: {
+    backgroundColor: "#C2B9CB",
+    borderColor: "#C2B9CB",
+  },
+  sharePassChipShared: {
+    borderColor: "#16D869",
+  },
+  sharePassChipUsed: {
+    borderColor: "#C2B9CB",
+  },
+  sharePassChipText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
+  },
+  sharePassChipTextSelected: {
+    color: "#17151A",
+  },
+  sharePassCheck: {
+    alignItems: "center",
+    backgroundColor: "#C2B9CB",
+    borderRadius: 999,
+    height: 14,
+    justifyContent: "center",
+    position: "absolute",
+    right: 4,
+    top: 4,
+    width: 14,
+  },
+  sharePassHint: {
+    color: "#A6A0AA",
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 12,
   },
   currentShareCard: {
     alignItems: "center",

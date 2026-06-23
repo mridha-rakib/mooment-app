@@ -1,5 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Mapbox from "@rnmapbox/maps";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +13,7 @@ import { getCategoryColor } from "@/constants/categoryColors";
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 const USER_MARKER_COLOR = "#2F80ED";
-const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
+const DARK_STYLE_URL = "mapbox://styles/mapbox/dark-v11";
 
 const firstParam = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
@@ -57,6 +58,30 @@ const formatDistance = (miles: number) => {
   return `${Math.round(miles)} mi from you`;
 };
 
+const generateBezierArc = (
+  start: [number, number],
+  end: [number, number],
+  numPoints = 64,
+): [number, number][] => {
+  const midLng = (start[0] + end[0]) / 2;
+  const midLat = (start[1] + end[1]) / 2;
+  const latSpan = Math.abs(end[1] - start[1]);
+  const lngSpan = Math.abs(end[0] - start[0]);
+  const dist = Math.sqrt(latSpan * latSpan + lngSpan * lngSpan);
+  const arcHeight = Math.max(dist * 0.28, 0.004);
+  const controlLng = midLng;
+  const controlLat = midLat + arcHeight;
+  const points: [number, number][] = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    const u = 1 - t;
+    const lng = u * u * start[0] + 2 * t * u * controlLng + t * t * end[0];
+    const lat = u * u * start[1] + 2 * t * u * controlLat + t * t * end[1];
+    points.push([lng, lat]);
+  }
+  return points;
+};
+
 export default function EventMapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -74,34 +99,72 @@ export default function EventMapScreen() {
   }>();
   const cameraRef = useRef<Mapbox.Camera>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const initialPositioned = useRef(false);
 
   const eventLatitude = parseCoordinate(params.eventLatitude);
   const eventLongitude = parseCoordinate(params.eventLongitude);
-  const userLatitude = parseCoordinate(params.userLatitude);
-  const userLongitude = parseCoordinate(params.userLongitude);
+  const paramUserLatitude = parseCoordinate(params.userLatitude);
+  const paramUserLongitude = parseCoordinate(params.userLongitude);
   const hasEventCoordinates = isFiniteCoordinate(eventLatitude) && isFiniteCoordinate(eventLongitude);
-  const hasUserCoordinates = isFiniteCoordinate(userLatitude) && isFiniteCoordinate(userLongitude);
   const eventCoordinate: [number, number] | null = hasEventCoordinates ? [eventLongitude, eventLatitude] : null;
-  const userCoordinate: [number, number] | null = hasUserCoordinates ? [userLongitude, userLatitude] : null;
   const eventTitle = firstParam(params.eventTitle)?.trim() || "Event location";
   const eventVenue = firstParam(params.eventVenue)?.trim() || "";
   const eventAddress = firstParam(params.eventAddress)?.trim() || "";
   const markerImage = firstParam(params.markerImage)?.trim() || "";
   const markerColor = getCategoryColor(firstParam(params.eventCategory));
+
+  const paramUserCoordinate: [number, number] | null =
+    isFiniteCoordinate(paramUserLatitude) && isFiniteCoordinate(paramUserLongitude)
+      ? [paramUserLongitude, paramUserLatitude]
+      : null;
+
+  const [liveUserCoordinate, setLiveUserCoordinate] = useState<[number, number] | null>(paramUserCoordinate);
+
+  useEffect(() => {
+    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+  }, []);
+
+  useEffect(() => {
+    let locationSub: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      locationSub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 5000,
+          distanceInterval: 10,
+        },
+        (loc) => {
+          setLiveUserCoordinate([loc.coords.longitude, loc.coords.latitude]);
+        },
+      );
+    };
+
+    startTracking();
+
+    return () => {
+      locationSub?.remove();
+    };
+  }, []);
+
   const distanceLabel = useMemo(() => {
-    if (!hasEventCoordinates || !hasUserCoordinates) {
+    if (!hasEventCoordinates || !liveUserCoordinate) {
       return null;
     }
 
     return formatDistance(
       getDistanceMiles(
-        { latitude: userLatitude, longitude: userLongitude },
+        { latitude: liveUserCoordinate[1], longitude: liveUserCoordinate[0] },
         { latitude: eventLatitude, longitude: eventLongitude },
       ),
     );
-  }, [eventLatitude, eventLongitude, hasEventCoordinates, hasUserCoordinates, userLatitude, userLongitude]);
+  }, [eventLatitude, eventLongitude, hasEventCoordinates, liveUserCoordinate]);
+
   const routeShape = useMemo(() => {
-    if (!eventCoordinate || !userCoordinate) {
+    if (!eventCoordinate || !liveUserCoordinate) {
       return null;
     }
 
@@ -109,56 +172,57 @@ export default function EventMapScreen() {
       type: "Feature" as const,
       geometry: {
         type: "LineString" as const,
-        coordinates: [userCoordinate, eventCoordinate],
+        coordinates: generateBezierArc(liveUserCoordinate, eventCoordinate),
       },
       properties: {},
     };
-  }, [eventCoordinate, userCoordinate]);
-
-  useEffect(() => {
-    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
-  }, []);
+  }, [eventCoordinate, liveUserCoordinate]);
 
   useEffect(() => {
     if (!mapLoaded || !eventCoordinate) {
       return;
     }
 
-    if (userCoordinate) {
+    if (liveUserCoordinate) {
+      if (initialPositioned.current) return;
+      initialPositioned.current = true;
+
       const northEast: [number, number] = [
-        Math.max(eventCoordinate[0], userCoordinate[0]),
-        Math.max(eventCoordinate[1], userCoordinate[1]),
+        Math.max(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.max(eventCoordinate[1], liveUserCoordinate[1]),
       ];
       const southWest: [number, number] = [
-        Math.min(eventCoordinate[0], userCoordinate[0]),
-        Math.min(eventCoordinate[1], userCoordinate[1]),
+        Math.min(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.min(eventCoordinate[1], liveUserCoordinate[1]),
       ];
 
       cameraRef.current?.fitBounds(northEast, southWest, [110, 60, 220, 60], 800);
       return;
     }
 
-    cameraRef.current?.setCamera({
-      animationDuration: 600,
-      animationMode: "easeTo",
-      centerCoordinate: eventCoordinate,
-      zoomLevel: 15,
-    });
-  }, [eventCoordinate, mapLoaded, userCoordinate]);
+    if (!initialPositioned.current) {
+      cameraRef.current?.setCamera({
+        animationDuration: 600,
+        animationMode: "easeTo",
+        centerCoordinate: eventCoordinate,
+        zoomLevel: 15,
+      });
+    }
+  }, [eventCoordinate, mapLoaded, liveUserCoordinate]);
 
   const recenterMap = () => {
     if (!eventCoordinate) {
       return;
     }
 
-    if (userCoordinate) {
+    if (liveUserCoordinate) {
       const northEast: [number, number] = [
-        Math.max(eventCoordinate[0], userCoordinate[0]),
-        Math.max(eventCoordinate[1], userCoordinate[1]),
+        Math.max(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.max(eventCoordinate[1], liveUserCoordinate[1]),
       ];
       const southWest: [number, number] = [
-        Math.min(eventCoordinate[0], userCoordinate[0]),
-        Math.min(eventCoordinate[1], userCoordinate[1]),
+        Math.min(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.min(eventCoordinate[1], liveUserCoordinate[1]),
       ];
 
       cameraRef.current?.fitBounds(northEast, southWest, [110, 60, 220, 60], 800);
@@ -196,26 +260,18 @@ export default function EventMapScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={SATELLITE_STYLE_URL}
+        styleURL={DARK_STYLE_URL}
         logoEnabled={false}
         attributionEnabled={false}
         rotateEnabled
         pitchEnabled
         onDidFinishLoadingMap={() => setMapLoaded(true)}
       >
-        <Mapbox.RasterLayer
-          id="satellite"
-          existing
-          style={{
-            rasterBrightnessMax: 0.4,
-            rasterSaturation: -0.15,
-          }}
-        />
         <Mapbox.Camera
           ref={cameraRef}
           animationDuration={0}
           centerCoordinate={eventCoordinate}
-          zoomLevel={hasUserCoordinates ? 13 : 15}
+          zoomLevel={liveUserCoordinate ? 13 : 15}
         />
 
         {routeShape && (
@@ -224,17 +280,17 @@ export default function EventMapScreen() {
               id="event-distance-line"
               style={{
                 lineCap: "round",
-                lineColor: markerColor,
-                lineDasharray: [2, 1.5],
-                lineOpacity: 0.9,
-                lineWidth: 3,
+                lineJoin: "round",
+                lineColor: "#FFFFFF",
+                lineOpacity: 0.88,
+                lineWidth: 2.5,
               }}
             />
           </Mapbox.ShapeSource>
         )}
 
-        {userCoordinate && (
-          <Mapbox.MarkerView coordinate={userCoordinate} anchor={{ x: 0.5, y: 0.5 }}>
+        {liveUserCoordinate && (
+          <Mapbox.MarkerView coordinate={liveUserCoordinate} anchor={{ x: 0.5, y: 0.5 }}>
             <View style={styles.userMarkerOuter} accessibilityLabel="Your location">
               <View style={styles.userMarkerInner} />
             </View>

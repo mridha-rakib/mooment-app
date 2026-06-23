@@ -1,97 +1,209 @@
-import React, { useState } from 'react';
+import { Feather } from '@expo/vector-icons';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
-  StyleSheet,
-  View,
+  ActivityIndicator,
+  FlatList,
   Image,
-  TouchableOpacity,
-  Dimensions,
-  ScrollView,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { useTheme } from '@/hooks/useTheme';
 
-const { width, height } = Dimensions.get('window');
+export type FullScreenMediaItem = {
+  uri: string;
+  type: 'image' | 'video';
+};
 
 interface FullScreenMediaModalProps {
   visible: boolean;
   onClose: () => void;
-  mediaUris: string[];
+  onIndexChange?: (index: number) => void;
+  mediaItems: FullScreenMediaItem[];
   initialIndex: number;
+}
+
+const clampIndex = (index: number, itemCount: number) => (
+  Math.min(Math.max(Math.round(index) || 0, 0), Math.max(itemCount - 1, 0))
+);
+
+function FullScreenImage({ uri }: { uri: string }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setHasError(false);
+  }, [uri]);
+
+  return (
+    <View style={styles.fullMedia}>
+      {!hasError ? (
+        <Image
+          source={{ uri }}
+          style={styles.fullMedia}
+          resizeMode="contain"
+          onLoadStart={() => setIsLoading(true)}
+          onLoadEnd={() => setIsLoading(false)}
+          onError={() => {
+            setIsLoading(false);
+            setHasError(true);
+          }}
+        />
+      ) : (
+        <View style={styles.errorState}>
+          <Feather name="image" size={34} color="#8E8E9B" />
+          <Text style={styles.errorText}>Unable to load this image</Text>
+        </View>
+      )}
+
+      {isLoading && !hasError ? (
+        <ActivityIndicator style={styles.loadingIndicator} size="large" color="#FFFFFF" />
+      ) : null}
+    </View>
+  );
+}
+
+function FullScreenVideo({ uri, isActive }: { uri: string; isActive: boolean }) {
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.loop = false;
+  });
+
+  useEffect(() => {
+    if (!isActive) {
+      player.pause();
+    }
+  }, [isActive, player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.fullMedia}
+      nativeControls
+      contentFit="contain"
+    />
+  );
 }
 
 export default function FullScreenMediaModal({
   visible,
   onClose,
-  mediaUris,
+  onIndexChange,
+  mediaItems,
   initialIndex,
 }: FullScreenMediaModalProps) {
-  const { colors, isDark } = useTheme();
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const { width, height } = useWindowDimensions();
+  const listRef = useRef<FlatList<FullScreenMediaItem>>(null);
+  const normalizedMediaItems = useMemo(
+    () => mediaItems.filter((item) => Boolean(item.uri?.trim())),
+    [mediaItems],
+  );
+  const requestedIndex = clampIndex(initialIndex, normalizedMediaItems.length);
+  const [currentIndex, setCurrentIndex] = useState(requestedIndex);
 
-  const handleScroll = (event: any) => {
-    const slideSize = event.nativeEvent.layoutMeasurement.width;
-    const index = event.nativeEvent.contentOffset.x / slideSize;
-    setCurrentIndex(Math.round(index));
+  const scrollToRequestedItem = useCallback(() => {
+    if (!visible || normalizedMediaItems.length === 0 || width <= 0) {
+      return;
+    }
+
+    listRef.current?.scrollToOffset({
+      offset: requestedIndex * width,
+      animated: false,
+    });
+  }, [normalizedMediaItems.length, requestedIndex, visible, width]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    setCurrentIndex(requestedIndex);
+    const frame = requestAnimationFrame(scrollToRequestedItem);
+
+    return () => cancelAnimationFrame(frame);
+  }, [requestedIndex, scrollToRequestedItem, visible]);
+
+  const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (width <= 0) {
+      return;
+    }
+
+    const nextIndex = clampIndex(
+      event.nativeEvent.contentOffset.x / width,
+      normalizedMediaItems.length,
+    );
+    setCurrentIndex(nextIndex);
+    onIndexChange?.(nextIndex);
   };
+
+  if (!visible) {
+    return null;
+  }
 
   return (
     <Modal
       visible={visible}
-      transparent
       animationType="fade"
+      presentationStyle="fullScreen"
+      hardwareAccelerated
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
-      <View style={styles.container}>
-        <SafeAreaView style={styles.header}>
-          <TouchableOpacity 
-            style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' }]} 
+      <View style={styles.container} onLayout={scrollToRequestedItem}>
+        <FlatList
+          ref={listRef}
+          data={normalizedMediaItems}
+          keyExtractor={(item, index) => `${item.type}-${item.uri}-${index}`}
+          renderItem={({ item, index }) => (
+            <View style={[styles.slide, { width, height }]}>
+              {item.type === 'video' ? (
+                <FullScreenVideo uri={item.uri} isActive={visible && index === currentIndex} />
+              ) : (
+                <FullScreenImage uri={item.uri} />
+              )}
+            </View>
+          )}
+          horizontal
+          pagingEnabled
+          bounces={false}
+          initialScrollIndex={normalizedMediaItems.length > 0 ? requestedIndex : undefined}
+          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+          onMomentumScrollEnd={handleScrollEnd}
+          onScrollToIndexFailed={({ index }) => {
+            listRef.current?.scrollToOffset({ offset: index * width, animated: false });
+          }}
+          showsHorizontalScrollIndicator={false}
+          style={styles.mediaContainer}
+        />
+
+        <SafeAreaView pointerEvents="box-none" style={styles.header}>
+          <TouchableOpacity
+            style={styles.closeBtn}
             onPress={onClose}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Close full-screen media"
           >
             <Feather name="x" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </SafeAreaView>
 
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={handleScroll}
-          contentOffset={{ x: initialIndex * width, y: 0 }}
-          style={styles.mediaContainer}
-        >
-          {mediaUris.map((uri, index) => (
-            <View key={index} style={styles.slide}>
-              <Image 
-                source={{ uri }} 
-                style={styles.fullImage} 
-                resizeMode="contain" 
-              />
+        {normalizedMediaItems.length > 1 ? (
+          <SafeAreaView pointerEvents="none" style={styles.footer}>
+            <View style={styles.counterPill}>
+              <Text style={styles.counterText}>{currentIndex + 1} / {normalizedMediaItems.length}</Text>
             </View>
-          ))}
-        </ScrollView>
-
-        <View style={styles.footer}>
-           {mediaUris.length > 1 && (
-             <View style={styles.indicatorContainer}>
-                {mediaUris.map((_, i) => (
-                  <View 
-                    key={i} 
-                    style={[
-                      styles.indicator, 
-                      { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)' },
-                      i === currentIndex && [styles.activeIndicator, { backgroundColor: colors.primary }]
-                    ]} 
-                  />
-                ))}
-             </View>
-           )}
-        </View>
+          </SafeAreaView>
+        ) : null}
       </View>
     </Modal>
   );
@@ -109,12 +221,14 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 10,
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
+    paddingTop: Platform.OS === 'android' ? 16 : 4,
+    alignItems: 'flex-start',
   },
   closeBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: 'rgba(32, 32, 32, 0.82)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -122,32 +236,47 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   slide: {
-    width: width,
-    height: height,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000000',
   },
-  fullImage: {
+  fullMedia: {
     width: '100%',
     height: '100%',
   },
+  loadingIndicator: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  errorState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    color: '#D0D0D8',
+    fontSize: 14,
+  },
   footer: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 12,
     left: 0,
     right: 0,
     alignItems: 'center',
   },
-  indicatorContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  counterPill: {
+    minWidth: 54,
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    backgroundColor: 'rgba(32, 32, 32, 0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  indicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  activeIndicator: {
-    width: 12,
+  counterText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
 });

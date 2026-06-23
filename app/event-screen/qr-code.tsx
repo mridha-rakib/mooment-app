@@ -1,28 +1,55 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   Dimensions,
+  FlatList,
   Image,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { cancelTicketShare, shareTicketWithFriend, type TicketWalletPass } from '@/lib/payments';
+import { getFriendUsers, type FriendUserResponse } from '@/lib/users';
+import { getStorageFileUrl } from '@/lib/storage';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 40, 401);
 const QR_SIZE = CONTENT_WIDTH - 32;
+const DEFAULT_AVATAR =
+  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400';
 
 const getParam = (value: string | string[] | undefined, fallback: string) => {
   const source = Array.isArray(value) ? value[0] : value;
   return source?.trim() || fallback;
+};
+
+const parsePositiveInteger = (value: string | string[] | undefined, fallback = 0) => {
+  const parsed = Number.parseInt(getParam(value, ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_AVATAR) => {
+  if (!key) {
+    return fallback;
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return fallback;
+  }
 };
 
 const formatDisplayAmount = (amount?: string, currency?: string): string => {
@@ -47,6 +74,10 @@ export default function QRCodeScreen() {
     type?: string;
     // Event ticket params
     ticketNo?: string;
+    orderId?: string;
+    eventId?: string;
+    ticketId?: string;
+    walletSource?: string;
     eventName?: string;
     hostName?: string;
     venue?: string;
@@ -54,24 +85,180 @@ export default function QRCodeScreen() {
     dateTime?: string;
     ticketName?: string;
     quantity?: string;
+    paidQuantity?: string;
+    freeQuantity?: string;
+    totalQuantity?: string;
     amount?: string;
     currency?: string;
+    ticketPasses?: string;
   }>();
 
   const type = getParam(params.type, 'event');
   const ticketNo = getParam(params.ticketNo, '');
+  const orderId = getParam(params.orderId, '');
+  const eventId = getParam(params.eventId, '');
+  const ticketId = getParam(params.ticketId, '');
+  const walletSource = getParam(params.walletSource, 'owned');
   const eventName = getParam(params.eventName, 'Event');
   const hostName = getParam(params.hostName, '');
   const venue = getParam(params.venue, '');
   const address = getParam(params.address, '');
   const dateTime = getParam(params.dateTime, '');
   const ticketName = getParam(params.ticketName, 'Ticket');
-  const quantity = getParam(params.quantity, '1');
+  const paidQuantity = parsePositiveInteger(params.paidQuantity, parsePositiveInteger(params.quantity, 1));
+  const freeQuantity = parsePositiveInteger(params.freeQuantity, 0);
+  const totalQuantity = parsePositiveInteger(params.totalQuantity, paidQuantity + freeQuantity);
+  const quantity = String(totalQuantity);
   const displayAmount = formatDisplayAmount(params.amount, params.currency);
-  const qrValue = ticketNo || 'INVALID';
+  const initialTicketPasses = useMemo<TicketWalletPass[]>(() => {
+    const rawPasses = getParam(params.ticketPasses, '');
+
+    if (rawPasses) {
+      try {
+        const parsed = JSON.parse(rawPasses) as TicketWalletPass[];
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Fall through to deterministic local pass generation.
+      }
+    }
+
+    return Array.from({ length: totalQuantity }, (_, index) => {
+      const ticketIndex = index + 1;
+
+      return {
+        orderId,
+        ticketNo: ticketNo ? `${ticketNo}-${String(ticketIndex).padStart(2, '0')}` : `TICKET-${ticketIndex}`,
+        ticketIndex,
+        qrCode: JSON.stringify({
+          type: 'event-ticket',
+          eventId,
+          ticketId,
+          orderId,
+          ticketIndex,
+        }),
+        status: 'active',
+        usedAt: null,
+        currentShare: null,
+      };
+    });
+  }, [eventId, orderId, params.ticketPasses, ticketId, ticketNo, totalQuantity]);
+  const [ticketPasses, setTicketPasses] = useState<TicketWalletPass[]>(initialTicketPasses);
+  const [selectedPassIndex, setSelectedPassIndex] = useState(0);
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [friends, setFriends] = useState<FriendUserResponse[]>([]);
+  const [friendSearch, setFriendSearch] = useState('');
+  const [isFriendsLoading, setIsFriendsLoading] = useState(false);
+  const [isShareSubmitting, setIsShareSubmitting] = useState(false);
+  const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
+  const visibleTicketPasses = useMemo(
+    () => (walletSource === 'owned' ? ticketPasses.filter((pass) => !pass.currentShare) : ticketPasses),
+    [ticketPasses, walletSource],
+  );
+  const selectedPass = visibleTicketPasses[Math.min(selectedPassIndex, Math.max(0, visibleTicketPasses.length - 1))];
+  const selectedTicketNo = selectedPass?.ticketNo ?? ticketNo;
+  const selectedQrValue = selectedPass?.qrCode || ticketNo || 'INVALID';
+  const selectedCurrentShare = selectedPass?.currentShare ?? null;
+  const shareablePassCount = visibleTicketPasses.filter((pass) => pass.status !== 'used').length;
+  const canShareSelectedPass = (
+    type === 'event' &&
+    walletSource === 'owned' &&
+    shareablePassCount >= 2 &&
+    selectedPass?.status !== 'used' &&
+    Boolean(eventId && ticketId && selectedPass?.orderId)
+  );
 
   const handleCopy = () => {
-    Alert.alert('Copied', 'Order number copied to clipboard');
+    Alert.alert('Copied', 'Ticket number copied to clipboard');
+  };
+
+  const loadFriends = async (search = friendSearch) => {
+    setIsFriendsLoading(true);
+    setShareErrorMessage(null);
+
+    try {
+      const friendUsers = await getFriendUsers(search, 100);
+      setFriends(friendUsers);
+    } catch (error) {
+      setShareErrorMessage(getAuthErrorMessage(error, 'Unable to load friends.'));
+    } finally {
+      setIsFriendsLoading(false);
+    }
+  };
+
+  const handleOpenShareModal = async () => {
+    if (!canShareSelectedPass) {
+      Alert.alert('Share unavailable', 'This ticket QR cannot be shared.');
+      return;
+    }
+
+    setIsShareModalVisible(true);
+    setFriendSearch('');
+    await loadFriends('');
+  };
+
+  const handleShareWithFriend = async (friend: FriendUserResponse) => {
+    if (!selectedPass) {
+      setShareErrorMessage('Ticket QR details are unavailable.');
+      return;
+    }
+
+    if (selectedCurrentShare) {
+      setShareErrorMessage('Cancel the current share before choosing another friend.');
+      return;
+    }
+
+    setIsShareSubmitting(true);
+    setShareErrorMessage(null);
+
+    try {
+      const share = await shareTicketWithFriend({
+        eventId,
+        ticketId,
+        orderId: selectedPass.orderId,
+        ticketIndex: selectedPass.ticketIndex,
+        friendId: friend.id,
+      });
+
+      setTicketPasses((passes) =>
+        passes.map((pass) =>
+          pass.orderId === selectedPass.orderId && pass.ticketIndex === selectedPass.ticketIndex
+            ? { ...pass, currentShare: share }
+            : pass,
+        ),
+      );
+    } catch (error) {
+      setShareErrorMessage(getAuthErrorMessage(error, 'Unable to share ticket QR.'));
+    } finally {
+      setIsShareSubmitting(false);
+    }
+  };
+
+  const handleCancelShare = async () => {
+    if (!selectedCurrentShare || !selectedPass) {
+      return;
+    }
+
+    setIsShareSubmitting(true);
+    setShareErrorMessage(null);
+
+    try {
+      await cancelTicketShare(selectedCurrentShare.id);
+      setTicketPasses((passes) =>
+        passes.map((pass) =>
+          pass.orderId === selectedPass.orderId && pass.ticketIndex === selectedPass.ticketIndex
+            ? { ...pass, currentShare: null }
+            : pass,
+        ),
+      );
+      await loadFriends(friendSearch);
+    } catch (error) {
+      setShareErrorMessage(getAuthErrorMessage(error, 'Unable to cancel ticket QR share.'));
+    } finally {
+      setIsShareSubmitting(false);
+    }
   };
 
   return (
@@ -137,7 +324,7 @@ export default function QRCodeScreen() {
             <View style={styles.qrWrapper}>
               <View style={[styles.qrContainer, { backgroundColor: '#FFFFFF' }]}>
                 <QRCode
-                  value={qrValue}
+                  value={ticketNo || 'INVALID'}
                   size={QR_SIZE}
                   backgroundColor="white"
                   color="black"
@@ -174,7 +361,12 @@ export default function QRCodeScreen() {
                 </Text>
                 {!!hostName && (
                   <Text style={[styles.ticketSummaryMeta, { color: colors.textSecondary }]}>
-                    {hostName}  •  QTY: {quantity}
+                    {hostName}  •  {ticketName} total: {quantity}
+                  </Text>
+                )}
+                {freeQuantity > 0 && (
+                  <Text style={[styles.ticketSummaryMeta, { color: colors.textSecondary }]}>
+                    Paid {paidQuantity} • Rewarded {freeQuantity}
                   </Text>
                 )}
                 {displayAmount !== "Free" && (
@@ -215,33 +407,108 @@ export default function QRCodeScreen() {
               </View>
             )}
 
-            {!!ticketNo && (
+            {!!selectedTicketNo && (
               <View style={styles.ticketIdRow}>
-                <Text style={[styles.ticketIdLabel, { color: colors.textSecondary }]}>Order No:</Text>
-                <Text style={[styles.ticketIdText, { color: colors.textSecondary }]}>{ticketNo}</Text>
+                <Text style={[styles.ticketIdLabel, { color: colors.textSecondary }]}>Ticket No:</Text>
+                <Text style={[styles.ticketIdText, { color: colors.textSecondary }]}>{selectedTicketNo}</Text>
                 <TouchableOpacity onPress={handleCopy} activeOpacity={0.8} style={{ marginLeft: 4 }}>
                   <Feather name="copy" size={13} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             )}
 
+            {visibleTicketPasses.length > 1 && (
+              <View style={styles.ticketPassSelector}>
+                {visibleTicketPasses.map((pass, index) => {
+                  const isSelected = index === selectedPassIndex;
+                  const isUsed = pass.status === 'used';
+
+                  return (
+                    <TouchableOpacity
+                      key={`${pass.orderId}-${pass.ticketIndex}`}
+                      style={[
+                        styles.ticketPassChip,
+                        isUsed && styles.ticketPassChipUsed,
+                        {
+                          backgroundColor: isSelected ? colors.primary : isDark ? '#17151A' : colors.card,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedPassIndex(index)}
+                      activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.ticketPassChipText,
+                            { color: isSelected ? colors.background : colors.text },
+                          ]}
+                        >
+                          {pass.ticketIndex}
+                        </Text>
+                        {isUsed && (
+                          <View style={styles.ticketPassCheck}>
+                            <Feather name="check" size={10} color="#101014" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                })}
+              </View>
+            )}
+
+            <Text style={[styles.ticketPassCaption, { color: colors.textSecondary }]}>
+              Ticket {selectedPass?.ticketIndex ?? 1} of {visibleTicketPasses.length || 1}
+            </Text>
+
+            {selectedPass?.status === 'used' && (
+              <View style={styles.usedTicketBadge}>
+                <Feather name="check" size={14} color="#101014" />
+                <Text style={styles.usedTicketBadgeText}>Used</Text>
+              </View>
+            )}
+
             <View style={styles.qrWrapper}>
               <View style={[styles.qrContainer, { backgroundColor: '#FFFFFF' }]}>
-                <QRCode
-                  value={qrValue}
-                  size={QR_SIZE}
-                  backgroundColor="white"
-                  color="black"
-                />
+                {selectedPass ? (
+                  <QRCode
+                    value={selectedQrValue}
+                    size={QR_SIZE}
+                    backgroundColor="white"
+                    color="black"
+                  />
+                ) : (
+                  <View style={styles.unavailableQrState}>
+                    <Feather name="users" size={28} color="#6E6677" />
+                    <Text style={styles.unavailableQrText}>This ticket is currently shared from another account view.</Text>
+                  </View>
+                )}
               </View>
             </View>
 
             <View style={styles.instructionBanner}>
               <Ionicons name="information-circle-outline" size={20} color="#E75737" />
               <Text style={styles.instructionText}>
-                Show this QR code to the host at the event to verify your ticket. Keep screen brightness high.
+                {selectedPass?.status === 'used'
+                  ? 'This ticket has already been scanned and cannot be used again.'
+                  : 'Show this QR code to the host at the event to verify your ticket. Keep screen brightness high.'}
               </Text>
             </View>
+
+            {canShareSelectedPass && (
+              <TouchableOpacity
+                style={[
+                  styles.shareQrButton,
+                  selectedCurrentShare && styles.shareQrButtonActive,
+                ]}
+                activeOpacity={0.85}
+                onPress={() => void handleOpenShareModal()}
+              >
+                <Feather name="share-2" size={15} color="#111111" />
+                <Text style={styles.shareQrButtonText}>
+                  {selectedCurrentShare ? `Shared with ${selectedCurrentShare.friend?.name ?? 'friend'}` : 'Share this QR'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.walletButton}
@@ -255,6 +522,98 @@ export default function QRCodeScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={isShareModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsShareModalVisible(false)}
+      >
+        <View style={styles.shareModalOverlay}>
+          <View style={styles.shareModalSheet}>
+            <View style={styles.shareModalHeader}>
+              <View>
+                <Text style={styles.shareModalTitle}>Share QR</Text>
+                <Text style={styles.shareModalSubtitle}>
+                  Ticket {selectedPass?.ticketIndex ?? 1} • {ticketName}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.shareModalClose}
+                onPress={() => setIsShareModalVisible(false)}
+                activeOpacity={0.85}
+              >
+                <Feather name="x" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedCurrentShare && (
+              <View style={styles.currentShareCard}>
+                <View>
+                  <Text style={styles.currentShareLabel}>Currently shared with</Text>
+                  <Text style={styles.currentShareName}>{selectedCurrentShare.friend?.name ?? 'Friend'}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.cancelShareButton}
+                  onPress={() => void handleCancelShare()}
+                  disabled={isShareSubmitting}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.cancelShareButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TextInput
+              value={friendSearch}
+              onChangeText={(value) => {
+                setFriendSearch(value);
+                void loadFriends(value);
+              }}
+              placeholder="Search friends"
+              placeholderTextColor="#77717D"
+              style={styles.friendSearchInput}
+            />
+
+            {!!shareErrorMessage && <Text style={styles.shareErrorText}>{shareErrorMessage}</Text>}
+
+            {isFriendsLoading ? (
+              <View style={styles.friendState}>
+                <ActivityIndicator color="#C2B9CB" />
+              </View>
+            ) : (
+              <FlatList
+                data={friends.filter((friend) => friend.id !== selectedCurrentShare?.friend?.id)}
+                keyExtractor={(item) => item.id}
+                style={styles.friendList}
+                contentContainerStyle={friends.length === 0 ? styles.friendState : undefined}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={<Text style={styles.friendEmptyText}>No mutual friends found.</Text>}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.friendRow}
+                    onPress={() => void handleShareWithFriend(item)}
+                    disabled={isShareSubmitting || Boolean(selectedCurrentShare)}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={{ uri: resolveStorageUrl(item.avatarKey, DEFAULT_AVATAR) }}
+                      style={styles.friendAvatar}
+                    />
+                    <View style={styles.friendCopy}>
+                      <Text style={styles.friendName}>{item.name}</Text>
+                      {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
+                    </View>
+                    <Text style={[styles.friendAction, selectedCurrentShare && styles.friendActionDisabled]}>
+                      {selectedCurrentShare ? 'Cancel first' : 'Share'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -323,6 +682,18 @@ const styles = StyleSheet.create({
     height: QR_SIZE + 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  unavailableQrState: {
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+  },
+  unavailableQrText: {
+    color: '#6E6677',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    textAlign: 'center',
   },
 
   instructionBanner: {
@@ -446,5 +817,224 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 18,
+  },
+  ticketPassSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    width: CONTENT_WIDTH,
+  },
+  ticketPassChip: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    minWidth: 44,
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+  },
+  ticketPassChipUsed: {
+    borderColor: '#B2ABBA',
+  },
+  ticketPassChipText: {
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  ticketPassCheck: {
+    alignItems: 'center',
+    backgroundColor: '#B2ABBA',
+    borderRadius: 999,
+    height: 14,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 14,
+  },
+  ticketPassCaption: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  usedTicketBadge: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#B2ABBA',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  usedTicketBadgeText: {
+    color: '#101014',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  shareQrButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#C2B9CB',
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 38,
+    paddingHorizontal: 16,
+  },
+  shareQrButtonActive: {
+    backgroundColor: '#A8D8BA',
+  },
+  shareQrButtonText: {
+    color: '#111111',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  shareModalOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  shareModalSheet: {
+    backgroundColor: '#121116',
+    borderColor: '#2A2730',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    maxHeight: '78%',
+    padding: 16,
+    paddingBottom: 28,
+  },
+  shareModalHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  shareModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 24,
+  },
+  shareModalSubtitle: {
+    color: '#A6A0AA',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  shareModalClose: {
+    alignItems: 'center',
+    backgroundColor: '#242229',
+    borderRadius: 16,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  currentShareCard: {
+    alignItems: 'center',
+    backgroundColor: '#1B1821',
+    borderColor: '#36313D',
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    padding: 12,
+  },
+  currentShareLabel: {
+    color: '#A6A0AA',
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 15,
+  },
+  currentShareName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  cancelShareButton: {
+    backgroundColor: '#2B100F',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cancelShareButtonText: {
+    color: '#FF4D4D',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  friendSearchInput: {
+    backgroundColor: '#1B1821',
+    borderColor: '#36313D',
+    borderRadius: 10,
+    borderWidth: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  shareErrorText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+    marginTop: 10,
+  },
+  friendList: {
+    marginTop: 10,
+  },
+  friendState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 160,
+  },
+  friendEmptyText: {
+    color: '#A6A0AA',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  friendRow: {
+    alignItems: 'center',
+    borderBottomColor: '#28242E',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 62,
+    paddingVertical: 10,
+  },
+  friendAvatar: {
+    borderRadius: 20,
+    height: 40,
+    width: 40,
+  },
+  friendCopy: {
+    flex: 1,
+  },
+  friendName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  friendHandle: {
+    color: '#A6A0AA',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  friendAction: {
+    color: '#C2B9CB',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  friendActionDisabled: {
+    color: '#77717D',
   },
 });

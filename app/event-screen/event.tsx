@@ -822,6 +822,10 @@ const EventScreen = () => {
 
     const quantity = Math.min(clampTicketQuantity(selectedTicketQuantity, selectedTicket), maxAllowed);
 
+    const linkedReward = (event.rewards ?? []).find(
+      (r) => r.rewardType === "ticket" && r.ticketId === ticketId && r.id,
+    );
+
     router.push({
       pathname: "/event-screen/checkout",
       params: {
@@ -838,6 +842,9 @@ const EventScreen = () => {
         ticketType: selectedTicket.type,
         ticketPrice: String(selectedTicket.price),
         quantity: String(quantity),
+        rewardId: linkedReward?.id ?? "",
+        rewardBuyQuantity: linkedReward ? String(linkedReward.buyQuantity) : "",
+        rewardFreeQuantity: linkedReward ? String(linkedReward.freeQuantity) : "",
       },
     });
   };
@@ -987,6 +994,22 @@ const EventScreen = () => {
     if (!rewardId) {
       Alert.alert("Unable to claim reward", "Reward information is incomplete.");
       return;
+    }
+
+    if (reward.rewardType === "ticket" && reward.ticketId) {
+      const linkedTicket = (event.tickets ?? []).find((t) => t.id === reward.ticketId);
+
+      if (linkedTicket && linkedTicket.type !== "free" && linkedTicket.price > 0) {
+        const alreadyPurchased = purchasedTicketCounts[reward.ticketId] ?? 0;
+
+        if (alreadyPurchased === 0) {
+          Alert.alert(
+            "Purchase required",
+            "You need to purchase this ticket first before claiming the reward.",
+          );
+          return;
+        }
+      }
     }
 
     setClaimingRewardId(rewardId);

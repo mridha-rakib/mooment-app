@@ -20,7 +20,8 @@ import {
   CheckoutFooter,
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
-import { startMoomentCreditsCheckout } from "@/lib/payments";
+import { createCheckoutIntent, startMoomentCreditsCheckout, type CheckoutOrder } from "@/lib/payments";
+import { claimEventReward } from "@/lib/events";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
 const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
@@ -74,6 +75,9 @@ const EventCheckoutScreen = () => {
     hostName?: string;
     venue?: string;
     address?: string;
+    rewardId?: string;
+    rewardBuyQuantity?: string;
+    rewardFreeQuantity?: string;
   }>();
   const { colors, isDark } = useTheme();
   const [paymentType, setPaymentType] = useState("Online");
@@ -83,6 +87,7 @@ const EventCheckoutScreen = () => {
 
   const eventId = typeof params.eventId === "string" ? params.eventId : "";
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : "";
+  const rewardId = typeof params.rewardId === "string" ? params.rewardId : "";
   const eventName = getParam(params.eventName, "Event");
   const eventDateTime = getParam(params.eventDateTime, "Date TBA");
   const eventDateDisplay = getParam(params.eventDateDisplay, eventDateTime);
@@ -91,6 +96,12 @@ const EventCheckoutScreen = () => {
   const venue = getParam(params.venue, "");
   const address = getParam(params.address, "");
   const quantity = parsePositiveInteger(params.quantity);
+  const rewardBuyQuantity = parsePositiveInteger(params.rewardBuyQuantity, 0);
+  const rewardFreeQuantity = parsePositiveInteger(params.rewardFreeQuantity, 0);
+  const previewFreeQuantity =
+    rewardBuyQuantity > 0 && rewardFreeQuantity > 0
+      ? Math.floor(quantity / rewardBuyQuantity) * rewardFreeQuantity
+      : 0;
   const ticketPrice = parsePrice(params.ticketPrice);
   const isFreeTicket = params.ticketType === "free" || ticketPrice <= 0;
   const subtotalValue = isFreeTicket ? 0 : roundCurrency(ticketPrice * quantity);
@@ -102,7 +113,10 @@ const EventCheckoutScreen = () => {
   const total = isFreeTicket ? "Free" : formatCurrency(totalValue);
 
   const orderItems = [
-    { name: `${ticketName} x ${quantity}`, price: subtotal },
+    { name: `${ticketName} paid x ${quantity}`, price: subtotal },
+    ...(previewFreeQuantity > 0
+      ? [{ name: `${ticketName} rewarded x ${previewFreeQuantity}`, price: "Free" }]
+      : []),
   ];
 
   const handleContinue = async () => {
@@ -116,26 +130,6 @@ const EventCheckoutScreen = () => {
       return;
     }
 
-    if (isFreeTicket) {
-      router.push({
-        pathname: "/event-screen/payment-success",
-        params: {
-          eventId,
-          eventName,
-          eventDateDisplay,
-          hostName,
-          venue,
-          address,
-          ticketName,
-          quantity: String(quantity),
-          amount: "0",
-          currency: "usd",
-          isFree: "true",
-        },
-      });
-      return;
-    }
-
     if (!eventId || !ticketId) {
       Alert.alert("Payment unavailable", "This ticket checkout is missing event details.");
       return;
@@ -144,8 +138,21 @@ const EventCheckoutScreen = () => {
     setIsPaying(true);
 
     try {
-      const order = payWith === "Credits"
-        ? await startMoomentCreditsCheckout({
+      let order: CheckoutOrder;
+
+      if (isFreeTicket) {
+        const checkout = await createCheckoutIntent({
+          kind: "ticket",
+          paymentMethod: "card",
+          eventId,
+          ticketId,
+          quantity,
+          anonymous: false,
+          acceptedTerms: agreed,
+        });
+        order = checkout.order;
+      } else if (payWith === "Credits") {
+        order = await startMoomentCreditsCheckout({
           kind: "ticket",
           paymentMethod: "mooment_credits",
           eventId,
@@ -153,8 +160,9 @@ const EventCheckoutScreen = () => {
           quantity,
           anonymous: false,
           acceptedTerms: agreed,
-        })
-        : await startStripeCheckout(
+        });
+      } else {
+        order = await startStripeCheckout(
           {
             kind: "ticket",
             paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
@@ -166,6 +174,18 @@ const EventCheckoutScreen = () => {
           },
           { isDark },
         );
+      }
+
+      if (rewardId) {
+        await claimEventReward(eventId, rewardId).catch(() => {});
+      }
+
+      const ticketLineItem = order.lineItems.find(
+        (item) => item.itemType === "ticket" && item.itemId === ticketId,
+      );
+      const paidQuantity = ticketLineItem?.paidQuantity ?? ticketLineItem?.quantity ?? quantity;
+      const freeQuantity = Math.max(ticketLineItem?.freeQuantity ?? 0, previewFreeQuantity);
+      const totalQuantity = Math.max(ticketLineItem?.totalQuantity ?? 0, paidQuantity + freeQuantity);
 
       router.replace({
         pathname: "/event-screen/payment-success",
@@ -179,14 +199,21 @@ const EventCheckoutScreen = () => {
           hostName,
           venue,
           address,
-          quantity: String(quantity),
-          amount: String(order.totalAmount),
+          quantity: String(totalQuantity),
+          paidQuantity: String(paidQuantity),
+          freeQuantity: String(freeQuantity),
+          totalQuantity: String(totalQuantity),
+          amount: isFreeTicket ? "0" : String(order.totalAmount),
           currency: order.currency,
           createdAt: order.createdAt,
+          ...(isFreeTicket ? { isFree: "true" } : {}),
         },
       });
     } catch (error) {
-      Alert.alert("Payment failed", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        isFreeTicket ? "Unable to claim ticket" : "Payment failed",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setIsPaying(false);
     }
@@ -221,7 +248,7 @@ const EventCheckoutScreen = () => {
         <OrderSummary
           items={orderItems}
           subtotal={subtotal}
-          reward="$0"
+          reward={previewFreeQuantity > 0 ? `${previewFreeQuantity} free` : "$0"}
           fee={fee}
           tax="$0"
           total={total}

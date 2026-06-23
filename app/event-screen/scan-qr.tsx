@@ -4,9 +4,9 @@ import { CameraView,
   useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React,
-  { useRef,
-  useState } from 'react';
+  { useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Platform,
   StatusBar,
@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '@/components/ui/CinematicButton';
 import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-icons";
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { scanTicketQrCode } from '@/lib/payments';
 
 const { width, height } = Dimensions.get('window');
 const FRAME = width * 0.65;
@@ -28,6 +30,7 @@ export default function ScanQRScreen() {
   const { colors, isDark } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
 
   if (!permission) return <View style={[styles.safe, { backgroundColor: colors.background }]} />;
 
@@ -58,9 +61,24 @@ export default function ScanQRScreen() {
         style={StyleSheet.absoluteFill}
         facing="back"
         enableTorch={flash}
-        onBarcodeScanned={({ data }) => {
-          // Navigate to QR result screen with scanned data
-          router.push({ pathname: '/event-screen/qr-code', params: { data, type: 'scan' } });
+        onBarcodeScanned={isScanning ? undefined : async ({ data }) => {
+          setIsScanning(true);
+
+          try {
+            const scannedTicket = await scanTicketQrCode(data);
+
+            Alert.alert(
+              'Ticket used',
+              `${scannedTicket.ticketName}\n${scannedTicket.ticketNo}\nHolder: ${scannedTicket.holderName}`,
+              [{ text: 'Scan next', onPress: () => setIsScanning(false) }],
+            );
+          } catch (error) {
+            Alert.alert(
+              'Scan failed',
+              getAuthErrorMessage(error, 'This QR code could not be accepted.'),
+              [{ text: 'Try again', onPress: () => setIsScanning(false) }],
+            );
+          }
         }}
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
       />
@@ -108,14 +126,14 @@ export default function ScanQRScreen() {
 
       {/* Hint text */}
       <View style={styles.hintRow}>
-        <Text style={styles.hintText}>Align QR code within the frame</Text>
+        <Text style={styles.hintText}>{isScanning ? 'Validating ticket...' : 'Align QR code within the frame'}</Text>
       </View>
 
       {/* Capture / torch circle at bottom */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={[styles.captureCircle, { backgroundColor: colors.primary }]}
-          onPress={() => router.push({ pathname: '/event-screen/qr-code', params: { type: 'event' } })}
+          onPress={() => setIsScanning(false)}
           activeOpacity={0.9}
         />
       </View>

@@ -7,7 +7,7 @@ import { VideoView,
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -19,8 +19,6 @@ import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
 import MoreMenuModal from "./MoreMenuModal";
 import HashtagText from './HashtagText';
-const { width } = Dimensions.get('window');
-
 // Hardcoded visual waveform for Audio posts
 const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38, 22, 16, 32, 24, 14, 28, 36, 18, 12, 30, 42, 24, 16, 38, 28, 14, 45, 20, 12, 32, 24, 18, 10, 26, 14, 10];
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
@@ -121,7 +119,7 @@ function VideoFeedMedia({ uri }: { uri: string }) {
   );
 }
 
-function CroppedFeedImage({ item }: { item: PostMediaItem }) {
+function CroppedFeedImage({ item, frameWidth }: { item: PostMediaItem; frameWidth: number }) {
   const [imageSize, setImageSize] = useState(() => ({
     width: item.displayCrop?.imageWidth ?? 0,
     height: item.displayCrop?.imageHeight ?? 0,
@@ -155,13 +153,12 @@ function CroppedFeedImage({ item }: { item: PostMediaItem }) {
     return (
       <Image
         source={{ uri: item.uri }}
-        style={styles.postImage}
+        style={[styles.postImage, { width: frameWidth }]}
         resizeMode="cover"
       />
     );
   }
 
-  const frameWidth = width - 64;
   const frameHeight = 340;
   const cropPixelWidth = Math.max(crop.width * imageSize.width, 1);
   const cropPixelHeight = Math.max(crop.height * imageSize.height, 1);
@@ -348,7 +345,9 @@ export default function FeedPost({
   isOwnPost?: boolean;
 }) {
   const { colors, isDark } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [mediaFrameWidth, setMediaFrameWidth] = useState(() => Math.max(windowWidth - 64, 1));
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
@@ -360,6 +359,7 @@ export default function FeedPost({
   const [isHidden, setIsHidden] = useState(false);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const moreBtnRef = useRef<View>(null);
+  const mediaScrollRef = useRef<ScrollView>(null);
   const [menuTop, setMenuTop] = useState(0);
   const canCompareAuthorId = Boolean(post.authorId && currentUserId);
   const isPostByCurrentUser = canCompareAuthorId ? post.authorId === currentUserId : isOwnPost;
@@ -374,8 +374,17 @@ export default function FeedPost({
   const [sharesCount, setSharesCount] = useState(post.sharesCount || 0);
   const [isLikePending, setIsLikePending] = useState(false);
   const [isSavePending, setIsSavePending] = useState(false);
-  const mediaItems = post.mediaItems ?? post.mediaUris?.map((uri) => ({ uri, type: 'image' as const, fullUri: uri })) ?? [];
-  const fullScreenMediaUris = post.mediaUris || mediaItems.map((item) => item.fullUri || item.uri);
+  const mediaItems = useMemo(() => {
+    const sourceItems = post.mediaItems?.length
+      ? post.mediaItems
+      : post.mediaUris?.map((uri) => ({ uri, type: 'image' as const, fullUri: uri })) ?? [];
+
+    return sourceItems.filter((item) => Boolean(item.uri?.trim()));
+  }, [post.mediaItems, post.mediaUris]);
+  const fullScreenMediaItems = useMemo(() => mediaItems.map((item) => ({
+    uri: item.fullUri?.trim() || item.uri.trim(),
+    type: item.type,
+  })), [mediaItems]);
   const resolvedEventId = useMemo(() => {
     const explicitEventId = post.eventId?.trim();
 
@@ -404,6 +413,15 @@ export default function FeedPost({
     setCommentsCount(post.commentsCount || 0);
     setSharesCount(post.sharesCount || 0);
   }, [post.id, post.isLiked, post.isSaved, post.likesCount, post.commentsCount, post.sharesCount]);
+
+  useEffect(() => {
+    setCurrentMediaIndex(0);
+    const frame = requestAnimationFrame(() => {
+      mediaScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [post.id]);
 
   // Reanimated Shared Values
   const heartScale = useSharedValue(1);
@@ -488,13 +506,44 @@ export default function FeedPost({
     });
   };
 
-  const handleScroll = (event: any) => {
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
+    if (slideSize <= 0) {
+      return;
+    }
+
     const index = event.nativeEvent.contentOffset.x / slideSize;
-    const roundIndex = Math.round(index);
+    const roundIndex = Math.min(Math.max(Math.round(index), 0), Math.max(mediaItems.length - 1, 0));
     if (roundIndex !== currentMediaIndex) {
       setCurrentMediaIndex(roundIndex);
     }
+  };
+
+  const handleMediaLayout = (event: LayoutChangeEvent) => {
+    const nextWidth = event.nativeEvent.layout.width;
+
+    if (nextWidth <= 0 || Math.abs(nextWidth - mediaFrameWidth) < 0.5) {
+      return;
+    }
+
+    setMediaFrameWidth(nextWidth);
+    requestAnimationFrame(() => {
+      mediaScrollRef.current?.scrollTo({
+        x: currentMediaIndex * nextWidth,
+        y: 0,
+        animated: false,
+      });
+    });
+  };
+
+  const handleMediaPress = (index: number) => {
+    if (post.postType === 'event') {
+      handleEventPress();
+      return;
+    }
+
+    setCurrentMediaIndex(index);
+    setShowFullScreenMedia(true);
   };
 
   const toggleFollow = async () => {
@@ -692,31 +741,37 @@ export default function FeedPost({
         )}
 
         {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && mediaItems.length > 0 && (
-          <TouchableOpacity
-            activeOpacity={post.postType === 'event' || post.postType === 'standard' ? 0.9 : 1}
-            onPress={() => {
-              if (post.postType === 'event') {
-                handleEventPress();
-              }
-            }}
+          <View
             style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
+            onLayout={handleMediaLayout}
           >
             <ScrollView
+              ref={mediaScrollRef}
               horizontal
               pagingEnabled
+              nestedScrollEnabled
+              bounces={false}
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={handleScroll}
+              onScrollEndDrag={handleScroll}
               scrollEventThrottle={16}
             >
               {mediaItems.map((item, index) => (
-                item.type === 'video' ? (
-                  <VideoFeedMedia key={`${item.uri}-${index}`} uri={item.uri} />
-                ) : (
-                  <CroppedFeedImage
-                    key={`${item.uri}-${index}`}
-                    item={item}
-                  />
-                )
+                <View key={`${item.uri}-${index}`} style={[styles.mediaSlide, { width: mediaFrameWidth }]}>
+                  {item.type === 'video' ? (
+                    <VideoFeedMedia uri={item.uri} />
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.mediaImageButton}
+                      activeOpacity={0.92}
+                      onPress={() => handleMediaPress(index)}
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel={`Open image ${index + 1} of ${mediaItems.length} full screen`}
+                    >
+                      <CroppedFeedImage item={item} frameWidth={mediaFrameWidth} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
             </ScrollView>
 
@@ -799,7 +854,7 @@ export default function FeedPost({
               <>
                 {/* Media Counters & Badges (Standard & Product) */}
                 {mediaItems.length > 1 && (
-                  <View style={[styles.imageCounter, post.isExpandable && styles.imageCounterBottom]}>
+                  <View pointerEvents="none" style={[styles.imageCounter, post.isExpandable && styles.imageCounterBottom]}>
                     <Text style={styles.imageCounterText}>
                       {currentMediaIndex + 1}/{mediaItems.length}
                     </Text>
@@ -826,7 +881,7 @@ export default function FeedPost({
                 )}
               </>
             )}
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* Product Post Footer */}
@@ -918,7 +973,8 @@ export default function FeedPost({
         <FullScreenMediaModal
           visible={showFullScreenMedia}
           onClose={() => setShowFullScreenMedia(false)}
-          mediaUris={fullScreenMediaUris}
+          onIndexChange={setCurrentMediaIndex}
+          mediaItems={fullScreenMediaItems}
           initialIndex={currentMediaIndex}
         />
       </View>
@@ -1058,11 +1114,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   postImage: {
-    width: width - 64,
+    width: "100%",
     height: "100%",
   },
+  mediaSlide: {
+    height: "100%",
+  },
+  mediaImageButton: {
+    flex: 1,
+  },
   croppedImageFrame: {
-    width: width - 64,
+    width: "100%",
     height: "100%",
     backgroundColor: "#000000",
     overflow: "hidden",
@@ -1072,7 +1134,7 @@ const styles = StyleSheet.create({
     position: "absolute",
   },
   videoMediaFrame: {
-    width: width - 64,
+    width: "100%",
     height: "100%",
     position: "relative",
     backgroundColor: "#000000",

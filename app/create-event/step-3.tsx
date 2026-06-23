@@ -155,7 +155,7 @@ export default function CreateEventStep3() {
       setSavedLabel(true);
       setTimeout(() => setSavedLabel(false), 2000);
     } catch (error) {
-      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Please try saving the event draft again.'));
+      Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Please try again.'));
     } finally {
       setIsSaving(false);
     }
@@ -199,7 +199,7 @@ export default function CreateEventStep3() {
       }
     } catch (error) {
       if (!isMountedRef.current) return;
-      Alert.alert('Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+      Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
     } finally {
       if (isMountedRef.current) {
         setIsSaving(false);

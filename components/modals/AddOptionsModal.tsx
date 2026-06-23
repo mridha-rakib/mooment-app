@@ -9,7 +9,6 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import {
   Modal,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -49,8 +48,7 @@ const OPTIONS = [
   {
     id: 'scan',
     label: 'Scan QR',
-
-    description: 'Scan to open on product links',
+    description: 'Scan event ticket QR codes',
     icon: QrCodeIcon,
     color: '#0C447C',
     bg: '#85B7EB',
