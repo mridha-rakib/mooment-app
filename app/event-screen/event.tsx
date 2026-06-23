@@ -30,6 +30,9 @@ import {
 import { getMyTicketPurchaseCounts } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
+import { toggleMomentReaction, shareMoment, type MomentInteractionSummary } from "@/lib/moments";
+import CommentsModal from "@/components/post/CommentsModal";
+import ShareModal from "@/components/post/ShareModal";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
@@ -287,6 +290,13 @@ const EventScreen = () => {
   const [acceptingJoinRequestId, setAcceptingJoinRequestId] = useState<string | null>(null);
   const [decliningJoinRequestId, setDecliningJoinRequestId] = useState<string | null>(null);
   const [myJoinRequestStatus, setMyJoinRequestStatus] = useState<JoinRequestStatus | null>(null);
+  const [localLikesCount, setLocalLikesCount] = useState(0);
+  const [localCommentsCount, setLocalCommentsCount] = useState(0);
+  const [localSharesCount, setLocalSharesCount] = useState(0);
+  const [localIsLiked, setLocalIsLiked] = useState(false);
+  const [isLikePending, setIsLikePending] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -484,11 +494,19 @@ const EventScreen = () => {
         likesCount?: number | null;
         commentsCount?: number | null;
         sharesCount?: number | null;
+        isLiked?: boolean;
+        interactionMomentId?: string | null;
       })
     | null;
-  const likesCount = eventStats?.likesCount ?? 0;
-  const commentsCount = eventStats?.commentsCount ?? 0;
-  const sharesCount = eventStats?.sharesCount ?? 0;
+  const interactionMomentId = eventStats?.interactionMomentId ?? null;
+
+  useEffect(() => {
+    setLocalLikesCount(eventStats?.likesCount ?? 0);
+    setLocalCommentsCount(eventStats?.commentsCount ?? 0);
+    setLocalSharesCount(eventStats?.sharesCount ?? 0);
+    setLocalIsLiked(Boolean(eventStats?.isLiked));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event]);
 
   useEffect(() => {
     if (!selectedTicketKey) {
@@ -506,6 +524,46 @@ const EventScreen = () => {
 
     setSelectedTicketQuantity((quantity) => clampTicketQuantity(quantity, currentTicket));
   }, [event?.tickets, selectedTicketKey]);
+
+  const handleLike = async () => {
+    if (!interactionMomentId || isLikePending) return;
+
+    const prevIsLiked = localIsLiked;
+    const prevCount = localLikesCount;
+    setLocalIsLiked(!prevIsLiked);
+    setLocalLikesCount(prevIsLiked ? Math.max(0, prevCount - 1) : prevCount + 1);
+    setIsLikePending(true);
+
+    try {
+      const summary = await toggleMomentReaction(interactionMomentId);
+      setLocalIsLiked(summary.isLiked);
+      setLocalLikesCount(summary.likesCount);
+    } catch {
+      setLocalIsLiked(prevIsLiked);
+      setLocalLikesCount(prevCount);
+    } finally {
+      setIsLikePending(false);
+    }
+  };
+
+  const handleInteractionChange = (summary: MomentInteractionSummary) => {
+    setLocalCommentsCount(summary.commentsCount);
+    setLocalLikesCount(summary.likesCount);
+  };
+
+  const handleShare = () => {
+    setShowShare(true);
+  };
+
+  const handleRepost = async () => {
+    if (!interactionMomentId) return;
+    try {
+      await shareMoment(interactionMomentId);
+      setLocalSharesCount((prev) => prev + 1);
+    } catch {
+      // best-effort — share count is non-critical
+    }
+  };
 
   const handleEdit = () => {
     setMenuVisible(false);
@@ -1157,18 +1215,18 @@ const EventScreen = () => {
             </View>
 
             <View style={styles.actionStatsRow}>
-              <View style={styles.actionStat}>
-                <HugeiconsIcon icon={FavouriteIcon} size={18} color="#F2245C" />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>{likesCount}</Text>
-              </View>
-              <View style={styles.actionStat}>
+              <TouchableOpacity style={styles.actionStat} activeOpacity={0.7} onPress={handleLike} disabled={isLikePending}>
+                <HugeiconsIcon icon={FavouriteIcon} size={18} color={localIsLiked ? "#F2245C" : colors.textSecondary} />
+                <Text style={[styles.actionStatText, { color: colors.text }]}>{localLikesCount}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionStat} activeOpacity={0.7} onPress={() => setShowComments(true)}>
                 <HugeiconsIcon icon={Comment02Icon} size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>{commentsCount}</Text>
-              </View>
-              <View style={styles.actionStat}>
+                <Text style={[styles.actionStatText, { color: colors.text }]}>{localCommentsCount}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionStat} activeOpacity={0.7} onPress={handleShare}>
                 <HugeiconsIcon icon={Share01Icon} size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>{sharesCount}</Text>
-              </View>
+                <Text style={[styles.actionStatText, { color: colors.text }]}>{localSharesCount}</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1577,6 +1635,22 @@ const EventScreen = () => {
           </View>
         </View>
       </Modal>
+
+      <CommentsModal
+        visible={showComments}
+        onClose={() => setShowComments(false)}
+        momentId={interactionMomentId}
+        likesCount={localLikesCount}
+        sharesCount={localSharesCount}
+        onInteractionChange={handleInteractionChange}
+      />
+
+      <ShareModal
+        visible={showShare}
+        onClose={() => setShowShare(false)}
+        shareUrl={event?.id ? `xenog://events/${event.id}` : undefined}
+        onRepost={handleRepost}
+      />
     </View>
   );
 };
