@@ -9,6 +9,7 @@ export type NotificationItem = {
   actorName?: string | null;
   actorUsername?: string | null;
   actorAvatarUrl?: string | null;
+  isFollowing?: boolean | null;
   eventId?: string | null;
   eventName?: string | null;
   ticketName?: string | null;

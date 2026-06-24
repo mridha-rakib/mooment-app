@@ -21,6 +21,7 @@ import {
   type NotificationItem,
 } from "@/lib/notifications";
 import { followUser, unfollowUser } from "@/lib/users";
+import { useNotificationStore } from "@/stores/notificationStore";
 
 const isToday = (dateStr: string): boolean => {
   const date = new Date(dateStr);
@@ -62,16 +63,27 @@ export default function Explore() {
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
 
+  const setUnreadCount = useNotificationStore((state) => state.setUnreadCount);
+  const incrementUnread = useNotificationStore((state) => state.incrementUnread);
+  const clearUnread = useNotificationStore((state) => state.clearUnread);
+
   const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
 
   const loadNotifications = useCallback(async () => {
     try {
       const data = await getNotifications();
       setNotifications(data);
+      setUnreadCount(data.filter((n) => !n.isRead).length);
+      const initialFollowingIds = new Set<string>(
+        data
+          .filter((n) => n.actorId && n.isFollowing === true)
+          .map((n) => n.actorId as string),
+      );
+      setFollowingIds(initialFollowingIds);
     } catch {
       // silently ignore load errors
     }
-  }, []);
+  }, [setUnreadCount]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -86,6 +98,9 @@ export default function Explore() {
       accessToken,
       onNotification: (notification) => {
         setNotifications((prev) => [notification, ...prev]);
+        if (!notification.isRead) {
+          incrementUnread();
+        }
       },
     });
 
@@ -107,10 +122,11 @@ export default function Explore() {
     try {
       await markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      clearUnread();
     } catch {
       // silently ignore
     }
-  }, []);
+  }, [clearUnread]);
 
   const handleFollow = useCallback(async (actorId: string) => {
     if (followLoadingIds.has(actorId)) return;

@@ -161,6 +161,7 @@ export type TicketWalletItem = {
     bannerImageKey?: string | null;
     bannerOriginalImageKey?: string | null;
     scheduledAt?: string | null;
+    endAt?: string | null;
     location?: {
       searchLabel?: string | null;
       venue?: string | null;
@@ -209,6 +210,18 @@ export const refundCheckoutOrder = async (orderId: string): Promise<CheckoutOrde
   }
 
   return order;
+};
+
+export type TicketStatEntry = {
+  sold: number;
+  available: number;
+  capacity: number;
+};
+
+export const getEventTicketStats = async (eventId: string): Promise<Record<string, TicketStatEntry>> => {
+  const response = await api.get(`/payments/event-ticket-stats/${encodeURIComponent(eventId)}`);
+  const stats = response.data?.data?.stats as Record<string, TicketStatEntry> | undefined;
+  return stats ?? {};
 };
 
 export const getMyTicketPurchaseCounts = async (eventId: string): Promise<Record<string, number>> => {

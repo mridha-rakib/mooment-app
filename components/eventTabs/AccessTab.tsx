@@ -9,15 +9,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import SegmentedControl from "../ui/SegmentedControl";
 import { Spinner } from "@/components/ui/spinner";
 
+type TicketStat = { sold: number; available: number; capacity: number };
+
 type AccessTabProps = {
   tickets?: EventTicketPayload[];
   rewards?: EventRewardPayload[];
   scheduledAt?: string | null;
   privacy?: EventPrivacy;
   purchasedTicketCounts?: Record<string, number>;
+  ticketStats?: Record<string, TicketStat>;
   isHostMode?: boolean;
   selectedTicketKey?: string | null;
   selectedTicketQuantity?: number;
+  currentTimeMs?: number;
   deletingTicketId?: string | null;
   deletingRewardId?: string | null;
   claimingRewardId?: string | null;
@@ -30,6 +34,7 @@ type AccessTabProps = {
   decliningJoinRequestId?: string | null;
   onSelectAccessSubTab?: (subTab: string) => void;
   onSelectTicket?: (ticket: EventTicketPayload, ticketKey: string) => void;
+  onExpiredTicketPress?: (ticket: EventTicketPayload) => void;
   onTicketQuantityChange?: (ticket: EventTicketPayload, ticketKey: string, quantity: number) => void;
   onSubmitJoinRequest?: () => void;
   onAcceptJoinRequest?: (userId: string) => void;
@@ -92,6 +97,22 @@ const getTicketDescriptionPreview = (value?: string | null) => {
 const getTicketKey = (ticket: EventTicketPayload, index: number) =>
   ticket.id ?? `${ticket.name}-${index}`;
 
+const getTicketSalesEndDate = (ticket: EventTicketPayload) => {
+  if (!ticket.salesEndAt) {
+    return null;
+  }
+
+  const salesEndAt = new Date(ticket.salesEndAt);
+
+  return Number.isNaN(salesEndAt.getTime()) ? null : salesEndAt;
+};
+
+const isTicketSalesEnded = (ticket: EventTicketPayload, nowMs = Date.now()) => {
+  const salesEndAt = getTicketSalesEndDate(ticket);
+
+  return Boolean(salesEndAt && salesEndAt.getTime() <= nowMs);
+};
+
 const getRewardKey = (reward: EventRewardPayload, index: number) =>
   reward.id ?? `${reward.rewardType}-${reward.name}-${index}`;
 
@@ -124,9 +145,11 @@ const AccessTab = ({
   scheduledAt,
   privacy,
   purchasedTicketCounts = {},
+  ticketStats,
   isHostMode = false,
   selectedTicketKey = null,
   selectedTicketQuantity = 1,
+  currentTimeMs = Date.now(),
   deletingTicketId = null,
   deletingRewardId = null,
   claimingRewardId = null,
@@ -139,6 +162,7 @@ const AccessTab = ({
   decliningJoinRequestId = null,
   onSelectAccessSubTab,
   onSelectTicket,
+  onExpiredTicketPress,
   onTicketQuantityChange,
   onSubmitJoinRequest,
   onAcceptJoinRequest,
@@ -215,6 +239,7 @@ const AccessTab = ({
     isFreeTicket: boolean,
     isSoldOut: boolean,
     isLimitReached: boolean,
+    isSalesEnded: boolean,
     isUnavailable: boolean,
     alreadyPurchased: number,
     remainingAllowed: number,
@@ -228,7 +253,9 @@ const AccessTab = ({
           </Text>
           <View style={[
             styles.countBadge,
-            isLimitReached
+            isSalesEnded
+              ? { backgroundColor: "rgba(255, 107, 61, 0.15)" }
+              : isLimitReached
               ? { backgroundColor: "rgba(255, 107, 61, 0.15)" }
               : isSoldOut
                 ? { backgroundColor: "#2D1B1B" }
@@ -236,20 +263,22 @@ const AccessTab = ({
           ]}>
             <Text style={[
               styles.countBadgeText,
-              isLimitReached
+              isSalesEnded
+                ? { color: "#FF6B3D" }
+                : isLimitReached
                 ? { color: "#FF6B3D" }
                 : isSoldOut
                   ? { color: "#E83030" }
                   : { color: "#FFFFFF" }
             ]}>
-              {isLimitReached ? "Limit reached" : isSoldOut ? "Sold Out" : `${ticket.capacity} left`}
+              {isSalesEnded ? "Sales ended" : isLimitReached ? "Limit reached" : isSoldOut ? "Sold Out" : `${ticket.capacity} left`}
             </Text>
           </View>
         </View>
 
         {isLimitReached && (
           <Text style={styles.limitReachedText}>
-            You've purchased the maximum of 2 tickets of this type.
+            You have purchased the maximum of 2 tickets of this type.
           </Text>
         )}
 
@@ -323,9 +352,9 @@ const AccessTab = ({
               <TouchableOpacity
                 style={[
                   styles.counterBtn,
-                  (!isSelected || quantity <= 1 || isUnavailable) && styles.counterBtnDisabled,
+                  (!isSelected || quantity <= 1 || isUnavailable || isSalesEnded) && styles.counterBtnDisabled,
                 ]}
-                disabled={!isSelected || quantity <= 1 || isUnavailable}
+                disabled={!isSelected || quantity <= 1 || isUnavailable || isSalesEnded}
                 onPress={(event) => {
                   event.stopPropagation();
                   onTicketQuantityChange?.(ticket, ticketKey, quantity - 1);
@@ -337,9 +366,9 @@ const AccessTab = ({
               <TouchableOpacity
                 style={[
                   styles.counterBtn,
-                  (isUnavailable || (isSelected && quantity >= maxQuantity)) && styles.counterBtnDisabled,
+                  (isUnavailable || isSalesEnded || (isSelected && quantity >= maxQuantity)) && styles.counterBtnDisabled,
                 ]}
-                disabled={isUnavailable || (isSelected && quantity >= maxQuantity)}
+                disabled={isUnavailable || isSalesEnded || (isSelected && quantity >= maxQuantity)}
                 onPress={(event) => {
                   event.stopPropagation();
                   onTicketQuantityChange?.(ticket, ticketKey, isSelected ? quantity + 1 : 1);
@@ -356,6 +385,7 @@ const AccessTab = ({
 
   const renderTickets = () => {
     const hasAcceptedRequest = myJoinRequestStatus === "accepted";
+    const hasPurchasedTickets = Object.values(purchasedTicketCounts).some((count) => count > 0);
 
     return (
       <View style={{ marginTop: 20 }}>
@@ -405,6 +435,7 @@ const AccessTab = ({
             const isSelected = selectedTicketKey === ticketKey;
             const isFreeTicket = ticket.type === "free" || ticket.price <= 0;
             const isSoldOut = ticket.capacity <= 0;
+            const isSalesEnded = isTicketSalesEnded(ticket, currentTimeMs);
             const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
             const remainingAllowed = Math.max(0, 2 - alreadyPurchased);
             const isLimitReached = !isSoldOut && alreadyPurchased >= 2;
@@ -462,7 +493,10 @@ const AccessTab = ({
                       ]}
                       activeOpacity={isLocked && !hasAcceptedRequest ? 1 : 0.86}
                       onPress={() => {
-                        if (!isUnavailable && (!isLocked || hasAcceptedRequest)) {
+                        if (isSalesEnded && !isUnavailable && (!isLocked || hasAcceptedRequest)) {
+                          onSelectTicket?.(ticket, ticketKey);
+                          onExpiredTicketPress?.(ticket);
+                        } else if (!isUnavailable && (!isLocked || hasAcceptedRequest)) {
                           onSelectTicket?.(ticket, ticketKey);
                         }
                       }}
@@ -476,6 +510,7 @@ const AccessTab = ({
                         isFreeTicket,
                         isSoldOut,
                         isLimitReached,
+                        isSalesEnded,
                         isUnavailable,
                         alreadyPurchased,
                         remainingAllowed,
@@ -494,7 +529,10 @@ const AccessTab = ({
                     ]}
                     activeOpacity={isLocked && !hasAcceptedRequest ? 1 : 0.86}
                     onPress={() => {
-                      if (!isUnavailable && (!isLocked || hasAcceptedRequest)) {
+                      if (isSalesEnded && !isUnavailable && (!isLocked || hasAcceptedRequest)) {
+                        onSelectTicket?.(ticket, ticketKey);
+                        onExpiredTicketPress?.(ticket);
+                      } else if (!isUnavailable && (!isLocked || hasAcceptedRequest)) {
                         onSelectTicket?.(ticket, ticketKey);
                       }
                     }}
@@ -508,6 +546,7 @@ const AccessTab = ({
                       isFreeTicket,
                       isSoldOut,
                       isLimitReached,
+                      isSalesEnded,
                       isUnavailable,
                       alreadyPurchased,
                       remainingAllowed,
@@ -527,10 +566,12 @@ const AccessTab = ({
           </View>
         )}
 
-        <View style={styles.secureBadge}>
-          <Feather name="shield" size={24} color="#1D9E75" />
-          <Text style={styles.secureText}>Payment held securely until event completes</Text>
-        </View>
+        {!hasPurchasedTickets && (
+          <View style={styles.secureBadge}>
+            <Feather name="shield" size={24} color="#1D9E75" />
+            <Text style={styles.secureText}>Payment held securely until event completes</Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -636,6 +677,8 @@ const AccessTab = ({
             const ticketKey = getTicketKey(ticket, index);
             const isDeleting = deletingTicketId === ticketKey || deletingTicketId === ticket.id;
             const isFreeTicket = ticket.type === "free" || ticket.price <= 0;
+            const stat = ticket.id ? ticketStats?.[ticket.id] : undefined;
+            const statsLoaded = ticketStats !== undefined;
 
             return (
               <TouchableOpacity
@@ -647,16 +690,11 @@ const AccessTab = ({
               >
                 <View style={styles.creatorTicketTopRow}>
                   <View style={styles.creatorTicketInfo}>
-                    <View style={styles.creatorTicketTitleRow}>
-                      <Text style={styles.creatorTicketTitle} numberOfLines={1}>
-                        {ticket.name || "General Ticket"}
-                      </Text>
-                      <View style={styles.creatorTicketCountBadge}>
-                        <Text style={styles.creatorTicketCountText}>{ticket.capacity} left</Text>
-                      </View>
-                    </View>
+                    <Text style={styles.creatorTicketTitle} numberOfLines={1}>
+                      {ticket.name || "General Ticket"}
+                    </Text>
                     <Text style={styles.creatorTicketDescription} numberOfLines={1}>
-                      {ticket.description || "Entry from 9pm. Standing only."}
+                      {ticket.description || ""}
                     </Text>
                     <Text style={styles.creatorTicketExpiry} numberOfLines={1}>
                       {formatExpiry(ticket.salesEndAt, scheduledAt)}
@@ -671,6 +709,24 @@ const AccessTab = ({
                   >
                     <Feather name="edit-2" size={20} color="#B3B3B3" />
                   </TouchableOpacity>
+                </View>
+
+                <View style={styles.creatorTicketStatsRow}>
+                  <View style={styles.creatorTicketStatSold}>
+                    <Feather name="tag" size={12} color="#999999" />
+                    <Text style={styles.creatorTicketStatSoldValue}>
+                      {statsLoaded ? (stat?.sold ?? 0) : "—"}
+                    </Text>
+                    <Text style={styles.creatorTicketStatSoldLabel}>sold</Text>
+                  </View>
+                  <View style={styles.creatorTicketStatDivider} />
+                  <View style={styles.creatorTicketStatAvailable}>
+                    <Feather name="check-circle" size={12} color="#1D9E75" />
+                    <Text style={styles.creatorTicketStatAvailableValue}>
+                      {statsLoaded ? (stat?.available ?? ticket.capacity) : "—"}
+                    </Text>
+                    <Text style={styles.creatorTicketStatAvailableLabel}>available</Text>
+                  </View>
                 </View>
 
                 <View style={styles.creatorTicketFooter}>
@@ -988,11 +1044,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
   },
-  creatorTicketTitleRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
   creatorTicketTitle: {
     color: "#B3B3B3",
     flexShrink: 1,
@@ -1000,20 +1051,59 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 24,
   },
-  creatorTicketCountBadge: {
-    alignItems: "center",
-    backgroundColor: "#666666",
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  creatorTicketStatsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  creatorTicketCountText: {
+  creatorTicketStatSold: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  creatorTicketStatSoldValue: {
     color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  creatorTicketStatSoldLabel: {
+    color: "#999999",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 16,
+  },
+  creatorTicketStatDivider: {
+    width: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginVertical: 8,
+  },
+  creatorTicketStatAvailable: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(29, 158, 117, 0.1)",
+  },
+  creatorTicketStatAvailableValue: {
+    color: "#1D9E75",
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  creatorTicketStatAvailableLabel: {
+    color: "#1D9E75",
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+    opacity: 0.75,
   },
   creatorTicketDescription: {
     color: "#B3B3B3",

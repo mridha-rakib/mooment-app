@@ -2,9 +2,10 @@ const { withGradleProperties } = require("@expo/config-plugins");
 
 const gradleSettings = {
   "org.gradle.jvmargs":
-    "-Xmx1536m -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=256m -Dfile.encoding=UTF-8",
-  "org.gradle.parallel": "false",
-  "org.gradle.workers.max": "4",
+    "-Xmx4096m -XX:MaxMetaspaceSize=1g -XX:ReservedCodeCacheSize=512m -Dfile.encoding=UTF-8",
+  "org.gradle.parallel": "true",
+  "org.gradle.workers.max": "8",
+  "org.gradle.caching": "true",
 };
 
 function setGradleProperty(properties, key, value) {

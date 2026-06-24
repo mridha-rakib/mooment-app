@@ -85,6 +85,8 @@ export default function EventDraftsScreen() {
   const { colors, isDark } = useTheme();
   const loadFromEvent = useEventDraftStore((state) => state.loadFromEvent);
   const resetDraft = useEventDraftStore((state) => state.resetDraft);
+  const lastPublishedDraftId = useEventDraftStore((state) => state.lastPublishedDraftId);
+  const clearLastPublishedDraftId = useEventDraftStore((state) => state.clearLastPublishedDraftId);
   const user = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
@@ -107,8 +109,12 @@ export default function EventDraftsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (lastPublishedDraftId) {
+        setDrafts((prev) => prev.filter((d) => d.id !== lastPublishedDraftId));
+        clearLastPublishedDraftId();
+      }
       void loadDrafts();
-    }, [loadDrafts]),
+    }, [loadDrafts, lastPublishedDraftId, clearLastPublishedDraftId]),
   );
 
   const handleResume = (event: EventResponse) => {

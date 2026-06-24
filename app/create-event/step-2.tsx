@@ -51,6 +51,17 @@ const createEventStepTwoSchema = z.object({
     message: 'Choose a valid end date and time.',
   }),
 }).superRefine((value, ctx) => {
+  const now = new Date();
+
+  if (value.scheduledAt < now) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Start date and time cannot be in the past.',
+      path: ['scheduledAt'],
+    });
+    return;
+  }
+
   const message = getEventDateRangeError(value.scheduledAt, value.endAt);
 
   if (message) {
@@ -457,6 +468,7 @@ export default function CreateEventStep2() {
           <DateTimePicker
             value={startAt}
             mode="date"
+            minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}

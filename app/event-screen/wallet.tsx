@@ -346,6 +346,8 @@ const TicketWalletScreen = () => {
                               location: getLocationLabel(item),
                               address: getAddressLabel(item),
                               dateTime: formatDateTime(item.event.scheduledAt),
+                              eventStartDateTime: formatDateTime(item.event.scheduledAt),
+                              eventEndDateTime: formatDateTime(item.event.endAt),
                               amount: String(item.totalAmount),
                               currency: item.currency,
                               currentShareId: item.currentShare?.id ?? "",

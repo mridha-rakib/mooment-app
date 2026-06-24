@@ -27,7 +27,7 @@ import {
     type JoinRequest,
     type JoinRequestStatus,
 } from "@/lib/events";
-import { getMyTicketPurchaseCounts } from "@/lib/payments";
+import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
 import { toggleMomentReaction, shareMoment, type MomentInteractionSummary } from "@/lib/moments";
@@ -183,6 +183,22 @@ const getTicketKey = (ticket: EventTicketPayload, index: number) =>
 const clampTicketQuantity = (quantity: number, ticket: EventTicketPayload) =>
   Math.min(Math.max(1, quantity), Math.min(2, Math.max(1, ticket.capacity)));
 
+const getTicketSalesEndDate = (ticket?: EventTicketPayload | null) => {
+  if (!ticket?.salesEndAt) {
+    return null;
+  }
+
+  const salesEndAt = new Date(ticket.salesEndAt);
+
+  return Number.isNaN(salesEndAt.getTime()) ? null : salesEndAt;
+};
+
+const isTicketSalesEnded = (ticket?: EventTicketPayload | null, nowMs = Date.now()) => {
+  const salesEndAt = getTicketSalesEndDate(ticket);
+
+  return Boolean(salesEndAt && salesEndAt.getTime() <= nowMs);
+};
+
 const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => {
   if (ticket.type === "free" || ticket.price <= 0) {
     return "Free";
@@ -316,8 +332,10 @@ const EventScreen = () => {
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [purchasedTicketCounts, setPurchasedTicketCounts] = useState<Record<string, number>>({});
+  const [ticketStats, setTicketStats] = useState<Record<string, TicketStatEntry> | undefined>(undefined);
   const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
   const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [selectedReward, setSelectedReward] = useState<EventRewardPayload | null>(null);
@@ -340,6 +358,12 @@ const EventScreen = () => {
 
     return explicitId ?? draftId;
   }, [draftId, params.eventId, params.id]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setCurrentTimeMs(Date.now()), 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const isHostMode =
     params.mode === "host" ||
@@ -450,6 +474,21 @@ const EventScreen = () => {
     }, [eventId, isLoading]),
   );
 
+  useEffect(() => {
+    if (!isHostMode || !eventId) return;
+    let cancelled = false;
+
+    getEventTicketStats(eventId)
+      .then((stats) => {
+        if (!cancelled) setTicketStats(stats);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHostMode, eventId]);
+
   const updateHostFollowState = (nextIsFollowing: boolean) => {
     setIsFollowing(nextIsFollowing);
     setEvent((currentEvent) => {
@@ -509,6 +548,7 @@ const EventScreen = () => {
   const selectedTicketPriceLabel = selectedTicket
     ? formatTicketPurchasePrice(selectedTicket, selectedTicketQuantity)
     : priceLabel;
+  const selectedTicketSalesEnded = isTicketSalesEnded(selectedTicket, currentTimeMs);
   const footerPriceLabel = selectedTicket
     ? `${selectedTicketQuantity} ${selectedTicketQuantity === 1 ? "ticket" : "tickets"}`
     : "From";
@@ -836,12 +876,19 @@ const EventScreen = () => {
     setSelectedTicketQuantity(1);
   };
 
+  const handleExpiredTicketPress = () => {
+    Alert.alert(
+      "Ticket sales ended",
+      "Sales for this ticket have ended. Please choose another available ticket.",
+    );
+  };
+
   const handleTicketQuantityChange = (
     ticket: EventTicketPayload,
     ticketKey: string,
     quantity: number,
   ) => {
-    if (ticket.capacity <= 0) {
+    if (ticket.capacity <= 0 || isTicketSalesEnded(ticket)) {
       return;
     }
 
@@ -851,6 +898,14 @@ const EventScreen = () => {
 
   const handleBuySelectedTicket = () => {
     if (!event || !selectedTicket || !selectedTicketKey) {
+      return;
+    }
+
+    if (isTicketSalesEnded(selectedTicket)) {
+      Alert.alert(
+        "Ticket sales ended",
+        "Sales for this ticket have ended. Please choose another available ticket.",
+      );
       return;
     }
 
@@ -1370,6 +1425,7 @@ const EventScreen = () => {
               scheduledAt={event?.scheduledAt ?? null}
               privacy={event?.privacy}
               purchasedTicketCounts={purchasedTicketCounts}
+              ticketStats={isHostMode ? ticketStats : undefined}
               isHostMode={isHostMode}
               deletingTicketId={deletingTicketId}
               deletingRewardId={deletingRewardId}
@@ -1377,6 +1433,7 @@ const EventScreen = () => {
               claimedRewardIds={claimedRewardIds}
               selectedTicketKey={selectedTicketKey}
               selectedTicketQuantity={selectedTicketQuantity}
+              currentTimeMs={currentTimeMs}
               selectedAccessSubTab={accessSubTab}
               joinRequests={joinRequests}
               myJoinRequestStatus={myJoinRequestStatus}
@@ -1385,6 +1442,7 @@ const EventScreen = () => {
               decliningJoinRequestId={decliningJoinRequestId}
               onSelectAccessSubTab={setAccessSubTab}
               onSelectTicket={handleSelectTicket}
+              onExpiredTicketPress={handleExpiredTicketPress}
               onTicketQuantityChange={handleTicketQuantityChange}
               onSubmitJoinRequest={handleSubmitJoinRequest}
               onAcceptJoinRequest={handleAcceptJoinRequest}
@@ -1481,15 +1539,21 @@ const EventScreen = () => {
               style={[
                 styles.buyBtn,
                 {
-                  backgroundColor: selectedTicket ? colors.primary : colors.card,
-                  opacity: 1,
+                  backgroundColor: selectedTicket && !selectedTicketSalesEnded ? colors.primary : colors.card,
+                  opacity: selectedTicketSalesEnded ? 0.55 : 1,
                 },
               ]}
               activeOpacity={0.8}
+              disabled={selectedTicketSalesEnded}
               onPress={handleTicketCtaPress}
             >
-              <Text style={[styles.buyBtnText, { color: selectedTicket ? colors.background : colors.textSecondary }]}>
-                {selectedTicket ? "Buy Now" : "Select Ticket"}
+              <Text
+                style={[
+                  styles.buyBtnText,
+                  { color: selectedTicket && !selectedTicketSalesEnded ? colors.background : colors.textSecondary },
+                ]}
+              >
+                {selectedTicketSalesEnded ? "Sales Ended" : selectedTicket ? "Buy Now" : "Select Ticket"}
               </Text>
             </TouchableOpacity>
           </>

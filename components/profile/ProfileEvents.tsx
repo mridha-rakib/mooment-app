@@ -3,13 +3,18 @@ import { BlurView } from "expo-blur";
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { cancelEvent, getMyProfileEvents, type EventResponse, type ProfileEventGroups } from "@/lib/events";
+import {
+  cancelEvent,
+  getMyProfileEvents,
+  getProfileEvents,
+  type EventResponse,
+  type ProfileEventGroups,
+} from "@/lib/events";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import FeedPost, { PostData } from "../post/FeedPost";
 
-const ACTIVE_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
 const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
@@ -21,6 +26,7 @@ type ProfileEventsProps = {
   onCommentPress: (post: PostData) => void;
   onSharePress: (post: PostData) => void;
   isOwnProfile?: boolean;
+  profileUserId: string;
 };
 
 const formatTimeAgo = (createdAt?: string | null) => {
@@ -75,15 +81,16 @@ const formatEventDateTime = (scheduledAt?: string | null) => {
   return `${eventDate} • ${eventTime}`;
 };
 
-const isLiveEvent = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
+const isLiveEvent = (event: EventResponse) => {
+  if (!event.scheduledAt || !event.endAt || event.status === "cancelled") {
     return false;
   }
 
-  const scheduledTime = new Date(scheduledAt).getTime();
+  const scheduledTime = new Date(event.scheduledAt).getTime();
+  const endTime = new Date(event.endAt).getTime();
   const now = Date.now();
 
-  return Number.isFinite(scheduledTime) && scheduledTime <= now && now - scheduledTime <= ACTIVE_EVENT_WINDOW_MS;
+  return Number.isFinite(scheduledTime) && Number.isFinite(endTime) && scheduledTime <= now && endTime >= now;
 };
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
@@ -142,16 +149,20 @@ const mapEventToPost = (
   event: EventResponse,
   userLocation: [number, number] | null,
   fallbackAuthor: { name: string; avatar: string },
+  filter: "active" | "past",
 ): PostData => {
-  const isLive = isLiveEvent(event.scheduledAt);
+  const isLive = filter === "active" && isLiveEvent(event);
+  const eventStateLabel = filter === "past"
+    ? event.status === "cancelled" ? "Cancelled" : "Past"
+    : isLive ? "Live" : "Upcoming";
   const categoryTags = (event.categories?.length ? event.categories : event.category ? [event.category] : ["Event"])
     .map((category) => ({ label: category, bg: "#FFFFFF", color: "#000000" }));
   const tags = [
     ...categoryTags,
     {
-      label: isLive ? "Live" : "Upcoming",
-      bg: isLive ? "rgba(22, 216, 105, 0.2)" : "rgba(255, 125, 84, 0.2)",
-      color: isLive ? "#16D869" : "#FF7D54",
+      label: eventStateLabel,
+      bg: isLive ? "rgba(22, 216, 105, 0.2)" : filter === "past" ? "rgba(160, 160, 160, 0.2)" : "rgba(255, 125, 84, 0.2)",
+      color: isLive ? "#16D869" : filter === "past" ? "#B6B6C2" : "#FF7D54",
     },
   ];
   const bannerPreviewUri = event.bannerImageKey ? resolveStorageUrl(event.bannerImageKey) : null;
@@ -194,7 +205,12 @@ const mapEventToPost = (
   };
 };
 
-export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfile = true }: ProfileEventsProps) {
+export default function ProfileEvents({
+  onCommentPress,
+  onSharePress,
+  isOwnProfile = true,
+  profileUserId,
+}: ProfileEventsProps) {
   const [filter, setFilter] = useState<'active' | 'past'>('active');
   const [events, setEvents] = useState<ProfileEventGroups>(EMPTY_PROFILE_EVENTS);
   const user = useAuthStore((state) => state.user);
@@ -213,8 +229,10 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
     [user?.avatarKey, user?.name],
   );
   const eventPosts = useMemo(
-    () => events[filter].map((event) => mapEventToPost(event, userLocation, fallbackAuthor)),
-    [events, fallbackAuthor, filter, userLocation],
+    () => events[filter]
+      .filter((event) => event.userId.toLowerCase() === profileUserId.toLowerCase())
+      .map((event) => mapEventToPost(event, userLocation, fallbackAuthor, filter)),
+    [events, fallbackAuthor, filter, profileUserId, userLocation],
   );
 
   const handleCancelEventPost = useCallback(
@@ -232,10 +250,10 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
             style: "destructive",
             onPress: async () => {
               try {
-                await cancelEvent(eventId);
+                const cancelledEvent = await cancelEvent(eventId);
                 setEvents((prev) => ({
                   active: prev.active.filter((e) => e.id !== eventId),
-                  past: prev.past.filter((e) => e.id !== eventId),
+                  past: [cancelledEvent, ...prev.past.filter((e) => e.id !== eventId)],
                 }));
               } catch (error) {
                 Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
@@ -254,7 +272,9 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
 
       const loadEvents = async () => {
         try {
-          const profileEvents = isOwnProfile ? await getMyProfileEvents() : EMPTY_PROFILE_EVENTS;
+          const profileEvents = isOwnProfile
+            ? await getMyProfileEvents()
+            : await getProfileEvents(profileUserId);
 
           if (isActive) {
             setEvents(profileEvents);
@@ -271,7 +291,7 @@ export default function ProfileEvents({ onCommentPress, onSharePress, isOwnProfi
       return () => {
         isActive = false;
       };
-    }, [isOwnProfile]),
+    }, [isOwnProfile, profileUserId]),
   );
 
   return (

@@ -5,14 +5,17 @@ import {
 } from '@/hooks/useTheme';
 import type { DirectMessageConversationResponse, GroupConversationResponse } from '@/lib/chat';
 import { getDirectMessageConversations, getGroupConversations } from '@/lib/chat';
+import { createRealtimeSocket } from '@/lib/realtime';
+import { useAuthStore } from '@/stores/authStore';
 import {
     Feather,
     Ionicons
 } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, {
     useCallback,
     useEffect,
+    useRef,
     useState
 } from 'react';
 import {
@@ -181,6 +184,7 @@ const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
 export default function MessagesScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const { accessToken, user: currentUser } = useAuthStore();
   const [topTab, setTopTab] = useState<'All' | 'Unread' | 'Blocked'>('All');
   const [subTab, setSubTab] = useState<'DMs' | 'Groups'>('DMs');
   const [roomTab, setRoomTab] = useState<'Event Rooms' | 'General Rooms'>('Event Rooms');
@@ -191,30 +195,44 @@ export default function MessagesScreen() {
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
+  const currentUserIdRef = useRef<string | undefined>(currentUser?.id);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+
+      const loadDirectMessages = async () => {
+        setIsDmsLoading(true);
+        setDmsError(null);
+
+        try {
+          const dms = await getDirectMessageConversations();
+
+          if (isMounted) {
+            setDmConversations(dms.map(toConversationData));
+          }
+        } catch {
+          if (isMounted) {
+            setDmsError('Unable to load DMs.');
+          }
+        } finally {
+          if (isMounted) {
+            setIsDmsLoading(false);
+          }
+        }
+      };
+
+      void loadDirectMessages();
+
+      return () => {
+        isMounted = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     let isMounted = true;
-
-    const loadDirectMessages = async () => {
-      setIsDmsLoading(true);
-      setDmsError(null);
-
-      try {
-        const dms = await getDirectMessageConversations();
-
-        if (isMounted) {
-          setDmConversations(dms.map(toConversationData));
-        }
-      } catch {
-        if (isMounted) {
-          setDmsError('Unable to load DMs.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsDmsLoading(false);
-        }
-      }
-    };
 
     const loadGroups = async () => {
       setIsGroupsLoading(true);
@@ -237,13 +255,61 @@ export default function MessagesScreen() {
       }
     };
 
-    void loadDirectMessages();
     void loadGroups();
 
     return () => {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUser?.id;
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const socket = createRealtimeSocket({
+      accessToken,
+      onUserOnline: (userId) => {
+        setDmConversations((prev) =>
+          prev.map((c) => (c.id === userId ? { ...c, isOnline: true } : c)),
+        );
+      },
+      onUserOffline: (userId) => {
+        setDmConversations((prev) =>
+          prev.map((c) => (c.id === userId ? { ...c, isOnline: false } : c)),
+        );
+      },
+      onDirectMessage: (message) => {
+        const currentUserId = currentUserIdRef.current;
+        const partnerId =
+          message.senderId === currentUserId ? message.recipientId : message.senderId;
+
+        setDmConversations((prev) => {
+          const idx = prev.findIndex((c) => c.id === partnerId);
+          if (idx === -1) return prev;
+
+          const updated = [...prev];
+          const conv = { ...updated[idx] };
+          conv.lastMessage = message.text;
+          conv.time = formatConversationTime(message.createdAt);
+          if (message.senderId !== currentUserId) {
+            conv.unread = (conv.unread ?? 0) + 1;
+          }
+          updated.splice(idx, 1);
+          return [conv, ...updated];
+        });
+      },
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, [accessToken]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -300,7 +366,7 @@ export default function MessagesScreen() {
   const renderConvoItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
       style={styles.convoCard}
-      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar } })}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar, isOnline: item.isOnline ? 'true' : 'false', isBlocked: item.isBlocked ? 'true' : 'false' } })}
       activeOpacity={0.85}
     >
       {renderAvatar(item)}

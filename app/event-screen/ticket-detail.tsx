@@ -10,7 +10,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,8 +28,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   cancelTicketShare,
+  getEventTicketStats,
   shareTicketWithFriend,
   type TicketShare,
+  type TicketStatEntry,
   type TicketWalletPass,
 } from "@/lib/payments";
 import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
@@ -146,6 +148,8 @@ const TicketDetailScreen = () => {
     location?: string;
     address?: string;
     dateTime?: string;
+    eventStartDateTime?: string;
+    eventEndDateTime?: string;
     amount?: string;
     currency?: string;
     walletSource?: string;
@@ -181,8 +185,10 @@ const TicketDetailScreen = () => {
     return event.tickets.find((item) => item.id === ticketId) ?? null;
   }, [event, ticketId]);
 
+  const [ticketStat, setTicketStat] = useState<TicketStatEntry | null>(null);
+
   const bannerImageUri = resolveStorageUrl(event?.bannerOriginalImageKey ?? event?.bannerImageKey, DEFAULT_BANNER);
-  const hostAvatarUri = resolveStorageUrl(event?.host?.avatarUrl ?? event?.host?.avatarKey, DEFAULT_AVATAR);
+  const hostAvatarUri = resolveStorageUrl(event?.host?.avatarKey, DEFAULT_AVATAR);
   const hostHandle = getHostHandle(event);
 
   useFocusEffect(
@@ -235,6 +241,21 @@ const TicketDetailScreen = () => {
     }, [eventId, isWalletTicket, ticketId]),
   );
 
+  useEffect(() => {
+    if (!isHostMode || !eventId || !ticketId) return;
+    let cancelled = false;
+
+    getEventTicketStats(eventId)
+      .then((stats) => {
+        if (!cancelled) setTicketStat(stats[ticketId] ?? null);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHostMode, eventId, ticketId]);
+
   const handleEditTicket = () => {
     if (!event || !ticket || !isHostMode) {
       return;
@@ -257,14 +278,22 @@ const TicketDetailScreen = () => {
     });
   };
 
+  const availableLabel = isHostMode && ticketStat
+    ? `${ticketStat.available} left`
+    : `${ticket?.capacity ?? 0} left`;
+
   const details = [
     { label: "Ticket", value: ticket?.name ?? "Ticket unavailable" },
     { label: "Type", value: ticket?.type === "pay" ? "Paid" : "Free" },
-    { label: "Available", value: `${ticket?.capacity ?? 0} left` },
+    ...(isHostMode && ticketStat
+      ? [{ label: "Sold", value: `${ticketStat.sold} tickets`, highlight: true }]
+      : []),
+    { label: "Available", value: availableLabel },
     { label: "Price", value: formatPrice(ticket) },
     { label: "Sales end", value: formatDateTime(ticket?.salesEndAt) },
     { label: "Event", value: event?.name ?? "Event unavailable" },
-    { label: "Date and time", value: formatDateTime(event?.scheduledAt) },
+    { label: "Event start", value: formatDateTime(event?.scheduledAt) },
+    { label: "Event end", value: formatDateTime(event?.endAt) },
     { label: "Venue", value: event?.location?.venue ?? "Venue TBA" },
     { label: "Address", value: event?.location?.address ?? event?.location?.searchLabel ?? "Address TBA" },
   ];
@@ -282,6 +311,8 @@ const TicketDetailScreen = () => {
   const walletLocation = getParamValue(params.location, "Location TBA");
   const walletAddress = getParamValue(params.address, "Address TBA");
   const walletDateTime = getParamValue(params.dateTime, "Date TBA");
+  const walletEventStartDateTime = getParamValue(params.eventStartDateTime, walletDateTime);
+  const walletEventEndDateTime = getParamValue(params.eventEndDateTime, "Date TBA");
   const walletAmount = formatWalletAmount(params.amount, params.currency);
   const walletSource = getParamValue(params.walletSource, "owned");
   const initialWalletTicketPasses = useMemo<TicketWalletPass[]>(() => {
@@ -378,14 +409,16 @@ const TicketDetailScreen = () => {
   const walletDetails = [
     { label: "Ticket No", value: walletTicketNo },
     { label: "Host", value: walletHostName },
-    { label: "Venue", value: walletEventTitle },
+    { label: "Event", value: walletEventTitle },
+    { label: "Venue", value: walletLocation },
     { label: "Address", value: walletAddress },
     { label: "Paid Tickets", value: `${walletTicketName} x ${walletPaidQuantity}` },
     ...(walletFreeQuantity > 0
       ? [{ label: "Rewarded Tickets", value: `${walletTicketName} x ${walletFreeQuantity}` }]
       : []),
     { label: "Total Tickets", value: `${walletTicketName} x ${walletPurchaseCount}` },
-    { label: "Date and time", value: walletDateTime },
+    { label: "Event start", value: walletEventStartDateTime },
+    { label: "Event end", value: walletEventEndDateTime },
     {
       label: walletHasShareQr ? "Amount paid" : "Amount Pending",
       value: walletAmount,
@@ -862,7 +895,13 @@ const TicketDetailScreen = () => {
                 <View key={item.label}>
                   <View style={styles.detailRow}>
                     <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{item.label}</Text>
-                    <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={2}>
+                    <Text
+                      style={[
+                        styles.detailValue,
+                        { color: item.highlight ? "#1D9E75" : colors.text },
+                      ]}
+                      numberOfLines={2}
+                    >
                       {item.value}
                     </Text>
                   </View>

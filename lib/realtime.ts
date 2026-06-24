@@ -48,6 +48,8 @@ type RealtimeEvent =
   | { type: "group:message"; message: GroupRealtimeMessage }
   | { type: "live:message"; roomId: string; message: LiveRealtimeMessage }
   | { type: "notification:new"; notification: NotificationItem }
+  | { type: "user:online"; userId: string }
+  | { type: "user:offline"; userId: string }
   | { type: "error"; code: string; message: string }
   | { type: "pong" };
 
@@ -60,6 +62,8 @@ type RealtimeSocketOptions = {
   onLiveMessage?: (roomId: string, message: LiveRealtimeMessage) => void;
   onNotification?: (notification: NotificationItem) => void;
   onReady?: () => void;
+  onUserOnline?: (userId: string) => void;
+  onUserOffline?: (userId: string) => void;
 };
 
 const buildRealtimeUrl = (accessToken: string) => {
@@ -88,6 +92,8 @@ export const createRealtimeSocket = ({
   onLiveMessage,
   onNotification,
   onReady,
+  onUserOnline,
+  onUserOffline,
 }: RealtimeSocketOptions) => {
   const socket = new WebSocket(buildRealtimeUrl(accessToken));
   const pendingMessages: string[] = [];
@@ -144,6 +150,16 @@ export const createRealtimeSocket = ({
 
       if (payload.type === "notification:new") {
         onNotification?.(payload.notification);
+        return;
+      }
+
+      if (payload.type === "user:online") {
+        onUserOnline?.(payload.userId);
+        return;
+      }
+
+      if (payload.type === "user:offline") {
+        onUserOffline?.(payload.userId);
         return;
       }
 

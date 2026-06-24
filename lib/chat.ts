@@ -102,6 +102,10 @@ export const createGroup = async (payload: {
   return group as GroupConversationResponse;
 };
 
+export const deleteConversation = async (friendId: string): Promise<void> => {
+  await api.delete(`/chat/dms/${encodeURIComponent(friendId)}`);
+};
+
 export const getGroupMessages = async (
   groupId: string,
   options?: { before?: string; limit?: number },

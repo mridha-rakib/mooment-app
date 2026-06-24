@@ -63,6 +63,8 @@ type EventDraftState = {
   deleteTicket: (localId: string) => void;
   saveTicket: (ticket: Partial<EventDraftTicket>) => Promise<EventResponse>;
   removeTicket: (localId: string) => Promise<EventResponse | null>;
+  lastPublishedDraftId: string | null;
+  clearLastPublishedDraftId: () => void;
   saveDraft: () => Promise<EventResponse>;
   publish: () => Promise<EventResponse>;
   discardDraft: () => Promise<void>;
@@ -213,6 +215,8 @@ let draftSaveQueue: Promise<unknown> = Promise.resolve();
 
 export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   ...createInitialState(),
+  lastPublishedDraftId: null,
+  clearLastPublishedDraftId: () => set({ lastPublishedDraftId: null }),
 
   setStepOne: ({ name, description, bannerImageUri, bannerOriginalImageUri, bannerImageDisplay }) => {
     set((state) => ({
@@ -418,6 +422,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       bannerImageKey: event.bannerImageKey ?? state.bannerImageKey,
       bannerOriginalImageKey: event.bannerOriginalImageKey ?? state.bannerOriginalImageKey,
       bannerImageDisplay: event.bannerImageDisplay ?? state.bannerImageDisplay,
+      lastPublishedDraftId: state.draftId,
     });
 
     return event;

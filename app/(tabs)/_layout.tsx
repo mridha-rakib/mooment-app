@@ -1,13 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { Tabs as ExpoTabs } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Path, Svg } from "react-native-svg";
 import AddOptionsModal from "../../components/modals/AddOptionsModal";
 import { useTheme } from "@/hooks/useTheme";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 
 export default function TabLayout() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
@@ -16,6 +17,7 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const tabAvatarUri = user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null;
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
 
   useEffect(() => {
     setTabAvatarError(false);
@@ -68,15 +70,24 @@ export default function TabLayout() {
           name="explore"
           options={{
             tabBarIcon: ({ focused }) => (
-              focused ? (
-                <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                  <Path d="M11.5048 16.8981H10.8929C8.91458 16.8981 7.92542 16.8981 7.5038 16.2459C7.08217 15.5937 7.4839 14.6851 8.28737 12.8678L10.7029 7.40431C11.4334 5.752 11.7987 4.92584 12.5073 4.46292C13.2159 4 14.1152 4 15.914 4H18.6998C20.8849 4 21.9774 4 22.3894 4.7138C22.8016 5.4276 22.2596 6.38117 21.1754 8.28831L19.7462 10.8025C19.2073 11.7506 18.9378 12.2247 18.9416 12.6127C18.9465 13.117 19.2146 13.5816 19.6478 13.836C19.9812 14.0319 20.5242 14.0319 21.6105 14.0319C22.9837 14.0319 23.6704 14.0319 24.028 14.2696C24.4925 14.5784 24.7357 15.1309 24.6505 15.6843C24.5849 16.1101 24.123 16.6208 23.1993 17.6423L15.8192 25.8031C14.3696 27.406 13.6448 28.2075 13.1581 27.9539C12.6714 27.7001 12.9051 26.6429 13.3725 24.5283L14.2882 20.3861C14.6441 18.776 14.8221 17.9709 14.3941 17.4345C13.9661 16.8981 13.1457 16.8981 11.5048 16.8981Z" fill={colors.text} />
-                </Svg>
-              ) : (
-                <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                  <Path d="M11.5048 16.8981H10.8929C8.91458 16.8981 7.92542 16.8981 7.5038 16.2459C7.08217 15.5937 7.4839 14.6851 8.28737 12.8678L10.7029 7.40431C11.4334 5.752 11.7987 4.92584 12.5073 4.46292C13.2159 4 14.1152 4 15.914 4H18.6998C20.8849 4 21.9774 4 22.3894 4.7138C22.8016 5.4276 22.2596 6.38117 21.1754 8.28831L19.7462 10.8025C19.2073 11.7506 18.9378 12.2247 18.9416 12.6127C18.9465 13.117 19.2146 13.5816 19.6478 13.836C19.9812 14.0319 20.5242 14.0319 21.6105 14.0319C22.9837 14.0319 23.6704 14.0319 24.028 14.2696C24.4925 14.5784 24.7357 15.1309 24.6505 15.6843C24.5849 16.1101 24.123 16.6208 23.1993 17.6423L15.8192 25.8031C14.3696 27.406 13.6448 28.2075 13.1581 27.9539C12.6714 27.7001 12.9051 26.6429 13.3725 24.5283L14.2882 20.3861C14.6441 18.776 14.8221 17.9709 14.3941 17.4345C13.9661 16.8981 13.1457 16.8981 11.5048 16.8981Z" stroke={colors.textSecondary} strokeWidth={2} strokeLinejoin="round" />
-                </Svg>
-              )
+              <View>
+                {focused ? (
+                  <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <Path d="M11.5048 16.8981H10.8929C8.91458 16.8981 7.92542 16.8981 7.5038 16.2459C7.08217 15.5937 7.4839 14.6851 8.28737 12.8678L10.7029 7.40431C11.4334 5.752 11.7987 4.92584 12.5073 4.46292C13.2159 4 14.1152 4 15.914 4H18.6998C20.8849 4 21.9774 4 22.3894 4.7138C22.8016 5.4276 22.2596 6.38117 21.1754 8.28831L19.7462 10.8025C19.2073 11.7506 18.9378 12.2247 18.9416 12.6127C18.9465 13.117 19.2146 13.5816 19.6478 13.836C19.9812 14.0319 20.5242 14.0319 21.6105 14.0319C22.9837 14.0319 23.6704 14.0319 24.028 14.2696C24.4925 14.5784 24.7357 15.1309 24.6505 15.6843C24.5849 16.1101 24.123 16.6208 23.1993 17.6423L15.8192 25.8031C14.3696 27.406 13.6448 28.2075 13.1581 27.9539C12.6714 27.7001 12.9051 26.6429 13.3725 24.5283L14.2882 20.3861C14.6441 18.776 14.8221 17.9709 14.3941 17.4345C13.9661 16.8981 13.1457 16.8981 11.5048 16.8981Z" fill={colors.text} />
+                  </Svg>
+                ) : (
+                  <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <Path d="M11.5048 16.8981H10.8929C8.91458 16.8981 7.92542 16.8981 7.5038 16.2459C7.08217 15.5937 7.4839 14.6851 8.28737 12.8678L10.7029 7.40431C11.4334 5.752 11.7987 4.92584 12.5073 4.46292C13.2159 4 14.1152 4 15.914 4H18.6998C20.8849 4 21.9774 4 22.3894 4.7138C22.8016 5.4276 22.2596 6.38117 21.1754 8.28831L19.7462 10.8025C19.2073 11.7506 18.9378 12.2247 18.9416 12.6127C18.9465 13.117 19.2146 13.5816 19.6478 13.836C19.9812 14.0319 20.5242 14.0319 21.6105 14.0319C22.9837 14.0319 23.6704 14.0319 24.028 14.2696C24.4925 14.5784 24.7357 15.1309 24.6505 15.6843C24.5849 16.1101 24.123 16.6208 23.1993 17.6423L15.8192 25.8031C14.3696 27.406 13.6448 28.2075 13.1581 27.9539C12.6714 27.7001 12.9051 26.6429 13.3725 24.5283L14.2882 20.3861C14.6441 18.776 14.8221 17.9709 14.3941 17.4345C13.9661 16.8981 13.1457 16.8981 11.5048 16.8981Z" stroke={colors.textSecondary} strokeWidth={2} strokeLinejoin="round" />
+                  </Svg>
+                )}
+                {unreadCount > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             ),
           }}
         />
@@ -156,6 +167,24 @@ const styles = StyleSheet.create({
   profileImageFallback: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#F2245C",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "700",
+    lineHeight: 12,
   },
 });
 

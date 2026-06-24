@@ -15,6 +15,7 @@ type ProfileContentProps = {
   onDeletePost?: (post: PostData) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   isOwnProfile?: boolean;
+  profileUserId: string;
 };
 
 export default function ProfileContent({ 
@@ -24,7 +25,8 @@ export default function ProfileContent({
   onSharePress,
   onDeletePost,
   onInteractionChange,
-  isOwnProfile = true 
+  isOwnProfile = true,
+  profileUserId,
 }: ProfileContentProps) {
   const { colors } = useTheme();
   
@@ -55,6 +57,7 @@ export default function ProfileContent({
           onCommentPress={onCommentPress} 
           onSharePress={onSharePress}
           isOwnProfile={isOwnProfile}
+          profileUserId={profileUserId}
         />
       )}
       

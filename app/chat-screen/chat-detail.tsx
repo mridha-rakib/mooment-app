@@ -26,10 +26,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
+import { deleteConversation, getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
 import type { DirectChatMessageResponse, GroupMessageResponse } from '@/lib/chat';
 import { createRealtimeSocket } from '@/lib/realtime';
 import type { DirectRealtimeMessage, GroupRealtimeMessage } from '@/lib/realtime';
+import { blockUser, unblockUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
@@ -240,7 +241,7 @@ function EventBubble({ msg }: { msg: Message }) {
 // ── Main Screen ────────────────────────────────────────────────────────────
 export default function ChatDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; name: string; avatar: string; isGroup?: string }>();
+  const params = useLocalSearchParams<{ id: string; name: string; avatar: string; isGroup?: string; isOnline?: string; isBlocked?: string }>();
   const accessToken = useAuthStore((state) => state.accessToken);
   const currentUser = useAuthStore((state) => state.user);
   const [inputText, setInputText] = useState('');
@@ -248,9 +249,14 @@ export default function ChatDetailScreen() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [showAttach, setShowAttach] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
+  const [isFriendOnline, setIsFriendOnline] = useState(params.isOnline === 'true');
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(params.isBlocked === 'true');
+  const [isBlockLoading, setIsBlockLoading] = useState(false);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [moreMenuTop, setMoreMenuTop] = useState(0);
   const listRef = useRef<FlatList>(null);
+  const moreMenuBtnRef = useRef<TouchableOpacity>(null);
   const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
   const ownTypingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const friendTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -459,6 +465,16 @@ export default function ChatDetailScreen() {
             setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
           }
         : undefined,
+      onUserOnline: isGroup
+        ? undefined
+        : (userId) => {
+            if (userId === friendId) setIsFriendOnline(true);
+          },
+      onUserOffline: isGroup
+        ? undefined
+        : (userId) => {
+            if (userId === friendId) setIsFriendOnline(false);
+          },
     });
 
     realtimeRef.current = realtime;
@@ -538,12 +554,24 @@ export default function ChatDetailScreen() {
           <Image source={{ uri: avatar }} style={styles.headerAvatar} />
           <View>
             <Text style={styles.headerName}>{name}</Text>
-            <Text style={styles.headerStatus}>{isFriendTyping ? 'Typing...' : 'Online'}</Text>
+            <Text style={styles.headerStatus}>
+              {isFriendTyping ? 'Typing...' : isFriendOnline ? 'Online' : 'Offline'}
+            </Text>
           </View>
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerBtn} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(true)}>
+          <TouchableOpacity
+            ref={moreMenuBtnRef}
+            style={styles.headerBtn}
+            activeOpacity={0.8}
+            onPress={() => {
+              moreMenuBtnRef.current?.measure((_x, _y, _w, h, _pageX, pageY) => {
+                setMoreMenuTop(pageY + h + 6);
+              });
+              setIsMoreMenuVisible(true);
+            }}
+          >
             <Feather name="more-vertical" size={20} color="#8E8E9B" />
           </TouchableOpacity>
         </View>
@@ -666,22 +694,38 @@ export default function ChatDetailScreen() {
       {/* ── More Options Modal ── */}
       <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
-          <View style={styles.moreMenuContainer}>
+          <View style={[styles.moreMenuContainer, { top: moreMenuTop }]}>
             <View style={styles.moreMenuBox}>
               <TouchableOpacity
                 style={styles.moreMenuItem}
                 activeOpacity={0.8}
-                onPress={() => {
-                  setIsBlocked(!isBlocked);
+                disabled={isBlockLoading}
+                onPress={async () => {
                   setIsMoreMenuVisible(false);
+                  if (!isObjectId(friendId)) return;
+                  setIsBlockLoading(true);
+                  try {
+                    if (isBlocked) {
+                      await unblockUser(friendId);
+                    } else {
+                      await blockUser(friendId);
+                    }
+                    setIsBlocked((prev) => !prev);
+                  } finally {
+                    setIsBlockLoading(false);
+                  }
                 }}
               >
-                <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+                {isBlockLoading ? (
+                  <Spinner size="small" color="#FFFFFF" style={styles.moreMenuIcon} />
+                ) : (
+                  <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
+                )}
                 <Text style={styles.moreMenuText}>{isBlocked ? 'Unblock' : 'Block'}</Text>
               </TouchableOpacity>
 
-              <View style={styles.moreMenuSeparator} />
-
+              {/* Create Plan — hidden until feature is ready */}
+              {/* <View style={styles.moreMenuSeparator} />
               <TouchableOpacity
                 style={styles.moreMenuItem}
                 activeOpacity={0.8}
@@ -692,20 +736,39 @@ export default function ChatDetailScreen() {
               >
                 <Feather name="plus" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
                 <Text style={styles.moreMenuText}>Create Plan</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
-              <View style={styles.moreMenuSeparator} />
-
+              {/* Share Calendar — hidden until feature is ready */}
+              {/* <View style={styles.moreMenuSeparator} />
               <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
                 <Feather name="calendar" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
                 <Text style={styles.moreMenuText}>Share Calendar</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               <View style={styles.moreMenuSeparator} />
 
-              <TouchableOpacity style={styles.moreMenuItem} activeOpacity={0.8} onPress={() => setIsMoreMenuVisible(false)}>
-                <Feather name="trash-2" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
-                <Text style={styles.moreMenuText}>Delete</Text>
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                activeOpacity={0.8}
+                disabled={isDeleteLoading}
+                onPress={async () => {
+                  setIsMoreMenuVisible(false);
+                  if (!isObjectId(friendId)) return;
+                  setIsDeleteLoading(true);
+                  try {
+                    await deleteConversation(friendId);
+                    router.back();
+                  } finally {
+                    setIsDeleteLoading(false);
+                  }
+                }}
+              >
+                {isDeleteLoading ? (
+                  <Spinner size="small" color="#F2245C" style={styles.moreMenuIcon} />
+                ) : (
+                  <Feather name="trash-2" size={18} color="#F2245C" style={styles.moreMenuIcon} />
+                )}
+                <Text style={[styles.moreMenuText, { color: '#F2245C' }]}>Delete Conversation</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -836,8 +899,8 @@ const styles = StyleSheet.create({
 
   /* Modal */
   modalOverlay: { flex: 1, backgroundColor: 'transparent' },
-  moreMenuContainer: { position: 'absolute', top: 155, right: 16 },
-  moreMenuBox: { width: 160, backgroundColor: 'rgba(30, 29, 33, 0.95)', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  moreMenuContainer: { position: 'absolute', right: 16 },
+  moreMenuBox: { width: 210, backgroundColor: 'rgba(30, 29, 33, 0.95)', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   moreMenuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   moreMenuIcon: { marginRight: 12 },
   moreMenuText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },

@@ -125,6 +125,7 @@ export default function ProfileView({
             ));
           }}
           isOwnProfile={isOwnProfile}
+          profileUserId={user.id}
         />
         
         <View style={{ height: 100 }} />
