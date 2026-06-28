@@ -23,7 +23,7 @@ const getInitial = (name?: string | null) => {
 };
 
 export default function UserAvatar({ uri, name, size, style, textStyle, iconSize }: UserAvatarProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [imageFailed, setImageFailed] = useState(false);
   const imageUri = uri?.trim() || null;
   const initial = useMemo(() => getInitial(name), [name]);
@@ -54,7 +54,7 @@ export default function UserAvatar({ uri, name, size, style, textStyle, iconSize
   }
 
   return (
-    <View style={[avatarStyle, styles.fallback, { backgroundColor: colors.card }]}>
+    <View style={[avatarStyle, styles.fallback, { backgroundColor: isDark ? '#2C2C2E' : '#C7C7CC' }]}>
       {initial ? (
         <Text
           style={[
