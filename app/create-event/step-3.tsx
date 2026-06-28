@@ -59,6 +59,7 @@ export default function CreateEventStep3() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
+  const isAdvancingRef = useRef(false);
   const searchLabel = draftLocation.searchLabel ?? address;
 
   useEffect(() => () => {
@@ -161,8 +162,12 @@ export default function CreateEventStep3() {
     }
   };
 
+  const handleNextDraftSaveError = (error: unknown) => {
+    Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+  };
+
   const handleNext = async () => {
-    if (isSaving) return;
+    if (isSaving || isAdvancingRef.current) return;
     const trimmedAddress = address.trim();
     const trimmedVenue = venue.trim();
     const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
@@ -190,6 +195,19 @@ export default function CreateEventStep3() {
 
     setErrors({});
     persistStepThree();
+
+    if (!isEditingPublished) {
+      isAdvancingRef.current = true;
+      const draftSave = saveDraft();
+      router.push('/create-event/step-4');
+      void draftSave
+        .catch(handleNextDraftSaveError)
+        .finally(() => {
+          isAdvancingRef.current = false;
+        });
+      return;
+    }
+
     setIsSaving(true);
 
     try {

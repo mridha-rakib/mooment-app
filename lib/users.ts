@@ -57,8 +57,11 @@ export type UserResponse = {
   name: string;
   username?: string;
   email?: string;
+  accountType?: "personal" | "business";
   avatarKey?: string | null;
+  avatarUrl?: string | null;
   bio?: string | null;
+  isFollowing?: boolean;
 };
 
 const parseFollowStatus = (payload: unknown, fallbackUserId: string): FollowStatusResponse => {
@@ -100,7 +103,7 @@ export const getFriendUsers = async (search?: string, limit = 100): Promise<Frie
 
 export const getUserById = async (userId: string): Promise<UserResponse> => {
   const response = await api.get(`/users/${encodeURIComponent(userId)}`);
-  const user = response.data?.data as UserResponse | undefined;
+  const user = (response.data?.data?.user ?? response.data?.data) as UserResponse | undefined;
 
   if (!user) {
     throw new Error("The user response was incomplete.");

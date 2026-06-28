@@ -24,7 +24,10 @@ export type EventTicketPayload = {
   type: EventTicketType;
   price: number;
   capacity: number;
+  availableCount?: number | null;
 };
+
+export type EventTicketRequestPayload = Omit<EventTicketPayload, "availableCount">;
 
 export type EventRewardPayload = {
   id?: string;
@@ -97,7 +100,7 @@ export type EventPayload = {
   scheduledAt?: string | null;
   endAt?: string | null;
   location?: EventLocation | null;
-  tickets?: EventTicketPayload[];
+  tickets?: EventTicketRequestPayload[];
   privacy?: EventPrivacy;
 };
 
@@ -108,7 +111,7 @@ export type PublishedEventPayload = EventPayload & {
   scheduledAt: string;
   endAt: string;
   location: EventLocation;
-  tickets: EventTicketPayload[];
+  tickets: EventTicketRequestPayload[];
   privacy: EventPrivacy;
 };
 
@@ -136,6 +139,8 @@ export type EventResponse = {
   tickets: EventTicketPayload[];
   rewards: EventRewardPayload[];
   privacy: EventPrivacy;
+  memberCount?: number;
+  isMember?: boolean;
   myJoinRequestStatus?: JoinRequestStatus | null;
   publishedAt?: string | null;
   startedAt?: string | null;
@@ -156,6 +161,14 @@ export const ticketAlreadyHasReward = (
 ));
 
 export type EventMapQuery = {
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+  limit?: number;
+};
+
+export type EventFeedQuery = {
+  category?: EventCategory | string;
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
@@ -254,7 +267,7 @@ export const getEventTicket = async (eventId: string, ticketId: string): Promise
 
 export const createEventTicket = async (
   eventId: string,
-  payload: EventTicketPayload,
+  payload: EventTicketRequestPayload,
 ): Promise<EventResponse> => {
   const response = await api.post(`/events/${encodeURIComponent(eventId)}/tickets`, payload);
 
@@ -264,7 +277,7 @@ export const createEventTicket = async (
 export const updateEventTicket = async (
   eventId: string,
   ticketId: string,
-  payload: Partial<Omit<EventTicketPayload, "id">>,
+  payload: Partial<Omit<EventTicketRequestPayload, "id">>,
 ): Promise<EventResponse> => {
   const response = await api.patch(
     `/events/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
@@ -314,7 +327,7 @@ export const deleteEventReward = async (eventId: string, rewardId: string): Prom
 
 export const createDraftTicket = async (
   eventId: string,
-  payload: EventTicketPayload,
+  payload: EventTicketRequestPayload,
 ): Promise<EventResponse> => {
   const response = await api.post(`/events/drafts/${encodeURIComponent(eventId)}/tickets`, payload);
 
@@ -324,7 +337,7 @@ export const createDraftTicket = async (
 export const updateDraftTicket = async (
   eventId: string,
   ticketId: string,
-  payload: Partial<Omit<EventTicketPayload, "id">>,
+  payload: Partial<Omit<EventTicketRequestPayload, "id">>,
 ): Promise<EventResponse> => {
   const response = await api.patch(
     `/events/drafts/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
@@ -388,8 +401,8 @@ export const getMyDraftEvents = async (): Promise<EventResponse[]> => {
   return getEventsFromResponse(response);
 };
 
-export const getFeedEvents = async (): Promise<EventResponse[]> => {
-  const response = await api.get("/events/feed");
+export const getFeedEvents = async (params: EventFeedQuery = {}): Promise<EventResponse[]> => {
+  const response = await api.get("/events/feed", { params });
   return getEventsFromResponse(response);
 };
 

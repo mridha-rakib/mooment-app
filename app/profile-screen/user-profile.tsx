@@ -10,7 +10,6 @@ import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getUserById, getUserProfileStats } from "@/lib/users";
 
-const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 const DEFAULT_BIO = "Digital goodies designer everything is designed.";
 const FALLBACK_PROFILE_NAME = "Mooment User";
 const FALLBACK_PROFILE_HANDLE = "@mooment_user";
@@ -42,17 +41,19 @@ const formatNameFallbackHandle = (name?: string | null) => {
 
 export default function UserProfileScreen() {
   const { colors } = useTheme();
-  const params = useLocalSearchParams<{ userId?: string; name?: string; avatar?: string }>();
+  const params = useLocalSearchParams<{ userId?: string; name?: string; avatar?: string; isFollowing?: string }>();
   const userId = params.userId;
-  const [avatarUri, setAvatarUri] = useState(params.avatar || DEFAULT_AVATAR);
+  const routeIsFollowing = params.isFollowing === "true" ? true : params.isFollowing === "false" ? false : undefined;
+  const [avatarUri, setAvatarUri] = useState<string | null>(params.avatar || null);
   const [posts, setPosts] = useState<PostData[]>([]);
   const [profileUser, setProfileUser] = useState<UserProfileData>({
     id: userId || "unknown",
     name: params.name || FALLBACK_PROFILE_NAME,
     handle: formatNameFallbackHandle(params.name),
-    avatar: params.avatar || DEFAULT_AVATAR,
+    avatar: params.avatar || null,
     bio: DEFAULT_BIO,
     stats: EMPTY_STATS,
+    isFollowing: routeIsFollowing,
   });
 
   const loadProfile = useCallback(async () => {
@@ -67,10 +68,12 @@ export default function UserProfileScreen() {
         getUserProfileStats(userId),
       ]);
       const resolvedUserId = user.id ?? user._id ?? userId;
-      let nextAvatar = params.avatar || DEFAULT_AVATAR;
+      let nextAvatar = params.avatar || null;
 
       if (user.avatarKey) {
         nextAvatar = getStorageFileUrl(user.avatarKey);
+      } else if (user.avatarUrl) {
+        nextAvatar = user.avatarUrl;
       }
 
       setAvatarUri(nextAvatar);
@@ -80,6 +83,8 @@ export default function UserProfileScreen() {
         handle: formatHandle(user.username, user.email),
         avatar: nextAvatar,
         bio: user.bio?.trim() || DEFAULT_BIO,
+        accountType: user.accountType,
+        isFollowing: typeof user.isFollowing === "boolean" ? user.isFollowing : routeIsFollowing,
         stats: {
           posts: timeline.stats.posts,
           reviews: stats.reviews,
@@ -101,7 +106,7 @@ export default function UserProfileScreen() {
       setPosts([]);
       Alert.alert("Unable to load profile", getAuthErrorMessage(error, "Please try again."));
     }
-  }, [params.avatar, params.name, userId]);
+  }, [params.avatar, params.name, routeIsFollowing, userId]);
 
   useEffect(() => {
     void loadProfile();
@@ -126,6 +131,19 @@ export default function UserProfileScreen() {
     avatar: avatarUri,
   }), [avatarUri, profileUser]);
 
+  const handleFollowChange = useCallback((isFollowing: boolean) => {
+    setProfileUser((current) => ({
+      ...current,
+      isFollowing,
+      stats: {
+        ...current.stats,
+        followers: current.isFollowing === isFollowing
+          ? current.stats.followers
+          : Math.max(0, current.stats.followers + (isFollowing ? 1 : -1)),
+      },
+    }));
+  }, []);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ProfileView
@@ -133,6 +151,7 @@ export default function UserProfileScreen() {
         posts={posts}
         isOwnProfile={false}
         onInteractionChange={handleInteractionChange}
+        onFollowChange={handleFollowChange}
         onRefresh={loadProfile}
       />
     </View>

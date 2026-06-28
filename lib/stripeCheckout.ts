@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { Platform } from "react-native";
 import {
+  cancelCheckoutOrder,
   confirmCheckoutOrder,
   createCheckoutIntent,
   type CheckoutOrder,
@@ -34,7 +35,7 @@ const loadStripeSdk = async () => {
 export const startStripeCheckout = async (
   payload: CreateCheckoutIntentPayload,
   options?: { isDark?: boolean },
-): Promise<CheckoutOrder> => {
+): Promise<CheckoutOrder | null> => {
   if (payload.paymentMethod === "apple_pay" && Platform.OS !== "ios") {
     throw new Error("Apple Pay is only available on iOS devices.");
   }
@@ -81,6 +82,14 @@ export const startStripeCheckout = async (
   const { error: paymentError } = await presentPaymentSheet();
 
   if (paymentError) {
+    if (paymentError.code === "Canceled") {
+      // User dismissed the PaymentSheet — not an error; release the reservation server-side
+      await cancelCheckoutOrder(checkout.order.id).catch(() => {});
+      return null;
+    }
+
+    // Genuine payment failure — release the reservation and surface the error
+    await cancelCheckoutOrder(checkout.order.id).catch(() => {});
     throw new Error(paymentError.message);
   }
 

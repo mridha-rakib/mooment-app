@@ -1,13 +1,17 @@
 import LocationSearchModal from '@/components/post/LocationSearchModal';
+import { getCurrentLocationForSharing, getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
+import { reverseGeocodeLocation, type LocationSearchResult } from '@/lib/locationSearch';
 import {
   useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React,
-  { useEffect,
+  { useCallback,
+  useEffect,
   useRef,
   useState } from 'react';
 import { Modal,
+  Alert,
   PanResponder,
   Platform,
   ScrollView,
@@ -21,20 +25,50 @@ import { Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
+import { useAuthStore } from '@/stores/authStore';
+
+export type NearbyEventsFilter = {
+  latitude: number;
+  longitude: number;
+  radiusMiles: number;
+  label: string;
+  source: 'current' | 'selected';
+};
+
+export type HomeFeedFilters = {
+  hashtags: string[];
+  nearby: NearbyEventsFilter | null;
+};
 
 export type FilterModalProps = {
   visible: boolean;
   onClose: () => void;
   activeHashtags?: string[];
-  onApply: (hashtags: string[]) => void;
+  activeNearbyFilter?: NearbyEventsFilter | null;
+  onApply: (filters: HomeFeedFilters) => void;
 };
 
 const AGE_OPTIONS = ['All Ages', '18+', '21+'];
 const PRICE_OPTIONS = ['Free', '< $10', '< $50', '< $100', '$100+'];
 const TIME_OPTIONS = ['Morning', 'Noon', 'Evening', 'Late Night', 'Any'];
+const DEFAULT_LOCATION = {
+  label: 'Los Angeles, CA',
+  latitude: 34.052235,
+  longitude: -118.243683,
+};
 
-export default function FilterModal({ visible, onClose, activeHashtags = [], onApply }: FilterModalProps) {
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+export default function FilterModal({
+  visible,
+  onClose,
+  activeHashtags = [],
+  activeNearbyFilter = null,
+  onApply,
+}: FilterModalProps) {
   const { colors, isDark } = useTheme();
+  const currentLocation = useAuthStore((state) => state.user?.currentLocation);
   const [activeAge, setActiveAge] = useState('All Ages');
   const [activePrice, setActivePrice] = useState('Free');
   const [activeTime, setActiveTime] = useState('Morning');
@@ -46,21 +80,70 @@ export default function FilterModal({ visible, onClose, activeHashtags = [], onA
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
 
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState('Los Angeles, CA');
+  const [selectedLocation, setSelectedLocation] = useState(DEFAULT_LOCATION.label);
+  const [selectedLocationCoords, setSelectedLocationCoords] = useState({
+    latitude: DEFAULT_LOCATION.latitude,
+    longitude: DEFAULT_LOCATION.longitude,
+  });
 
   const [radius, setRadius] = useState(75);
   const [trackWidth, setTrackWidth] = useState(0);
+  const [isApplying, setIsApplying] = useState(false);
+
+  // Refs to manage async location fetch lifecycle
+  const abortFetchRef = useRef(false);
+  const locationResolvedRef = useRef(false);
+  const isFetchingRef = useRef(false);
+  const updateRadiusRef = useRef<(x: number) => void>(null!);
+  const activeNearbyFilterRef = useRef(activeNearbyFilter);
+  activeNearbyFilterRef.current = activeNearbyFilter;
+  const fetchLocationRef = useRef<(silent: boolean) => Promise<void>>(null!);
 
   useEffect(() => {
-    if (visible) setHashtags(activeHashtags.map((tag) => `#${tag}`).join(' '));
-  }, [activeHashtags, visible]);
+    if (!visible) return;
 
+    setHashtags(activeHashtags.map((tag) => `#${tag}`).join(' '));
+    if (activeNearbyFilter) {
+      setRadius(activeNearbyFilter.radiusMiles);
+      setUseCurrentLocation(activeNearbyFilter.source === 'current');
+      setSelectedLocation(activeNearbyFilter.label || DEFAULT_LOCATION.label);
+      setSelectedLocationCoords({
+        latitude: activeNearbyFilter.latitude,
+        longitude: activeNearbyFilter.longitude,
+      });
+      // Treat an existing 'current' filter as already resolved
+      locationResolvedRef.current = activeNearbyFilter.source === 'current';
+    } else {
+      setRadius(75);
+      setUseCurrentLocation(true);
+      setSelectedLocation(DEFAULT_LOCATION.label);
+      setSelectedLocationCoords({
+        latitude: DEFAULT_LOCATION.latitude,
+        longitude: DEFAULT_LOCATION.longitude,
+      });
+      locationResolvedRef.current = false;
+    }
+  }, [activeHashtags, activeNearbyFilter, visible]);
+
+  // On modal open (no active filter): silently resolve current location display
+  useEffect(() => {
+    if (!visible) {
+      abortFetchRef.current = true;
+      locationResolvedRef.current = false;
+      return;
+    }
+    if (activeNearbyFilterRef.current) return;
+    abortFetchRef.current = false;
+    void fetchLocationRef.current?.(true);
+  }, [visible]);
+
+  // Fix: panResponder is created once; use a ref so callbacks always call the latest updateRadius
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => updateRadius(evt.nativeEvent.locationX),
-      onPanResponderMove: (evt) => updateRadius(evt.nativeEvent.locationX),
+      onPanResponderGrant: (evt) => updateRadiusRef.current?.(evt.nativeEvent.locationX),
+      onPanResponderMove: (evt) => updateRadiusRef.current?.(evt.nativeEvent.locationX),
     })
   ).current;
 
@@ -70,6 +153,62 @@ export default function FilterModal({ visible, onClose, activeHashtags = [], onA
       setRadius(Math.round(percent * 200));
     }
   };
+  updateRadiusRef.current = updateRadius;
+
+  // Fetch current GPS location and reverse-geocode it for display.
+  // silent=true: only proceeds if permission already granted (no permission prompt).
+  // silent=false: requests permission if needed (called when user explicitly enables the toggle).
+  const fetchAndDisplayCurrentLocation = useCallback(async (silent: boolean): Promise<void> => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    try {
+      let coords: { latitude: number; longitude: number } | null = null;
+
+      if (isFiniteCoordinate(currentLocation?.latitude) && isFiniteCoordinate(currentLocation?.longitude)) {
+        coords = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
+      } else if (silent) {
+        coords = await getCurrentLocationIfPermissionGranted();
+      } else {
+        const loc = await getCurrentLocationForSharing();
+        coords = { latitude: loc.latitude, longitude: loc.longitude };
+      }
+
+      if (abortFetchRef.current || !coords) return;
+
+      setSelectedLocationCoords(coords);
+
+      const geocoded = await reverseGeocodeLocation(coords.latitude, coords.longitude);
+
+      if (abortFetchRef.current) return;
+
+      if (geocoded?.label) {
+        setSelectedLocation(geocoded.label);
+      }
+      locationResolvedRef.current = true;
+    } catch (error) {
+      if (abortFetchRef.current) return;
+      if (!silent) {
+        setUseCurrentLocation(false);
+        Alert.alert(
+          'Location Error',
+          error instanceof Error ? error.message : 'Unable to get your current location. Check your location settings.',
+        );
+      }
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [currentLocation]);
+  fetchLocationRef.current = fetchAndDisplayCurrentLocation;
+
+  const handleToggleCurrentLocation = useCallback(async (value: boolean) => {
+    setUseCurrentLocation(value);
+    if (value) {
+      locationResolvedRef.current = false;
+      abortFetchRef.current = false;
+      await fetchAndDisplayCurrentLocation(false);
+    }
+  }, [fetchAndDisplayCurrentLocation]);
 
   const handleDateChange = (event: any, date?: Date) => {
     setShowDatePicker(false);
@@ -84,14 +223,71 @@ export default function FilterModal({ visible, onClose, activeHashtags = [], onA
     setActiveTime('Morning');
     setSelectedDate(null);
     setHashtags('');
-    setUseCurrentLocation(true);
-    setSelectedLocation('Los Angeles, CA');
+    setUseCurrentLocation(false);
+    setSelectedLocation(DEFAULT_LOCATION.label);
+    setSelectedLocationCoords({
+      latitude: DEFAULT_LOCATION.latitude,
+      longitude: DEFAULT_LOCATION.longitude,
+    });
     setRadius(75);
+    onApply({ hashtags: [], nearby: null });
   };
 
-  const handleApply = () => {
-    onApply(parseHashtagFilterInput(hashtags));
-    onClose();
+  const handleApply = async () => {
+    if (isApplying) return;
+
+    setIsApplying(true);
+    try {
+      const parsedHashtags = parseHashtagFilterInput(hashtags);
+      const nearby = useCurrentLocation
+        ? await resolveCurrentLocationFilter()
+        : {
+            latitude: selectedLocationCoords.latitude,
+            longitude: selectedLocationCoords.longitude,
+            radiusMiles: radius,
+            label: selectedLocation,
+            source: 'selected' as const,
+          };
+
+      onApply({ hashtags: parsedHashtags, nearby });
+      onClose();
+    } catch (error) {
+      Alert.alert(
+        'Unable to apply filters',
+        error instanceof Error ? error.message : 'Please check your location settings and try again.',
+      );
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const resolveCurrentLocationFilter = async (): Promise<NearbyEventsFilter> => {
+    const location = isFiniteCoordinate(currentLocation?.latitude) && isFiniteCoordinate(currentLocation?.longitude)
+      ? {
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+        }
+      : await getCurrentLocationForSharing();
+
+    // Use the label already resolved via reverse geocoding; fall back to placeholder
+    const label = locationResolvedRef.current ? selectedLocation : 'Current Location';
+
+    return {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      radiusMiles: radius,
+      label,
+      source: 'current',
+    };
+  };
+
+  const handleSelectLocation = (location: LocationSearchResult) => {
+    setSelectedLocation(location.label);
+    setSelectedLocationCoords({
+      latitude: location.latitude,
+      longitude: location.longitude,
+    });
+    setUseCurrentLocation(false);
   };
 
   const renderPills = (options: string[], active: string, onSelect: (val: string) => void) => {
@@ -210,7 +406,7 @@ export default function FilterModal({ visible, onClose, activeHashtags = [], onA
                 </View>
                 <Switch
                   value={useCurrentLocation}
-                  onValueChange={setUseCurrentLocation}
+                  onValueChange={handleToggleCurrentLocation}
                   trackColor={{ false: isDark ? '#3A3A44' : '#E0E0E0', true: colors.primary }}
                   thumbColor="#FFFFFF"
                 />
@@ -245,8 +441,15 @@ export default function FilterModal({ visible, onClose, activeHashtags = [], onA
             <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: isDark ? '#3A3A44' : '#E0E0E0' }]} onPress={onClose} activeOpacity={0.8}>
               <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={handleApply} activeOpacity={0.8}>
-              <Text style={[styles.applyBtnText, { color: colors.background }]}>Apply Filters</Text>
+            <TouchableOpacity
+              style={[styles.applyBtn, { backgroundColor: colors.primary }, isApplying && styles.disabledBtn]}
+              onPress={handleApply}
+              activeOpacity={0.8}
+              disabled={isApplying}
+            >
+              <Text style={[styles.applyBtnText, { color: colors.background }]}>
+                {isApplying ? 'Applying...' : 'Apply Filters'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -256,7 +459,7 @@ export default function FilterModal({ visible, onClose, activeHashtags = [], onA
       <LocationSearchModal
         visible={locationSearchVisible}
         onClose={() => setLocationSearchVisible(false)}
-        onSelectLocation={(loc) => setSelectedLocation(loc)}
+        onSelectLocation={handleSelectLocation}
       />
     </Modal>
   );
@@ -420,5 +623,8 @@ const styles = StyleSheet.create({
   },
   applyBtnText: {
     fontWeight: 'bold',
+  },
+  disabledBtn: {
+    opacity: 0.7,
   },
 });

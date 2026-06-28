@@ -28,6 +28,8 @@ export default function CreateEventStep5() {
   const publishEvent = useEventDraftStore((state) => state.publish);
   const resetDraft = useEventDraftStore((state) => state.resetDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const tickets = useEventDraftStore((state) => state.tickets);
+  const scheduledAt = useEventDraftStore((state) => state.scheduledAt);
   const currentUser = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
@@ -62,6 +64,30 @@ export default function CreateEventStep5() {
       return;
     }
 
+    // Client-side ticket date validation — mirrors the backend rules so the
+    // user gets instant feedback without a network round-trip.
+    const now = new Date();
+    const eventDate = new Date(scheduledAt);
+    for (const ticket of tickets) {
+      if (!ticket.salesEndAt) continue;
+      const salesEnd = new Date(ticket.salesEndAt);
+      if (Number.isNaN(salesEnd.getTime())) continue;
+      if (salesEnd <= now) {
+        Alert.alert(
+          'Ticket date is in the past',
+          `"${ticket.name}" has a sales end date in the past. Go back to the tickets step and update it before publishing.`,
+        );
+        return;
+      }
+      if (!Number.isNaN(eventDate.getTime()) && salesEnd > eventDate) {
+        Alert.alert(
+          'Ticket date is too late',
+          `"${ticket.name}" sales end date must not be after the event start date.`,
+        );
+        return;
+      }
+    }
+
     setDraftPrivacy(privacy);
     setIsPublishing(true);
 
@@ -74,6 +100,9 @@ export default function CreateEventStep5() {
       });
     } catch (error) {
       setIsPublishing(false);
+
+      const httpStatus = (error as { response?: { status?: number } })?.response?.status;
+
       if (isBusinessAccountRequiredError(error)) {
         requireBusinessAccountForEvent({
           user: currentUser,
@@ -84,6 +113,12 @@ export default function CreateEventStep5() {
         });
         return;
       }
+
+      if (httpStatus === 429) {
+        Alert.alert('Too many requests', 'Too many requests, please try again shortly.');
+        return;
+      }
+
       Alert.alert(
         isEditingPublished ? 'Unable to update event' : 'Unable to publish event',
         getAuthErrorMessage(error, 'Please check the event details and try again.'),

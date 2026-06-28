@@ -3,7 +3,8 @@ import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
-import FilterModal from './FilterModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FilterModal, { type HomeFeedFilters, type NearbyEventsFilter } from './FilterModal';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '../ui/CinematicButton';
 
@@ -11,17 +12,33 @@ interface HomeHeaderProps {
   selectedType: string;
   setSelectedType: (type: string) => void;
   activeHashtags: string[];
-  onHashtagFilterChange: (hashtags: string[]) => void;
+  activeNearbyFilter?: NearbyEventsFilter | null;
+  onFilterChange: (filters: HomeFeedFilters) => void;
+  overlay?: boolean;
 }
 
-export default function HomeHeader({ selectedType, setSelectedType, activeHashtags, onHashtagFilterChange }: HomeHeaderProps) {
+export default function HomeHeader({
+  selectedType,
+  setSelectedType,
+  activeHashtags,
+  activeNearbyFilter,
+  onFilterChange,
+  overlay = false,
+}: HomeHeaderProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const [filterVisible, setFilterVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
 
   return (
-    <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.headerContainer,
+        overlay && [styles.headerOverlay, { top: insets.top }],
+        { backgroundColor: overlay ? "transparent" : colors.background },
+      ]}
+    >
       <View style={styles.header}>
         <TouchableOpacity 
           style={[styles.feedBtn, { backgroundColor: colors.card }]} 
@@ -96,7 +113,8 @@ export default function HomeHeader({ selectedType, setSelectedType, activeHashta
         visible={filterVisible}
         onClose={() => setFilterVisible(false)}
         activeHashtags={activeHashtags}
-        onApply={onHashtagFilterChange}
+        activeNearbyFilter={activeNearbyFilter}
+        onApply={onFilterChange}
       />
     </View>
   );
@@ -105,6 +123,11 @@ export default function HomeHeader({ selectedType, setSelectedType, activeHashta
 const styles = StyleSheet.create({
   headerContainer: {
     zIndex: 100,
+  },
+  headerOverlay: {
+    position: "absolute",
+    right: 0,
+    left: 0,
   },
   header: {
     flexDirection: "row",

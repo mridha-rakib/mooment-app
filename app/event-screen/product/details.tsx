@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { addCartItem, getCart } from "@/lib/cart";
 import { getPublishedProduct, type Product } from "@/lib/products";
 import { getStorageFileUrl } from "@/lib/storage";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 const { width } = Dimensions.get("window");
 
@@ -36,8 +37,6 @@ const COLORS = {
 
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=900&auto=format&fit=crop";
-const FALLBACK_AVATAR =
-  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
 const formatMoney = (value: number) =>
   `$${value.toLocaleString("en-US", {
@@ -66,7 +65,7 @@ const EventProductDetailsScreen = () => {
   const insets = useSafeAreaInsets();
   const productId = typeof params.productId === "string" ? params.productId : null;
   const hostName = typeof params.hostName === "string" && params.hostName.trim() ? params.hostName : "Event creator";
-  const hostAvatar = typeof params.hostAvatar === "string" && params.hostAvatar.trim() ? params.hostAvatar : FALLBACK_AVATAR;
+  const hostAvatar = typeof params.hostAvatar === "string" && params.hostAvatar.trim() ? params.hostAvatar : null;
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -301,7 +300,7 @@ const EventProductDetailsScreen = () => {
               </Text>
 
               <TouchableOpacity style={styles.sellerCard} activeOpacity={0.85}>
-                <Image source={{ uri: hostAvatar }} style={styles.sellerAvatar} />
+                <UserAvatar uri={hostAvatar} name={hostName} size={46} style={styles.sellerAvatar} />
                 <View style={styles.sellerInfo}>
                   <Text style={styles.sellerName}>{hostName}</Text>
                   <Text style={styles.sellerStats}>Event product seller</Text>

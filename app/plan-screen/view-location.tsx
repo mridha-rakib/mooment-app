@@ -145,7 +145,7 @@ export default function ViewLocationScreen() {
     Linking.openURL(url);
   };
 
-  if (!hasCoords) {
+  if (!eventCoordinate) {
     return (
       <View style={[styles.container, styles.fallback]}>
         <TouchableOpacity

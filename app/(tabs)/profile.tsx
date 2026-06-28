@@ -12,7 +12,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { Alert, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400';
 const DEFAULT_BIO = 'Digital goodies designer everything is designed.';
 const FALLBACK_PROFILE_NAME = 'Mooment User';
 const FALLBACK_PROFILE_HANDLE = '@mooment_user';
@@ -39,13 +38,13 @@ const formatHandle = (username?: string | null, email?: string | null) => {
 export default function ProfileTab() {
   const { colors } = useTheme();
   const user = useAuthStore((state) => state.user);
-  const [avatarUri, setAvatarUri] = useState(DEFAULT_AVATAR);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [posts, setPosts] = useState<PostData[]>([]);
   const [profileStats, setProfileStats] = useState(PROFILE_STATS);
 
   useEffect(() => {
     if (!user?.avatarKey) {
-      setAvatarUri(DEFAULT_AVATAR);
+      setAvatarUri(null);
       return;
     }
 

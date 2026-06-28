@@ -1,5 +1,6 @@
 import CinematicButton from '@/components/ui/CinematicButton';
 import SegmentedControl from '@/components/ui/SegmentedControl';
+import UserAvatar from '@/components/ui/UserAvatar';
 import {
     useTheme
 } from '@/hooks/useTheme';
@@ -34,7 +35,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
-const DEFAULT_DM_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
 
 const formatConversationTime = (value?: string | null) => {
   if (!value) {
@@ -70,7 +70,7 @@ const formatConversationTime = (value?: string | null) => {
 const toConversationData = (dm: DirectMessageConversationResponse): ConversationData => ({
   id: dm.friendId || dm.id,
   name: dm.name,
-  avatar: dm.avatarUrl ?? DEFAULT_DM_AVATAR,
+  avatar: dm.avatarUrl ?? null,
   lastMessage: dm.lastMessage ?? 'Start a conversation',
   time: formatConversationTime(dm.lastMessageAt),
   unread: dm.unreadCount ?? 0,
@@ -94,7 +94,7 @@ const toGroupConversationData = (group: GroupConversationResponse): Conversation
 export type ConversationData = {
   id: string;
   name: string;
-  avatar: string;
+  avatar?: string | null;
   lastMessage: string;
   time: string;
   unread: number;
@@ -108,63 +108,6 @@ export type ConversationData = {
 };
 
 
-
-const CONVERSATIONS: ConversationData[] = [
-  {
-    id: 'c1', name: 'Brooklyn Simmons', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
-    lastMessage: 'Hey! Are you coming tonight? 🎉', time: '2m', unread: 3, isOnline: true, isGroup: false, messageType: 'text',
-  },
-  {
-    id: 'c2', name: 'Rooftop Crew 🎧', avatar: '', groupAvatars: [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
-    ],
-    lastMessage: 'Dj Koko: Saved me a spot?', time: '10m', unread: 7, isOnline: false, isGroup: true, messageType: 'text',
-  },
-  {
-    id: 'c3', name: 'Ketty Perera', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
-    lastMessage: '🎵 Voice message', time: '1h', unread: 0, isOnline: true, isGroup: false, messageType: 'audio', isTyping: true,
-  },
-  {
-    id: 'c4', name: 'Tuval Mor', avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
-    lastMessage: '📷 Photo', time: '2h', unread: 0, isOnline: false, isGroup: false, messageType: 'image',
-  },
-  {
-    id: 'c5', name: 'Dj Koko', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
-    lastMessage: 'Rooftop Session Vol.4 — you going?', time: '3h', unread: 1, isOnline: true, isGroup: false, messageType: 'event',
-  },
-  {
-    id: 'c6', name: 'Mavrick Rick', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop',
-    lastMessage: 'Sounds good bro 🤙', time: '5h', unread: 0, isOnline: false, isGroup: false, isMuted: true,
-  },
-  {
-    id: 'c7', name: 'Night Owls 🦉', avatar: '', groupAvatars: [
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
-    ],
-    lastMessage: 'Mavrick: I\'ll meet you there', time: '1d', unread: 0, isOnline: false, isGroup: true,
-  },
-  {
-    id: 'c8', name: 'Giden Xenog', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
-    lastMessage: 'Check out this event!', time: '1d', unread: 0, isOnline: false, isGroup: false,
-  },
-  {
-    id: 'c9', name: 'Adam Smith', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150',
-    lastMessage: 'Hello there, are you alive?!?', time: '1m ago', unread: 1, isOnline: false, isGroup: true, isMuted: true,
-  },
-  {
-    id: 'c10', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150',
-    lastMessage: 'Nice to meet you too!', time: '1m ago', unread: 0, isOnline: false, isGroup: true,
-  },
-  {
-    id: 'c11', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150',
-    lastMessage: 'Looking forward to our collaboration!', time: '20 min ago', unread: 0, isOnline: false, isGroup: true,
-  },
-  {
-    id: 'c12', name: 'Music Party', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150',
-    lastMessage: 'Thanks for the update!', time: '15 min ago', unread: 0, isOnline: false, isGroup: true,
-  },
-];
 
 const MOCK_ROOMS = Array(4).fill(0).map((_, i) => ({
   id: `r${i}`,
@@ -348,7 +291,7 @@ export default function MessagesScreen() {
     }
     return (
       <View style={styles.avatarWrap}>
-        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        <UserAvatar uri={item.avatar} name={item.name} size={40} style={styles.avatar} />
         {item.isOnline && <View style={[styles.onlineDot, { borderColor: colors.background }]} />}
       </View>
     );
@@ -366,7 +309,7 @@ export default function MessagesScreen() {
   const renderConvoItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
       style={styles.convoCard}
-      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar, isOnline: item.isOnline ? 'true' : 'false', isBlocked: item.isBlocked ? 'true' : 'false' } })}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, ...(item.avatar ? { avatar: item.avatar } : {}), isOnline: item.isOnline ? 'true' : 'false', isBlocked: item.isBlocked ? 'true' : 'false' } })}
       activeOpacity={0.85}
     >
       {renderAvatar(item)}
@@ -399,11 +342,11 @@ export default function MessagesScreen() {
   const renderGroupItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
       style={[styles.groupCard, { backgroundColor: colors.card }]}
-      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, avatar: item.avatar, isGroup: 'true' } })}
+      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, ...(item.avatar ? { avatar: item.avatar } : {}), isGroup: 'true' } })}
       activeOpacity={0.85}
     >
       {item.avatar ? (
-        <Image source={{ uri: item.avatar }} style={styles.groupCardAvatar} />
+        <UserAvatar uri={item.avatar} name={item.name} size={52} style={styles.groupCardAvatar} />
       ) : (
         <View style={[styles.groupCardAvatar, styles.groupCardAvatarFallback]}>
           <Text style={styles.groupCardAvatarLetter}>{item.name.charAt(0).toUpperCase()}</Text>

@@ -2,15 +2,16 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 type AttendeeItem = {
   id: string;
   name: string;
   handle: string;
-  avatar: string;
+  avatar?: string | null;
   status: 'success' | 'failed' | 'pending';
   isFollowing: boolean;
 };
@@ -20,7 +21,7 @@ const ATTENDEE_DATA: AttendeeItem[] = [
     id: '1',
     name: 'Dj Koko',
     handle: '@sdfd_d',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    avatar: null,
     status: 'success',
     isFollowing: false,
   },
@@ -28,7 +29,7 @@ const ATTENDEE_DATA: AttendeeItem[] = [
     id: '2',
     name: 'Dj Koko',
     handle: '@sdfd_d',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    avatar: null,
     status: 'success',
     isFollowing: false,
   },
@@ -36,7 +37,7 @@ const ATTENDEE_DATA: AttendeeItem[] = [
     id: '3',
     name: 'Dj Koko',
     handle: '@sdfd_d',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    avatar: null,
     status: 'pending',
     isFollowing: false,
   },
@@ -44,7 +45,7 @@ const ATTENDEE_DATA: AttendeeItem[] = [
     id: '4',
     name: 'Dj Koko',
     handle: '@sdfd_d',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    avatar: null,
     status: 'failed',
     isFollowing: true,
   },
@@ -80,7 +81,7 @@ export default function AttendeeListScreen() {
     <View style={styles.statRow}>
       <View style={styles.userInfo}>
         <View style={styles.avatarContainer}>
-          <Image source={{ uri: item.avatar }} style={styles.avatar} />
+          <UserAvatar uri={item.avatar} name={item.name} size={48} style={styles.avatar} />
         </View>
         <View>
           <Text style={styles.userName}>{item.name}</Text>

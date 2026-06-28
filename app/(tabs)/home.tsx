@@ -4,9 +4,11 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Components
 import HomeHeader from "@/components/home/HomeHeader";
+import type { HomeFeedFilters, NearbyEventsFilter } from "@/components/home/FilterModal";
 import MapContainer from "@/components/home/MapContainer";
 import EventFeedCard from "@/components/home/EventFeedCard";
 import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
@@ -15,7 +17,7 @@ import CommentsModal from "@/components/post/CommentsModal";
 import FeedPost, { PostData } from "@/components/post/FeedPost";
 import ShareModal from "@/components/post/ShareModal";
 
-import { deleteMoment, getFeedMoments, shareMoment } from "@/lib/moments";
+import { consumePendingNewMoment, deleteMoment, getFeedMoments, shareMoment } from "@/lib/moments";
 import type { MomentInteractionSummary } from "@/lib/moments";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
@@ -27,9 +29,8 @@ import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
 import { useAuthStore } from "@/stores/authStore";
 
-const STORY_FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
-
 const SUGGESTED_USERS_INSERT_AFTER = 4;
+const MILES_TO_KM = 1.609344;
 
 const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>(), currentUserId?: string): StoryData[] => {
   const groupedStories = new Map<string, Story[]>();
@@ -64,7 +65,7 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
       isOwnStory: currentUserId ? authorId === currentUserId : false,
       title,
       authorName: title,
-      imageUri: latestStory.author?.avatarUrl ?? STORY_FALLBACK_AVATAR,
+      imageUri: latestStory.author?.avatarUrl ?? null,
       mediaUri: latestStory.mediaUrl,
       seen: storyItems.length > 0 && storyItems.every((story) => seenStoryIds.has(story.id)),
       storyItems,
@@ -74,20 +75,51 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
 
 type FeedItem =
   | { type: 'post'; id: string; data: PostData }
+  | { type: 'event'; id: string; data: EventResponse }
   | { type: 'suggested_users'; id: string; data: SuggestedUser[] };
 
-const buildFeedItems = (posts: PostData[], suggestedUsers: SuggestedUser[]): FeedItem[] => {
+const buildFeedItems = (
+  posts: PostData[],
+  events: EventResponse[],
+  suggestedUsers: SuggestedUser[],
+): FeedItem[] => {
+  type ContentItem =
+    | { type: 'post'; id: string; data: PostData; sortTime: number }
+    | { type: 'event'; id: string; data: EventResponse; sortTime: number };
+
+  const contentItems: ContentItem[] = [
+    ...posts.map((post) => ({
+      type: 'post' as const,
+      id: `moment-${post.id}`,
+      data: post,
+      sortTime: post.createdAt ? new Date(post.createdAt).getTime() : 0,
+    })),
+    ...events.map((event) => ({
+      type: 'event' as const,
+      id: `event-${event.id}`,
+      data: event,
+      sortTime: new Date(event.createdAt).getTime(),
+    })),
+  ].sort((a, b) => b.sortTime - a.sortTime);
+
   const items: FeedItem[] = [];
+  let contentCount = 0;
 
-  posts.forEach((post, index) => {
-    items.push({ type: 'post', id: `moment-${post.id}`, data: post });
+  for (const item of contentItems) {
+    if (item.type === 'post') {
+      items.push({ type: 'post', id: item.id, data: item.data });
+    } else {
+      items.push({ type: 'event', id: item.id, data: item.data });
+    }
 
-    if (index === SUGGESTED_USERS_INSERT_AFTER - 1 && suggestedUsers.length > 0) {
+    contentCount++;
+
+    if (contentCount === SUGGESTED_USERS_INSERT_AFTER && suggestedUsers.length > 0) {
       items.push({ type: 'suggested_users', id: 'feed-suggested-users', data: suggestedUsers });
     }
-  });
+  }
 
-  if (posts.length > 0 && posts.length < SUGGESTED_USERS_INSERT_AFTER && suggestedUsers.length > 0) {
+  if (contentCount > 0 && contentCount < SUGGESTED_USERS_INSERT_AFTER && suggestedUsers.length > 0) {
     items.push({ type: 'suggested_users', id: 'feed-suggested-users', data: suggestedUsers });
   }
 
@@ -95,6 +127,7 @@ const buildFeedItems = (posts: PostData[], suggestedUsers: SuggestedUser[]): Fee
 };
 
 export default function HomeFeed() {
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const userId = useAuthStore((state) => state.user?.id);
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
@@ -106,6 +139,8 @@ export default function HomeFeed() {
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
   const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
   const [activeHashtags, setActiveHashtags] = useState<string[]>([]);
+  const [nearbyEventFilter, setNearbyEventFilter] = useState<NearbyEventsFilter | null>(null);
+  const [isFeedLoading, setIsFeedLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -141,9 +176,17 @@ export default function HomeFeed() {
 
   const loadFeed = useCallback(async () => {
     const requestId = ++feedRequestIdRef.current;
+    setIsFeedLoading(true);
     const [momentsResult, eventsResult] = await Promise.allSettled([
       getFeedMoments({ hashtags: activeHashtags }),
-      getFeedEvents(),
+      getFeedEvents(nearbyEventFilter
+        ? {
+            latitude: nearbyEventFilter.latitude,
+            longitude: nearbyEventFilter.longitude,
+            radiusKm: nearbyEventFilter.radiusMiles * MILES_TO_KM,
+            limit: 100,
+          }
+        : {}),
     ]);
 
     if (requestId !== feedRequestIdRef.current) return;
@@ -152,7 +195,6 @@ export default function HomeFeed() {
       setFeedMomentPosts(
         momentsResult.value
           .map((moment) => mapMomentToPost(moment, {
-            fallbackAvatar: STORY_FALLBACK_AVATAR,
             storageUrlResolver: getStorageFileUrl,
           }))
           .filter((post): post is PostData => Boolean(post)),
@@ -161,8 +203,18 @@ export default function HomeFeed() {
       setFeedMomentPosts([]);
     }
 
-    setFeedEvents(activeHashtags.length === 0 && eventsResult.status === "fulfilled" ? eventsResult.value : []);
-  }, [activeHashtags]);
+    setFeedEvents(
+      (nearbyEventFilter || activeHashtags.length === 0) && eventsResult.status === "fulfilled"
+        ? eventsResult.value
+        : [],
+    );
+    setIsFeedLoading(false);
+  }, [activeHashtags, nearbyEventFilter]);
+
+  const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
+    setActiveHashtags(filters.hashtags);
+    setNearbyEventFilter(filters.nearby);
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -172,6 +224,18 @@ export default function HomeFeed() {
 
   useFocusEffect(
     useCallback(() => {
+      const pendingMoment = consumePendingNewMoment();
+
+      if (pendingMoment) {
+        const mappedPost = mapMomentToPost(pendingMoment, {
+          storageUrlResolver: getStorageFileUrl,
+        });
+
+        if (mappedPost) {
+          setFeedMomentPosts((current) => [mappedPost, ...current.filter((p) => p.id !== mappedPost.id)]);
+        }
+      }
+
       void loadStories();
       void loadFeed();
     }, [loadFeed, loadStories]),
@@ -291,16 +355,18 @@ export default function HomeFeed() {
     );
   }, []);
 
-  const feedItems = buildFeedItems(feedMomentPosts, suggestedUsers);
+  const feedItems = buildFeedItems(feedMomentPosts, feedEvents, suggestedUsers);
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <HomeHeader
           selectedType={selectedType}
           setSelectedType={setSelectedType}
           activeHashtags={activeHashtags}
-          onHashtagFilterChange={setActiveHashtags}
+          activeNearbyFilter={nearbyEventFilter}
+          onFilterChange={handleFilterChange}
+          overlay={selectedType === 'Map'}
         />
 
         {selectedType === 'Feed' ? (
@@ -316,9 +382,16 @@ export default function HomeFeed() {
           >
             <StoryCarousel stories={stories} />
 
-            {feedEvents.map((event) => (
-              <EventFeedCard key={`event-${event.id}`} event={event} />
-            ))}
+            {nearbyEventFilter ? (
+              <View style={styles.nearbyEventsSection}>
+                <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
+                {!isFeedLoading && feedEvents.length === 0 ? (
+                  <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
+                    No nearby active or upcoming events found.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
 
             {feedItems.map((item) => {
               if (item.type === 'post') {
@@ -334,6 +407,9 @@ export default function HomeFeed() {
                     onDeletePress={handleDeletePost}
                   />
                 );
+              }
+              if (item.type === 'event') {
+                return <EventFeedCard key={item.id} event={item.data} />;
               }
               if (item.type === 'suggested_users') {
                 return <PeopleToFollow key={item.id} users={item.data} />;
@@ -407,6 +483,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: 24,
+  },
+  nearbyEventsSection: {
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  nearbyEventsTitle: {
+    fontSize: 16,
+    fontWeight: "400",
+    letterSpacing: -0.08,
+    lineHeight: 16,
+  },
+  nearbyEventsEmptyText: {
+    fontSize: 13,
+    marginTop: 8,
   },
   modalOverlay: {
     flex: 1,

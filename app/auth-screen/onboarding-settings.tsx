@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { getCurrentLocationForSharing } from "@/lib/locationSharing";
+import { getCurrentLocationForSharing, type CurrentLocationPayload } from "@/lib/locationSharing";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -84,7 +84,11 @@ export default function OnboardingSettings() {
   const [locationEnabled, setLocationEnabled] = useState<boolean>(userLocationSharingEnabled);
   const [notificationsEnabled, setNotificationsEnabled] =
     useState<boolean>(userNotificationsEnabled);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [isResolvingLocation, setIsResolvingLocation] = useState(false);
+  const cachedLocationRef = useRef<CurrentLocationPayload | null>(null);
+  const pendingLocationRef = useRef<Promise<CurrentLocationPayload> | null>(null);
+  const locationRequestGenerationRef = useRef(0);
 
   useEffect(() => {
     setLocationEnabled(userLocationSharingEnabled);
@@ -94,48 +98,71 @@ export default function OnboardingSettings() {
     setNotificationsEnabled(userNotificationsEnabled);
   }, [userNotificationsEnabled]);
 
+  const getOnboardingLocation = () => {
+    if (cachedLocationRef.current) {
+      return Promise.resolve(cachedLocationRef.current);
+    }
+
+    if (!pendingLocationRef.current) {
+      pendingLocationRef.current = getCurrentLocationForSharing()
+        .then((location) => {
+          cachedLocationRef.current = location;
+          return location;
+        })
+        .finally(() => {
+          pendingLocationRef.current = null;
+        });
+    }
+
+    return pendingLocationRef.current;
+  };
+
   const handleLocationToggle = async (nextValue: boolean) => {
     if (!nextValue) {
+      locationRequestGenerationRef.current += 1;
+      cachedLocationRef.current = null;
       setLocationEnabled(false);
+      setIsResolvingLocation(false);
       return;
     }
 
-    setIsSaving(true);
+    const requestGeneration = locationRequestGenerationRef.current + 1;
+    locationRequestGenerationRef.current = requestGeneration;
+    setLocationEnabled(true);
+    setIsResolvingLocation(true);
 
     try {
-      await getCurrentLocationForSharing();
-      setLocationEnabled(true);
+      await getOnboardingLocation();
     } catch (error) {
-      Alert.alert(
-        "Current Location",
-        error instanceof Error ? error.message : "Unable to enable current location sharing.",
-      );
+      if (requestGeneration === locationRequestGenerationRef.current) {
+        cachedLocationRef.current = null;
+        setLocationEnabled(false);
+        Alert.alert(
+          "Current Location",
+          error instanceof Error ? error.message : "Unable to enable current location sharing.",
+        );
+      }
     } finally {
-      setIsSaving(false);
+      if (requestGeneration === locationRequestGenerationRef.current) {
+        setIsResolvingLocation(false);
+      }
     }
   };
 
   const handleDone = async () => {
-    setIsSaving(true);
+    setIsCompleting(true);
 
     try {
-      if (locationEnabled) {
-        const currentLocation = await getCurrentLocationForSharing();
+      const shouldPersistProfile =
+        locationEnabled ||
+        locationEnabled !== userLocationSharingEnabled ||
+        notificationsEnabled !== userNotificationsEnabled;
+
+      if (shouldPersistProfile) {
+        const currentLocation = locationEnabled ? await getOnboardingLocation() : null;
         await updateProfile({
-          currentLocationSharingEnabled: true,
+          currentLocationSharingEnabled: locationEnabled,
           currentLocation,
-          notificationsEnabled,
-        });
-      } else if (userLocationSharingEnabled) {
-        await updateProfile({
-          currentLocationSharingEnabled: false,
-          currentLocation: null,
-          notificationsEnabled,
-        });
-      } else {
-        await updateProfile({
-          currentLocationSharingEnabled: false,
-          currentLocation: null,
           notificationsEnabled,
         });
       }
@@ -147,9 +174,11 @@ export default function OnboardingSettings() {
         error instanceof Error ? error.message : "Unable to save your location preference.",
       );
     } finally {
-      setIsSaving(false);
+      setIsCompleting(false);
     }
   };
+
+  const isBusy = isCompleting || isResolvingLocation;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -179,7 +208,7 @@ export default function OnboardingSettings() {
               <CustomSwitch
                 value={locationEnabled}
                 onValueChange={handleLocationToggle}
-                disabled={isSaving}
+                disabled={isCompleting}
               />
             </View>
           </View>
@@ -205,9 +234,9 @@ export default function OnboardingSettings() {
           </View>
 
           <TouchableOpacity
-            style={[styles.doneButton, { backgroundColor: colors.primary }, isSaving && styles.doneButtonDisabled]}
+            style={[styles.doneButton, { backgroundColor: colors.primary }, isBusy && styles.doneButtonDisabled]}
             activeOpacity={0.8}
-            disabled={isSaving}
+            disabled={isBusy}
             onPress={handleDone}
           >
             <Text style={[styles.doneButtonText, { color: colors.background }]}>Done</Text>

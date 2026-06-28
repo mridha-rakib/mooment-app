@@ -20,6 +20,7 @@ import type {
   EventPrivacy,
   EventResponse,
   EventTicketPayload,
+  EventTicketRequestPayload,
 } from "@/lib/events";
 import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 
@@ -154,12 +155,19 @@ export const fromAgeRestriction = (value: EventAgeRestriction) => {
   return "All Ages";
 };
 
-const stripLocalTicketFields = (tickets: EventDraftTicket[]): EventTicketPayload[] =>
+const stripLocalTicketFields = (tickets: EventDraftTicket[]): EventTicketRequestPayload[] =>
   tickets.map(stripLocalTicketField);
 
-const stripLocalTicketField = ({ localId: _localId, ...ticket }: EventDraftTicket): EventTicketPayload => ticket;
+const stripLocalTicketField = ({
+  localId: _localId,
+  availableCount: _availableCount,
+  ...ticket
+}: EventDraftTicket): EventTicketRequestPayload => ticket;
 
-const stripTicketIdentity = ({ id: _id, ...ticket }: EventTicketPayload): Omit<EventTicketPayload, "id"> => ticket;
+const stripTicketIdentity = ({
+  id: _id,
+  ...ticket
+}: EventTicketRequestPayload): Omit<EventTicketRequestPayload, "id"> => ticket;
 
 const createTicketLocalId = (index: number) => `ticket-${Date.now()}-${index}`;
 
@@ -212,6 +220,7 @@ const assertValidCategories = (categories: EventCategory[]) => {
 // screen has fully unmounted. Serialize them so two calls cannot both POST a
 // new draft or let an older response race a newer update.
 let draftSaveQueue: Promise<unknown> = Promise.resolve();
+let draftLifecycleVersion = 0;
 
 export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   ...createInitialState(),
@@ -365,6 +374,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   },
 
   saveDraft: () => {
+    const lifecycleVersion = draftLifecycleVersion;
     const operation = draftSaveQueue
       .catch(() => undefined)
       .then(async () => {
@@ -373,6 +383,10 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
         const event = state.isEditingPublishedEvent && state.draftId
           ? await updateEvent(state.draftId, payload)
           : await saveEventDraft(payload, state.draftId);
+
+        if (lifecycleVersion !== draftLifecycleVersion) {
+          return event;
+        }
 
         set({
           ...getEventSyncState(event, get().tickets),
@@ -389,9 +403,21 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   },
 
   publish: async () => {
+    await draftSaveQueue.catch(() => undefined);
+
     const state = get();
     assertValidCategories(state.categories);
     const payload = await buildEventPayload(state);
+
+    // Persist newly-uploaded S3 keys immediately so that if the API call fails
+    // and the user retries, buildEventPayload sees the keys and skips re-upload.
+    if (payload.bannerImageKey && payload.bannerImageKey !== state.bannerImageKey) {
+      set({ bannerImageKey: payload.bannerImageKey });
+    }
+    if (payload.bannerOriginalImageKey && payload.bannerOriginalImageKey !== state.bannerOriginalImageKey) {
+      set({ bannerOriginalImageKey: payload.bannerOriginalImageKey });
+    }
+
     const publishedPayload = {
       ...payload,
       ageRestriction: state.ageRestriction,
@@ -429,6 +455,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   },
 
   loadFromEvent: (event) => {
+    draftLifecycleVersion += 1;
+
     const bannerImageUri = event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null;
     const bannerOriginalImageUri = event.bannerOriginalImageKey
       ? getStorageFileUrl(event.bannerOriginalImageKey)
@@ -455,14 +483,18 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   },
 
   discardDraft: async () => {
+    await draftSaveQueue.catch(() => undefined);
+
     const { draftId, isEditingPublishedEvent } = get();
     if (draftId && !isEditingPublishedEvent) {
       await deleteEvent(draftId);
     }
+    draftLifecycleVersion += 1;
     set(createInitialState());
   },
 
   resetDraft: () => {
+    draftLifecycleVersion += 1;
     set(createInitialState());
   },
 }));

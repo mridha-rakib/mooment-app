@@ -1,29 +1,58 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Platform, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { searchLocations, type LocationSearchResult } from '@/lib/locationSearch';
 
 export type LocationSearchModalProps = {
   visible: boolean;
   onClose: () => void;
-  onSelectLocation: (location: string) => void;
+  onSelectLocation: (location: LocationSearchResult) => void;
 };
-
-const RECENT_LOCATIONS = [
-  { id: '1', name: 'Hazrat Shahjalal International Airport', country: 'Bangladesh', distance: '34mi' },
-  { id: '2', name: 'Hazrat Shahjalal International Airport', country: 'Bangladesh', distance: '34mi' },
-  { id: '3', name: 'Hazrat Shahjalal International Airport', country: 'Bangladesh', distance: '34mi' },
-  { id: '4', name: 'Hazrat Shahjalal International Airport', country: 'Bangladesh', distance: '34mi' },
-  { id: '5', name: 'Hazrat Shahjalal International Airport', country: 'Bangladesh', distance: '34mi' },
-];
 
 export default function LocationSearchModal({ visible, onClose, onSelectLocation }: LocationSearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [locations, setLocations] = useState<LocationSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const filteredLocations = RECENT_LOCATIONS.filter(loc => 
-    loc.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) || 
-    loc.country.toLowerCase().includes(searchQuery.toLowerCase().trim())
-  );
+  useEffect(() => {
+    if (!visible) {
+      setSearchQuery('');
+      setLocations([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setLocations([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let isMounted = true;
+    setIsSearching(true);
+
+    const timer = setTimeout(() => {
+      void searchLocations(query, null, { signal: controller.signal })
+        .then((results) => {
+          if (isMounted) setLocations(results);
+        })
+        .catch(() => {
+          if (isMounted) setLocations([]);
+        })
+        .finally(() => {
+          if (isMounted) setIsSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery, visible]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
@@ -55,31 +84,37 @@ export default function LocationSearchModal({ visible, onClose, onSelectLocation
 
           {/* Recent Locations List */}
           <ScrollView style={styles.listContainer}>
-            {filteredLocations.length > 0 ? (
-              filteredLocations.map((loc, index) => (
+            {isSearching ? (
+              <View style={styles.searchingContainer}>
+                <ActivityIndicator color="#8E8E9B" />
+              </View>
+            ) : locations.length > 0 ? (
+              locations.map((loc, index) => (
               <View key={`${loc.id}-${index}`}>
                 <TouchableOpacity 
                   style={styles.locationItem} 
                   activeOpacity={0.7}
                   onPress={() => {
-                    onSelectLocation(loc.name);
+                    onSelectLocation(loc);
                     onClose();
                   }}
                 >
                   <View style={styles.iconContainer}>
-                    <Feather name="clock" size={16} color="#8E8E9B" />
-                    <Text style={styles.distanceText}>{loc.distance}</Text>
+                    <Feather name="map-pin" size={16} color="#8E8E9B" />
+                    <Text style={styles.distanceText}>{loc.matchLabel ?? 'Place'}</Text>
                   </View>
                   <View style={styles.textContainer}>
                     <Text style={styles.locationName}>{loc.name}</Text>
-                    <Text style={styles.countryName}>{loc.country}</Text>
+                    <Text style={styles.countryName}>{loc.address}</Text>
                   </View>
                 </TouchableOpacity>
                 <View style={styles.separator} />
               </View>
             ))
             ) : (
-              <Text style={{color: '#8E8E9B', marginTop: 40, textAlign: 'center'}}>No locations found</Text>
+              <Text style={{color: '#8E8E9B', marginTop: 40, textAlign: 'center'}}>
+                {searchQuery.trim().length < 2 ? 'Search for a location' : 'No locations found'}
+              </Text>
             )}
           </ScrollView>
 
@@ -173,5 +208,9 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.1)',
     marginLeft: 48, // aligns with text
+  },
+  searchingContainer: {
+    alignItems: 'center',
+    paddingTop: 40,
   },
 });

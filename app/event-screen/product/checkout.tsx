@@ -20,11 +20,9 @@ import {
   COLORS,
 } from "@/components/event/checkout";
 import { clearCart, getCart, type Cart } from "@/lib/cart";
-import { startMoomentCreditsCheckout } from "@/lib/payments";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
 const BUYER_FEE_STRIPE = 0.10;
-const BUYER_FEE_CREDITS = 0.05;
 
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -82,9 +80,8 @@ const ProductCheckoutScreen = () => {
     };
   }, [router]);
 
-  const feeRate = payWith === "Credits" ? BUYER_FEE_CREDITS : BUYER_FEE_STRIPE;
   const subtotalValue = cart?.subtotalUsd ?? 0;
-  const feeValue = roundCurrency(subtotalValue * feeRate);
+  const feeValue = roundCurrency(subtotalValue * BUYER_FEE_STRIPE);
   const totalValue = roundCurrency(subtotalValue + feeValue);
 
   const orderItems = (cart?.items ?? []).map((item) => ({
@@ -116,21 +113,12 @@ const ProductCheckoutScreen = () => {
     setIsPaying(true);
 
     try {
-      if (payWith === "Credits") {
-        await startMoomentCreditsCheckout({
-          kind: "product",
-          paymentMethod: "mooment_credits",
-          items,
-          acceptedTerms: agreed,
-        });
-      } else {
-        await startStripeCheckout({
-          kind: "product",
-          paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
-          items,
-          acceptedTerms: agreed,
-        });
-      }
+      await startStripeCheckout({
+        kind: "product",
+        paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
+        items,
+        acceptedTerms: agreed,
+      });
 
       await clearCart().catch(() => {});
       router.replace({ pathname: "/event-screen/qr-code", params: { type: "product" } });

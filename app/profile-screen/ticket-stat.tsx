@@ -2,16 +2,17 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 
 type TicketStatItem = {
   id: string;
   name: string;
   handle: string;
-  avatar: string;
+  avatar?: string | null;
   status: 'success' | 'failed' | 'pending';
   ticketType: string;
   amount: string;
@@ -22,7 +23,7 @@ const STAT_DATA: TicketStatItem[] = [
     id: '1',
     name: 'Tuval Mor',
     handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
+    avatar: null,
     status: 'success',
     ticketType: 'General Ticket',
     amount: '$45.00',
@@ -31,7 +32,7 @@ const STAT_DATA: TicketStatItem[] = [
     id: '2',
     name: 'Tuval Mor',
     handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
+    avatar: null,
     status: 'failed',
     ticketType: 'Early Bird',
     amount: '$45.00',
@@ -40,7 +41,7 @@ const STAT_DATA: TicketStatItem[] = [
     id: '3',
     name: 'Tuval Mor',
     handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
+    avatar: null,
     status: 'success',
     ticketType: 'VIP',
     amount: '$45.00',
@@ -49,7 +50,7 @@ const STAT_DATA: TicketStatItem[] = [
     id: '4',
     name: 'Tuval Mor',
     handle: '@sfdf',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
+    avatar: null,
     status: 'pending',
     ticketType: 'VIP',
     amount: '$45.00',
@@ -87,7 +88,7 @@ export default function TicketStatScreen() {
     <View style={styles.statRow}>
       <View style={styles.userInfo}>
         <View style={[styles.avatarContainer, { borderColor: colors.primary }]}>
-          <Image source={{ uri: item.avatar }} style={styles.avatar} />
+          <UserAvatar uri={item.avatar} name={item.name} size={48} style={styles.avatar} />
         </View>
         <View>
           <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>

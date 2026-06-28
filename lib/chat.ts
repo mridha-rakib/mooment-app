@@ -15,14 +15,52 @@ export type DirectMessageConversationResponse = {
   isBlocked: boolean;
 };
 
+export type ChatMessageType = "text" | "image" | "video" | "audio" | "location" | "event";
+
+export type ChatFileAttachment = {
+  type: "image" | "video" | "audio";
+  key: string;
+  url?: string | null;
+  mimeType: string;
+  size: number;
+  fileName?: string | null;
+  width?: number | null;
+  height?: number | null;
+  durationSeconds?: number | null;
+};
+
+export type ChatLocationAttachment = {
+  type: "location";
+  latitude: number;
+  longitude: number;
+  label?: string | null;
+  address?: string | null;
+};
+
+export type ChatEventAttachment = {
+  type: "event";
+  eventId: string;
+  title?: string | null;
+  scheduledAt?: string | null;
+  endAt?: string | null;
+  coverImageKey?: string | null;
+  coverImageUrl?: string | null;
+  locationName?: string | null;
+  address?: string | null;
+};
+
+export type ChatMessageAttachment = ChatFileAttachment | ChatLocationAttachment | ChatEventAttachment;
+
 export type DirectChatMessageResponse = {
   id: string;
   conversationId: string;
   senderId: string;
   recipientId: string;
-  type: "text";
+  type: ChatMessageType;
   text: string;
+  attachment?: ChatMessageAttachment | null;
   readAt: string | null;
+  editedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -45,7 +83,10 @@ export type GroupMessageResponse = {
   groupId: string;
   senderId: string;
   senderName: string;
+  type: ChatMessageType;
   text: string;
+  attachment?: ChatMessageAttachment | null;
+  editedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -69,8 +110,12 @@ export const getDirectMessageHistory = async (
   return Array.isArray(messages) ? (messages as DirectChatMessageResponse[]) : [];
 };
 
-export const sendDirectMessage = async (friendId: string, text: string): Promise<DirectChatMessageResponse> => {
-  const response = await api.post(`/chat/dms/${friendId}/messages`, { text });
+export const sendDirectMessage = async (
+  friendId: string,
+  payload: { text?: string; type?: ChatMessageType; attachment?: ChatMessageAttachment } | string,
+): Promise<DirectChatMessageResponse> => {
+  const body = typeof payload === "string" ? { text: payload } : payload;
+  const response = await api.post(`/chat/dms/${friendId}/messages`, body);
   const message = response.data?.data?.message;
 
   if (!message) {
@@ -106,6 +151,12 @@ export const deleteConversation = async (friendId: string): Promise<void> => {
   await api.delete(`/chat/dms/${encodeURIComponent(friendId)}`);
 };
 
+// Checks whether the current user is allowed to message friendId.
+// Throws with a backend-provided reason if messaging is blocked.
+export const checkDirectMessageAccess = async (friendId: string): Promise<void> => {
+  await api.get(`/chat/dms/${encodeURIComponent(friendId)}/messages`, { params: { limit: 1 } });
+};
+
 export const getGroupMessages = async (
   groupId: string,
   options?: { before?: string; limit?: number },
@@ -116,8 +167,12 @@ export const getGroupMessages = async (
   return Array.isArray(messages) ? (messages as GroupMessageResponse[]) : [];
 };
 
-export const sendGroupMessage = async (groupId: string, text: string): Promise<GroupMessageResponse> => {
-  const response = await api.post(`/groups/${groupId}/messages`, { text });
+export const sendGroupMessage = async (
+  groupId: string,
+  payload: { text?: string; type?: ChatMessageType; attachment?: ChatMessageAttachment } | string,
+): Promise<GroupMessageResponse> => {
+  const body = typeof payload === "string" ? { text: payload } : payload;
+  const response = await api.post(`/groups/${groupId}/messages`, body);
   const message = response.data?.data?.message;
 
   if (!message) {

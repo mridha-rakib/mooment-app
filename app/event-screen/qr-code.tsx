@@ -23,12 +23,11 @@ import { getAuthErrorMessage } from '@/lib/authErrors';
 import { cancelTicketShare, shareTicketWithFriend, type TicketWalletPass } from '@/lib/payments';
 import { getFriendUsers, type FriendUserResponse } from '@/lib/users';
 import { getStorageFileUrl } from '@/lib/storage';
+import UserAvatar from '@/components/ui/UserAvatar';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 40, 401);
 const QR_SIZE = CONTENT_WIDTH - 32;
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400';
 
 const getParam = (value: string | string[] | undefined, fallback: string) => {
   const source = Array.isArray(value) ? value[0] : value;
@@ -40,15 +39,19 @@ const parsePositiveInteger = (value: string | string[] | undefined, fallback = 0
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_AVATAR) => {
+const resolveAvatarUri = (key?: string | null, url?: string | null) => {
+  if (url?.trim()) {
+    return url.trim();
+  }
+
   if (!key) {
-    return fallback;
+    return null;
   }
 
   try {
     return getStorageFileUrl(key);
   } catch {
-    return fallback;
+    return null;
   }
 };
 
@@ -596,10 +599,7 @@ export default function QRCodeScreen() {
                     disabled={isShareSubmitting || Boolean(selectedCurrentShare)}
                     activeOpacity={0.85}
                   >
-                    <Image
-                      source={{ uri: resolveStorageUrl(item.avatarKey, DEFAULT_AVATAR) }}
-                      style={styles.friendAvatar}
-                    />
+                    <UserAvatar uri={resolveAvatarUri(item.avatarKey, item.avatarUrl)} name={item.name} size={42} style={styles.friendAvatar} />
                     <View style={styles.friendCopy}>
                       <Text style={styles.friendName}>{item.name}</Text>
                       {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}

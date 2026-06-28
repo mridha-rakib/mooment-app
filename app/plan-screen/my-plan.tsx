@@ -1,4 +1,5 @@
 import EventPickerModal from '@/components/post/EventPickerModal';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -76,16 +77,6 @@ const EVENT_CARD_ACTIVE = {
   muted: '#9A9898',
   text: '#FFFFFF',
 };
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400';
-
-const getFriendInitials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?';
-
 export default function MyPlanScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -567,20 +558,15 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, onDele
   const renderFriendAvatar = (friend: PlanFriend, index: number, borderColor: string) => {
     const marginLeft = index === 0 ? 0 : -8;
 
-    if (friend.avatarUrl || friend.avatarKey) {
-      return (
-        <Image
-          key={friend.id}
-          source={{ uri: friend.avatarUrl || DEFAULT_AVATAR }}
-          style={[s.capsuleAvatar, { borderColor, marginLeft }]}
-        />
-      );
-    }
-
     return (
-      <View key={friend.id} style={[s.initialsAvatar, { borderColor, marginLeft }]}>
-        <Text style={s.initialsText}>{getFriendInitials(friend.name)}</Text>
-      </View>
+      <UserAvatar
+        key={friend.id}
+        uri={friend.avatarUrl}
+        name={friend.name}
+        size={20}
+        style={[s.capsuleAvatar, { borderColor, marginLeft }]}
+        textStyle={s.initialsText}
+      />
     );
   };
 

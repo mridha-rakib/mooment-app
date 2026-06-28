@@ -23,28 +23,6 @@ const PaymentMethods = ({ payWith, onMethodChange, disabledMethods = [] }: Payme
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Pay with</Text>
       <View style={styles.list}>
         <TouchableOpacity 
-          style={[
-            styles.card,
-            { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card, borderColor: payWith === "Credits" ? colors.primary + '33' : 'transparent' },
-            isDisabled("Credits") && styles.disabledCard,
-          ]}
-          onPress={() => handlePress("Credits")}
-          disabled={isDisabled("Credits")}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.radio, { borderColor: colors.textSecondary }, payWith === "Credits" && { borderColor: colors.primary }]}>
-            {payWith === "Credits" && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-          </View>
-          <View style={[styles.iconBg, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.background }]}>
-            <Ionicons name="wallet-outline" size={18} color={colors.textSecondary} />
-          </View>
-          <View style={styles.info}>
-            <Text style={[styles.name, { color: colors.text }]}>Mooment Credits</Text>
-            <Text style={[styles.sub, { color: colors.textSecondary }]}>Balance: $120.00</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
           style={[styles.card, { backgroundColor: isDark ? "rgba(17, 17, 17, 0.8)" : colors.card, borderColor: payWith === "Card" ? colors.primary + '33' : 'transparent' }]}
           onPress={() => handlePress("Card")}
           activeOpacity={0.8}
@@ -137,8 +115,5 @@ const styles = StyleSheet.create({
   sub: {
     fontSize: 11,
     lineHeight: 16,
-  },
-  disabledCard: {
-    opacity: 0.75,
   },
 });

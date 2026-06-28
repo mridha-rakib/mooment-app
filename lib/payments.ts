@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 
-export type CheckoutPaymentMethod = "card" | "apple_pay" | "mooment_credits";
+export type CheckoutPaymentMethod = "card" | "apple_pay";
 export type CheckoutPaymentStatus =
   | "requires_payment"
   | "processing"
@@ -201,6 +201,17 @@ export const confirmCheckoutOrder = async (orderId: string): Promise<CheckoutOrd
   return order;
 };
 
+export const cancelCheckoutOrder = async (orderId: string): Promise<CheckoutOrder> => {
+  const response = await api.post(`/payments/checkout-orders/${encodeURIComponent(orderId)}/cancel`);
+  const order = response.data?.data?.order as CheckoutOrder | undefined;
+
+  if (!order) {
+    throw new Error("The cancellation response was incomplete.");
+  }
+
+  return order;
+};
+
 export const refundCheckoutOrder = async (orderId: string): Promise<CheckoutOrder> => {
   const response = await api.post(`/payments/checkout-orders/${encodeURIComponent(orderId)}/refund`);
   const order = response.data?.data?.order as CheckoutOrder | undefined;
@@ -278,6 +289,81 @@ export const cancelTicketShare = async (shareId: string): Promise<TicketShare> =
   return share;
 };
 
+export type CreatorEarningStatus = "held" | "eligible" | "withdrawn" | "refunded";
+
+export type CreatorEarningItem = {
+  id: string;
+  orderId: string;
+  eventId?: string | null;
+  itemType: "ticket" | "product";
+  grossAmount: number;
+  platformFeePercent: number;
+  platformFeeAmount: number;
+  netAmount: number;
+  status: CreatorEarningStatus;
+  eligibleAt?: string | null;
+  payoutId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreatorEarningsSummary = {
+  heldAmount: number;
+  eligibleAmount: number;
+  pendingWithdrawalAmount: number;
+  withdrawnAmount: number;
+  totalEarnedAmount: number;
+  earnings: CreatorEarningItem[];
+};
+
+export type EventEarningsSummary = {
+  grossAmount: number;
+  platformFeeAmount: number;
+  netAmount: number;
+  refundedAmount: number;
+  ticketNetAmount: number;
+  productNetAmount: number;
+  earnings: CreatorEarningItem[];
+};
+
+export const getMyEarningsSummary = async (): Promise<CreatorEarningsSummary> => {
+  const response = await api.get("/payments/creator-earnings");
+  const summary = response.data?.data?.summary as CreatorEarningsSummary | undefined;
+  return summary ?? {
+    heldAmount: 0,
+    eligibleAmount: 0,
+    pendingWithdrawalAmount: 0,
+    withdrawnAmount: 0,
+    totalEarnedAmount: 0,
+    earnings: [],
+  };
+};
+
+export const requestWithdrawal = async (params?: { amount?: number }): Promise<import("@/lib/payoutSettings").CreatorPayout> => {
+  const response = await api.post("/payments/creator-earnings/withdraw", params ?? {});
+  const payout = response.data?.data?.payout as import("@/lib/payoutSettings").CreatorPayout | undefined;
+
+  if (!payout) {
+    throw new Error("Withdrawal response was incomplete.");
+  }
+
+  return payout;
+};
+
+export const getMyEarningsByEvent = async (eventId: string): Promise<EventEarningsSummary> => {
+  const response = await api.get(`/payments/creator-earnings/events/${encodeURIComponent(eventId)}`);
+  const summary = response.data?.data?.summary as EventEarningsSummary | undefined;
+  return summary ?? {
+    grossAmount: 0,
+    platformFeeAmount: 0,
+    netAmount: 0,
+    refundedAmount: 0,
+    ticketNetAmount: 0,
+    productNetAmount: 0,
+    earnings: [],
+  };
+};
+
 export const scanTicketQrCode = async (qrCode: string): Promise<ScannedTicket> => {
   const response = await api.post("/payments/ticket-scans", { qrCode });
   const ticket = response.data?.data?.ticket as ScannedTicket | undefined;
@@ -287,17 +373,4 @@ export const scanTicketQrCode = async (qrCode: string): Promise<ScannedTicket> =
   }
 
   return ticket;
-};
-
-export const startMoomentCreditsCheckout = async (
-  payload: CreateCheckoutIntentPayload,
-): Promise<CheckoutOrder> => {
-  const creditsPayload = { ...payload, paymentMethod: "mooment_credits" as const };
-  const checkout = await createCheckoutIntent(creditsPayload);
-
-  if (checkout.order.paymentStatus !== "paid") {
-    throw new Error("Mooment Credits payment could not be completed.");
-  }
-
-  return checkout.order;
 };

@@ -14,7 +14,7 @@ type LocationSharingState = {
   error: string | null;
   enableSharing: () => Promise<void>;
   disableSharing: () => Promise<void>;
-  startWatching: () => Promise<void>;
+  startWatching: (options?: { syncImmediately?: boolean }) => Promise<void>;
   stopWatching: () => void;
   syncLocation: (location: CurrentLocationPayload) => Promise<void>;
 };
@@ -74,7 +74,7 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
         generation,
       );
       set({ error: null, isSyncing: false });
-      await get().startWatching();
+      void get().startWatching({ syncImmediately: false }).catch(() => undefined);
     } catch (error) {
       if (generation === sharingGeneration) {
         set({
@@ -107,7 +107,8 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
     }
   },
 
-  startWatching: async () => {
+  startWatching: async (options = {}) => {
+    const { syncImmediately = true } = options;
     const user = useAuthStore.getState().user;
 
     if (!user?.currentLocationSharingEnabled) {
@@ -146,9 +147,11 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
 
       locationSubscription = subscription;
       set({ error: null, isWatching: true });
-      void getCurrentLocationForSharing()
-        .then((location) => get().syncLocation(location))
-        .catch(() => undefined);
+      if (syncImmediately) {
+        void getCurrentLocationForSharing()
+          .then((location) => get().syncLocation(location))
+          .catch(() => undefined);
+      }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Unable to track your current location.",

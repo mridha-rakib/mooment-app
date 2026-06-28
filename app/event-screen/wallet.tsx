@@ -18,6 +18,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useTheme } from "@/hooks/useTheme";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import CinematicButton from "@/components/ui/CinematicButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getMyTicketWallet, type TicketWalletItem } from "@/lib/payments";
@@ -34,7 +35,10 @@ const DEFAULT_EVENT_IMAGE =
   "https://images.unsplash.com/photo-1514525253361-bee8a187499b?q=80&w=400&auto=format&fit=crop";
 const WALLET_TABS: WalletTab[] = ["Shared", "Active", "Used", "Canceled"];
 
-const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_EVENT_IMAGE) => {
+function resolveStorageUrl(key?: string | null): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: null): string | null;
+function resolveStorageUrl(key?: string | null, fallback: string | null = DEFAULT_EVENT_IMAGE) {
   if (!key) {
     return fallback;
   }
@@ -44,7 +48,7 @@ const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_EVENT_IMAGE) 
   } catch {
     return fallback;
   }
-};
+}
 
 const isSameDay = (left: Date, right: Date) =>
   left.getFullYear() === right.getFullYear() &&
@@ -260,15 +264,21 @@ const TicketWalletScreen = () => {
             {section.items.map((item) => (
               <View key={item.id} style={styles.cardContainer}>
                 <View style={styles.sharedInfo}>
-                  <Image
-                    source={{
-                      uri: resolveStorageUrl(
-                        item.source === "shared"
-                          ? item.sharedBy?.avatarKey
-                          : item.currentShare?.friend?.avatarKey ?? item.event.host?.avatarKey,
-                        "https://i.pravatar.cc/150?u=host",
-                      ),
-                    }}
+                  <UserAvatar
+                    uri={resolveStorageUrl(
+                      item.source === "shared"
+                        ? item.sharedBy?.avatarKey
+                        : item.currentShare?.friend?.avatarKey ?? item.event.host?.avatarKey,
+                      null,
+                    )}
+                    name={
+                      item.source === "shared"
+                        ? item.sharedBy?.name ?? "Friend"
+                        : item.currentShare
+                          ? item.currentShare.friend?.name ?? "Friend"
+                          : item.event.host?.name ?? "Host"
+                    }
+                    size={28}
                     style={styles.avatar}
                   />
                   <Text style={[styles.sharedText, { color: colors.textSecondary }]}>

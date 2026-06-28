@@ -71,6 +71,28 @@ export default function EventFeedCard({ event }: Props) {
 
   const hostName = event.host?.name?.trim() || event.host?.username?.trim() || "Event host";
   const categories = event.categories?.length > 0 ? event.categories : event.category ? [event.category] : [];
+  const displayCategories = categories.slice(0, 3);
+  const categoryCount = displayCategories.length;
+  const overlayLayout = useMemo(() => {
+    if (categoryCount >= 3) {
+      return {
+        overlay: { bottom: 6, height: 170, paddingBottom: 8 },
+        panel: { height: 154, paddingVertical: 8, gap: 4 },
+      };
+    }
+
+    if (categoryCount === 2) {
+      return {
+        overlay: { bottom: 8, height: 138, paddingBottom: 10 },
+        panel: { height: 118, paddingVertical: 10, gap: 5 },
+      };
+    }
+
+    return {
+      overlay: { bottom: 0, height: 116, paddingBottom: 20 },
+      panel: { height: 96, paddingVertical: 10, gap: 5 },
+    };
+  }, [categoryCount]);
   const firstCategory = categories[0] ?? null;
   const eventDate = formatDate(event.scheduledAt);
   const eventTime = formatTime(event.scheduledAt);
@@ -253,6 +275,9 @@ export default function EventFeedCard({ event }: Props) {
   const goToEvent = () =>
     router.push({ pathname: "/event-screen/event", params: { eventId: event.id } });
 
+  const goToCategory = (category: string) =>
+    router.push({ pathname: "/discover-screen/event-category", params: { category } });
+
   const goToMap = () => {
     const locationName =
       event.location?.venue?.trim()
@@ -356,21 +381,31 @@ export default function EventFeedCard({ event }: Props) {
         <View style={styles.imageTint} />
 
         {/* info section pinned to image bottom */}
-        <View style={styles.infoOverlay}>
+        <View style={[styles.infoOverlay, overlayLayout.overlay]}>
           {/* left: accent bar + gradient panel */}
           <View style={styles.infoLeft}>
-            <View style={styles.accentBar} />
+            <View style={[styles.accentBar, { height: overlayLayout.panel.height }]} />
             <LinearGradient
               colors={["#1F1A23", "rgba(102,102,102,0)"]}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
-              style={styles.infoPanel}
+              style={[styles.infoPanel, overlayLayout.panel]}
             >
-              {firstCategory ? (
+              {displayCategories.length > 0 ? (
                 <View style={styles.tagsRow}>
-                  <View style={styles.categoryTag}>
-                    <Text style={styles.categoryTagText} numberOfLines={1}>{firstCategory}</Text>
-                  </View>
+                  {displayCategories.map((category) => (
+                    <TouchableOpacity
+                      key={category}
+                      style={styles.categoryTag}
+                      activeOpacity={0.85}
+                      hitSlop={4}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${category} events`}
+                      onPress={() => goToCategory(category)}
+                    >
+                      <Text style={styles.categoryTagText} numberOfLines={1}>{category}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               ) : null}
 
@@ -615,15 +650,12 @@ const styles = StyleSheet.create({
   },
   infoOverlay: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
-    height: 116,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
     paddingHorizontal: 12,
-    paddingBottom: 20,
   },
   infoLeft: {
     flex: 1,
@@ -634,19 +666,15 @@ const styles = StyleSheet.create({
   },
   accentBar: {
     width: 4,
-    height: 96,
     borderRadius: 999,
     backgroundColor: "#B2ABBA",
   },
   infoPanel: {
     flex: 1,
-    height: 96,
     borderRadius: 12,
     paddingLeft: 8,
     paddingRight: 8,
-    paddingVertical: 10,
     justifyContent: "center",
-    gap: 5,
   },
   tagsRow: {
     flexDirection: "row",

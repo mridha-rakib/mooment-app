@@ -10,8 +10,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
-
 export default function HashtagPostsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -31,7 +29,7 @@ export default function HashtagPostsScreen() {
     try {
       const moments = await getHashtagMoments(tag, 100);
       setPosts(moments
-        .map((moment) => mapMomentToPost(moment, { fallbackAvatar: FALLBACK_AVATAR, storageUrlResolver: getStorageFileUrl }))
+        .map((moment) => mapMomentToPost(moment, { storageUrlResolver: getStorageFileUrl }))
         .filter((post): post is PostData => Boolean(post)));
     } catch {
       setPosts([]);

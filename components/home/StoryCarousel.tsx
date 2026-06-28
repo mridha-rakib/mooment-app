@@ -5,12 +5,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer } from 'expo-video';
 import { getCachedStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSource } from '@/lib/storyThumbnails';
+import UserAvatar from '../ui/UserAvatar';
 
 export type StoryData = {
   id: string;
   type: 'add' | 'live' | 'standard' | 'muted';
   isOwnStory?: boolean;
-  imageUri?: string;
+  imageUri?: string | null;
   mediaUri?: string | null;
   storyItems?: StorySequenceItem[];
   title?: string;
@@ -44,10 +45,12 @@ function StoryThumbnail({
   storyId,
   mediaUri,
   fallbackUri,
+  fallbackName,
 }: {
   storyId: string;
   mediaUri?: string | null;
-  fallbackUri?: string;
+  fallbackUri?: string | null;
+  fallbackName?: string | null;
 }) {
   const player = useVideoPlayer(mediaUri ? { uri: mediaUri, useCaching: true } : null, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -107,13 +110,17 @@ function StoryThumbnail({
     };
   }, [fallbackUri, mediaUri, player, storyId]);
 
-  return (
-    <Image
-      source={thumbnailSource ?? undefined}
-      style={styles.storyImage}
-      contentFit="cover"
-    />
-  );
+  if (thumbnailSource) {
+    return (
+      <Image
+        source={thumbnailSource}
+        style={styles.storyImage}
+        contentFit="cover"
+      />
+    );
+  }
+
+  return <UserAvatar uri={null} name={fallbackName} size={70} style={styles.storyImage} />;
 }
 
 export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
@@ -175,7 +182,12 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
               }}
             >
               <View style={[styles.storyRing, ringStyle]}>
-                <StoryThumbnail storyId={story.id} mediaUri={story.mediaUri} fallbackUri={story.imageUri} />
+                <StoryThumbnail
+                  storyId={story.id}
+                  mediaUri={story.mediaUri}
+                  fallbackUri={story.imageUri}
+                  fallbackName={story.title ?? story.authorName}
+                />
 
                 {story.type === 'live' && (
                   <View style={styles.liveBadge}>

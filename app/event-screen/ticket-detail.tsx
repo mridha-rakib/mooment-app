@@ -1,4 +1,5 @@
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getEventTicket, type EventResponse, type EventTicketPayload } from "@/lib/events";
@@ -38,12 +39,13 @@ import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
 
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
-const DEFAULT_AVATAR =
-  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 const { width } = Dimensions.get("window");
 const WALLET_CONTENT_WIDTH = Math.min(width - 32, 360);
 
-const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_BANNER) => {
+function resolveStorageUrl(key?: string | null): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: null): string | null;
+function resolveStorageUrl(key?: string | null, fallback: string | null = DEFAULT_BANNER) {
   if (!key) {
     return fallback;
   }
@@ -53,6 +55,14 @@ const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_BANNER) => {
   } catch {
     return fallback;
   }
+}
+
+const resolveAvatarUri = (key?: string | null, url?: string | null) => {
+  if (url?.trim()) {
+    return url.trim();
+  }
+
+  return resolveStorageUrl(key, null);
 };
 
 const formatPrice = (ticket?: EventTicketPayload | null) => {
@@ -188,7 +198,7 @@ const TicketDetailScreen = () => {
   const [ticketStat, setTicketStat] = useState<TicketStatEntry | null>(null);
 
   const bannerImageUri = resolveStorageUrl(event?.bannerOriginalImageKey ?? event?.bannerImageKey, DEFAULT_BANNER);
-  const hostAvatarUri = resolveStorageUrl(event?.host?.avatarKey, DEFAULT_AVATAR);
+  const hostAvatarUri = resolveAvatarUri(event?.host?.avatarKey, event?.host?.avatarUrl);
   const hostHandle = getHostHandle(event);
 
   useFocusEffect(
@@ -553,7 +563,7 @@ const TicketDetailScreen = () => {
                 <Text style={styles.walletCategoryText}>Music Party</Text>
               </View>
               <View style={styles.walletHostRow}>
-                <Image source={{ uri: DEFAULT_AVATAR }} style={styles.walletHostAvatar} contentFit="cover" />
+                <UserAvatar uri={null} name={walletHostName} size={34} style={styles.walletHostAvatar} />
                 <View style={styles.walletHostCopy}>
                   <Text style={styles.walletHostName}>{walletHostName}</Text>
                   {!!walletHostHandle && <Text style={styles.walletHostHandle}>{walletHostHandle}</Text>}
@@ -777,11 +787,7 @@ const TicketDetailScreen = () => {
                       disabled={isShareSubmitting || Boolean(selectedShare) || selectedSharePass?.status === "used"}
                       activeOpacity={0.85}
                     >
-                      <Image
-                        source={{ uri: resolveStorageUrl(item.avatarKey, DEFAULT_AVATAR) }}
-                        style={styles.friendAvatar}
-                        contentFit="cover"
-                      />
+                      <UserAvatar uri={resolveAvatarUri(item.avatarKey, item.avatarUrl)} name={item.name} size={42} style={styles.friendAvatar} />
                       <View style={styles.friendCopy}>
                         <Text style={styles.friendName}>{item.name}</Text>
                         {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
@@ -856,7 +862,7 @@ const TicketDetailScreen = () => {
             )}
 
             <View style={styles.hostRow}>
-              <Image source={{ uri: hostAvatarUri }} style={styles.hostAvatar} contentFit="cover" />
+              <UserAvatar uri={hostAvatarUri} name={event.host?.name} size={52} style={styles.hostAvatar} />
               <View style={styles.hostTextBlock}>
                 <Text style={styles.hostName} numberOfLines={1}>
                   {event.host?.name ?? "Host"}

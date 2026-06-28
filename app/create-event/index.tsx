@@ -78,6 +78,7 @@ export default function CreateEventScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
+  const isAdvancingRef = useRef(false);
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -173,8 +174,24 @@ export default function CreateEventScreen() {
     }
   };
 
+  const handleNextDraftSaveError = (error: unknown) => {
+    if (isBusinessAccountRequiredError(error)) {
+      requireBusinessAccountForEvent({
+        user: currentUser,
+        completedProfileTypes,
+        updateProfile,
+        router,
+        onReady: () => {
+          void saveDraft().catch(handleNextDraftSaveError);
+        },
+      });
+    } else {
+      Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+    }
+  };
+
   const handleNext = async () => {
-    if (isSaving) return;
+    if (isSaving || isAdvancingRef.current) return;
     const result = createEventStepOneSchema.safeParse({
       name,
       description,
@@ -195,6 +212,19 @@ export default function CreateEventScreen() {
 
     setErrors({});
     persistStepOne(result.data);
+
+    if (!isEditingPublished) {
+      isAdvancingRef.current = true;
+      const draftSave = saveDraft();
+      router.push('/create-event/step-2');
+      void draftSave
+        .catch(handleNextDraftSaveError)
+        .finally(() => {
+          isAdvancingRef.current = false;
+        });
+      return;
+    }
+
     setIsSaving(true);
 
     try {

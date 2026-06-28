@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useRouter } from 'expo-router';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { followUser, unfollowUser } from '@/lib/users';
+import UserAvatar from '../ui/UserAvatar';
 
 export type SuggestedUser = {
   id: string;
@@ -23,7 +23,6 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
   const router = useRouter();
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
-  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
   useEffect(() => {
     setFollowedUserIds(users.filter((user) => user.isFollowing).map((user) => user.id));
@@ -102,22 +101,13 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
                 params: { 
                   userId: user.id,
                   name: user.name,
+                  isFollowing: String(user.isFollowing ?? followedUserIds.includes(user.id)),
                   ...(user.avatarUri ? { avatar: user.avatarUri } : {}),
                 }
               } as any)}
               style={styles.avatarContainer}
             >
-              {user.avatarUri && !failedAvatarIds.has(user.id) ? (
-                <Image
-                  source={{ uri: user.avatarUri }}
-                  style={styles.avatar}
-                  onError={() => setFailedAvatarIds((prev) => new Set([...prev, user.id]))}
-                />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Feather name="user" size={28} color="#8E8E9B" />
-                </View>
-              )}
+              <UserAvatar uri={user.avatarUri} name={user.name} size={70} style={styles.avatar} iconSize={28} />
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -126,6 +116,7 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
                 params: { 
                   userId: user.id,
                   name: user.name,
+                  isFollowing: String(user.isFollowing ?? followedUserIds.includes(user.id)),
                   ...(user.avatarUri ? { avatar: user.avatarUri } : {}),
                 }
               } as any)}

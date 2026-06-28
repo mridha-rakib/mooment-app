@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
@@ -12,6 +12,7 @@ import MoreMenuModal from "../post/MoreMenuModal";
 import BackButton from "../ui/BackButton";
 import ChevronRightIcon from "../ui/ChevronRightIcon";
 import CinematicButton from "../ui/CinematicButton";
+import UserAvatar from "../ui/UserAvatar";
 
 export type ProfileStats = {
   posts: number;
@@ -24,25 +25,20 @@ const BUSINESS_RING_COLOR = '#FFD700';
 
 type ProfileHeaderProps = {
   userId: string;
-  avatar: string;
+  name?: string | null;
+  avatar?: string | null;
   stats: ProfileStats;
   accountType?: 'personal' | 'business';
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
 };
 
-export default function ProfileHeader({ userId, avatar, stats, accountType, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
+export default function ProfileHeader({ userId, name, avatar, stats, accountType, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
   const [isSearching, setIsSearching] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
-
-  useEffect(() => {
-    setAvatarLoadFailed(false);
-  }, [avatar]);
-
   return (
     <View style={styles.container}>
       {isOwnProfile ? (
@@ -101,17 +97,7 @@ export default function ProfileHeader({ userId, avatar, stats, accountType, isOw
         style={[styles.avatarBorder, { borderColor: accountType === 'business' ? BUSINESS_RING_COLOR : colors.primary }]}
         accessibilityLabel={accountType === 'business' ? 'Business account avatar' : 'Personal account avatar'}
       >
-          {!avatarLoadFailed ? (
-            <Image
-              source={{ uri: avatar }}
-              style={styles.avatar}
-              onError={() => setAvatarLoadFailed(true)}
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: colors.card }]}>
-              <Feather name="user" size={36} color={colors.textSecondary} />
-            </View>
-          )}
+          <UserAvatar uri={avatar} name={name} size={80} style={styles.avatar} iconSize={36} />
         </View>
 
         <View style={styles.statsContainer}>

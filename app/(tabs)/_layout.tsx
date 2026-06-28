@@ -1,27 +1,77 @@
+import { useTheme } from "@/hooks/useTheme";
+import { getUnreadNotificationCount } from "@/lib/notifications";
+import { createRealtimeSocket } from "@/lib/realtime";
+import { getStorageFileUrl } from "@/lib/storage";
+import { useAuthStore } from "@/stores/authStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { Feather } from "@expo/vector-icons";
 import { Tabs as ExpoTabs } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Path, Svg } from "react-native-svg";
 import AddOptionsModal from "../../components/modals/AddOptionsModal";
-import { useTheme } from "@/hooks/useTheme";
-import { getStorageFileUrl } from "@/lib/storage";
-import { useAuthStore } from "@/stores/authStore";
-import { useNotificationStore } from "@/stores/notificationStore";
 
 export default function TabLayout() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [tabAvatarError, setTabAvatarError] = useState(false);
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
   const tabAvatarUri = user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null;
   const unreadCount = useNotificationStore((state) => state.unreadCount);
+  const setUnreadCount = useNotificationStore((state) => state.setUnreadCount);
+  const incrementUnread = useNotificationStore((state) => state.incrementUnread);
+  const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
 
   useEffect(() => {
     setTabAvatarError(false);
   }, [user?.avatarKey]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let isMounted = true;
+
+    getUnreadNotificationCount()
+      .then((count) => {
+        if (isMounted) {
+          setUnreadCount(count);
+        }
+      })
+      .catch(() => {
+        // Keep the current badge value if the count request fails.
+      });
+
+    const socket = createRealtimeSocket({
+      accessToken,
+      onNotification: (notification) => {
+        if (!notification.isRead) {
+          incrementUnread();
+        }
+      },
+      onNotificationRead: ({ unreadCount: nextUnreadCount }) => {
+        setUnreadCount(nextUnreadCount);
+      },
+      onNotificationsReadAll: ({ unreadCount: nextUnreadCount }) => {
+        setUnreadCount(nextUnreadCount);
+      },
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      isMounted = false;
+      socket.close();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+    };
+  }, [accessToken, incrementUnread, setUnreadCount]);
 
   const TAB_BAR_INNER_HEIGHT = 56;
   const tabBarHeight = TAB_BAR_INNER_HEIGHT + insets.bottom;

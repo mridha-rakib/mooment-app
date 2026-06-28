@@ -5,11 +5,14 @@ import ChatTab from "@/components/eventTabs/ChatTab";
 // import ProductTab from "@/components/eventTabs/ProductTab";
 import VibeTab from "@/components/eventTabs/VibeTab";
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import {
     acceptJoinRequest,
+    cancelEvent,
     claimEventReward,
+    completeEvent,
     declineJoinRequest,
     deleteEvent,
     deleteEventReward,
@@ -17,6 +20,7 @@ import {
     getEventById,
     getJoinRequests,
     getMyEventRewardClaims,
+    startEvent,
     submitJoinRequest,
     ticketAlreadyHasReward,
     updateEvent,
@@ -69,8 +73,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const { width } = Dimensions.get("window");
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
-const DEFAULT_AVATAR =
-  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
 const isDirectMediaUrl = (value?: string | null) =>
   Boolean(value && /^(https?:|data:|file:|content:)/i.test(value.trim()));
@@ -141,7 +143,9 @@ const formatEventTime = (scheduledAt?: string | null) => {
   }).format(date);
 };
 
-const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_AVATAR) => {
+function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
+function resolveStorageUrl(key?: string | null, fallback?: string | null): string | null;
+function resolveStorageUrl(key?: string | null, fallback: string | null = null) {
   if (!key) {
     return fallback;
   }
@@ -155,7 +159,7 @@ const resolveStorageUrl = (key?: string | null, fallback = DEFAULT_AVATAR) => {
   } catch {
     return fallback;
   }
-};
+}
 
 const formatPrice = (tickets: EventResponse["tickets"]) => {
   const prices = tickets
@@ -233,7 +237,7 @@ const getDistanceLabel = (
     return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()}mi`;
   }
 
-  return "nearby";
+    return "nearby";
 };
 
 const getBannerImageUri = (event?: EventResponse | null) =>
@@ -252,28 +256,22 @@ const getHostAvatarUri = (event?: EventResponse | null) => {
   const avatarKey = getNonEmptyString(event?.host?.avatarKey);
 
   if (avatarKey) {
-    return resolveStorageUrl(avatarKey, DEFAULT_AVATAR);
+    return resolveStorageUrl(avatarKey, null);
   }
 
   const avatarUrl = getNonEmptyString(event?.host?.avatarUrl);
 
   if (avatarUrl) {
-    return resolveStorageUrl(avatarUrl, DEFAULT_AVATAR);
+    return resolveStorageUrl(avatarUrl, null);
   }
 
-  return DEFAULT_AVATAR;
+  return null;
 };
 
 const getHostHandle = (event?: EventResponse | null) => {
   const handle = event?.host?.username?.trim().replace(/^@+/, "");
 
   return handle ? `@${handle}` : "";
-};
-
-const getHostInitial = (event?: EventResponse | null) => {
-  const source = event?.host?.name?.trim() || event?.host?.username?.trim() || "H";
-
-  return source.charAt(0).toUpperCase();
 };
 
 const getHeroCategoryTags = (event?: EventResponse | null) => {
@@ -337,7 +335,9 @@ const EventScreen = () => {
   const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
-  const [isEventStarted, setIsEventStarted] = useState(false);
+  const isEventStarted = event?.status === 'live';
+  const isEventCompleted = event?.status === 'completed';
+  const isEventCancelled = event?.status === 'cancelled';
   const [selectedReward, setSelectedReward] = useState<EventRewardPayload | null>(null);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [submittingJoinRequest, setSubmittingJoinRequest] = useState(false);
@@ -351,7 +351,6 @@ const EventScreen = () => {
   const [isLikePending, setIsLikePending] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  const [hostAvatarFailed, setHostAvatarFailed] = useState(false);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -555,11 +554,7 @@ const EventScreen = () => {
   const hostName = event?.host?.name ?? "Host";
   const hostHandle = getHostHandle(event);
   const hostAvatarUri = getHostAvatarUri(event);
-  const hostInitial = getHostInitial(event);
 
-  useEffect(() => {
-    setHostAvatarFailed(false);
-  }, [hostAvatarUri]);
   const bannerImageUri = getBannerImageUri(event);
   const eventImageUris = useMemo(() => {
     const bannerUris = getEventBannerImageUris(event);
@@ -654,6 +649,10 @@ const EventScreen = () => {
       return;
     }
 
+    if (isEventCompleted || isEventCancelled) {
+      return;
+    }
+
     requireBusinessAccountForEvent({
       user: currentUser,
       completedProfileTypes,
@@ -725,9 +724,13 @@ const EventScreen = () => {
             {
               text: "Yes, Cancel Event",
               style: "destructive",
-              onPress: () => {
-                // TODO: wire up cancel-event API call
-                console.log("Event cancelled");
+              onPress: async () => {
+                try {
+                  const updated = await cancelEvent(event.id);
+                  mergeUpdatedEvent(updated);
+                } catch (error) {
+                  Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
+                }
               },
             },
           ],
@@ -754,9 +757,17 @@ const EventScreen = () => {
             { text: "Not Yet", style: "cancel" },
             {
               text: "Start Now",
-              onPress: () => {
-                setIsEventStarted(true);
-                router.push("/profile-screen/event-dashboard");
+              onPress: async () => {
+                try {
+                  const updated = await startEvent(event.id);
+                  mergeUpdatedEvent(updated);
+                  router.push({
+                    pathname: "/profile-screen/event-dashboard",
+                    params: { eventId: event.id, eventName: event.name ?? "Event" },
+                  });
+                } catch (error) {
+                  Alert.alert("Unable to start event", getAuthErrorMessage(error, "Please try again."));
+                }
               },
             },
           ],
@@ -784,10 +795,13 @@ const EventScreen = () => {
             {
               text: "End Event",
               style: "destructive",
-              onPress: () => {
-                setIsEventStarted(false);
-                // TODO: wire up end-event API call
-                console.log("Event ended successfully");
+              onPress: async () => {
+                try {
+                  const updated = await completeEvent(event.id);
+                  mergeUpdatedEvent(updated);
+                } catch (error) {
+                  Alert.alert("Unable to end event", getAuthErrorMessage(error, "Please try again."));
+                }
               },
             },
           ],
@@ -813,12 +827,20 @@ const EventScreen = () => {
       return;
     }
 
+    if (isEventCompleted || isEventCancelled) {
+      return;
+    }
+
     loadEventForEdit(event);
     router.push("/create-event/ticket-details");
   };
 
   const handleEditTicket = (ticket: EventTicketPayload) => {
     if (!event || !isHostMode) {
+      return;
+    }
+
+    if (isEventCompleted || isEventCancelled) {
       return;
     }
 
@@ -1123,7 +1145,7 @@ const EventScreen = () => {
   };
 
   const handleAddMembers = () => {
-    if (!event) return;
+    if (!event || isEventCompleted || isEventCancelled) return;
     router.push({
       pathname: "/event-screen/members",
       params: { eventId: event.id },
@@ -1192,6 +1214,10 @@ const EventScreen = () => {
       return;
     }
 
+    if (isEventCompleted || isEventCancelled) {
+      return;
+    }
+
     setIsUpdatingPrivacy(true);
 
     try {
@@ -1207,7 +1233,7 @@ const EventScreen = () => {
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={colors.text} onPress={() => router.back()} />
-      {isHostMode && event?.privacy !== "private" && (
+      {isHostMode && event?.privacy !== "private" && !isEventCompleted && !isEventCancelled && (
         <TouchableOpacity
           style={styles.privacyPill}
           activeOpacity={0.8}
@@ -1273,40 +1299,30 @@ const EventScreen = () => {
                   </View>
                 ))}
               </View>
-              {isHostMode && event?.privacy === "private" && (
+              {isHostMode && event?.privacy === "private" && !isEventCompleted && !isEventCancelled && (
                 <TouchableOpacity
                   style={styles.addMembersBtn}
                   activeOpacity={0.85}
                   onPress={handleAddMembers}
                 >
                   <Feather name="plus" size={15} color="#111111" />
-                  <Text style={styles.addMembersText}>Add Members</Text>
+                  <Text style={styles.addMembersText}>
+                    {(event.memberCount ?? 0) > 0 ? `Members (${event.memberCount})` : "Add Members"}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
 
             <View style={styles.hostRow}>
-              {hostAvatarUri && !hostAvatarFailed ? (
-                <Image
-                  source={{ uri: hostAvatarUri }}
-                  style={[
-                    styles.hostAvatar,
-                    { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
-                  ]}
-                  contentFit="cover"
-                  onError={() => setHostAvatarFailed(true)}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.hostAvatar,
-                    styles.hostAvatarFallback,
-                    { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
-                  ]}
-                >
-                  <Text style={styles.hostAvatarFallbackText}>{hostInitial}</Text>
-                </View>
-              )}
+              <UserAvatar
+                uri={hostAvatarUri}
+                name={event?.host?.name}
+                size={42}
+                style={[
+                  styles.hostAvatar,
+                  { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
+                ]}
+              />
               <View style={styles.hostInfo}>
                 <Text style={[styles.hostName, { color: colors.text }]}>{hostName}</Text>
                 <View style={styles.hostSubRow}>
@@ -1424,6 +1440,7 @@ const EventScreen = () => {
               rewards={event?.rewards ?? []}
               scheduledAt={event?.scheduledAt ?? null}
               privacy={event?.privacy}
+              isMember={event?.isMember ?? false}
               purchasedTicketCounts={purchasedTicketCounts}
               ticketStats={isHostMode ? ticketStats : undefined}
               isHostMode={isHostMode}
@@ -1447,9 +1464,9 @@ const EventScreen = () => {
               onSubmitJoinRequest={handleSubmitJoinRequest}
               onAcceptJoinRequest={handleAcceptJoinRequest}
               onDeclineJoinRequest={handleDeclineJoinRequest}
-              onCreateTicket={handleCreateTicket}
+              onCreateTicket={isEventCompleted || isEventCancelled ? undefined : handleCreateTicket}
               onViewTicket={handleViewTicket}
-              onEditTicket={handleEditTicket}
+              onEditTicket={isEventCompleted || isEventCancelled ? undefined : handleEditTicket}
               onDeleteTicket={handleDeleteTicket}
               onCreateReward={handleCreateReward}
               onViewReward={handleViewReward}
@@ -1500,35 +1517,37 @@ const EventScreen = () => {
         ]}
       >
         {isHostMode ? (
-          <View style={styles.hostFooterBtns}>
-            <TouchableOpacity
-              style={styles.cancelEventBtn}
-              activeOpacity={0.8}
-              onPress={handleCancelEvent}
-            >
-              <Feather name="x-circle" size={18} color="#D44343" />
-              <Text style={styles.cancelEventBtnText}>Cancel Event</Text>
-            </TouchableOpacity>
-            {isEventStarted ? (
+          !isEventCompleted && !isEventCancelled ? (
+            <View style={styles.hostFooterBtns}>
               <TouchableOpacity
-                style={styles.endEventBtn}
-                activeOpacity={0.85}
-                onPress={handleEndEvent}
+                style={styles.cancelEventBtn}
+                activeOpacity={0.8}
+                onPress={handleCancelEvent}
               >
-                <Feather name="check-circle" size={18} color="#FFFFFF" />
-                <Text style={[styles.buyBtnText, { color: "#FFFFFF" }]}>End Event</Text>
+                <Feather name="x-circle" size={18} color="#D44343" />
+                <Text style={styles.cancelEventBtnText}>Cancel Event</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.startEventBtn}
-                activeOpacity={0.85}
-                onPress={handleStartEvent}
-              >
-                <Feather name="play-circle" size={18} color="#111111" />
-                <Text style={[styles.buyBtnText, { color: "#111111" }]}>Start The Event</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+              {isEventStarted ? (
+                <TouchableOpacity
+                  style={styles.endEventBtn}
+                  activeOpacity={0.85}
+                  onPress={handleEndEvent}
+                >
+                  <Feather name="check-circle" size={18} color="#FFFFFF" />
+                  <Text style={[styles.buyBtnText, { color: "#FFFFFF" }]}>End Event</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.startEventBtn}
+                  activeOpacity={0.85}
+                  onPress={handleStartEvent}
+                >
+                  <Feather name="play-circle" size={18} color="#111111" />
+                  <Text style={[styles.buyBtnText, { color: "#111111" }]}>Start The Event</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null
         ) : (
           <>
             <View style={styles.priceContainer}>
@@ -1621,12 +1640,16 @@ const EventScreen = () => {
           >
             {isHostMode ? (
               <>
-                <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
-                  <Feather name="edit-3" size={20} color="#FFF" />
-                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>Edit</Text>
-                </TouchableOpacity>
+                {!isEventCompleted && !isEventCancelled && (
+                  <>
+                    <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
+                      <Feather name="edit-3" size={20} color="#FFF" />
+                      <Text style={[styles.menuItemText, { color: "#FFF" }]}>Edit</Text>
+                    </TouchableOpacity>
 
-                <View style={styles.menuSeparator} />
+                    <View style={styles.menuSeparator} />
+                  </>
+                )}
 
                 <TouchableOpacity
                   style={styles.menuItem}

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ScrollView, Platform, KeyboardAvoidingView, Share } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Platform, KeyboardAvoidingView, Share } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
+import UserAvatar from '../ui/UserAvatar';
 
 type ShareUser = {
   id: string;
   name: string;
-  avatar: string;
+  avatar?: string | null;
 };
 
 type ShareApp = {
@@ -16,12 +17,12 @@ type ShareApp = {
 };
 
 const MOCK_USERS: ShareUser[] = [
-  { id: '1', name: 'dj_karas', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop' },
-  { id: '2', name: 'Kudos', avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop' },
-  { id: '3', name: 'Hamid', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop' },
-  { id: '4', name: 'Karas', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop' },
-  { id: '5', name: 'Carry', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop' },
-  { id: '6', name: 'Sierra', avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=80&w=150&auto=format&fit=crop' },
+  { id: '1', name: 'dj_karas', avatar: null },
+  { id: '2', name: 'Kudos', avatar: null },
+  { id: '3', name: 'Hamid', avatar: null },
+  { id: '4', name: 'Karas', avatar: null },
+  { id: '5', name: 'Carry', avatar: null },
+  { id: '6', name: 'Sierra', avatar: null },
 ];
 
 const MOCK_APPS: ShareApp[] = [
@@ -147,7 +148,7 @@ export default function ShareModal({
               {MOCK_USERS.map((user) => (
                 <TouchableOpacity key={user.id} style={styles.userItem} activeOpacity={0.8}>
                   <View style={[styles.avatarRing, { borderColor: colors.primary }]}>
-                    <Image source={{ uri: user.avatar }} style={[styles.avatarImage, { borderColor: colors.card }]} />
+                    <UserAvatar uri={user.avatar} name={user.name} size={52} style={[styles.avatarImage, { borderColor: colors.card }]} />
                   </View>
                   <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>{user.name}</Text>
                 </TouchableOpacity>

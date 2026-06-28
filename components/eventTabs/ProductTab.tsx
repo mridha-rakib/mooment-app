@@ -14,11 +14,10 @@ import { getPublishedProductsByUser, type Product } from "@/lib/products";
 import { getStorageFileUrl } from "@/lib/storage";
 import type { EventHost } from "@/lib/events";
 import MoreMenuModal from "../post/MoreMenuModal";
+import UserAvatar from "../ui/UserAvatar";
 
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=700&auto=format&fit=crop";
-const FALLBACK_AVATAR =
-  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
 type ProductTabProps = {
   creatorId?: string | null;
@@ -32,7 +31,10 @@ type ProductCardProps = {
   isHostMode?: boolean;
 };
 
-const resolveStorageUrl = (key?: string | null, fallback = FALLBACK_PRODUCT_IMAGE) => {
+function resolveStorageUrl(key?: string | null): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: null): string | null;
+function resolveStorageUrl(key?: string | null, fallback: string | null = FALLBACK_PRODUCT_IMAGE) {
   if (!key) {
     return fallback;
   }
@@ -42,7 +44,7 @@ const resolveStorageUrl = (key?: string | null, fallback = FALLBACK_PRODUCT_IMAG
   } catch {
     return fallback;
   }
-};
+}
 
 const formatPrice = (product: Product) => {
   const price = product.discountPercent > 0
@@ -57,8 +59,13 @@ const formatPrice = (product: Product) => {
 
 const getHostName = (host?: EventHost | null) => host?.name?.trim() || "Event creator";
 
-const getHostAvatar = (host?: EventHost | null) =>
-  resolveStorageUrl(host?.avatarUrl ?? host?.avatarKey, FALLBACK_AVATAR);
+const getHostAvatar = (host?: EventHost | null) => {
+  if (host?.avatarUrl?.trim()) {
+    return host.avatarUrl.trim();
+  }
+
+  return host?.avatarKey ? resolveStorageUrl(host.avatarKey, null) : null;
+};
 
 const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) => {
   const { colors, isDark } = useTheme();
@@ -70,6 +77,7 @@ const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) =>
     () => resolveStorageUrl(product.imageKeys[0], FALLBACK_PRODUCT_IMAGE),
     [product.imageKeys],
   );
+  const hostAvatarUri = getHostAvatar(host);
   const imageCount = Math.max(1, product.imageKeys.length);
 
   const handleMorePress = () => {
@@ -82,7 +90,7 @@ const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) =>
   return (
     <View style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Image source={{ uri: getHostAvatar(host) }} style={styles.avatar} />
+        <UserAvatar uri={hostAvatarUri} name={getHostName(host)} size={36} style={styles.avatar} />
         <View style={styles.userInfo}>
           <Text style={[styles.userName, { color: colors.text }]}>{getHostName(host)}</Text>
           <Text style={[styles.time, { color: colors.textSecondary }]}>Published product</Text>
@@ -129,7 +137,7 @@ const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) =>
               pathname: "/event-screen/product/details",
               params: {
                 productId: product.id,
-                hostAvatar: getHostAvatar(host),
+                ...(hostAvatarUri ? { hostAvatar: hostAvatarUri } : {}),
                 hostName: getHostName(host),
               },
             })

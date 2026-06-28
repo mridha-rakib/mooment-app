@@ -7,7 +7,7 @@ const MOCK_PRODUCTS: PostData[] = [
     id: 'pr1',
     postType: 'product',
     authorName: 'Dj Koko',
-    authorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+    authorAvatar: null,
     timeAgo: '2 min ago',
     mediaUris: ['https://images.unsplash.com/photo-1601049541289-9b1b7abc74a4?q=80&w=800'],
     productDetails: {

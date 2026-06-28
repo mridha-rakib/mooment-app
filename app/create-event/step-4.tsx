@@ -27,6 +27,7 @@ export default function CreateEventStep4() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [savedLabel, setSavedLabel] = React.useState(false);
   const isMountedRef = React.useRef(true);
+  const isAdvancingRef = React.useRef(false);
   const tickets = useEventDraftStore((state) => state.tickets);
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
@@ -108,8 +109,25 @@ export default function CreateEventStep4() {
     }
   };
 
+  const handleNextDraftSaveError = (error: unknown) => {
+    Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+  };
+
   const handleNext = async () => {
-    if (isSaving) return;
+    if (isSaving || isAdvancingRef.current) return;
+
+    if (!isEditingPublished) {
+      isAdvancingRef.current = true;
+      const draftSave = saveDraft();
+      router.push('/create-event/step-5');
+      void draftSave
+        .catch(handleNextDraftSaveError)
+        .finally(() => {
+          isAdvancingRef.current = false;
+        });
+      return;
+    }
+
     setIsSaving(true);
 
     try {

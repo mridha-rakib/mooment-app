@@ -15,8 +15,6 @@ import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import FeedPost, { PostData } from "../post/FeedPost";
 
-const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
-
 const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
   active: [],
   past: [],
@@ -133,7 +131,7 @@ const formatDistanceOrLocation = (event: EventResponse, userLocation: [number, n
   return formatLocationLabel(event);
 };
 
-const resolveStorageUrl = (key?: string | null, fallback?: string) => {
+const resolveStorageUrl = (key?: string | null, fallback?: string | null) => {
   if (!key) {
     return fallback;
   }
@@ -148,7 +146,7 @@ const resolveStorageUrl = (key?: string | null, fallback?: string) => {
 const mapEventToPost = (
   event: EventResponse,
   userLocation: [number, number] | null,
-  fallbackAuthor: { name: string; avatar: string },
+  fallbackAuthor: { name: string; avatar?: string | null },
   filter: "active" | "past",
 ): PostData => {
   const isLive = filter === "active" && isLiveEvent(event);
@@ -185,7 +183,7 @@ const mapEventToPost = (
     postType: "event",
     authorId: event.userId,
     authorName: event.host?.name || fallbackAuthor.name,
-    authorAvatar: resolveStorageUrl(event.host?.avatarKey, fallbackAuthor.avatar) ?? fallbackAuthor.avatar,
+    authorAvatar: resolveStorageUrl(event.host?.avatarKey, event.host?.avatarUrl ?? fallbackAuthor.avatar ?? null),
     timeAgo: formatTimeAgo(event.publishedAt ?? event.createdAt),
     isPublic: event.privacy === "public",
     likesCount: 0,
@@ -224,7 +222,7 @@ export default function ProfileEvents({
   const fallbackAuthor = useMemo(
     () => ({
       name: user?.name?.trim() || "Mooment User",
-      avatar: resolveStorageUrl(user?.avatarKey, DEFAULT_AVATAR) ?? DEFAULT_AVATAR,
+      avatar: resolveStorageUrl(user?.avatarKey, null),
     }),
     [user?.avatarKey, user?.name],
   );

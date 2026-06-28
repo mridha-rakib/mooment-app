@@ -220,6 +220,18 @@ export const getSavedMoments = async (): Promise<Moment[]> => {
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 
+let _pendingNewMoment: Moment | null = null;
+
+export const setPendingNewMoment = (moment: Moment): void => {
+  _pendingNewMoment = moment;
+};
+
+export const consumePendingNewMoment = (): Moment | null => {
+  const moment = _pendingNewMoment;
+  _pendingNewMoment = null;
+  return moment;
+};
+
 export const createMomentComment = async (
   momentId: string,
   payload: {

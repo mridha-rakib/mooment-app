@@ -18,6 +18,7 @@ import { createRealtimeSocket } from "@/lib/realtime";
 import {
   getNotifications,
   markAllNotificationsRead,
+  markNotificationRead,
   type NotificationItem,
 } from "@/lib/notifications";
 import { followUser, unfollowUser } from "@/lib/users";
@@ -52,6 +53,9 @@ const formatTime = (dateStr: string): string => {
   return date.toLocaleDateString();
 };
 
+const getActorDisplayName = (item: NotificationItem, fallback = "Someone") =>
+  item.actorName?.trim() || (item.actorUsername ? `@${item.actorUsername}` : fallback);
+
 export default function Explore() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -64,7 +68,7 @@ export default function Explore() {
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
 
   const setUnreadCount = useNotificationStore((state) => state.setUnreadCount);
-  const incrementUnread = useNotificationStore((state) => state.incrementUnread);
+  const decrementUnread = useNotificationStore((state) => state.decrementUnread);
   const clearUnread = useNotificationStore((state) => state.clearUnread);
 
   const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
@@ -98,9 +102,18 @@ export default function Explore() {
       accessToken,
       onNotification: (notification) => {
         setNotifications((prev) => [notification, ...prev]);
-        if (!notification.isRead) {
-          incrementUnread();
-        }
+      },
+      onNotificationRead: ({ notificationId, unreadCount }) => {
+        setNotifications((prev) =>
+          prev.map((notification) =>
+            notification.id === notificationId ? { ...notification, isRead: true } : notification,
+          ),
+        );
+        setUnreadCount(unreadCount);
+      },
+      onNotificationsReadAll: ({ unreadCount }) => {
+        setNotifications((prev) => prev.map((notification) => ({ ...notification, isRead: true })));
+        setUnreadCount(unreadCount);
       },
     });
 
@@ -110,7 +123,7 @@ export default function Explore() {
       socket.close();
       socketRef.current = null;
     };
-  }, [accessToken]);
+  }, [accessToken, setUnreadCount]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -120,13 +133,45 @@ export default function Explore() {
 
   const handleMarkAllRead = useCallback(async () => {
     try {
-      await markAllNotificationsRead();
+      const unreadCount = await markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      clearUnread();
+      if (typeof unreadCount === "number") {
+        setUnreadCount(unreadCount);
+      } else {
+        clearUnread();
+      }
     } catch {
       // silently ignore
     }
-  }, [clearUnread]);
+  }, [clearUnread, setUnreadCount]);
+
+  const markNotificationReadOptimistically = useCallback((item: NotificationItem) => {
+    if (item.isRead) {
+      return;
+    }
+
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === item.id ? { ...notification, isRead: true } : notification,
+      ),
+    );
+    decrementUnread();
+
+    markNotificationRead(item.id)
+      .then((unreadCount) => {
+        if (typeof unreadCount === "number") {
+          setUnreadCount(unreadCount);
+        }
+      })
+      .catch(() => {
+        void loadNotifications();
+      });
+  }, [decrementUnread, loadNotifications, setUnreadCount]);
+
+  const handleNotificationPress = useCallback((item: NotificationItem, navigate?: () => void) => {
+    markNotificationReadOptimistically(item);
+    navigate?.();
+  }, [markNotificationReadOptimistically]);
 
   const handleFollow = useCallback(async (actorId: string) => {
     if (followLoadingIds.has(actorId)) return;
@@ -178,7 +223,20 @@ export default function Explore() {
         <TouchableOpacity
           style={styles.cardContent}
           activeOpacity={0.7}
-          onPress={() => router.push("/profile-screen/user-profile")}
+          onPress={() => {
+            handleNotificationPress(item, () => {
+              if (!actorId) return;
+              router.push({
+                pathname: "/profile-screen/user-profile",
+                params: {
+                  userId: actorId,
+                  name: item.actorName ?? item.actorUsername ?? undefined,
+                  isFollowing: String(isFollowing),
+                  ...(item.actorAvatarUrl ? { avatar: item.actorAvatarUrl } : {}),
+                },
+              });
+            });
+          }}
         >
           {item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
@@ -241,7 +299,11 @@ export default function Explore() {
           !item.isRead && styles.unreadCard,
         ]}
         activeOpacity={0.7}
-        onPress={() => item.eventId && router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } })}
+        onPress={() => handleNotificationPress(item, () => {
+          if (item.eventId) {
+            router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+          }
+        })}
       >
         <View style={styles.cardContent}>
           <View
@@ -294,7 +356,11 @@ export default function Explore() {
         !item.isRead && styles.unreadCard,
       ]}
       activeOpacity={0.7}
-      onPress={() => item.eventId && router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } })}
+      onPress={() => handleNotificationPress(item, () => {
+        if (item.eventId) {
+          router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+        }
+      })}
     >
       <View style={styles.cardContent}>
         {item.actorAvatarUrl ? (
@@ -326,9 +392,57 @@ export default function Explore() {
     </TouchableOpacity>
   );
 
+  const renderEventMemberCard = (item: NotificationItem) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.activityCard,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        !item.isRead && styles.unreadCard,
+      ]}
+      activeOpacity={0.7}
+      onPress={() => handleNotificationPress(item, () => {
+        if (item.eventId) {
+          router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+        }
+      })}
+    >
+      <View style={styles.cardContent}>
+        {item.actorAvatarUrl ? (
+          <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.card }]}>
+            <Feather name="user" size={20} color={colors.textSecondary} />
+          </View>
+        )}
+        <View style={styles.textContainer}>
+          <Text style={[styles.inviteTitle, { color: colors.text }]} numberOfLines={1}>
+            Private event invitation
+          </Text>
+          <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={4}>
+            {"You've been invited by "}
+            <Text style={[styles.boldText, { color: colors.text }]}>
+              {getActorDisplayName(item, "the host")}
+            </Text>
+            {" to "}
+            <Text style={[styles.boldText, { color: colors.text }]}>
+              {item.eventName ?? "a private event"}
+            </Text>
+            {". You're now eligible to join and purchase tickets. Tap to view the event and secure your spot."}
+          </Text>
+          <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+            {formatTime(item.createdAt)}
+          </Text>
+        </View>
+      </View>
+      <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
   const renderItem = (item: NotificationItem) => {
     if (item.type === "follow") return renderFollowCard(item);
     if (item.type === "ticket_share") return renderTicketShareCard(item);
+    if (item.type === "event_member_added") return renderEventMemberCard(item);
     return renderTicketCard(item);
   };
 
@@ -502,6 +616,12 @@ const styles = StyleSheet.create({
   mainText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  inviteTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginBottom: 2,
   },
   boldText: {
     fontWeight: "bold",

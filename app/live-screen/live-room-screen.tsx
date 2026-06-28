@@ -1,11 +1,13 @@
 import BackButton from '@/components/ui/BackButton';
 import CinematicButton from '@/components/ui/CinematicButton';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { getLiveRoomMessages, joinLiveRoom, leaveLiveRoom, updateLiveRoomPermissions } from '@/lib/liveRooms';
 import type { LiveRoom, LiveRoomMessage, LiveRoomParticipant, LiveRoomViewerPermissions } from '@/lib/liveRooms';
 import { createRealtimeSocket } from '@/lib/realtime';
 import type { LiveRealtimeMessage } from '@/lib/realtime';
+import { getStorageFileUrl } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 import { Feather } from '@expo/vector-icons';
 import { Mic01Icon, MicOff01Icon, MoreHorizontalIcon, UnavailableIcon } from '@hugeicons/core-free-icons';
@@ -13,7 +15,7 @@ import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, Image,
+  ActivityIndicator, Alert, Animated, Dimensions,
   Modal, Pressable, ScrollView, StatusBar,
   StyleSheet, Text,
   TextInput, TouchableOpacity, View
@@ -24,20 +26,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width } = Dimensions.get('window');
 
 /* ─── Types ─── */
-type ChatMessage = { id: string; senderId?: string; avatar: string; name: string; role: string | null; time: string; text: string };
-type Participant = { id: string; userId: string; name: string; avatar: string; micMuted: boolean; hidden: boolean; canSpeak: boolean };
+type ChatMessage = { id: string; senderId?: string; avatar?: string | null; name: string; role: string | null; time: string; text: string };
+type Participant = { id: string; userId: string; name: string; avatar?: string | null; micMuted: boolean; hidden: boolean; canSpeak: boolean };
 
 /* ─── Initial Data ─── */
 const INITIAL_MESSAGES: ChatMessage[] = [
-  { id: '1', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop', name: 'Dj Koko', role: 'Host', time: '9:02pm', text: 'Welcome everyone! Going lie in a few mins' },
-  { id: '2', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop', name: 'Tuval', role: null, time: '9:02pm', text: 'Cant wait, already at the venue' },
-  { id: '3', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop', name: 'Nosel', role: null, time: '9:02pm', text: 'What track are you opening with tonight?' },
+  { id: '1', avatar: null, name: 'Dj Koko', role: 'Host', time: '9:02pm', text: 'Welcome everyone! Going lie in a few mins' },
+  { id: '2', avatar: null, name: 'Tuval', role: null, time: '9:02pm', text: 'Cant wait, already at the venue' },
+  { id: '3', avatar: null, name: 'Nosel', role: null, time: '9:02pm', text: 'What track are you opening with tonight?' },
 ];
 
 const INITIAL_PARTICIPANTS: Participant[] = [
-  { id: '1', userId: '1', name: 'Lister', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: false, canSpeak: true },
-  { id: '2', userId: '2', name: 'Kate', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop', micMuted: true, hidden: true, canSpeak: false },
-  { id: '3', userId: '3', name: 'Sona', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop', micMuted: false, hidden: true, canSpeak: true },
+  { id: '1', userId: '1', name: 'Lister', avatar: null, micMuted: false, hidden: false, canSpeak: true },
+  { id: '2', userId: '2', name: 'Kate', avatar: null, micMuted: true, hidden: true, canSpeak: false },
+  { id: '3', userId: '3', name: 'Sona', avatar: null, micMuted: false, hidden: true, canSpeak: true },
 ];
 
 const SIMULATED_MSGS = [
@@ -48,8 +50,6 @@ const SIMULATED_MSGS = [
   { name: 'Sam', text: 'Shoutout from London!' },
 ];
 
-const USER_AVATAR = 'https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop';
-const FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=200&auto=format&fit=crop';
 const DEFAULT_ROOM_PERMISSIONS: LiveRoomViewerPermissions = {
   isHost: true,
   canSpeak: true,
@@ -82,7 +82,7 @@ function formatMessageTime(value?: string) {
 
 function toLiveChatMessage(message: LiveRealtimeMessage, hostUserId?: string): ChatMessage {
   return {
-    avatar: message.senderAvatarUrl || `https://i.pravatar.cc/100?u=${message.senderId}`,
+    avatar: message.senderAvatarUrl ?? null,
     id: message.id,
     senderId: message.senderId,
     name: message.senderName,
@@ -94,7 +94,7 @@ function toLiveChatMessage(message: LiveRealtimeMessage, hostUserId?: string): C
 
 function toApiChatMessage(message: LiveRoomMessage, hostUserId?: string): ChatMessage {
   return {
-    avatar: message.senderAvatarUrl || `https://i.pravatar.cc/100?u=${message.senderId}`,
+    avatar: message.senderAvatarUrl ?? null,
     id: message.id,
     senderId: message.senderId,
     name: message.senderName,
@@ -113,11 +113,23 @@ function toParticipant(participant: LiveRoomParticipant): Participant | null {
     id: participant.id,
     userId: participant.user.id,
     name: participant.user.name,
-    avatar: participant.user.avatarUrl || `https://i.pravatar.cc/100?u=${participant.user.id}`,
+    avatar: participant.user.avatarUrl ?? null,
     micMuted: !participant.canSpeak,
     hidden: false,
     canSpeak: participant.canSpeak,
   };
+}
+
+function resolveStorageAvatar(key?: string | null) {
+  if (!key) {
+    return null;
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return null;
+  }
 }
 
 function parseBooleanParam(value?: string) {
@@ -204,7 +216,7 @@ export default function EventDetailsScreen() {
   const [roomTitle, setRoomTitle] = useState(params.title?.trim() || 'DJ Nova');
   const [hostUserId, setHostUserId] = useState<string | undefined>(undefined);
   const [hostName, setHostName] = useState(params.title?.trim() || 'DJ Nova');
-  const [hostAvatar, setHostAvatar] = useState(FALLBACK_AVATAR);
+  const [hostAvatar, setHostAvatar] = useState<string | null>(null);
   const [roomStatus, setRoomStatus] = useState<'live' | 'ended'>('live');
   const [allowAll, setAllowAll] = useState(initialAllowAll);
   const [roomPermissions, setRoomPermissions] = useState<LiveRoomViewerPermissions>(DEFAULT_ROOM_PERMISSIONS);
@@ -232,7 +244,7 @@ export default function EventDetailsScreen() {
     setRoomTitle(liveRoom.title);
     setHostUserId(liveRoom.hostUserId);
     setHostName(liveRoom.host?.name ?? liveRoom.title);
-    setHostAvatar(liveRoom.host?.avatarUrl ?? FALLBACK_AVATAR);
+    setHostAvatar(liveRoom.host?.avatarUrl ?? null);
     setRoomStatus(liveRoom.status);
     setAllowAll(liveRoom.allowAllParticipantsToSpeak);
     setRoomPermissions(liveRoom.viewerPermissions);
@@ -356,7 +368,7 @@ export default function EventDetailsScreen() {
       simIdx.current++;
       setMessages((prev) => [...prev, {
         id: String(nextId.current++),
-        avatar: `https://i.pravatar.cc/100?u=${msg.name}`,
+        avatar: null,
         name: msg.name, role: null, time: getTimeNow(), text: msg.text,
       }]);
       setListenerCount((c) => c + Math.floor(Math.random() * 5) - 1);
@@ -384,7 +396,7 @@ export default function EventDetailsScreen() {
     setMessages((prev) => [...prev, {
       id: clientMessageId,
       senderId: currentUser?.id,
-      avatar: currentUser?.avatarKey ? USER_AVATAR : USER_AVATAR,
+      avatar: resolveStorageAvatar(currentUser?.avatarKey),
       name: 'You',
       role: currentUser?.id === hostUserId ? 'Host' : null,
       time: getTimeNow(),
@@ -652,7 +664,7 @@ export default function EventDetailsScreen() {
                 style={[styles.avatarRingInner, isSpeaking && styles.avatarRingSpeaking, { borderColor: colors.border }]}
                 onPress={() => router.push('/profile-screen/user-profile')}
               >
-                <Image source={{ uri: hostAvatar }} style={styles.speakerAvatar} />
+                <UserAvatar uri={hostAvatar} name={hostName} size={132} style={styles.speakerAvatar} />
               </TouchableOpacity>
             </View>
             {roomStatus === 'live' && isSpeaking && (
@@ -689,7 +701,7 @@ export default function EventDetailsScreen() {
             ) : messages.map((msg) => (
               <View key={msg.id} style={styles.chatRow}>
                 <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
-                  <Image source={{ uri: msg.avatar }} style={styles.chatAvatar} />
+                  <UserAvatar uri={msg.avatar} name={msg.name} size={38} style={styles.chatAvatar} />
                 </TouchableOpacity>
                 <View style={styles.chatContent}>
                   <View style={styles.chatMeta}>
@@ -729,7 +741,7 @@ export default function EventDetailsScreen() {
             {participants.map((p) => (
               <View key={p.id} style={styles.participantRow}>
                 <TouchableOpacity onPress={() => router.push('/profile-screen/user-profile')}>
-                  <Image source={{ uri: p.avatar }} style={styles.participantAvatar} />
+                  <UserAvatar uri={p.avatar} name={p.name} size={42} style={styles.participantAvatar} />
                 </TouchableOpacity>
                 <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push('/profile-screen/user-profile')}>
                   <Text style={[styles.participantName, { color: colors.text }]}>{p.name}</Text>

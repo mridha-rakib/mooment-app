@@ -19,12 +19,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CinematicButton from '@/components/ui/CinematicButton';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { createGroup, getDirectMessageConversations } from '@/lib/chat';
 import type { DirectMessageConversationResponse } from '@/lib/chat';
 import { uploadFileToStorage } from '@/lib/storage';
-
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
 
 export default function CreateGroupScreen() {
   const router = useRouter();
@@ -167,14 +166,10 @@ export default function CreateGroupScreen() {
 
   const renderFriend = ({ item }: { item: DirectMessageConversationResponse }) => {
     const isSelected = selectedIds.includes(item.friendId);
-    const avatarUrl = item.avatarUrl ?? DEFAULT_AVATAR;
 
     return (
       <View style={styles.contactRow}>
-        <Image
-          source={{ uri: avatarUrl }}
-          style={[styles.avatar, isSelected && styles.avatarSelected]}
-        />
+        <UserAvatar uri={item.avatarUrl} name={item.name} size={48} style={[styles.avatar, isSelected && styles.avatarSelected]} />
         <View style={styles.contactInfo}>
           <Text style={styles.contactName}>{item.name}</Text>
           {item.username ? (

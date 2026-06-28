@@ -3,7 +3,7 @@ import {
 import { useRouter } from 'expo-router';
 import React,
   { useState } from 'react';
-import { Image,
+import {
   Platform,
   ScrollView,
   StatusBar,
@@ -14,13 +14,14 @@ import { Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
+import UserAvatar from '@/components/ui/UserAvatar';
 
 
 const INITIAL_ATTENDEES = [
-  { id: '1', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop', isFollowing: false },
-  { id: '2', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop', isFollowing: false },
+  { id: '1', name: 'Dj Koko', handle: '@sdfd_d', avatar: null, isFollowing: false },
+  { id: '2', name: 'Dj Koko', handle: '@sdfd_d', avatar: null, isFollowing: false },
   { id: '3', name: 'Anonymous', handle: null, avatar: null, isFollowing: false },
-  { id: '4', name: 'Dj Koko', handle: '@sdfd_d', avatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop', isFollowing: true },
+  { id: '4', name: 'Dj Koko', handle: '@sdfd_d', avatar: null, isFollowing: true },
 ];
 
 export default function AttendeesListScreen() {
@@ -51,13 +52,7 @@ export default function AttendeesListScreen() {
           {users.map((user, index) => (
             <View key={user.id}>
               <View style={styles.listItem}>
-                {user.avatar ? (
-                  <Image source={{ uri: user.avatar }} style={styles.avatar} />
-                ) : (
-                  <View style={[styles.avatar, styles.anonymousAvatar, { backgroundColor: colors.text }]}>
-                    <Feather name="user" size={20} color={colors.background} />
-                  </View>
-                )}
+                <UserAvatar uri={user.avatar} name={user.name} size={48} style={styles.avatar} iconSize={20} />
                 <View style={styles.textContainer}>
                   <Text style={[styles.name, { color: colors.text }]}>{user.name}</Text>
                   {user.handle && <Text style={[styles.handle, { color: colors.textSecondary }]}>{user.handle}</Text>}

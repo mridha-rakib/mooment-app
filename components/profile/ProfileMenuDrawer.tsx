@@ -5,7 +5,6 @@ import {
   Add01Icon,
   Analytics01Icon,
   Archive01Icon,
-  BitcoinIcon,
   Bookmark02Icon,
   Calendar01Icon,
   Calendar03Icon,
@@ -13,10 +12,8 @@ import {
   Settings02Icon,
   ShoppingBag01Icon,
   ShoppingCart01Icon,
-  StripeIcon,
   Ticket01Icon,
   UserEdit01Icon,
-  Wallet01Icon
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { BlurView } from 'expo-blur';
@@ -171,33 +168,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             */}
 
             <SectionLabel label="WALLET" colors={colors} />
-            <MenuItem
-              icon={StripeIcon}
-              label="Add Stripe Account"
-              colors={colors}
-              onPress={() => {
-                onClose();
-                router.push('/profile-screen/add-stripe');
-              }}
-            />
-            <MenuItem
-              icon={BitcoinIcon}
-              label="Buy Mooment Credits"
-              colors={colors}
-              onPress={() => {
-                onClose();
-                router.push('/profile-screen/buy-credits');
-              }}
-            />
-            <MenuItem
-              icon={Wallet01Icon}
-              label="Mooment Wallet"
-              colors={colors}
-              onPress={() => {
-                onClose();
-                router.push('/profile-screen/mooment-wallet');
-              }}
-            />
             <MenuItem
               icon={Ticket01Icon}
               label="Ticket Wallet"

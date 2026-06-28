@@ -6,7 +6,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,11 +17,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/hooks/useTheme";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
 import { usePlanStore } from "@/stores/planStore";
-
-const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
 
 const firstParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
 
@@ -32,13 +30,13 @@ const resolveAvatarUrl = (friend: FriendUserResponse) => {
   }
 
   if (!friend.avatarKey) {
-    return DEFAULT_AVATAR;
+    return null;
   }
 
   try {
     return getStorageFileUrl(friend.avatarKey);
   } catch {
-    return DEFAULT_AVATAR;
+    return null;
   }
 };
 
@@ -182,7 +180,7 @@ export default function AddFriendScreen() {
 
             return (
               <View key={friend.id} style={[s.userRow, { borderBottomColor: colors.border }]}>
-                <Image source={{ uri: resolveAvatarUrl(friend) }} style={[s.avatar, { borderColor: colors.border }]} />
+                <UserAvatar uri={resolveAvatarUrl(friend)} name={friend.name} size={48} style={[s.avatar, { borderColor: colors.border }]} />
                 <View style={s.userInfo}>
                   <Text style={[s.userName, { color: colors.text }]}>{friend.name}</Text>
                   <Text style={[s.userHandle, { color: colors.textSecondary }]}>

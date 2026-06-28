@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { getStorageFileUrl } from '@/lib/storage';
 import { followUser, getSuggestedUsers, unfollowUser } from '@/lib/users';
-import { Feather } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 
 const CheckIcon = () => (
@@ -33,7 +33,6 @@ type PeopleToFollowUser = {
 export default function PeopleToFollowScreen() {
   const [users, setUsers] = useState<PeopleToFollowUser[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
-  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
   useEffect(() => {
     let isMounted = true;
@@ -125,17 +124,7 @@ export default function PeopleToFollowScreen() {
           {users.map((user, index) => (
             <View key={user.id}>
               <View style={styles.listItem}>
-                {user.avatar && !failedAvatarIds.has(user.id) ? (
-                  <Image
-                    source={{ uri: user.avatar }}
-                    style={styles.avatar}
-                    onError={() => setFailedAvatarIds((prev) => new Set([...prev, user.id]))}
-                  />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarFallback]}>
-                    <Feather name="user" size={18} color="#8E8E9B" />
-                  </View>
-                )}
+                <UserAvatar uri={user.avatar} name={user.name} size={48} style={styles.avatar} iconSize={18} />
                 <View style={styles.textContainer}>
                   <Text style={styles.name}>{user.name}</Text>
                   <Text style={styles.handle}>{user.handle}</Text>

@@ -20,7 +20,7 @@ import {
   CheckoutFooter,
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
-import { createCheckoutIntent, startMoomentCreditsCheckout, type CheckoutOrder } from "@/lib/payments";
+import { createCheckoutIntent, type CheckoutOrder } from "@/lib/payments";
 import { claimEventReward } from "@/lib/events";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
@@ -45,7 +45,6 @@ const getParam = (value: string | string[] | undefined, fallback: string) => {
 };
 
 const BUYER_FEE_STRIPE = 0.10;
-const BUYER_FEE_CREDITS = 0.05;
 
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -105,8 +104,7 @@ const EventCheckoutScreen = () => {
   const ticketPrice = parsePrice(params.ticketPrice);
   const isFreeTicket = params.ticketType === "free" || ticketPrice <= 0;
   const subtotalValue = isFreeTicket ? 0 : roundCurrency(ticketPrice * quantity);
-  const feeRate = payWith === "Credits" ? BUYER_FEE_CREDITS : BUYER_FEE_STRIPE;
-  const feeValue = isFreeTicket ? 0 : roundCurrency(subtotalValue * feeRate);
+  const feeValue = isFreeTicket ? 0 : roundCurrency(subtotalValue * BUYER_FEE_STRIPE);
   const totalValue = isFreeTicket ? 0 : roundCurrency(subtotalValue + feeValue);
   const subtotal = isFreeTicket ? "Free" : formatCurrency(subtotalValue);
   const fee = isFreeTicket ? "$0" : formatCurrency(feeValue);
@@ -151,18 +149,8 @@ const EventCheckoutScreen = () => {
           acceptedTerms: agreed,
         });
         order = checkout.order;
-      } else if (payWith === "Credits") {
-        order = await startMoomentCreditsCheckout({
-          kind: "ticket",
-          paymentMethod: "mooment_credits",
-          eventId,
-          ticketId,
-          quantity,
-          anonymous: false,
-          acceptedTerms: agreed,
-        });
       } else {
-        order = await startStripeCheckout(
+        const stripeResult = await startStripeCheckout(
           {
             kind: "ticket",
             paymentMethod: payWith === "Apple" ? "apple_pay" : "card",
@@ -174,6 +162,13 @@ const EventCheckoutScreen = () => {
           },
           { isDark },
         );
+
+        if (stripeResult === null) {
+          // User dismissed the PaymentSheet — stay on checkout screen, no error shown
+          return;
+        }
+
+        order = stripeResult;
       }
 
       if (rewardId) {

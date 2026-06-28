@@ -210,7 +210,15 @@ export default function SearchScreen() {
             <TouchableOpacity 
               key={person.id} 
               style={styles.listItem}
-              onPress={() => router.push('/profile-screen/user-profile')}
+              onPress={() => router.push({
+                pathname: '/profile-screen/user-profile',
+                params: {
+                  userId: person.id,
+                  name: person.name,
+                  isFollowing: "false",
+                  ...(person.avatarUrl ? { avatar: person.avatarUrl } : {}),
+                },
+              })}
             >
               {person.avatarUrl ? (
                 <Image source={{ uri: person.avatarUrl }} style={styles.personAvatar} />

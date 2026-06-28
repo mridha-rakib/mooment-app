@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import CinematicButton from "../ui/CinematicButton";
+import UserAvatar from "../ui/UserAvatar";
 // SegmentedControl hidden — preserved for future restoration
 // import SegmentedControl from "../ui/SegmentedControl";
 const { width } = Dimensions.get("window");
@@ -199,14 +200,12 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
 
               <View style={styles.listenerRow}>
                 <View style={styles.avatarCluster}>
-                  {[
-                    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
-                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop",
-                    "https://images.unsplash.com/photo-1599566150163-29194dcabd9c?q=80&w=100&auto=format&fit=crop",
-                  ].map((uri, i) => (
-                    <Image
-                      key={uri}
-                      source={{ uri }}
+                  {["Alex", "Maya", "Sam"].map((name, i) => (
+                    <UserAvatar
+                      key={name}
+                      uri={null}
+                      name={name}
+                      size={26}
                       style={[
                         styles.avatarSmall,
                         { zIndex: 3 - i, marginLeft: i > 0 ? -8 : 0, borderColor: colors.background },
@@ -279,11 +278,7 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
                 style={[styles.postCard, { backgroundColor: colors.card }]}
               >
                 <View style={styles.postHeader}>
-                  {avatarUri ? (
-                    <Image source={{ uri: avatarUri }} style={styles.postAvatar} />
-                  ) : (
-                    <View style={[styles.postAvatar, styles.postAvatarPlaceholder, { backgroundColor: colors.border }]} />
-                  )}
+                  <UserAvatar uri={avatarUri} name={authorName} size={36} style={styles.postAvatar} />
                   <View style={styles.postUserInfo}>
                     <Text style={[styles.postUserName, { color: colors.text }]}>
                       {authorName}

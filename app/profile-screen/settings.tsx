@@ -59,6 +59,7 @@ export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const user = useAuthStore((state) => state.user);
   const updateProfile = useAuthStore((state) => state.updateProfile);
+  const deleteAccount = useAuthStore((state) => state.deleteAccount);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
   const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
@@ -66,6 +67,7 @@ export default function SettingsScreen() {
   // Settings states
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   // Bottom sheet states
   const [isAccountTypeModalVisible, setAccountTypeModalVisible] = useState(false);
@@ -158,6 +160,43 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleConfirmDeleteAccount = async () => {
+    if (isDeletingAccount) {
+      return;
+    }
+
+    setIsDeletingAccount(true);
+
+    try {
+      await deleteAccount();
+      router.replace('/auth-screen/onboarding');
+    } catch (error) {
+      Alert.alert(
+        "Delete Account",
+        error instanceof Error ? error.message : "Unable to delete your account. Please try again.",
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  const handleDeleteAccountPress = () => {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account access and sign you out. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void handleConfirmDeleteAccount();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -169,7 +208,13 @@ export default function SettingsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 72, 96) },
+        ]}
+      >
         
         {/* ESSENTIALS Section */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ESSENTIALS</Text>
@@ -209,6 +254,39 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* BUSINESS Section — only visible for business accounts */}
+        {user?.accountType === 'business' && (
+          <>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BUSINESS</Text>
+            <View style={styles.sectionGroup}>
+              <SettingItem
+                icon="sliders"
+                label="Payout Preferences"
+                onPress={() => router.push('/profile-screen/payout-preferences')}
+                colors={colors}
+              />
+              <SettingItem
+                icon="credit-card"
+                label="Withdrawal Method"
+                onPress={() => router.push('/profile-screen/withdrawal-method')}
+                colors={colors}
+              />
+              <SettingItem
+                icon="briefcase"
+                label="Bank Account"
+                onPress={() => router.push('/profile-screen/bank-account')}
+                colors={colors}
+              />
+              <SettingItem
+                icon="list"
+                label="Payout History"
+                onPress={() => router.push('/profile-screen/payout-history')}
+                colors={colors}
+              />
+            </View>
+          </>
+        )}
+
         {/* TERMS & POLICIES Section */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TERMS & POLICIES</Text>
         <View style={styles.sectionGroup}>
@@ -223,8 +301,20 @@ export default function SettingsScreen() {
         </View>
 
         {/* Delete Account */}
-        <TouchableOpacity style={[styles.deleteAccountBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.deleteAccountText, { color: colors.danger }]}>Delete Account</Text>
+        <TouchableOpacity
+          style={[
+            styles.deleteAccountBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+            isDeletingAccount && styles.settingItemDisabled,
+          ]}
+          onPress={handleDeleteAccountPress}
+          disabled={isDeletingAccount}
+        >
+          {isDeletingAccount ? (
+            <Spinner color={colors.danger} />
+          ) : (
+            <Text style={[styles.deleteAccountText, { color: colors.danger }]}>Delete Account</Text>
+          )}
         </TouchableOpacity>
 
       </ScrollView>
@@ -238,7 +328,7 @@ export default function SettingsScreen() {
       >
         <View style={styles.modalOverlay}>
           <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-          <View style={[styles.bottomSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+          <View style={[styles.bottomSheet, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom + 16, 40) }]}>
             <View style={[styles.bottomSheetHandle, { backgroundColor: colors.border }]} />
             <Text style={[styles.modalTitle, { color: colors.text }]}>Select Account Type</Text>
             <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>You can always change the account type</Text>
@@ -324,7 +414,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
   },
   sectionTitle: {
     fontSize: 11,

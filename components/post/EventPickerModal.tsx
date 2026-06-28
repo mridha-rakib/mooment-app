@@ -1,10 +1,10 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Image, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getMyPostTagEvents, type PostTagEvent, type PostTagEventStatus } from '@/lib/events';
 
@@ -26,6 +26,7 @@ const STATUS_CONFIG: Record<PostTagEventStatus, { label: string; color: string; 
 };
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop';
+const ANDROID_NAV_FALLBACK = 48;
 
 function formatEventMeta(event: PostTagEvent): string {
   const parts: string[] = [];
@@ -54,11 +55,14 @@ function formatEventMeta(event: PostTagEvent): string {
 }
 
 export default function EventPickerModal({ visible, onClose, onSelect }: Props) {
-  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [events, setEvents] = useState<PostTagEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const bottomInset = Platform.OS === 'android'
+    ? Math.max(insets.bottom, ANDROID_NAV_FALLBACK)
+    : insets.bottom;
 
   useEffect(() => {
     if (!visible) return;
@@ -98,7 +102,7 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
       <View style={styles.overlay}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: bottomInset + 16 }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>Events</Text>
 
@@ -127,7 +131,8 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
               data={filtered}
               keyExtractor={item => item.id}
               showsVerticalScrollIndicator={false}
-              style={{ maxHeight: 400 }}
+              style={styles.eventList}
+              contentContainerStyle={styles.eventListContent}
               renderItem={({ item }) => {
                 const cfg = STATUS_CONFIG[item.postTagStatus];
                 const isSelected = selectedId === item.id;
@@ -168,8 +173,6 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
               </TouchableOpacity>
             </View>
           )}
-
-          <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
         </View>
       </View>
     </Modal>
@@ -212,6 +215,12 @@ const styles = StyleSheet.create({
   loadingState: {
     paddingVertical: 40,
     alignItems: 'center',
+  },
+  eventList: {
+    maxHeight: 400,
+  },
+  eventListContent: {
+    paddingBottom: 8,
   },
 
   eventRow: {

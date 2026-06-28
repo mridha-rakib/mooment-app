@@ -18,7 +18,7 @@ export type UserProfileData = {
   id: string;
   name: string;
   handle: string;
-  avatar: string;
+  avatar?: string | null;
   bio: string;
   stats: ProfileStats;
   accountType?: 'personal' | 'business';
@@ -32,6 +32,7 @@ type ProfileViewProps = {
   onRepost?: (post: PostData) => Promise<void> | void;
   onDeletePost?: (post: PostData) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
+  onFollowChange?: (isFollowing: boolean) => void;
   onRefresh?: () => Promise<void>;
 };
 
@@ -42,6 +43,7 @@ export default function ProfileView({
   onRepost,
   onDeletePost,
   onInteractionChange,
+  onFollowChange,
   onRefresh,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
@@ -81,6 +83,7 @@ export default function ProfileView({
       >
         <ProfileHeader
           userId={user.id}
+          name={user.name}
           avatar={user.avatar}
           stats={user.stats}
           accountType={user.accountType}
@@ -93,7 +96,17 @@ export default function ProfileView({
           bio={user.bio}
           accountType={user.accountType}
           isOwnProfile={isOwnProfile}
-          actions={<ProfileActions isOwnProfile={isOwnProfile} onlyButtons={true} initialIsFollowing={user.isFollowing} />}
+          actions={
+            <ProfileActions
+              userId={user.id}
+              userName={user.name}
+              userAvatar={user.avatar}
+              isOwnProfile={isOwnProfile}
+              onlyButtons={true}
+              initialIsFollowing={user.isFollowing}
+              onFollowChange={onFollowChange}
+            />
+          }
         />
         {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
         

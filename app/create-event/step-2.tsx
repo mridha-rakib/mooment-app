@@ -90,6 +90,7 @@ export default function CreateEventStep2() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
+  const isAdvancingRef = useRef(false);
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -282,8 +283,12 @@ export default function CreateEventStep2() {
     }
   };
 
+  const handleNextDraftSaveError = (error: unknown) => {
+    Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+  };
+
   const handleNext = async () => {
-    if (isSaving) return;
+    if (isSaving || isAdvancingRef.current) return;
     const result = createEventStepTwoSchema.safeParse({
       ageRestriction: selectedAge,
       categories: selectedCategories,
@@ -306,6 +311,19 @@ export default function CreateEventStep2() {
 
     setErrors({});
     persistStepTwo(result.data);
+
+    if (!isEditingPublished) {
+      isAdvancingRef.current = true;
+      const draftSave = saveDraft();
+      router.push('/create-event/step-3');
+      void draftSave
+        .catch(handleNextDraftSaveError)
+        .finally(() => {
+          isAdvancingRef.current = false;
+        });
+      return;
+    }
+
     setIsSaving(true);
 
     try {

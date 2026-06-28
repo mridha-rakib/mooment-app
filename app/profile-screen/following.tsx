@@ -98,6 +98,7 @@ export default function FollowingScreen() {
         userId: user.id,
         name: user.name,
         avatar: avatarUri,
+        isFollowing: String(user.isFollowing),
       },
     });
   };

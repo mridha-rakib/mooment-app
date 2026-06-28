@@ -6,6 +6,7 @@ import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View, StatusBar } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 type ProductStatItem = {
   id: string;
@@ -14,7 +15,7 @@ type ProductStatItem = {
   status: 'success' | 'failed' | 'pending';
   userName: string;
   userHandle: string;
-  userAvatar: string;
+  userAvatar?: string | null;
   amount: string;
 };
 
@@ -26,7 +27,7 @@ const STAT_DATA: ProductStatItem[] = [
     status: 'success',
     userName: 'Tuval Mor',
     userHandle: '@sfdf',
-    userAvatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
+    userAvatar: null,
     amount: '$45.00',
   },
   {
@@ -36,7 +37,7 @@ const STAT_DATA: ProductStatItem[] = [
     status: 'failed',
     userName: 'Dianne Russell',
     userHandle: '@sfdf',
-    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+    userAvatar: null,
     amount: '$405.00',
   },
   {
@@ -46,7 +47,7 @@ const STAT_DATA: ProductStatItem[] = [
     status: 'pending',
     userName: 'Esther Howard',
     userHandle: '@sfdf',
-    userAvatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    userAvatar: null,
     amount: '$4500.00',
   },
   {
@@ -56,7 +57,7 @@ const STAT_DATA: ProductStatItem[] = [
     status: 'success',
     userName: 'Cody Fisher',
     userHandle: '@sfdf',
-    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    userAvatar: null,
     amount: '$450.00',
   },
 ];
@@ -103,7 +104,7 @@ export default function ProductStatScreen() {
       <View style={styles.bottomRow}>
         <View style={styles.userInfo}>
           <View style={[styles.userAvatarContainer, { borderColor: colors.primary }]}>
-            <Image source={{ uri: item.userAvatar }} style={styles.userAvatar} />
+            <UserAvatar uri={item.userAvatar} name={item.userName} size={40} style={styles.userAvatar} />
           </View>
           <View>
             <Text style={[styles.userName, { color: colors.text }]}>{item.userName}</Text>

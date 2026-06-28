@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 
-export type NotificationType = "follow" | "ticket_buyer" | "ticket_creator" | "ticket_share";
+export type NotificationType = "follow" | "ticket_buyer" | "ticket_creator" | "ticket_share" | "join_request" | "join_request_accepted" | "event_member_added";
 
 export type NotificationItem = {
   id: string;
@@ -24,8 +24,21 @@ export const getNotifications = async (): Promise<NotificationItem[]> => {
   return Array.isArray(notifications) ? (notifications as NotificationItem[]) : [];
 };
 
-export const markAllNotificationsRead = async (): Promise<void> => {
-  await api.patch("/notifications/read-all");
+const getUnreadCountFromResponse = (response: unknown): number | null => {
+  const count = (response as { data?: { data?: { unreadCount?: unknown; count?: unknown } } })?.data?.data?.unreadCount
+    ?? (response as { data?: { data?: { count?: unknown } } })?.data?.data?.count;
+
+  return typeof count === "number" ? count : null;
+};
+
+export const markAllNotificationsRead = async (): Promise<number | null> => {
+  const response = await api.patch("/notifications/read-all");
+  return getUnreadCountFromResponse(response);
+};
+
+export const markNotificationRead = async (notificationId: string): Promise<number | null> => {
+  const response = await api.patch(`/notifications/${encodeURIComponent(notificationId)}/read`);
+  return getUnreadCountFromResponse(response);
 };
 
 export const getUnreadNotificationCount = async (): Promise<number> => {

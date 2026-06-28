@@ -9,8 +9,6 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=User&background=888&color=fff&size=200';
-
 export default function SavedPostsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -26,7 +24,7 @@ export default function SavedPostsScreen() {
     try {
       const moments = await getSavedMoments();
       const mapped = moments
-        .map((moment) => mapMomentToPost(moment, { fallbackAvatar: FALLBACK_AVATAR }))
+        .map((moment) => mapMomentToPost(moment, {}))
         .filter((post): post is PostData => post !== null);
 
       setPosts(mapped);

@@ -2,18 +2,19 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { createMomentComment, getMomentComments, toggleCommentReaction, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
+import UserAvatar from '../ui/UserAvatar';
 
 type CommentType = {
   id: string;
   authorId?: string;
   authorName: string;
-  authorAvatar: string;
+  authorAvatar?: string | null;
   text: string;
   timeAgo: string;
   likesCount: number;
@@ -27,7 +28,7 @@ const INITIAL_COMMENTS: CommentType[] = [
   {
     id: '1',
     authorName: 'Del Ray',
-    authorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
+    authorAvatar: null,
     text: 'What an amazing DJ party! The atmosphere was electric and everyone had a blast.',
     timeAgo: '5h',
     likesCount: 0,
@@ -35,7 +36,7 @@ const INITIAL_COMMENTS: CommentType[] = [
   {
     id: '2',
     authorName: 'Somia Kasem',
-    authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
+    authorAvatar: null,
     text: 'This party was so much fun! The DJ played fantastic tracks that kept everyone dancing.',
     timeAgo: '5h',
     likesCount: 5000,
@@ -44,7 +45,7 @@ const INITIAL_COMMENTS: CommentType[] = [
   {
     id: '3',
     authorName: 'Somia Kasem',
-    authorAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
+    authorAvatar: null,
     text: 'I had a great time at the DJ event! The music was on point and the vibe was incredible.',
     timeAgo: '5h',
     likesCount: 5000,
@@ -52,7 +53,7 @@ const INITIAL_COMMENTS: CommentType[] = [
       {
         id: '3-1',
         authorName: 'Kasem Khondokar',
-        authorAvatar: 'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
+        authorAvatar: null,
         text: 'What a fantastic night at the DJ party! The energy was high and the crowd was loving it.',
         timeAgo: '5h',
         likesCount: 5000,
@@ -60,7 +61,7 @@ const INITIAL_COMMENTS: CommentType[] = [
       {
         id: '3-2',
         authorName: 'Yasin Kasem',
-        authorAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=150&auto=format&fit=crop',
+        authorAvatar: null,
         text: 'Everyone is loving the concert! The atmosphere is electric, and the performers are amazing.',
         timeAgo: '5h',
         likesCount: 5000,
@@ -69,7 +70,6 @@ const INITIAL_COMMENTS: CommentType[] = [
   }
 ];
 
-const DEFAULT_COMMENT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop';
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 const formatCommentTimeAgo = (createdAt: string) => {
@@ -100,7 +100,7 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
   id: comment.id,
   authorId: comment.author?.id,
   authorName: comment.author?.name ?? 'Mooment User',
-  authorAvatar: (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null) ?? comment.author?.avatarUrl ?? DEFAULT_COMMENT_AVATAR,
+  authorAvatar: (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null) ?? comment.author?.avatarUrl ?? null,
   text: comment.text,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
   likesCount: comment.likesCount,
@@ -125,14 +125,18 @@ export default function CommentsModal({
 }) {
   const { colors, isDark } = useTheme();
   const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
-  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
   const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
   const [commentText, setCommentText] = useState('');
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const inputRef = useRef<TextInput>(null);
   const isInputFocusedRef = useRef(false);
   const wasKeyboardVisibleRef = useRef(false);
+  // Android: set to true when the send button receives a touch-start.
+  // Checked in TextInput.onBlur so we can send even though Android's Dialog
+  // consumes the first tap to dismiss the keyboard before onPress fires.
+  const sendBtnPressedRef = useRef(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const canUseCommentsApi = Boolean(momentId && MONGO_OBJECT_ID_PATTERN.test(momentId));
@@ -160,34 +164,44 @@ export default function CommentsModal({
     if (visible) {
       setReplyingTo(null);
       setCommentText('');
-      setFailedAvatarIds(new Set());
       void loadComments();
     }
   }, [loadComments, visible]);
 
   useEffect(() => {
-    if (Platform.OS !== 'android' || !visible) {
+    if (!visible) {
       return;
     }
 
-    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
-      wasKeyboardVisibleRef.current = true;
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (e) => {
+      // Track keyboard height so we can manually pad content above the keyboard.
+      // This replaces KeyboardAvoidingView, which has a known Android bug where
+      // behavior="height" doesn't fully restore height after keyboard dismiss,
+      // leaving a transparent gap that exposes the activity tab bar underneath.
+      setKeyboardHeight(e.endCoordinates.height);
+      if (Platform.OS === 'android') {
+        wasKeyboardVisibleRef.current = true;
+      }
     });
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      const shouldClose = isInputFocusedRef.current && wasKeyboardVisibleRef.current;
-      wasKeyboardVisibleRef.current = false;
+      setKeyboardHeight(0);
+      if (Platform.OS === 'android') {
+        const shouldClose = isInputFocusedRef.current && wasKeyboardVisibleRef.current;
+        wasKeyboardVisibleRef.current = false;
 
-      // Android sends Back to the IME before the Modal. Close the sheet when
-      // that Back press dismisses the keyboard from the focused comment input.
-      if (shouldClose) {
-        inputRef.current?.blur();
-        onClose();
+        // Android sends Back to the IME before the Modal. Close the sheet when
+        // that Back press dismisses the keyboard from the focused comment input.
+        if (shouldClose) {
+          inputRef.current?.blur();
+          onClose();
+        }
       }
     });
 
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
+      setKeyboardHeight(0);
       isInputFocusedRef.current = false;
       wasKeyboardVisibleRef.current = false;
     };
@@ -247,7 +261,7 @@ export default function CommentsModal({
         params: {
           userId: item.authorId ?? item.id,
           name: item.authorName,
-          avatar: item.authorAvatar
+          ...(item.authorAvatar ? { avatar: item.authorAvatar } : {}),
         }
       } as any);
     }, 300);
@@ -268,10 +282,30 @@ export default function CommentsModal({
         parentCommentId: replyingTo?.id ?? null,
       });
 
+      const newComment = momentCommentToComment(result.comment);
+      const parentId = replyingTo?.id ?? null;
+
+      // Capture parentId before clearing replyingTo so the setComments
+      // updater below can close over the correct value.
       setCommentText('');
       setReplyingTo(null);
       onInteractionChange?.(result.summary);
-      await loadComments();
+
+      // Append the server-returned comment directly instead of re-fetching
+      // the full list. Re-fetching triggers isLoadingComments true→false which
+      // replaces the ScrollView content twice while the keyboard is visible,
+      // causing the KeyboardAvoidingView to re-measure its offset each time
+      // and producing the visible shake/jump on send.
+      setComments((prev) => {
+        if (!parentId) {
+          return [...prev, newComment];
+        }
+        return prev.map((c) =>
+          c.id === parentId
+            ? { ...c, replies: [...(c.replies ?? []), newComment] }
+            : c,
+        );
+      });
     } catch (error) {
       Alert.alert('Unable to post comment', getAuthErrorMessage(error, 'Please try again.'));
     } finally {
@@ -297,17 +331,7 @@ export default function CommentsModal({
         )}
         
         <TouchableOpacity activeOpacity={0.7} onPress={() => handleProfilePress(item)}>
-          {!failedAvatarIds.has(item.id) ? (
-            <Image
-              source={{ uri: item.authorAvatar }}
-              style={styles.commentAvatar}
-              onError={() => setFailedAvatarIds((prev) => new Set([...prev, item.id]))}
-            />
-          ) : (
-            <View style={[styles.commentAvatar, styles.commentAvatarFallback]}>
-              <Feather name="user" size={14} color="#8E8E9B" />
-            </View>
-          )}
+          <UserAvatar uri={item.authorAvatar} name={item.authorName} size={36} style={styles.commentAvatar} iconSize={14} />
         </TouchableOpacity>
         
         <View style={styles.commentContent}>
@@ -344,14 +368,19 @@ export default function CommentsModal({
       transparent={true}
       animationType="slide"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
-      <KeyboardAvoidingView
-        style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      {/* Plain View overlay — always flex:1 / full screen height so the rgba
+          background always covers the tab bar area.
+          Keyboard avoidance is handled manually via keyboardHeight state
+          (Keyboard.addListener) instead of KeyboardAvoidingView to avoid
+          the well-known Android KAV bug where behavior="height" fails to
+          restore its height after keyboard dismiss, leaving a transparent
+          gap that exposes the activity tab bar underneath. */}
+      <View style={styles.modalOverlay}>
         {/* Clickable background to dismiss */}
         <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
-        
+
         {/* Comment Heading Outside Container */}
         <View style={styles.headerLabelContainer}>
           <Text style={[styles.headerLabel, { color: colors.textSecondary }]}>Comment</Text>
@@ -362,7 +391,13 @@ export default function CommentsModal({
           <View style={styles.grabberContainer}>
             <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           </View>
-          
+
+          {/* Content area: paddingBottom shifts the scrollview + input above the
+              keyboard. The modalContainer itself stays at fixed 85% height so its
+              opaque background always covers the tab bar — we never change the
+              panel's height, only the internal content padding. */}
+          <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
+
           {/* Stats Header */}
           <View style={styles.statsHeader}>
             <View style={styles.statsLeft}>
@@ -409,7 +444,6 @@ export default function CommentsModal({
             <View style={{ height: 20 }} />
           </ScrollView>
 
-          {/* Bottom Input */}
           <View
             style={[
               styles.inputSection,
@@ -444,29 +478,54 @@ export default function CommentsModal({
                   }}
                   onBlur={() => {
                     isInputFocusedRef.current = false;
+                    // On Android the Dialog-level keyboard dismiss consumes the
+                    // first tap before onPress reaches JS. If the send button
+                    // was touched (flag set in onTouchStart below), send now.
+                    if (Platform.OS === 'android' && sendBtnPressedRef.current) {
+                      sendBtnPressedRef.current = false;
+                      handleSendComment();
+                    }
                   }}
                 />
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.sendBtn,
-                  { backgroundColor: colors.primary },
-                  (!commentText.trim() || !canUseCommentsApi || isSendingComment) && styles.sendBtnDisabled,
-                ]}
-                activeOpacity={0.8}
-                disabled={!commentText.trim() || !canUseCommentsApi || isSendingComment}
-                onPress={handleSendComment}
+              {/* View wrapper captures onTouchStart at the native level — fires
+                  before Android's Dialog dismisses the keyboard and before
+                  TextInput.onBlur, so the ref is set when onBlur checks it. */}
+              <View
+                onTouchStart={() => {
+                  if (Platform.OS === 'android' && isInputFocusedRef.current) {
+                    sendBtnPressedRef.current = true;
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (Platform.OS === 'android') {
+                    // Delay reset so onBlur can read the flag first
+                    setTimeout(() => { sendBtnPressedRef.current = false; }, 500);
+                  }
+                }}
               >
-                {isSendingComment ? (
-                  <ActivityIndicator size="small" color={colors.background} />
-                ) : (
-                  <Feather name="send" size={18} color={colors.background} />
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.sendBtn,
+                    { backgroundColor: colors.primary },
+                    (!commentText.trim() || !canUseCommentsApi || isSendingComment) && styles.sendBtnDisabled,
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={!commentText.trim() || !canUseCommentsApi || isSendingComment}
+                  onPress={handleSendComment}
+                >
+                  {isSendingComment ? (
+                    <ActivityIndicator size="small" color={colors.background} />
+                  ) : (
+                    <Feather name="send" size={18} color={colors.background} />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
+          </View>{/* flex:1 paddingBottom keyboard wrapper */}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

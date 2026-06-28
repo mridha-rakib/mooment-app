@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -16,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import UserAvatar from "@/components/ui/UserAvatar";
 import {
   addEventMember,
   getEventMembers,
@@ -23,10 +23,15 @@ import {
   type EventMemberResponse,
 } from "@/lib/events";
 import { getStorageFileUrl } from "@/lib/storage";
-import { getUserFollowers, getUserFollowing, type ProfileFollowUserResponse } from "@/lib/users";
+import {
+  getFriendUsers,
+  getUserFollowers,
+  getUserFollowing,
+  type ProfileFollowUserResponse,
+} from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 
-const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
+const CONNECTION_LIMIT = 200;
 
 const resolveAvatar = (key?: string | null, url?: string | null) => {
   if (url) return url;
@@ -34,10 +39,10 @@ const resolveAvatar = (key?: string | null, url?: string | null) => {
     try {
       return getStorageFileUrl(key);
     } catch {
-      return DEFAULT_AVATAR;
+      return null;
     }
   }
-  return DEFAULT_AVATAR;
+  return null;
 };
 
 const getHandle = (username?: string) => {
@@ -102,13 +107,18 @@ export default function EventMembersScreen() {
     if (!currentUser?.id) return;
     setIsLoadingFollowing(true);
     try {
-      const [followingData, followersData] = await Promise.all([
-        getUserFollowing(currentUser.id, undefined, 200),
-        getUserFollowers(currentUser.id, undefined, 200),
+      const [followingData, followersData, friendData] = await Promise.all([
+        getUserFollowing(currentUser.id, undefined, CONNECTION_LIMIT),
+        getUserFollowers(currentUser.id, undefined, CONNECTION_LIMIT),
+        getFriendUsers(undefined, CONNECTION_LIMIT),
       ]);
+      const friendProfileData: ProfileFollowUserResponse[] = friendData.map((u) => ({
+        ...u,
+        isFollowing: true,
+      }));
       const seen = new Set<string>();
       const merged: ProfileFollowUserResponse[] = [];
-      for (const u of [...followingData, ...followersData]) {
+      for (const u of [...followingData, ...followersData, ...friendProfileData]) {
         if (!seen.has(u.id)) {
           seen.add(u.id);
           merged.push(u);
@@ -168,11 +178,7 @@ export default function EventMembersScreen() {
 
   const renderMember = ({ item }: { item: EventMemberResponse }) => (
     <View style={styles.listItem}>
-      <Image
-        source={{ uri: resolveAvatar(item.avatarKey, item.avatarUrl) }}
-        style={styles.avatar}
-        contentFit="cover"
-      />
+      <UserAvatar uri={resolveAvatar(item.avatarKey, item.avatarUrl)} name={item.name} size={48} style={styles.avatar} />
       <View style={styles.userInfo}>
         <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
         {getHandle(item.username) && (
@@ -196,11 +202,7 @@ export default function EventMembersScreen() {
 
   const renderFollowingUser = ({ item }: { item: ProfileFollowUserResponse }) => (
     <View style={styles.listItem}>
-      <Image
-        source={{ uri: resolveAvatar(item.avatarKey, item.avatarUrl) }}
-        style={styles.avatar}
-        contentFit="cover"
-      />
+      <UserAvatar uri={resolveAvatar(item.avatarKey, item.avatarUrl)} name={item.name} size={48} style={styles.avatar} />
       <View style={styles.userInfo}>
         <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
         {getHandle(item.username) && (

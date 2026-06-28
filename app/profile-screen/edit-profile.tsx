@@ -1,4 +1,5 @@
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { Spinner, SpinnerCustom } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
@@ -6,14 +7,18 @@ import { getStorageDownloadUrl, getStorageFileUrl, uploadFileToStorage } from "@
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  InputAccessoryView,
+  InteractionManager,
+  Keyboard,
   KeyboardAvoidingView,
   KeyboardTypeOptions,
+  LayoutChangeEvent,
   Linking,
   Modal,
   Platform,
@@ -26,20 +31,26 @@ import {
   TextInputProps,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200";
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,40}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENDER_OPTIONS = ["Male", "Female", "Others"] as const;
+const FIELD_VISIBLE_MARGIN = 20;
+const AGE_INPUT_ACCESSORY_ID = "edit-profile-age-next";
 
 type ProfileType = "personal" | "business";
 type GenderOption = (typeof GENDER_OPTIONS)[number];
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
+type ProfileField = "name" | "username" | "email" | "gender" | "age" | "address" | "bio";
+type MeasurableFieldRef = {
+  measureInWindow: View["measureInWindow"];
+};
 
 type PendingUpload = {
   contentType: string;
@@ -62,14 +73,23 @@ type DocumentMeta = {
 
 type CustomInputProps = {
   autoCapitalize?: TextInputProps["autoCapitalize"];
+  blurOnSubmit?: TextInputProps["blurOnSubmit"];
+  containerRef?: React.Ref<View>;
   colors: ThemeColors;
   editable?: boolean;
+  enterKeyHint?: TextInputProps["enterKeyHint"];
   icon?: FeatherIconName;
+  inputAccessoryViewID?: TextInputProps["inputAccessoryViewID"];
+  inputRef?: React.Ref<TextInput>;
   keyboardType?: KeyboardTypeOptions;
   multiline?: boolean;
   onChangeText: (text: string) => void;
+  onFocus?: TextInputProps["onFocus"];
+  onLayout?: (event: LayoutChangeEvent) => void;
+  onSubmitEditing?: TextInputProps["onSubmitEditing"];
   placeholder: string;
   rightIcon?: FeatherIconName;
+  returnKeyType?: TextInputProps["returnKeyType"];
   style?: StyleProp<ViewStyle>;
   value: string;
 };
@@ -120,35 +140,53 @@ const getUploadExtension = (contentType: string, fallback: string) => {
 
 const CustomInput = ({
   autoCapitalize,
+  blurOnSubmit,
+  containerRef,
   colors,
   editable = true,
+  enterKeyHint,
   icon,
+  inputAccessoryViewID,
+  inputRef,
   keyboardType,
   multiline,
   onChangeText,
+  onFocus,
+  onLayout,
+  onSubmitEditing,
   placeholder,
   rightIcon,
+  returnKeyType,
   style,
   value,
 }: CustomInputProps) => (
   <View
+    ref={containerRef}
     style={[
       styles.inputContainer,
       { backgroundColor: colors.card, borderColor: colors.border },
       multiline && styles.inputContainerMultiline,
       style,
     ]}
+    onLayout={onLayout}
   >
     {icon ? <Feather name={icon} size={16} color={colors.textSecondary} style={styles.inputIcon} /> : null}
     <TextInput
       autoCapitalize={autoCapitalize}
       disableFullscreenUI={Platform.OS === "android"}
       editable={editable}
+      enterKeyHint={enterKeyHint}
+      inputAccessoryViewID={inputAccessoryViewID}
+      ref={inputRef}
       keyboardType={keyboardType}
       multiline={multiline}
+      blurOnSubmit={blurOnSubmit}
       onChangeText={onChangeText}
+      onFocus={onFocus}
+      onSubmitEditing={onSubmitEditing}
       placeholder={placeholder}
       placeholderTextColor={colors.textSecondary}
+      returnKeyType={returnKeyType}
       style={[styles.input, { color: editable ? colors.text : colors.textSecondary }, multiline && styles.inputMultiline]}
       textAlignVertical={multiline ? "top" : "center"}
       value={value}
@@ -162,6 +200,7 @@ const CustomInput = ({
 export default function EditProfileScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const router = useRouter();
   const { type, mode } = useLocalSearchParams<{ type?: ProfileType; mode?: string }>();
   const isSwitchMode = mode === 'switch';
@@ -170,12 +209,29 @@ export default function EditProfileScreen() {
   const restoreAuthSession = useAuthStore((state) => state.restoreAuthSession);
   const isLoading = useAuthStore((state) => state.isLoading);
   const isMountedRef = useRef(true);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const activeFieldRef = useRef<ProfileField | null>(null);
+  const fieldLayoutsRef = useRef<Partial<Record<ProfileField, number>>>({});
+  const fieldRefs = useRef<Partial<Record<ProfileField, MeasurableFieldRef | null>>>({});
+  const scrollOffsetRef = useRef(0);
+  const keyboardHeightRef = useRef(0);
+  const keyboardTopRef = useRef(windowHeight);
+  const footerHeightRef = useRef(0);
+  const pendingGenderPickerRef = useRef(false);
+  const pendingFocusAfterGenderRef = useRef(false);
+  const pendingFocusAfterKeyboardHideRef = useRef<ProfileField | null>(null);
+  const nameInputRef = useRef<TextInput>(null);
+  const usernameInputRef = useRef<TextInput>(null);
+  const emailInputRef = useRef<TextInput>(null);
+  const ageInputRef = useRef<TextInput>(null);
+  const addressInputRef = useRef<TextInput>(null);
+  const bioInputRef = useRef<TextInput>(null);
 
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [profileType, setProfileType] = useState<ProfileType>(type || user?.accountType || "personal");
-  const [hasImage, setHasImage] = useState(true);
-  const [avatarUri, setAvatarUri] = useState(DEFAULT_AVATAR);
+  const [hasImage, setHasImage] = useState(Boolean(user?.avatarKey));
+  const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null);
   const [avatarKey, setAvatarKey] = useState<string | null>(user?.avatarKey ?? null);
   const [pendingAvatar, setPendingAvatar] = useState<PendingUpload | null>(null);
   const [businessDocumentKey, setBusinessDocumentKey] = useState<string | null>(user?.businessDocumentKey ?? null);
@@ -197,10 +253,180 @@ export default function EditProfileScreen() {
   const [age, setAge] = useState(user?.age ? String(user.age) : "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [address, setAddress] = useState(user?.address ?? "");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(0);
+  const documentActionRef = useRef<'view' | 'download' | null>(null);
+  const [documentAction, setDocumentAction] = useState<'view' | 'download' | null>(null);
 
   const isBusiness = profileType === "business";
   const hasDocument = Boolean(businessDocumentKey || pendingDocument);
   const isBusy = isLoading || isProfileLoading;
+
+  const handleFieldLayout = (field: ProfileField) => (event: LayoutChangeEvent) => {
+    fieldLayoutsRef.current[field] = event.nativeEvent.layout.y;
+  };
+
+  const setFieldRef = (field: ProfileField) => (node: MeasurableFieldRef | null) => {
+    fieldRefs.current[field] = node;
+  };
+
+  const ensureFieldVisible = useCallback(
+    (field: ProfileField) => {
+      const fieldRef = fieldRefs.current[field];
+      const fallbackY = fieldLayoutsRef.current[field];
+
+      const scrollByDelta = (delta: number) => {
+        if (Math.abs(delta) < 1) {
+          return;
+        }
+
+        const nextOffset = Math.max(0, scrollOffsetRef.current + delta);
+
+        scrollOffsetRef.current = nextOffset;
+        scrollViewRef.current?.scrollTo({
+          animated: true,
+          y: nextOffset,
+        });
+      };
+
+      const measure = () => {
+        requestAnimationFrame(() => {
+          if (fieldRef?.measureInWindow) {
+            fieldRef.measureInWindow((_, fieldY, __, fieldHeight) => {
+              const keyboardTop = keyboardHeightRef.current > 0 ? keyboardTopRef.current : windowHeight;
+              const footerTop = windowHeight - footerHeightRef.current;
+              const visibleBottom = Math.min(keyboardTop, footerTop) - FIELD_VISIBLE_MARGIN;
+              const visibleTop = FIELD_VISIBLE_MARGIN;
+              const fieldTop = fieldY - FIELD_VISIBLE_MARGIN;
+              const fieldBottom = fieldY + fieldHeight + FIELD_VISIBLE_MARGIN;
+
+              if (fieldBottom > visibleBottom) {
+                scrollByDelta(fieldBottom - visibleBottom);
+                return;
+              }
+
+              if (fieldTop < visibleTop) {
+                scrollByDelta(fieldTop - visibleTop);
+              }
+            });
+            return;
+          }
+
+          if (typeof fallbackY === "number") {
+            scrollViewRef.current?.scrollTo({
+              animated: true,
+              y: Math.max(0, fallbackY - FIELD_VISIBLE_MARGIN),
+            });
+          }
+        });
+      };
+
+      InteractionManager.runAfterInteractions(measure);
+    },
+    [windowHeight],
+  );
+
+  const focusInputField = useCallback(
+    (field: ProfileField) => {
+      activeFieldRef.current = field;
+      ensureFieldVisible(field);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (field === "name") nameInputRef.current?.focus();
+          if (field === "username") usernameInputRef.current?.focus();
+          if (field === "email") emailInputRef.current?.focus();
+          if (field === "age") ageInputRef.current?.focus();
+          if (field === "address") addressInputRef.current?.focus();
+          if (field === "bio") bioInputRef.current?.focus();
+        });
+      });
+    },
+    [ensureFieldVisible],
+  );
+
+  const blurTextInputs = useCallback(() => {
+    nameInputRef.current?.blur();
+    usernameInputRef.current?.blur();
+    emailInputRef.current?.blur();
+    ageInputRef.current?.blur();
+    addressInputRef.current?.blur();
+    bioInputRef.current?.blur();
+  }, []);
+
+  const openGenderPicker = useCallback(() => {
+    activeFieldRef.current = "gender";
+    blurTextInputs();
+    ensureFieldVisible("gender");
+
+    if (keyboardHeightRef.current > 0) {
+      pendingGenderPickerRef.current = true;
+      Keyboard.dismiss();
+      return;
+    }
+
+    setIsGenderDropdownVisible(true);
+  }, [blurTextInputs, ensureFieldVisible]);
+
+  const focusField = useCallback(
+    (field: ProfileField) => {
+      if (field === "gender") {
+        openGenderPicker();
+        return;
+      }
+
+      focusInputField(field);
+    },
+    [focusInputField, openGenderPicker],
+  );
+
+  const focusFieldAfterKeyboardHide = useCallback(
+    (field: ProfileField) => {
+      if (keyboardHeightRef.current > 0) {
+        pendingFocusAfterKeyboardHideRef.current = field;
+        Keyboard.dismiss();
+        return;
+      }
+
+      focusField(field);
+    },
+    [focusField],
+  );
+
+  const getFocusOrder = useCallback(() => {
+    const fields: ProfileField[] = ["name"];
+
+    if (!isSwitchMode) {
+      fields.push("username", "email");
+    }
+
+    if (isBusiness) {
+      fields.push("address");
+    } else {
+      fields.push("gender", "age");
+    }
+
+    fields.push("bio");
+
+    return fields;
+  }, [isBusiness, isSwitchMode]);
+
+  const focusNextField = useCallback(
+    (field: ProfileField) => {
+      const fields = getFocusOrder();
+      const nextField = fields[fields.indexOf(field) + 1];
+
+      if (nextField) {
+        if (field === "age" && nextField === "bio") {
+          focusFieldAfterKeyboardHide(nextField);
+          return;
+        }
+
+        focusField(nextField);
+      }
+    },
+    [focusField, focusFieldAfterKeyboardHide, getFocusOrder],
+  );
 
   const loadProfile = useCallback(async () => {
     setIsProfileLoading(true);
@@ -250,7 +476,7 @@ export default function EditProfileScreen() {
     setAddress(user.address ?? "");
     setAvatarKey(user.avatarKey ?? null);
     setPendingAvatar(null);
-    setHasImage(true);
+    setHasImage(Boolean(user.avatarKey));
     setBusinessDocumentKey(user.businessDocumentKey ?? null);
     setPendingDocument(null);
     setDocumentMeta(
@@ -266,14 +492,69 @@ export default function EditProfileScreen() {
 
   useEffect(() => {
     if (!user?.avatarKey) {
-      setAvatarUri(DEFAULT_AVATAR);
-      setHasImage(true);
+      setAvatarUri(null);
+      setHasImage(false);
       return;
     }
 
     setAvatarUri(getStorageFileUrl(user.avatarKey));
     setHasImage(true);
   }, [user?.avatarKey]);
+
+  useEffect(() => {
+    keyboardTopRef.current = windowHeight - keyboardHeightRef.current;
+  }, [windowHeight]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      keyboardHeightRef.current = event.endCoordinates.height;
+      keyboardTopRef.current = event.endCoordinates.screenY || windowHeight - event.endCoordinates.height;
+      setKeyboardHeight(event.endCoordinates.height);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const field = activeFieldRef.current;
+
+          if (field) {
+            ensureFieldVisible(field);
+          }
+        });
+      });
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      keyboardHeightRef.current = 0;
+      keyboardTopRef.current = windowHeight;
+      setKeyboardHeight(0);
+
+      if (pendingGenderPickerRef.current) {
+        pendingGenderPickerRef.current = false;
+        requestAnimationFrame(() => {
+          ensureFieldVisible("gender");
+          setIsGenderDropdownVisible(true);
+        });
+        return;
+      }
+
+      const pendingField = pendingFocusAfterKeyboardHideRef.current;
+
+      if (pendingField) {
+        pendingFocusAfterKeyboardHideRef.current = null;
+        InteractionManager.runAfterInteractions(() => {
+          requestAnimationFrame(() => {
+            focusField(pendingField);
+          });
+        });
+      }
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [ensureFieldVisible, focusField, windowHeight]);
 
   const handlePickAvatar = async () => {
     if (isBusy) {
@@ -315,6 +596,7 @@ export default function EditProfileScreen() {
     }
 
     setHasImage(false);
+    setAvatarUri(null);
     setAvatarKey(null);
     setPendingAvatar(null);
   };
@@ -368,21 +650,87 @@ export default function EditProfileScreen() {
 
   const handleGenderSelect = (selectedGender: GenderOption) => {
     setGender(selectedGender);
+    pendingFocusAfterGenderRef.current = true;
     setIsGenderDropdownVisible(false);
   };
 
-  const handleOpenDocument = async () => {
+  const closeGenderPicker = () => {
+    pendingFocusAfterGenderRef.current = false;
+    pendingGenderPickerRef.current = false;
+    setIsGenderDropdownVisible(false);
+  };
+
+  const completeGenderPickerClose = useCallback(() => {
+    if (!pendingFocusAfterGenderRef.current) {
+      return;
+    }
+
+    pendingFocusAfterGenderRef.current = false;
+
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        if (!isBusiness) {
+          focusField("age");
+        }
+      });
+    });
+  }, [focusField, isBusiness]);
+
+  useEffect(() => {
+    if (!isGenderDropdownVisible) {
+      completeGenderPickerClose();
+    }
+  }, [completeGenderPickerClose, isGenderDropdownVisible]);
+
+  const handleViewDocument = async () => {
+    if (documentActionRef.current) return;
+
+    if (pendingDocument) {
+      Alert.alert("Document not saved yet", "Save your profile first to preview this document.");
+      return;
+    }
+
+    if (!businessDocumentKey) {
+      Alert.alert("No document", "Upload a PDF document first.");
+      return;
+    }
+
+    documentActionRef.current = 'view';
+    setDocumentAction('view');
     try {
-      const url = pendingDocument?.uri || (businessDocumentKey ? await getStorageDownloadUrl(businessDocumentKey) : null);
+      const url = await getStorageDownloadUrl(businessDocumentKey);
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      Alert.alert("Unable to view document", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      documentActionRef.current = null;
+      setDocumentAction(null);
+    }
+  };
 
-      if (!url) {
-        Alert.alert("No document", "Upload a PDF document first.");
-        return;
-      }
+  const handleDownloadDocument = async () => {
+    if (documentActionRef.current) return;
 
+    if (pendingDocument) {
+      Alert.alert("Document not saved yet", "Save your profile first to download this document.");
+      return;
+    }
+
+    if (!businessDocumentKey) {
+      Alert.alert("No document", "Upload a PDF document first.");
+      return;
+    }
+
+    documentActionRef.current = 'download';
+    setDocumentAction('download');
+    try {
+      const url = await getStorageDownloadUrl(businessDocumentKey);
       await Linking.openURL(url);
     } catch (error) {
-      Alert.alert("Unable to open document", getAuthErrorMessage(error, "Please try again."));
+      Alert.alert("Unable to download document", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      documentActionRef.current = null;
+      setDocumentAction(null);
     }
   };
 
@@ -502,8 +850,25 @@ export default function EditProfileScreen() {
         </View>
       ) : (
         <>
-          <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <KeyboardAvoidingView
+            style={styles.keyboardView}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+          >
+            <ScrollView
+              ref={scrollViewRef}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: Math.max(40, footerHeight + 40 + keyboardHeight) },
+              ]}
+            >
               <View style={styles.sectionHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>IMAGE</Text>
                 {hasImage ? (
@@ -516,7 +881,7 @@ export default function EditProfileScreen() {
               <View style={styles.avatarWrapper}>
                 <View style={[styles.avatarContainer, { backgroundColor: colors.card }]}>
                   {hasImage ? (
-                    <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
+                    <UserAvatar uri={avatarUri} name={name} size={96} style={styles.avatar} />
                   ) : (
                     <View style={[styles.emptyAvatar, { backgroundColor: colors.border }]}>
                       <Feather name="user" size={40} color={colors.textSecondary} />
@@ -534,47 +899,91 @@ export default function EditProfileScreen() {
 
               <View style={styles.formGroup}>
                 <CustomInput
+                  containerRef={setFieldRef("name")}
                   colors={colors}
                   editable={!isBusy}
+                  enterKeyHint="next"
                   icon="user"
+                  inputRef={nameInputRef}
+                  onFocus={() => {
+                    activeFieldRef.current = "name";
+                    ensureFieldVisible("name");
+                  }}
+                  onLayout={handleFieldLayout("name")}
                   onChangeText={setName}
+                  onSubmitEditing={() => focusNextField("name")}
                   placeholder={isBusiness ? "Business name" : "Fullname"}
+                  returnKeyType="next"
                   value={name}
                 />
                 <CustomInput
                   autoCapitalize="none"
+                  containerRef={setFieldRef("username")}
                   colors={colors}
                   editable={!isBusy && !isSwitchMode}
+                  enterKeyHint="next"
                   icon="at-sign"
+                  inputRef={usernameInputRef}
+                  onFocus={() => {
+                    activeFieldRef.current = "username";
+                    ensureFieldVisible("username");
+                  }}
+                  onLayout={handleFieldLayout("username")}
                   onChangeText={setUsername}
+                  onSubmitEditing={() => focusNextField("username")}
                   placeholder="username"
+                  returnKeyType="next"
                   value={username}
                 />
                 <CustomInput
                   autoCapitalize="none"
+                  containerRef={setFieldRef("email")}
                   colors={colors}
                   editable={!isBusy && !isSwitchMode}
+                  enterKeyHint="next"
                   icon="mail"
+                  inputRef={emailInputRef}
                   keyboardType="email-address"
+                  onFocus={() => {
+                    activeFieldRef.current = "email";
+                    ensureFieldVisible("email");
+                  }}
+                  onLayout={handleFieldLayout("email")}
                   onChangeText={setEmail}
+                  onSubmitEditing={() => focusNextField("email")}
                   placeholder="name@nocturnal.com"
+                  returnKeyType="next"
                   value={email}
                 />
 
                 {isBusiness ? (
                   <CustomInput
+                    containerRef={setFieldRef("address")}
                     colors={colors}
                     editable={!isBusy}
+                    enterKeyHint="next"
                     icon="map-pin"
+                    inputRef={addressInputRef}
+                    onFocus={() => {
+                      activeFieldRef.current = "address";
+                      ensureFieldVisible("address");
+                    }}
+                    onLayout={handleFieldLayout("address")}
                     onChangeText={setAddress}
+                    onSubmitEditing={() => focusNextField("address")}
                     placeholder="Address"
+                    returnKeyType="next"
                     value={address}
                   />
                 ) : (
                   <TouchableOpacity
+                    ref={setFieldRef("gender")}
                     activeOpacity={0.75}
                     disabled={isBusy}
-                    onPress={() => setIsGenderDropdownVisible(true)}
+                    onLayout={handleFieldLayout("gender")}
+                    onPress={() => {
+                      openGenderPicker();
+                    }}
                     style={[
                       styles.inputContainer,
                       { backgroundColor: colors.card, borderColor: colors.border },
@@ -594,11 +1003,23 @@ export default function EditProfileScreen() {
                 <View style={styles.section}>
                   <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AGE</Text>
                   <CustomInput
+                    blurOnSubmit={false}
+                    containerRef={setFieldRef("age")}
                     colors={colors}
                     editable={!isBusy}
-                    keyboardType="number-pad"
+                    enterKeyHint="next"
+                    inputAccessoryViewID={Platform.OS === "ios" ? AGE_INPUT_ACCESSORY_ID : undefined}
+                    inputRef={ageInputRef}
+                    keyboardType={Platform.OS === "android" ? "numeric" : "number-pad"}
+                    onFocus={() => {
+                      activeFieldRef.current = "age";
+                      ensureFieldVisible("age");
+                    }}
+                    onLayout={handleFieldLayout("age")}
                     onChangeText={setAge}
+                    onSubmitEditing={() => focusNextField("age")}
                     placeholder="21"
+                    returnKeyType="next"
                     value={age}
                   />
                 </View>
@@ -635,13 +1056,29 @@ export default function EditProfileScreen() {
                         </Text>
                       </View>
                       <View style={styles.docActions}>
-                        <TouchableOpacity style={styles.docActionBtn} onPress={handleOpenDocument} disabled={isBusy}>
-                          <Feather name="download" size={16} color={colors.textSecondary} />
+                        <TouchableOpacity
+                          style={styles.docActionBtn}
+                          onPress={() => void handleDownloadDocument()}
+                          disabled={isBusy || documentAction !== null}
+                        >
+                          {documentAction === 'download' ? (
+                            <Spinner size={16} color={colors.textSecondary} />
+                          ) : (
+                            <Feather name="download" size={16} color={colors.textSecondary} />
+                          )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.docActionBtn} onPress={handleOpenDocument} disabled={isBusy}>
-                          <Feather name="eye" size={16} color={colors.textSecondary} />
+                        <TouchableOpacity
+                          style={styles.docActionBtn}
+                          onPress={() => void handleViewDocument()}
+                          disabled={isBusy || documentAction !== null}
+                        >
+                          {documentAction === 'view' ? (
+                            <Spinner size={16} color={colors.textSecondary} />
+                          ) : (
+                            <Feather name="eye" size={16} color={colors.textSecondary} />
+                          )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.docActionBtn} onPress={handleDeleteDocument} disabled={isBusy}>
+                        <TouchableOpacity style={styles.docActionBtn} onPress={handleDeleteDocument} disabled={isBusy || documentAction !== null}>
                           <Feather name="x" size={16} color={colors.textSecondary} />
                         </TouchableOpacity>
                       </View>
@@ -653,11 +1090,21 @@ export default function EditProfileScreen() {
               <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BIO</Text>
                 <CustomInput
+                  blurOnSubmit
+                  containerRef={setFieldRef("bio")}
                   colors={colors}
                   editable={!isBusy}
+                  enterKeyHint="done"
+                  inputRef={bioInputRef}
                   multiline
+                  onFocus={() => {
+                    activeFieldRef.current = "bio";
+                    ensureFieldVisible("bio");
+                  }}
+                  onLayout={handleFieldLayout("bio")}
                   onChangeText={setBio}
                   placeholder={isBusiness ? "Detail about business" : "Detail about yourself"}
+                  returnKeyType="done"
                   style={styles.bioInput}
                   value={bio}
                 />
@@ -665,7 +1112,24 @@ export default function EditProfileScreen() {
             </ScrollView>
           </KeyboardAvoidingView>
 
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          {Platform.OS === "ios" ? (
+            <InputAccessoryView nativeID={AGE_INPUT_ACCESSORY_ID}>
+              <View style={[styles.ageInputAccessory, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+                <TouchableOpacity onPress={() => focusNextField("age")} style={styles.ageInputAccessoryButton}>
+                  <Text style={[styles.ageInputAccessoryText, { color: colors.primary }]}>Next</Text>
+                </TouchableOpacity>
+              </View>
+            </InputAccessoryView>
+          ) : null}
+
+          <View
+            onLayout={(event) => {
+              const nextFooterHeight = event.nativeEvent.layout.height;
+              footerHeightRef.current = nextFooterHeight;
+              setFooterHeight(nextFooterHeight);
+            }}
+            style={[styles.footer, { borderTopColor: colors.border }]}
+          >
             <TouchableOpacity
               disabled={isLoading}
               onPress={() => router.back()}
@@ -690,9 +1154,10 @@ export default function EditProfileScreen() {
             animationType="slide"
             transparent
             visible={isGenderDropdownVisible}
-            onRequestClose={() => setIsGenderDropdownVisible(false)}
+            onDismiss={completeGenderPickerClose}
+            onRequestClose={closeGenderPicker}
           >
-            <TouchableWithoutFeedback onPress={() => setIsGenderDropdownVisible(false)}>
+            <TouchableWithoutFeedback onPress={closeGenderPicker}>
               <View style={styles.dropdownOverlay}>
                 <TouchableWithoutFeedback>
                   <View style={[styles.dropdownSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -735,7 +1200,7 @@ export default function EditProfileScreen() {
                     {/* Cancel button */}
                     <TouchableOpacity
                       activeOpacity={0.7}
-                      onPress={() => setIsGenderDropdownVisible(false)}
+                      onPress={closeGenderPicker}
                       style={[styles.dropdownCancel, { borderTopColor: colors.border }]}
                     >
                       <Text style={[styles.dropdownCancelText, { color: colors.textSecondary }]}>Cancel</Text>
@@ -1013,6 +1478,20 @@ const styles = StyleSheet.create({
     paddingBottom: 25,
     paddingHorizontal: 20,
     paddingTop: 15,
+  },
+  ageInputAccessory: {
+    alignItems: "flex-end",
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  ageInputAccessoryButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ageInputAccessoryText: {
+    fontSize: 15,
+    fontWeight: "700",
   },
   cancelBtn: {
     alignItems: "center",

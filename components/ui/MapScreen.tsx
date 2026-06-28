@@ -43,6 +43,12 @@ const TRAFFIC_DARK_STYLE_URL = "mapbox://styles/mapbox/traffic-night-v2";
 const DEFAULT_MAP_CENTER: [number, number] = [-73.935242, 40.73061];
 const DEFAULT_ZOOM_LEVEL = 12;
 const USER_LOCATION_ZOOM_LEVEL = 14;
+const CATEGORY_RAIL_TOP = 60;
+const CATEGORY_RAIL_HEIGHT = 42;
+const MAP_SCALE_BAR_OFFSET = {
+  top: CATEGORY_RAIL_TOP + CATEGORY_RAIL_HEIGHT + 10,
+  left: 16,
+};
 
 type MapViewMode = "traffic" | "satellite";
 
@@ -510,6 +516,8 @@ export default function MapScreen({
           styleURL={currentMapStyle}
           logoEnabled={false}
           attributionEnabled={false}
+          scaleBarEnabled={true}
+          scaleBarPosition={MAP_SCALE_BAR_OFFSET}
           pitchEnabled={true}
           rotateEnabled={true}
           onCameraChanged={handleCameraChanged}
@@ -733,9 +741,12 @@ const styles = StyleSheet.create({
   },
   /* ── Layout / chrome ── */
   topHeader: {
+    position: "absolute",
+    top: CATEGORY_RAIL_TOP,
+    left: 0,
     width: "100%",
     zIndex: 10,
-    backgroundColor: "#000000",
+    backgroundColor: "transparent",
     paddingBottom: 10,
   },
   mapArea: {

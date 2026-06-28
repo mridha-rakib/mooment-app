@@ -8,14 +8,32 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import SegmentedControl from "../ui/SegmentedControl";
 import { Spinner } from "@/components/ui/spinner";
+import UserAvatar from "../ui/UserAvatar";
 
 type TicketStat = { sold: number; available: number; capacity: number };
+
+const resolveAvatarUri = (avatarKey?: string | null, avatarUrl?: string | null) => {
+  if (avatarUrl?.trim()) {
+    return avatarUrl.trim();
+  }
+
+  if (!avatarKey) {
+    return null;
+  }
+
+  try {
+    return getStorageFileUrl(avatarKey);
+  } catch {
+    return null;
+  }
+};
 
 type AccessTabProps = {
   tickets?: EventTicketPayload[];
   rewards?: EventRewardPayload[];
   scheduledAt?: string | null;
   privacy?: EventPrivacy;
+  isMember?: boolean;
   purchasedTicketCounts?: Record<string, number>;
   ticketStats?: Record<string, TicketStat>;
   isHostMode?: boolean;
@@ -144,6 +162,7 @@ const AccessTab = ({
   rewards = [],
   scheduledAt,
   privacy,
+  isMember = false,
   purchasedTicketCounts = {},
   ticketStats,
   isHostMode = false,
@@ -179,6 +198,7 @@ const AccessTab = ({
 }: AccessTabProps) => {
   const { colors, isDark } = useTheme();
   const isLocked = privacy === "locked";
+  const isPrivate = privacy === "private";
   const showRequestTab = isLocked && isHostMode;
   const [localAccessSubTab, setLocalAccessSubTab] = useState("Tickets");
   const rawSubTab = selectedAccessSubTab ?? localAccessSubTab;
@@ -389,7 +409,16 @@ const AccessTab = ({
 
     return (
       <View style={{ marginTop: 20 }}>
-        {(!isLocked || hasAcceptedRequest) && (
+        {isPrivate && isMember && !isHostMode && (
+          <View style={[styles.alertBanner, { backgroundColor: "rgba(22, 216, 105, 0.1)", marginBottom: 8 }]}>
+            <Feather name="user-check" size={24} color="#1D9E75" />
+            <Text style={[styles.alertText, { color: "#1D9E75" }]}>
+              You've been invited to this private event and can purchase tickets.
+            </Text>
+          </View>
+        )}
+
+        {((!isLocked && !isPrivate) || hasAcceptedRequest || (isPrivate && (isHostMode || isMember))) && (
           <View style={styles.alertBanner}>
             <Feather name="info" size={24} color="#BB5E30" />
             <Text style={styles.alertText}>You can only buy maximum of 2 tickets</Text>
@@ -409,7 +438,7 @@ const AccessTab = ({
           </View>
         )}
 
-        {(!isLocked || hasAcceptedRequest) && (
+        {((!isLocked && !isPrivate) || hasAcceptedRequest || (isPrivate && (isHostMode || isMember))) && (
           <View style={styles.availabilityRow}>
             <View style={styles.availabilityLabel}>
               <View style={styles.greenDot} />
@@ -583,7 +612,7 @@ const AccessTab = ({
           const isAccepting = acceptingJoinRequestId === request.userId;
           const isDeclining = decliningJoinRequestId === request.userId;
           const isBusy = isAccepting || isDeclining;
-          const avatarUri = request.avatarUrl ?? request.avatarKey ?? null;
+          const avatarUri = resolveAvatarUri(request.avatarKey, request.avatarUrl);
 
           return (
             <View
@@ -591,13 +620,7 @@ const AccessTab = ({
               style={[styles.requestRow, { backgroundColor: isDark ? "#161521" : colors.backgroundSecondary, borderColor: colors.border }]}
             >
               <View style={styles.requestRowLeft}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.requestAvatar} contentFit="cover" />
-                ) : (
-                  <View style={[styles.requestAvatar, styles.requestAvatarPlaceholder, { backgroundColor: isDark ? "#313036" : colors.border }]}>
-                    <Feather name="user" size={18} color={colors.textSecondary} />
-                  </View>
-                )}
+                <UserAvatar uri={avatarUri} name={request.name} size={42} style={styles.requestAvatar} iconSize={18} />
                 <View style={styles.requestUserInfo}>
                   <Text style={[styles.requestUserName, { color: colors.text }]} numberOfLines={1}>
                     {request.name}

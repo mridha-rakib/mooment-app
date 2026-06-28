@@ -80,13 +80,18 @@ export const hasLocationSharingPermission = async (): Promise<boolean> => {
 
 export const requestLocationSharingPermission = async (): Promise<void> => {
   const Location = await loadLocationModule();
-  const servicesEnabled = await areLocationServicesEnabled(Location);
+  await requestLocationSharingPermissionForModule(Location);
+};
+
+const requestLocationSharingPermissionForModule = async (Location: RuntimeLocationModule): Promise<void> => {
+  const [servicesEnabled, existingPermission] = await Promise.all([
+    areLocationServicesEnabled(Location),
+    Location.getForegroundPermissionsAsync(),
+  ]);
 
   if (!servicesEnabled) {
     throw new Error("Turn on Location Services before sharing your current location.");
   }
-
-  const existingPermission = await Location.getForegroundPermissionsAsync();
 
   if (existingPermission.granted) {
     return;
@@ -107,7 +112,7 @@ const toCurrentLocationPayload = (position: LocationPosition): CurrentLocationPa
 
 export const getCurrentLocationForSharing = async (): Promise<CurrentLocationPayload> => {
   const Location = await loadLocationModule();
-  await requestLocationSharingPermission();
+  await requestLocationSharingPermissionForModule(Location);
 
   try {
     const position = await Location.getCurrentPositionAsync({
@@ -142,7 +147,7 @@ export const watchCurrentLocationForSharing = async (
   onLocation: (location: CurrentLocationPayload) => void,
 ): Promise<LocationSharingSubscription> => {
   const Location = await loadLocationModule();
-  await requestLocationSharingPermission();
+  await requestLocationSharingPermissionForModule(Location);
 
   return Location.watchPositionAsync(
     {

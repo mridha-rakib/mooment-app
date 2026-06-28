@@ -40,16 +40,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { createMoment } from '@/lib/moments';
+import { createMoment, setPendingNewMoment } from '@/lib/moments';
 import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
 import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop';
 const FALLBACK_AUTHOR_NAME = 'Mooment User';
 const MAX_MEDIA_ITEMS = 10;
 const CREATE_MOMENT_COLORS = {
@@ -246,7 +246,7 @@ function CameraSheet({
 
     try {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.9,
+        quality: 0.75,
         skipProcessing: false,
       });
 
@@ -1222,15 +1222,12 @@ export default function CreateMomentScreen() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [showAudienceModal, setShowAudienceModal] = useState(false);
-  const [authorAvatar, setAuthorAvatar] = useState(DEFAULT_AVATAR);
-  const [avatarError, setAvatarError] = useState(false);
+  const [authorAvatar, setAuthorAvatar] = useState<string | null>(null);
   const authorName = user?.name?.trim() || FALLBACK_AUTHOR_NAME;
 
   useEffect(() => {
-    setAvatarError(false);
-
     if (!user?.avatarKey) {
-      setAuthorAvatar(DEFAULT_AVATAR);
+      setAuthorAvatar(null);
       return;
     }
 
@@ -1239,7 +1236,7 @@ export default function CreateMomentScreen() {
       // MinIO URLs may resolve to localhost and fail outside the dev machine.
       setAuthorAvatar(getStorageFileUrl(user.avatarKey));
     } catch {
-      setAuthorAvatar(DEFAULT_AVATAR);
+      setAuthorAvatar(null);
     }
   }, [user?.avatarKey]);
 
@@ -1528,7 +1525,7 @@ export default function CreateMomentScreen() {
     try {
       const mediaItems = await buildMediaItems();
 
-      await createMoment({
+      const newMoment = await createMoment({
         mode: selectedEventId ? 'event' : 'feed',
         caption: trimmedCaption || null,
         audience: normalizeAudience(audience),
@@ -1539,6 +1536,7 @@ export default function CreateMomentScreen() {
         mediaItems,
       });
 
+      setPendingNewMoment(newMoment);
       return true;
     } catch (error) {
       Alert.alert(
@@ -1559,7 +1557,7 @@ export default function CreateMomentScreen() {
       setShowConfetti(true);
       setTimeout(() => {
         router.back();
-      }, 2500);
+      }, 1500);
     }
   };
 
@@ -1605,19 +1603,7 @@ export default function CreateMomentScreen() {
           {/* ── Author Row ── */}
           <View style={styles.authorRow}>
             <View style={styles.avatarRing}>
-              {!avatarError && authorAvatar ? (
-                <Image
-                  source={{ uri: authorAvatar }}
-                  style={styles.avatar}
-                  onError={() => setAvatarError(true)}
-                />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarInitials}>
-                    {authorName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
+              <UserAvatar uri={authorAvatar} name={authorName} size={36} style={styles.avatar} />
             </View>
             <View style={styles.authorInfo}>
               <Text style={styles.authorNameFull} numberOfLines={2}>

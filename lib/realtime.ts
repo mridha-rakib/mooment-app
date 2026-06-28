@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { ChatMessageAttachment, ChatMessageType } from "@/lib/chat";
 import type { NotificationItem } from "@/lib/notifications";
 
 export type DirectRealtimeMessage = {
@@ -10,7 +11,9 @@ export type DirectRealtimeMessage = {
   senderId: string;
   senderName: string;
   text: string;
-  type?: "text";
+  type?: ChatMessageType;
+  attachment?: ChatMessageAttachment | null;
+  editedAt?: string | null;
 };
 
 export type DirectTypingRealtimeEvent = {
@@ -38,16 +41,44 @@ export type GroupRealtimeMessage = {
   senderId: string;
   senderName: string;
   text: string;
+  type?: ChatMessageType;
+  attachment?: ChatMessageAttachment | null;
   createdAt: string;
+  editedAt?: string | null;
+};
+
+export type DirectMessageDeletedRealtimeEvent = {
+  conversationId: string;
+  messageId: string;
+};
+
+export type GroupMessageDeletedRealtimeEvent = {
+  groupId: string;
+  messageId: string;
+};
+
+export type NotificationReadRealtimeEvent = {
+  notificationId: string;
+  unreadCount: number;
+};
+
+export type NotificationReadAllRealtimeEvent = {
+  unreadCount: number;
 };
 
 type RealtimeEvent =
   | { type: "ready"; user: { id: string; name: string } }
   | { type: "dm:message"; message: DirectRealtimeMessage }
+  | { type: "dm:message:updated"; message: DirectRealtimeMessage }
+  | { type: "dm:message:deleted"; messageId: string; conversationId: string }
   | { type: "dm:typing"; typing: DirectTypingRealtimeEvent }
   | { type: "group:message"; message: GroupRealtimeMessage }
+  | { type: "group:message:updated"; message: GroupRealtimeMessage }
+  | { type: "group:message:deleted"; messageId: string; groupId: string }
   | { type: "live:message"; roomId: string; message: LiveRealtimeMessage }
   | { type: "notification:new"; notification: NotificationItem }
+  | { type: "notification:read"; notificationId: string; unreadCount: number }
+  | { type: "notification:read-all"; unreadCount: number }
   | { type: "user:online"; userId: string }
   | { type: "user:offline"; userId: string }
   | { type: "error"; code: string; message: string }
@@ -56,11 +87,17 @@ type RealtimeEvent =
 type RealtimeSocketOptions = {
   accessToken: string;
   onDirectMessage?: (message: DirectRealtimeMessage) => void;
+  onDirectMessageDeleted?: (event: DirectMessageDeletedRealtimeEvent) => void;
+  onDirectMessageUpdated?: (message: DirectRealtimeMessage) => void;
   onDirectTyping?: (typing: DirectTypingRealtimeEvent) => void;
   onError?: (error: { code?: string; message: string }) => void;
   onGroupMessage?: (message: GroupRealtimeMessage) => void;
+  onGroupMessageDeleted?: (event: GroupMessageDeletedRealtimeEvent) => void;
+  onGroupMessageUpdated?: (message: GroupRealtimeMessage) => void;
   onLiveMessage?: (roomId: string, message: LiveRealtimeMessage) => void;
   onNotification?: (notification: NotificationItem) => void;
+  onNotificationRead?: (event: NotificationReadRealtimeEvent) => void;
+  onNotificationsReadAll?: (event: NotificationReadAllRealtimeEvent) => void;
   onReady?: () => void;
   onUserOnline?: (userId: string) => void;
   onUserOffline?: (userId: string) => void;
@@ -86,11 +123,17 @@ const buildRealtimeUrl = (accessToken: string) => {
 export const createRealtimeSocket = ({
   accessToken,
   onDirectMessage,
+  onDirectMessageDeleted,
+  onDirectMessageUpdated,
   onDirectTyping,
   onError,
   onGroupMessage,
+  onGroupMessageDeleted,
+  onGroupMessageUpdated,
   onLiveMessage,
   onNotification,
+  onNotificationRead,
+  onNotificationsReadAll,
   onReady,
   onUserOnline,
   onUserOffline,
@@ -133,6 +176,19 @@ export const createRealtimeSocket = ({
         return;
       }
 
+      if (payload.type === "dm:message:updated") {
+        onDirectMessageUpdated?.(payload.message);
+        return;
+      }
+
+      if (payload.type === "dm:message:deleted") {
+        onDirectMessageDeleted?.({
+          conversationId: payload.conversationId,
+          messageId: payload.messageId,
+        });
+        return;
+      }
+
       if (payload.type === "dm:typing") {
         onDirectTyping?.(payload.typing);
         return;
@@ -143,6 +199,16 @@ export const createRealtimeSocket = ({
         return;
       }
 
+      if (payload.type === "group:message:updated") {
+        onGroupMessageUpdated?.(payload.message);
+        return;
+      }
+
+      if (payload.type === "group:message:deleted") {
+        onGroupMessageDeleted?.({ groupId: payload.groupId, messageId: payload.messageId });
+        return;
+      }
+
       if (payload.type === "live:message") {
         onLiveMessage?.(payload.roomId, payload.message);
         return;
@@ -150,6 +216,21 @@ export const createRealtimeSocket = ({
 
       if (payload.type === "notification:new") {
         onNotification?.(payload.notification);
+        return;
+      }
+
+      if (payload.type === "notification:read") {
+        onNotificationRead?.({
+          notificationId: payload.notificationId,
+          unreadCount: payload.unreadCount,
+        });
+        return;
+      }
+
+      if (payload.type === "notification:read-all") {
+        onNotificationsReadAll?.({
+          unreadCount: payload.unreadCount,
+        });
         return;
       }
 
@@ -179,9 +260,16 @@ export const createRealtimeSocket = ({
     close: () => socket.close(),
     joinLiveRoom: (roomId: string) => sendPayload({ roomId, type: "live:join" }),
     leaveLiveRoom: (roomId: string) => sendPayload({ roomId, type: "live:leave" }),
-    sendDirectMessage: (recipientId: string, text: string, clientMessageId?: string) =>
+    sendDirectMessage: (
+      recipientId: string,
+      text: string,
+      clientMessageId?: string,
+      options?: { type?: ChatMessageType; attachment?: ChatMessageAttachment },
+    ) =>
       sendPayload({
+        attachment: options?.attachment,
         clientMessageId,
+        messageType: options?.type,
         recipientId,
         text,
         type: "dm:message",
@@ -192,13 +280,28 @@ export const createRealtimeSocket = ({
         recipientId,
         type: "dm:typing",
       }),
-    sendGroupMessage: (groupId: string, text: string, clientMessageId?: string) =>
+    editDirectMessage: (messageId: string, text: string) =>
+      sendPayload({ messageId, text, type: "dm:message:edit" }),
+    deleteDirectMessage: (messageId: string) =>
+      sendPayload({ messageId, type: "dm:message:delete" }),
+    sendGroupMessage: (
+      groupId: string,
+      text: string,
+      clientMessageId?: string,
+      options?: { type?: ChatMessageType; attachment?: ChatMessageAttachment },
+    ) =>
       sendPayload({
+        attachment: options?.attachment,
         clientMessageId,
         groupId,
+        messageType: options?.type,
         text,
         type: "group:message",
       }),
+    editGroupMessage: (messageId: string, text: string) =>
+      sendPayload({ messageId, text, type: "group:message:edit" }),
+    deleteGroupMessage: (messageId: string) =>
+      sendPayload({ messageId, type: "group:message:delete" }),
     sendLiveMessage: (roomId: string, text: string, clientMessageId?: string) =>
       sendPayload({
         clientMessageId,

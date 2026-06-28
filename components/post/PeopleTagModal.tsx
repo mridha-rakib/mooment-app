@@ -2,25 +2,16 @@ import { Feather } from '@expo/vector-icons';
 import { getFriendUsers } from '@/lib/users';
 import React, { useState } from 'react';
 import {
-  FlatList, Image, Modal, Platform, StyleSheet,
+  FlatList, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-
-const FALLBACK_AVATARS = [
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1622253692010-333f2da6031d?q=80&w=150&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?q=80&w=150&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=150&auto=format&fit=crop',
-];
+import UserAvatar from '../ui/UserAvatar';
 
 type Friend = {
   id: string;
   name: string;
   handle: string;
-  avatar: string;
+  avatar?: string | null;
 };
 
 type Props = {
@@ -55,11 +46,11 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
           return;
         }
 
-        setFriends(users.map((user, index) => ({
+        setFriends(users.map((user) => ({
           id: user.id,
           name: user.name,
           handle: user.username ? `@${user.username}` : '@xenog',
-          avatar: user.avatarUrl ?? FALLBACK_AVATARS[index % FALLBACK_AVATARS.length],
+          avatar: user.avatarUrl ?? null,
         })));
       })
       .catch(() => {
@@ -130,7 +121,7 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
               return (
                 <View style={styles.personRow}>
                   {/* Avatar */}
-                  <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                  <UserAvatar uri={item.avatar} name={item.name} size={52} style={styles.avatar} />
 
                   {/* Info */}
                   <View style={styles.personInfo}>

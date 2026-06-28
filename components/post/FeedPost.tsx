@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
+import UserAvatar from '../ui/UserAvatar';
 import MoreMenuModal from "./MoreMenuModal";
 import HashtagText from './HashtagText';
 // Hardcoded visual waveform for Audio posts
@@ -71,12 +72,13 @@ export type PostMediaItem = {
 
 export type PostData = {
   id: string;
+  createdAt?: string;
   eventId?: string;
   postType: 'standard' | 'audio' | 'event' | 'product';
   authorId?: string;
   authorName: string;
   authorContextNodes?: PostContextNode[];
-  authorAvatar: string;
+  authorAvatar?: string | null;
   isFollowing?: boolean;
   timeAgo: string;
   caption?: string;
@@ -355,7 +357,6 @@ export default function FeedPost({
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(Boolean(post.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
-  const [authorAvatarError, setAuthorAvatarError] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const moreBtnRef = useRef<View>(null);
@@ -403,7 +404,6 @@ export default function FeedPost({
 
   useEffect(() => {
     setIsFollowing(Boolean(post.isFollowing));
-    setAuthorAvatarError(false);
   }, [post.id, post.isFollowing]);
 
   useEffect(() => {
@@ -656,21 +656,12 @@ export default function FeedPost({
               params: {
                 userId: post.authorId ?? post.id,
                 name: post.authorName,
-                avatar: post.authorAvatar
+                isFollowing: String(isFollowing),
+                ...(post.authorAvatar ? { avatar: post.authorAvatar } : {}),
               }
             } as any)}
           >
-            {!authorAvatarError ? (
-              <Image
-                source={{ uri: post.authorAvatar }}
-                style={styles.postAvatar}
-                onError={() => setAuthorAvatarError(true)}
-              />
-            ) : (
-              <View style={[styles.postAvatar, styles.postAvatarFallback]}>
-                <Feather name="user" size={16} color="#8E8E9B" />
-              </View>
-            )}
+            <UserAvatar uri={post.authorAvatar} name={post.authorName} size={36} style={styles.postAvatar} iconSize={16} />
             <View style={styles.authorTextContainer}>
               <Text style={styles.authorLine} numberOfLines={2}>
                 <Text style={[styles.postAuthor, { color: colors.text }]}>{post.authorName}</Text>

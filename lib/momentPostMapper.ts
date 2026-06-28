@@ -6,7 +6,7 @@ const DEFAULT_AUTHOR_NAME = "Mooment User";
 const AUDIO_FILE_PATTERN = /\.(aac|aiff|flac|m4a|mp3|mp4|oga|ogg|opus|wav|webm|3gp)(\?|#|$)/i;
 
 type MomentPostMapperOptions = {
-  fallbackAvatar: string;
+  fallbackAvatar?: string | null;
   createdAt?: string;
   headerLabel?: string;
   storageUrlResolver?: (storageKey: string, contentType?: string | null) => string;
@@ -89,7 +89,7 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   const authorName = moment.author?.name ?? DEFAULT_AUTHOR_NAME;
   const authorAvatar = (moment.author?.avatarKey && options.storageUrlResolver)
     ? options.storageUrlResolver(moment.author.avatarKey)
-    : (moment.author?.avatarUrl ?? options.fallbackAvatar);
+    : (moment.author?.avatarUrl ?? options.fallbackAvatar ?? null);
   const momentMediaItems = moment.mediaItems ?? [];
   const visualMedia = momentMediaItems
     .filter(isVisualMediaItem)
@@ -117,6 +117,7 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   ];
   const basePost = {
     id: moment.id,
+    createdAt: moment.createdAt,
     headerLabel: options.headerLabel,
     authorId: moment.author?.id ?? moment.userId,
     authorName,

@@ -97,6 +97,7 @@ type AuthState = {
   verifyEmail: (payload: VerifyEmailPayload) => Promise<AuthUser>;
   resendVerificationCode: (email?: string) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<AuthUser>;
+  deleteAccount: () => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AuthUser | null) => Promise<void>;
   setToken: (accessToken: string | null) => Promise<void>;
@@ -456,6 +457,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return user;
     } catch (error) {
       const message = getAuthErrorMessage(error, "Unable to save profile. Please try again.");
+      set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
+  },
+
+  deleteAccount: async () => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.delete("/auth/me", {
+        skipAuthRedirect: true,
+      });
+      await setStoredPendingVerificationEmail(null);
+      await get().clearAuthState();
+      set({ pendingVerificationEmail: null, isLoading: false, isRestoring: false, hasRestored: true });
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to delete your account. Please try again.");
       set({ isLoading: false, error: message });
       throw new Error(message);
     }
