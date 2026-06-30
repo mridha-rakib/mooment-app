@@ -22,6 +22,7 @@ import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import { reverseGeocodeLocation } from '@/lib/locationSearch';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const createEventStepThreeSchema = z
   .object({
     searchLabel: z.string().nullable().optional(),
@@ -353,11 +354,11 @@ export default function CreateEventStep3() {
         {/* Footer */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.nextButton, { backgroundColor: colors.primary }]}
+            style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
             onPress={handleNext}
             disabled={isSaving}
           >
-            <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
+            <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

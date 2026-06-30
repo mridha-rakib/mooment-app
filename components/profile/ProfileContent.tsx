@@ -16,6 +16,8 @@ type ProfileContentProps = {
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   isOwnProfile?: boolean;
   profileUserId: string;
+  profileIsFollowing?: boolean;
+  onFollowChange?: (isFollowing: boolean) => void;
 };
 
 export default function ProfileContent({ 
@@ -27,6 +29,8 @@ export default function ProfileContent({
   onInteractionChange,
   isOwnProfile = true,
   profileUserId,
+  profileIsFollowing,
+  onFollowChange,
 }: ProfileContentProps) {
   const { colors } = useTheme();
   
@@ -58,6 +62,8 @@ export default function ProfileContent({
           onSharePress={onSharePress}
           isOwnProfile={isOwnProfile}
           profileUserId={profileUserId}
+          profileIsFollowing={profileIsFollowing}
+          onFollowChange={onFollowChange}
         />
       )}
       

@@ -24,6 +24,7 @@ import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { useAuthStore } from '@/stores/authStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const requiredText = (label: string, maxLength: number) =>
   z
     .string({
@@ -391,11 +392,11 @@ export default function CreateEventScreen() {
           {/* Footer */}
           <View style={styles.footer}>
             <TouchableOpacity
-              style={[styles.nextButton, { backgroundColor: colors.primary }]}
+              style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
               onPress={handleNext}
               disabled={isSaving}
             >
-              <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
+              <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

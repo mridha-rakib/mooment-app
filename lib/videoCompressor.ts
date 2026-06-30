@@ -17,7 +17,13 @@ const calcVideoBitrate = (durationSeconds: number): number => {
   return Math.max(300_000, Math.floor(targetBits / durationSeconds) - AUDIO_BITRATE);
 };
 
-export type VideoCompressResult = { uri: string; contentType: string };
+export type VideoCompressResult = {
+  uri: string;
+  contentType: string;
+  originalBytes: number;
+  optimizedBytes: number;
+  compressed: boolean;
+};
 export type CompressProgressCallback = (stage: string, percent: number) => void;
 
 /**
@@ -37,7 +43,13 @@ export const compressStoryVideoIfNeeded = async (
   onProgress('Checking video...', 100);
 
   if (sizeBytes <= MAX_BYTES) {
-    return { uri, contentType: 'video/mp4' };
+    return {
+      uri,
+      contentType: 'video/mp4',
+      originalBytes: sizeBytes,
+      optimizedBytes: sizeBytes,
+      compressed: false,
+    };
   }
 
   const dur = durationSeconds > 0 ? durationSeconds : 15;
@@ -61,7 +73,13 @@ export const compressStoryVideoIfNeeded = async (
 
   const firstSize = await getUriByteSize(firstUri);
   if (firstSize <= MAX_BYTES) {
-    return { uri: firstUri, contentType: 'video/mp4' };
+    return {
+      uri: firstUri,
+      contentType: 'video/mp4',
+      originalBytes: sizeBytes,
+      optimizedBytes: firstSize,
+      compressed: true,
+    };
   }
 
   // Second pass — 480p cap, 55% of first-pass bitrate
@@ -84,5 +102,11 @@ export const compressStoryVideoIfNeeded = async (
     );
   }
 
-  return { uri: secondUri, contentType: 'video/mp4' };
+  return {
+    uri: secondUri,
+    contentType: 'video/mp4',
+    originalBytes: sizeBytes,
+    optimizedBytes: secondSize,
+    compressed: true,
+  };
 };

@@ -27,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
 import { useAuthStore } from '@/stores/authStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export type NearbyEventsFilter = {
   latitude: number;
   longitude: number;
@@ -298,11 +299,11 @@ export default function FilterModal({
           return (
             <TouchableOpacity
               key={opt}
-              style={[styles.pill, { borderColor: colors.border }, isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+              style={[styles.pill, { borderColor: colors.border }, isActive && { backgroundColor: buttonBackground(colors), borderColor: colors.primary }]}
               onPress={() => onSelect(opt)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.pillText, { color: colors.textSecondary }, isActive && { color: colors.background, fontWeight: 'bold' }]}>{opt}</Text>
+              <Text style={[styles.pillText, { color: colors.textSecondary }, isActive && { color: buttonForeground(colors), fontWeight: 'bold' }]}>{opt}</Text>
             </TouchableOpacity>
           );
         })}
@@ -442,12 +443,12 @@ export default function FilterModal({
               <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.applyBtn, { backgroundColor: colors.primary }, isApplying && styles.disabledBtn]}
+              style={[styles.applyBtn, { backgroundColor: buttonBackground(colors) }, isApplying && styles.disabledBtn]}
               onPress={handleApply}
               activeOpacity={0.8}
               disabled={isApplying}
             >
-              <Text style={[styles.applyBtnText, { color: colors.background }]}>
+              <Text style={[styles.applyBtnText, { color: buttonForeground(colors) }]}>
                 {isApplying ? 'Applying...' : 'Apply Filters'}
               </Text>
             </TouchableOpacity>

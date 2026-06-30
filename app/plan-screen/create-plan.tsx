@@ -9,7 +9,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getFriendUsers, type FriendUserResponse } from '@/lib/users';
+import { safeBack } from '@/lib/navigation';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 /* ─── Fake Event Dropdown Data ─── */
 const EVENTS = ['Rooftop Session Vol 4', 'Summer Fest 2026', 'Underground Beats', 'Jazz Night'];
 
@@ -158,7 +160,7 @@ export default function CreatePlanScreen() {
   };
 
   const handleCancel = () => {
-    router.back();
+    safeBack(router, '/(tabs)/home');
   };
 
   return (
@@ -358,8 +360,8 @@ export default function CreatePlanScreen() {
         <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card }]} activeOpacity={0.8} onPress={handleCancel}>
           <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.doneBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleDone}>
-          <Text style={[styles.doneText, { color: colors.background }]}>Done</Text>
+        <TouchableOpacity style={[styles.doneBtn, { backgroundColor: buttonBackground(colors) }]} activeOpacity={0.8} onPress={handleDone}>
+          <Text style={[styles.doneText, { color: buttonForeground(colors) }]}>Done</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

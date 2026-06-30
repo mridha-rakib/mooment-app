@@ -1,10 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useVideoPlayer } from 'expo-video';
-import { getCachedStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSource } from '@/lib/storyThumbnails';
+import { getCachedStoryThumbnail } from '@/lib/storyThumbnails';
+import type { StoryMediaType, StoryTextBackground, StoryTextOverlay } from '@/lib/stories';
 import UserAvatar from '../ui/UserAvatar';
 
 export type StoryData = {
@@ -13,6 +13,11 @@ export type StoryData = {
   isOwnStory?: boolean;
   imageUri?: string | null;
   mediaUri?: string | null;
+  contentType?: string | null;
+  mediaType?: StoryMediaType;
+  textContent?: string | null;
+  textBackground?: StoryTextBackground | null;
+  textOverlay?: StoryTextOverlay | null;
   storyItems?: StorySequenceItem[];
   title?: string;
   authorName?: string;
@@ -21,9 +26,14 @@ export type StoryData = {
 
 export type StorySequenceItem = {
   id: string;
-  mediaUri: string;
+  mediaType: StoryMediaType;
+  mediaUri?: string | null;
+  contentType?: string | null;
   durationSeconds: number;
   caption?: string | null;
+  textContent?: string | null;
+  textBackground?: StoryTextBackground | null;
+  textOverlay?: StoryTextOverlay | null;
   createdAt?: string;
 };
 
@@ -41,74 +51,40 @@ const getCompactStoryName = (fullName?: string) => {
   return `${nameParts[0]} ${nameParts[1].charAt(0).toUpperCase()}.`;
 };
 
-function StoryThumbnail({
+const StoryThumbnail = React.memo(function StoryThumbnail({
   storyId,
   mediaUri,
   fallbackUri,
   fallbackName,
+  mediaType = 'video',
+  textBackground,
 }: {
   storyId: string;
   mediaUri?: string | null;
   fallbackUri?: string | null;
   fallbackName?: string | null;
+  mediaType?: StoryMediaType;
+  textBackground?: StoryTextBackground | null;
 }) {
-  const player = useVideoPlayer(mediaUri ? { uri: mediaUri, useCaching: true } : null, (videoPlayer) => {
-    videoPlayer.loop = false;
-    videoPlayer.muted = true;
-    videoPlayer.timeUpdateEventInterval = 0;
-  });
-  const [thumbnailSource, setThumbnailSource] = useState<StoryThumbnailSource>(
-    getCachedStoryThumbnail(storyId) ?? (fallbackUri ? { uri: fallbackUri } : null),
-  );
-  const generatedForRef = useRef<string | null>(null);
+  const thumbnailSource = getCachedStoryThumbnail(storyId) ?? (fallbackUri ? { uri: fallbackUri } : null);
 
-  useEffect(() => {
-    generatedForRef.current = null;
-    setThumbnailSource(getCachedStoryThumbnail(storyId) ?? (fallbackUri ? { uri: fallbackUri } : null));
-  }, [fallbackUri, mediaUri, storyId]);
+  if (mediaType === 'text') {
+    return (
+      <View style={[styles.storyImage, styles.textThumbnail, { backgroundColor: textBackground?.colors[0] ?? '#37214F' }]}>
+        <Text style={styles.textThumbnailText} numberOfLines={3}>{fallbackName || 'Story'}</Text>
+      </View>
+    );
+  }
 
-  useEffect(() => {
-    if (!mediaUri || generatedForRef.current === mediaUri) {
-      return;
-    }
-
-    generatedForRef.current = mediaUri;
-    let isActive = true;
-
-    void (async () => {
-      try {
-        const startedAt = Date.now();
-
-        while (
-          isActive &&
-          player.status !== 'readyToPlay' &&
-          player.status !== 'error' &&
-          Date.now() - startedAt < 10000
-        ) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-
-        if (!isActive || player.status !== 'readyToPlay') {
-          return;
-        }
-
-        const thumbnails = await player.generateThumbnailsAsync(0.5);
-
-        if (isActive && thumbnails[0]) {
-          setCachedStoryThumbnail(storyId, thumbnails[0]);
-          setThumbnailSource(thumbnails[0]);
-        }
-      } catch {
-        if (isActive && fallbackUri) {
-          setThumbnailSource({ uri: fallbackUri });
-        }
-      }
-    })();
-
-    return () => {
-      isActive = false;
-    };
-  }, [fallbackUri, mediaUri, player, storyId]);
+  if (mediaType === 'image' && mediaUri) {
+    return (
+      <Image
+        source={{ uri: mediaUri }}
+        style={styles.storyImage}
+        contentFit="cover"
+      />
+    );
+  }
 
   if (thumbnailSource) {
     return (
@@ -121,9 +97,9 @@ function StoryThumbnail({
   }
 
   return <UserAvatar uri={null} name={fallbackName} size={70} style={styles.storyImage} />;
-}
+});
 
-export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
+function StoryCarousel({ stories }: { stories: StoryData[] }) {
   const router = useRouter();
 
   return (
@@ -156,15 +132,19 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
               style={styles.storyItem}
               activeOpacity={0.8}
               onPress={() => {
-                if (story.isOwnStory) {
-                  router.push('/post-screen/add-story');
-                  return;
-                }
-
-                if (story.storyItems?.length || story.mediaUri) {
+                if (story.storyItems?.length || story.mediaUri || story.mediaType === 'text') {
                   const storyItems = story.storyItems ?? (
-                    story.mediaUri
-                      ? [{ id: story.id, mediaUri: story.mediaUri, durationSeconds: 15 }]
+                    story.mediaUri || story.mediaType === 'text'
+                      ? [{
+                          id: story.id,
+                          mediaType: story.mediaType ?? 'video',
+                          mediaUri: story.mediaUri,
+                          contentType: null,
+                          durationSeconds: 15,
+                          textContent: story.textContent,
+                          textBackground: story.textBackground,
+                          textOverlay: story.textOverlay,
+                        }]
                       : []
                   );
 
@@ -173,6 +153,7 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
                     params: {
                       stories: JSON.stringify(storyItems),
                       title: story.title ?? story.authorName ?? 'Story',
+                      openedAt: String(Date.now()),
                     },
                   });
                   return;
@@ -185,8 +166,10 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
                 <StoryThumbnail
                   storyId={story.id}
                   mediaUri={story.mediaUri}
+                  mediaType={story.mediaType}
                   fallbackUri={story.imageUri}
                   fallbackName={story.title ?? story.authorName}
+                  textBackground={story.textBackground}
                 />
 
                 {story.type === 'live' && (
@@ -209,6 +192,8 @@ export default function StoryCarousel({ stories }: { stories: StoryData[] }) {
     </View>
   );
 }
+
+export default React.memo(StoryCarousel);
 
 const styles = StyleSheet.create({
   storiesContainer: {
@@ -257,6 +242,17 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     borderWidth: 2,
     borderColor: "#0e0d12",
+  },
+  textThumbnail: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 6,
+  },
+  textThumbnailText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "800",
+    textAlign: "center",
   },
   liveBadge: {
     position: "absolute",

@@ -15,6 +15,7 @@ import React,
   useState } from 'react';
 import {
   Alert,
+  AppState,
   Dimensions,
   FlatList,
   Image,
@@ -38,6 +39,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EventPickerModal from '@/components/post/EventPickerModal';
 import { deleteConversation, getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
+import { safeBack } from '@/lib/navigation';
 import type { ChatFileAttachment, ChatLocationAttachment, ChatMessageAttachment, ChatMessageType, DirectChatMessageResponse, GroupMessageResponse } from '@/lib/chat';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { createRealtimeSocket } from '@/lib/realtime';
@@ -45,6 +47,7 @@ import type { DirectRealtimeMessage, GroupRealtimeMessage } from '@/lib/realtime
 import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { blockUser, unblockUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
+import { useChatUnreadStore } from '@/stores/chatUnreadStore';
 
 const { width } = Dimensions.get('window');
 
@@ -741,6 +744,8 @@ export default function ChatDetailScreen() {
   const [messageActionTarget, setMessageActionTarget] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editMessageText, setEditMessageText] = useState('');
+  const clearDirectUnread = useChatUnreadStore((state) => state.clearDirectUnread);
+  const setActiveDirectConversationId = useChatUnreadStore((state) => state.setActiveDirectConversationId);
   const listRef = useRef<FlatList>(null);
   const moreMenuBtnRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
   const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
@@ -1097,6 +1102,19 @@ export default function ChatDetailScreen() {
   }, [friendId]);
 
   useEffect(() => {
+    if (isGroup || !isObjectId(friendId)) {
+      return;
+    }
+
+    clearDirectUnread(friendId);
+    setActiveDirectConversationId(friendId);
+
+    return () => {
+      setActiveDirectConversationId(null);
+    };
+  }, [clearDirectUnread, friendId, isGroup, setActiveDirectConversationId]);
+
+  useEffect(() => {
     if (!isObjectId(friendId)) {
       setMessages([]);
       setIsLoadingMessages(false);
@@ -1180,6 +1198,9 @@ export default function ChatDetailScreen() {
               return [...prev, serverMessage];
             });
             if (realtimeMessage.senderId === friendId) {
+              clearDirectUnread(friendId);
+              void getDirectMessageHistory(friendId, { limit: 1 }).catch(() => undefined);
+
               if (friendTypingTimeoutRef.current) {
                 clearTimeout(friendTypingTimeoutRef.current);
                 friendTypingTimeoutRef.current = null;
@@ -1334,7 +1355,16 @@ export default function ChatDetailScreen() {
         realtimeRef.current = null;
       }
     };
-  }, [accessToken, currentUser?.id, friendId, isGroup]);
+  }, [accessToken, clearDirectUnread, currentUser?.id, friendId, isGroup]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && realtimeRef.current) {
+        realtimeRef.current.reconnect();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   const sendMessage = () => {
     const uploadedAttachments = pendingAttachments.filter((item) => item.status === 'uploaded' && item.attachment);
@@ -1889,7 +1919,7 @@ export default function ChatDetailScreen() {
                   setIsDeleteLoading(true);
                   try {
                     await deleteConversation(friendId);
-                    router.back();
+                    safeBack(router, '/(tabs)/messages');
                   } finally {
                     setIsDeleteLoading(false);
                   }
@@ -2028,7 +2058,7 @@ const styles = StyleSheet.create({
   eventBubbleMetaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 5 },
   eventBubbleDate: { flex: 1, color: 'rgba(255,255,255,0.82)', fontSize: 12, lineHeight: 16 },
   eventBubbleLocation: { flex: 1, color: 'rgba(255,255,255,0.82)', fontSize: 12, lineHeight: 16 },
-  eventBubbleBtn: { alignSelf: 'flex-start', backgroundColor: '#E6C7FF', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 11, alignItems: 'center', marginTop: 8 },
+  eventBubbleBtn: { alignSelf: 'flex-start', backgroundColor: '#FFFFFF', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 11, alignItems: 'center', marginTop: 8 },
   eventBubbleBtnText: { color: '#180F22', fontWeight: '800', fontSize: 13 },
   eventBubbleTimeWrap: { position: 'absolute', left: 14, right: 14, bottom: 12 },
   eventBubbleTime: { color: 'rgba(255,255,255,0.72)', fontSize: 11 },
@@ -2072,7 +2102,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: '#FFFFFF', fontSize: 14, maxHeight: 100, marginLeft: 10, marginRight: 10 },
   emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 24 },
   fileBtn: { justifyContent: 'center', alignItems: 'center', width: 24 },
-  sendBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#B2ABBA', justifyContent: 'center', alignItems: 'center' },
+  sendBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
 
   /* Modal */
   modalOverlay: { flex: 1, backgroundColor: 'transparent' },
@@ -2096,7 +2126,7 @@ const styles = StyleSheet.create({
   editMessageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   editMessageClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center', marginTop: -8 },
   editMessageInput: { minHeight: 92, maxHeight: 180, color: '#FFFFFF', fontSize: 15, lineHeight: 21, textAlignVertical: 'top', backgroundColor: '#161616', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: 14 },
-  editMessageSave: { minHeight: 48, borderRadius: 14, backgroundColor: '#B2ABBA', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  editMessageSave: { minHeight: 48, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
   editMessageSaveDisabled: { opacity: 0.45 },
   editMessageSaveText: { color: '#0e0d12', fontSize: 14, fontWeight: '700' },
 
@@ -2114,7 +2144,7 @@ const styles = StyleSheet.create({
   recordInfo: { flex: 1 },
   recordTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   recordTime: { color: '#8E8E9B', fontSize: 12, marginTop: 2 },
-  recordButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D4B0EB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, gap: 6 },
+  recordButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, gap: 6 },
   stopButton: { backgroundColor: '#F6A6BC' },
   recordButtonText: { color: '#111111', fontSize: 13, fontWeight: '700' },
   pickAudioButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A1A2E', borderRadius: 12, paddingVertical: 13, gap: 8 },

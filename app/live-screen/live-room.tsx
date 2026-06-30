@@ -25,6 +25,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import { safeBack } from "@/lib/navigation";
 const MOCK_CHAT = [
   {
     id: "1",
@@ -64,7 +66,7 @@ export default function LiveRoomScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => safeBack(router, '/(tabs)/home')}
             style={[styles.headerBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
             activeOpacity={0.7}
           >
@@ -89,7 +91,7 @@ export default function LiveRoomScreen() {
           <TouchableOpacity
             style={[styles.leaveBtn, { borderColor: "#F2545B" }]}
             activeOpacity={0.7}
-            onPress={() => router.back()}
+            onPress={() => safeBack(router, '/(tabs)/home')}
           >
             <Text style={styles.leaveText}>Leave</Text>
           </TouchableOpacity>
@@ -172,8 +174,8 @@ export default function LiveRoomScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
             </View>
-            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8}>
-              <HugeiconsIcon icon={SentIcon} size={20} color={colors.background} />
+            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: buttonBackground(colors) }]} activeOpacity={0.8}>
+              <HugeiconsIcon icon={SentIcon} size={20} color={buttonForeground(colors)} />
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

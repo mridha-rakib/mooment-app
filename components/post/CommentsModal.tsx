@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { createMomentComment, getMomentComments, toggleCommentReaction, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
+import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 import UserAvatar from '../ui/UserAvatar';
 
 type CommentType = {
@@ -507,7 +508,7 @@ export default function CommentsModal({
                 <TouchableOpacity
                   style={[
                     styles.sendBtn,
-                    { backgroundColor: colors.primary },
+                    { backgroundColor: buttonBackground(colors) },
                     (!commentText.trim() || !canUseCommentsApi || isSendingComment) && styles.sendBtnDisabled,
                   ]}
                   activeOpacity={0.8}
@@ -515,9 +516,9 @@ export default function CommentsModal({
                   onPress={handleSendComment}
                 >
                   {isSendingComment ? (
-                    <ActivityIndicator size="small" color={colors.background} />
+                    <ActivityIndicator size="small" color={buttonForeground(colors)} />
                   ) : (
-                    <Feather name="send" size={18} color={colors.background} />
+                    <Feather name="send" size={18} color={buttonForeground(colors)} />
                   )}
                 </TouchableOpacity>
               </View>

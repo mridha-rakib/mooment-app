@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function NewPassword() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -95,11 +96,11 @@ export default function NewPassword() {
           </View>
 
           <TouchableOpacity
-            style={[styles.continueButton, { backgroundColor: colors.primary }]}
+            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]}
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/success-changed')}
           >
-            <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+            <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

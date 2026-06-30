@@ -6,6 +6,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Spinner } from "@/components/ui/spinner";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function VerifyEmail() {
   const [code, setCode] = useState(["", "", "", ""]);
   const { colors, isDark } = useTheme();
@@ -160,15 +161,15 @@ export default function VerifyEmail() {
           )}
 
           <TouchableOpacity 
-            style={[styles.continueButton, { backgroundColor: colors.primary }, isLoading && styles.continueButtonDisabled]} 
+            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }, isLoading && styles.continueButtonDisabled]} 
             activeOpacity={0.8}
             onPress={handleVerifyEmail}
             disabled={isLoading}
           >
             {isLoading ? (
-              <Spinner color={colors.background} />
+              <Spinner color={buttonForeground(colors)} />
             ) : (
-              <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+              <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
             )}
           </TouchableOpacity>
 

@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const fmt = (n: number) => `$${n.toFixed(2)}`;
 
 const METHOD_LABELS: Record<string, string> = {
@@ -342,16 +343,16 @@ export default function WithdrawScreen() {
           <TouchableOpacity
             style={[
               styles.submitBtn,
-              { backgroundColor: canWithdraw ? colors.primary : `${colors.primary}55` },
+              { backgroundColor: canWithdraw ? buttonBackground(colors) : `${buttonBackground(colors)}55` },
             ]}
             onPress={handleSubmit}
             disabled={!canWithdraw}
             activeOpacity={0.8}
           >
             {isSubmitting ? (
-              <Spinner color={colors.background} />
+              <Spinner color={buttonForeground(colors)} />
             ) : (
-              <Text style={[styles.submitBtnText, { color: colors.background }]}>
+              <Text style={[styles.submitBtnText, { color: buttonForeground(colors) }]}>
                 {parsedAmount > 0 ? `Withdraw ${fmt(parsedAmount)}` : "Request Withdrawal"}
               </Text>
             )}

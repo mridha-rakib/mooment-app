@@ -23,6 +23,7 @@ import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=300&auto=format&fit=crop";
 
@@ -177,7 +178,7 @@ export default function EventDraftsScreen() {
             Events you save as drafts will appear here
           </Text>
           <TouchableOpacity
-            style={[styles.createBtn, { backgroundColor: colors.primary }]}
+            style={[styles.createBtn, { backgroundColor: buttonBackground(colors) }]}
             activeOpacity={0.85}
             onPress={() =>
               requireBusinessAccountForEvent({
@@ -189,7 +190,7 @@ export default function EventDraftsScreen() {
               })
             }
           >
-            <Text style={[styles.createBtnText, { color: colors.background }]}>Create Event</Text>
+            <Text style={[styles.createBtnText, { color: buttonForeground(colors) }]}>Create Event</Text>
           </TouchableOpacity>
         </View>
       ) : (

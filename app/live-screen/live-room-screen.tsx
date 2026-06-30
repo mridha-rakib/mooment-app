@@ -3,6 +3,8 @@ import CinematicButton from '@/components/ui/CinematicButton';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { safeBack } from '@/lib/navigation';
+import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 import { getLiveRoomMessages, joinLiveRoom, leaveLiveRoom, updateLiveRoomPermissions } from '@/lib/liveRooms';
 import type { LiveRoom, LiveRoomMessage, LiveRoomParticipant, LiveRoomViewerPermissions } from '@/lib/liveRooms';
 import { createRealtimeSocket } from '@/lib/realtime';
@@ -461,11 +463,11 @@ export default function EventDetailsScreen() {
         style: 'destructive',
         onPress: () => {
           if (hasPersistedLiveRoom && params.id) {
-            void leaveLiveRoom(params.id).finally(() => router.back());
+            void leaveLiveRoom(params.id).finally(() => safeBack(router, '/(tabs)/home'));
             return;
           }
 
-          router.back();
+          safeBack(router, '/(tabs)/home');
         },
       },
     ]);
@@ -804,8 +806,8 @@ export default function EventDetailsScreen() {
             returnKeyType="send"
           />
         </View>
-        <TouchableOpacity style={[styles.sendBtn, { backgroundColor: isDark ? '#D4B0EB' : colors.primary }]} activeOpacity={0.7} onPress={handleSend}>
-          <Feather name="send" size={18} color={isDark ? '#0e0d12' : colors.background} />
+        <TouchableOpacity style={[styles.sendBtn, { backgroundColor: buttonBackground(colors) }]} activeOpacity={0.7} onPress={handleSend}>
+          <Feather name="send" size={18} color={buttonForeground(colors)} />
         </TouchableOpacity>
       </View>
 

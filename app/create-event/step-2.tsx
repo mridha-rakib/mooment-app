@@ -23,6 +23,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const AGE_OPTIONS = ['All Ages', '18+', '21+'] as const;
 const MIN_CATEGORIES = 1;
 const MAX_CATEGORIES = 3;
@@ -537,11 +538,11 @@ export default function CreateEventStep2() {
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={[styles.nextButton, { backgroundColor: colors.primary }]}
+          style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={handleNext}
           disabled={isSaving}
         >
-          <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
+          <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -602,10 +603,10 @@ export default function CreateEventStep2() {
               <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.continueButton, { backgroundColor: colors.primary }]}
+              style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]}
               onPress={handleCategoryContinue}
             >
-              <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+              <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   radiusPillActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#FFFFFF",
     borderColor: COLORS.primary,
   },
   radiusPillText: {
@@ -726,7 +726,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     paddingVertical: 11,
     marginTop: 2,

@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { 
@@ -53,7 +54,7 @@ export default function TaggedFriendsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.listContent}>
         {users.map((user) => (
           <View key={user.id} style={[s.userRow, { borderBottomColor: colors.border }]}>
-            <Image source={{ uri: user.image }} style={s.avatar} />
+            <UserAvatar uri={user.image} name={user.name} size={44} style={s.avatar} />
             <View style={s.userInfo}>
               <Text style={[s.userName, { color: colors.text }]}>{user.name}</Text>
               <Text style={[s.userHandle, { color: colors.textSecondary }]}>{user.handle}</Text>

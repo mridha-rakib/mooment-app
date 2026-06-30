@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 /* 🔥 Types */
 type CustomSwitchProps = {
   value: boolean;
@@ -234,12 +235,12 @@ export default function OnboardingSettings() {
           </View>
 
           <TouchableOpacity
-            style={[styles.doneButton, { backgroundColor: colors.primary }, isBusy && styles.doneButtonDisabled]}
+            style={[styles.doneButton, { backgroundColor: buttonBackground(colors) }, isBusy && styles.doneButtonDisabled]}
             activeOpacity={0.8}
             disabled={isBusy}
             onPress={handleDone}
           >
-            <Text style={[styles.doneButtonText, { color: colors.background }]}>Done</Text>
+            <Text style={[styles.doneButtonText, { color: buttonForeground(colors) }]}>Done</Text>
           </TouchableOpacity>
 
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>

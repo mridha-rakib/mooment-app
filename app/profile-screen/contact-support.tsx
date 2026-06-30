@@ -1,7 +1,9 @@
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 import { createSupportTicket } from '@/lib/support';
+import { safeBack } from '@/lib/navigation';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -31,7 +33,7 @@ export default function ContactSupportScreen() {
         title: trimmedTitle,
         description: trimmedDescription,
       });
-      router.back();
+      safeBack(router, '/(tabs)/profile');
     } catch (error) {
       Alert.alert('Unable to send message', getAuthErrorMessage(error, 'Please try again.'));
     } finally {
@@ -83,16 +85,16 @@ export default function ContactSupportScreen() {
         <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
           <TouchableOpacity
             style={[styles.cancelBtn, { borderColor: colors.border, backgroundColor: isDark ? '#1C1B1F' : '#F5F5F5' }]}
-            onPress={() => router.back()}
+            onPress={() => safeBack(router, '/(tabs)/profile')}
           >
             <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.sendBtn, { backgroundColor: isDark ? '#A399B2' : colors.primary }]}
+            style={[styles.sendBtn, { backgroundColor: buttonBackground(colors) }]}
             disabled={isSubmitting}
             onPress={handleSend}
           >
-            <Text style={[styles.sendBtnText, { color: isDark ? '#1C1B1F' : colors.background }]}>Send</Text>
+            <Text style={[styles.sendBtnText, { color: buttonForeground(colors) }]}>Send</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

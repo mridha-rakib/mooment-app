@@ -31,9 +31,23 @@ type ProfileHeaderProps = {
   accountType?: 'personal' | 'business';
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
+  onReport?: () => void;
+  onSave?: () => void;
+  isSaved?: boolean;
 };
 
-export default function ProfileHeader({ userId, name, avatar, stats, accountType, isOwnProfile = true, onMenuPress }: ProfileHeaderProps) {
+export default function ProfileHeader({
+  userId,
+  name,
+  avatar,
+  stats,
+  accountType,
+  isOwnProfile = true,
+  onMenuPress,
+  onReport,
+  onSave,
+  isSaved = false,
+}: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
@@ -87,8 +101,9 @@ export default function ProfileHeader({ userId, name, avatar, stats, accountType
         visible={showMore}
         onClose={() => setShowMore(false)}
         showDelete={false}
-        onReport={() => console.log('Report profile')}
-        onSave={() => console.log('Save profile')}
+        onReport={onReport}
+        onSave={onSave}
+        isSaved={isSaved}
         top={110} // Positioned under the header button
       />
 

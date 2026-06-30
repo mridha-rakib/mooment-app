@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { usePlanStore } from '@/stores/planStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const firstParam = (value: unknown): string | undefined => {
   const param = Array.isArray(value) ? value[0] : value;
   return typeof param === 'string' ? param : undefined;
@@ -123,8 +124,8 @@ export default function MapSelectionScreen() {
           <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8} onPress={handleBack}>
             <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: colors.primary }]} activeOpacity={0.8} onPress={handleConfirm}>
-            <Text style={[styles.confirmText, { color: colors.background }]}>Confirm</Text>
+          <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: buttonBackground(colors) }]} activeOpacity={0.8} onPress={handleConfirm}>
+            <Text style={[styles.confirmText, { color: buttonForeground(colors) }]}>Confirm</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

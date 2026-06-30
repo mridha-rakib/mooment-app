@@ -29,6 +29,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { usePlanStore } from '@/stores/planStore';
 import type { PlanEvent, PlanFriend } from '@/stores/planStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 /* ─── Constants ─── */
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -452,8 +453,8 @@ export default function MyPlanScreen() {
                   <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Cancel</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: colors.primary }]} onPress={() => { setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
-                  <Text style={[s.addBtnTextPremium, { color: colors.background }]}>Done</Text>
+                <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: buttonBackground(colors) }]} onPress={() => { setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
+                  <Text style={[s.addBtnTextPremium, { color: buttonForeground(colors) }]}>Done</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -499,8 +500,8 @@ export default function MyPlanScreen() {
                 <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: colors.primary }]} onPress={() => { setIsMapModalVisible(false); setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
-                <Text style={[s.addBtnTextPremium, { color: colors.background }]}>Confirm</Text>
+              <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: buttonBackground(colors) }]} onPress={() => { setIsMapModalVisible(false); setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
+                <Text style={[s.addBtnTextPremium, { color: buttonForeground(colors) }]}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </SafeAreaView>

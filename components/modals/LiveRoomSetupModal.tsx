@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Tick01Icon } from "@hugeicons/core-free-icons";
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -224,7 +225,7 @@ export default function LiveRoomSetupModal({
               <TouchableOpacity
                 style={[
                   styles.continueBtn,
-                  { backgroundColor: colors.primary },
+                  { backgroundColor: buttonBackground(colors) },
                   (!roomName.trim() || isSubmitting) && [
                     styles.continueBtnDisabled,
                     { backgroundColor: colors.border },
@@ -240,7 +241,7 @@ export default function LiveRoomSetupModal({
                   <Text
                     style={[
                       styles.continueText,
-                      { color: colors.background },
+                      { color: buttonForeground(colors) },
                       !roomName.trim() && [
                         styles.continueTextDisabled,
                         { color: colors.textSecondary },

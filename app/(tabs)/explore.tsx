@@ -2,7 +2,6 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,6 +21,7 @@ import {
   type NotificationItem,
 } from "@/lib/notifications";
 import { followUser, unfollowUser } from "@/lib/users";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useNotificationStore } from "@/stores/notificationStore";
 
 const isToday = (dateStr: string): boolean => {
@@ -238,13 +238,7 @@ export default function Explore() {
             });
           }}
         >
-          {item.actorAvatarUrl ? (
-            <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.card }]}>
-              <Feather name="user" size={20} color={colors.textSecondary} />
-            </View>
-          )}
+          <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
           <View style={styles.textContainer}>
             <Text style={[styles.mainText, { color: colors.textSecondary }]}>
               <Text style={[styles.boldText, { color: colors.text }]}>
@@ -363,13 +357,7 @@ export default function Explore() {
       })}
     >
       <View style={styles.cardContent}>
-        {item.actorAvatarUrl ? (
-          <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.card }]}>
-            <Feather name="user" size={20} color={colors.textSecondary} />
-          </View>
-        )}
+        <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
         <View style={styles.textContainer}>
           <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
             <Text style={[styles.boldText, { color: colors.text }]}>
@@ -408,13 +396,7 @@ export default function Explore() {
       })}
     >
       <View style={styles.cardContent}>
-        {item.actorAvatarUrl ? (
-          <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.card }]}>
-            <Feather name="user" size={20} color={colors.textSecondary} />
-          </View>
-        )}
+        <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
         <View style={styles.textContainer}>
           <Text style={[styles.inviteTitle, { color: colors.text }]} numberOfLines={1}>
             Private event invitation
@@ -596,10 +578,6 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     marginRight: 12,
-  },
-  avatarPlaceholder: {
-    justifyContent: "center",
-    alignItems: "center",
   },
   ticketIconContainer: {
     width: 44,

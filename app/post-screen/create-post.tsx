@@ -43,11 +43,13 @@ import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { safeBack } from '@/lib/navigation';
 import { createMoment, setPendingNewMoment } from '@/lib/moments';
 import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
 import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const { width } = Dimensions.get('window');
 
 const FALLBACK_AUTHOR_NAME = 'Mooment User';
@@ -292,8 +294,8 @@ function CameraSheet({
           <View style={[camStyles.permissionView, { backgroundColor: colors.background }]}>
             <Feather name="camera-off" size={48} color={colors.textSecondary} />
             <Text style={[camStyles.permissionText, { color: colors.textSecondary }]}>Camera access needed</Text>
-            <TouchableOpacity style={[camStyles.permissionBtn, { backgroundColor: colors.primary }]} onPress={requestPermission} activeOpacity={0.8}>
-              <Text style={[camStyles.permissionBtnText, { color: colors.background }]}>Allow Camera</Text>
+            <TouchableOpacity style={[camStyles.permissionBtn, { backgroundColor: buttonBackground(colors) }]} onPress={requestPermission} activeOpacity={0.8}>
+              <Text style={[camStyles.permissionBtnText, { color: buttonForeground(colors) }]}>Allow Camera</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} style={{ marginTop: 12 }}>
               <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
@@ -503,8 +505,8 @@ function VideoCameraSheet({
           <View style={[camStyles.permissionView, { backgroundColor: colors.background }]}>
             <Feather name="video-off" size={48} color={colors.textSecondary} />
             <Text style={[camStyles.permissionText, { color: colors.textSecondary }]}>Camera and microphone access needed</Text>
-            <TouchableOpacity style={[camStyles.permissionBtn, { backgroundColor: colors.primary }]} onPress={requestPermissions} activeOpacity={0.8}>
-              <Text style={[camStyles.permissionBtnText, { color: colors.background }]}>Allow Access</Text>
+            <TouchableOpacity style={[camStyles.permissionBtn, { backgroundColor: buttonBackground(colors) }]} onPress={requestPermissions} activeOpacity={0.8}>
+              <Text style={[camStyles.permissionBtnText, { color: buttonForeground(colors) }]}>Allow Access</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} style={{ marginTop: 12 }}>
               <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
@@ -583,10 +585,10 @@ function RoomSetupModal({
                 <Text style={[rmStyles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={[rmStyles.continueBtn, { backgroundColor: colors.primary }]} 
+                style={[rmStyles.continueBtn, { backgroundColor: buttonBackground(colors) }]} 
                 onPress={() => onContinue(name, speakers)}
               >
-                <Text style={[rmStyles.continueBtnText, { color: colors.background }]}>Continue</Text>
+                <Text style={[rmStyles.continueBtnText, { color: buttonForeground(colors) }]}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1556,7 +1558,7 @@ export default function CreateMomentScreen() {
     if (created) {
       setShowConfetti(true);
       setTimeout(() => {
-        router.back();
+        safeBack(router, '/(tabs)/home');
       }, 1500);
     }
   };
@@ -1580,7 +1582,7 @@ export default function CreateMomentScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <CreateMomentCloseButton onPress={() => router.back()} />
+        <CreateMomentCloseButton onPress={() => safeBack(router, '/(tabs)/home')} />
         <Text style={styles.headerTitle}>Create Mooment</Text>
         <TouchableOpacity style={[styles.doneBtn, isSubmitting && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isSubmitting}>
           <Text style={styles.doneBtnText}>Done</Text>

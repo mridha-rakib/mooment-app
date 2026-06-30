@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 interface ReportModalProps {
   visible: boolean;
   onClose: () => void;
@@ -86,13 +87,13 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
             <TouchableOpacity 
               style={[
                 styles.continueBtn, 
-                { backgroundColor: colors.primary },
+                { backgroundColor: buttonBackground(colors) },
                 !selectedReason && styles.continueBtnDisabled
               ]} 
               onPress={handleContinue}
               disabled={!selectedReason}
             >
-              <Text style={[styles.continueBtnText, { color: colors.background }]}>Continue</Text>
+              <Text style={[styles.continueBtnText, { color: buttonForeground(colors) }]}>Continue</Text>
             </TouchableOpacity>
           </View>
         </View>

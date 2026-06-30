@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { safeBack } from "@/lib/navigation";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -54,7 +55,7 @@ const ProductCheckoutScreen = () => {
 
         if (loadedCart.items.length === 0) {
           Alert.alert("Cart is empty", "Add products to your cart before checking out.");
-          router.back();
+          safeBack(router, '/(tabs)/home');
           return;
         }
 
@@ -65,7 +66,7 @@ const ProductCheckoutScreen = () => {
         }
 
         Alert.alert("Unable to load cart", "Please try again.");
-        router.back();
+        safeBack(router, '/(tabs)/home');
       } finally {
         if (isActive) {
           setIsLoadingCart(false);

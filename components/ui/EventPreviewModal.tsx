@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import React from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 
 type EventPreviewModalProps = {
   visible: boolean;
@@ -141,23 +142,23 @@ export default function EventPreviewModal({
           <View style={styles.buttonRow}>
             {showCalendarAction && (
               <TouchableOpacity
-                style={[styles.secondaryBtn, { backgroundColor: isAddedToCalendar ? 'rgba(142,84,233,0.2)' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') }]}
+                style={[styles.secondaryBtn, { backgroundColor: buttonBackground(colors) }]}
                 onPress={isAddedToCalendar ? onViewInCalendar : onAddToCalendar}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.secondaryBtnText, { color: isAddedToCalendar ? '#8E54E9' : colors.text }]}>
+                <Text style={[styles.secondaryBtnText, { color: buttonForeground(colors) }]}>
                   {isAddedToCalendar ? 'View in Calendar' : 'Add To Calendar'}
                 </Text>
               </TouchableOpacity>
             )}
             
             <TouchableOpacity 
-              style={[styles.primaryBtn, { backgroundColor: themeColor }]}
+              style={[styles.primaryBtn, { backgroundColor: buttonBackground(colors) }]}
               onPress={onViewEvent}
               activeOpacity={0.8}
             >
-              <Text style={[styles.primaryBtnText, { color: '#FFFFFF' }]}>View Event</Text>
-              <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+              <Text style={[styles.primaryBtnText, { color: buttonForeground(colors) }]}>View Event</Text>
+              <Feather name="arrow-right" size={18} color={buttonForeground(colors)} style={{ marginLeft: 8 }} />
             </TouchableOpacity>
           </View>
         </BlurView>

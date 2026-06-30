@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#B2ABBA', // Light purple-grey
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     marginLeft: 10,
   },

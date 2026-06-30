@@ -25,6 +25,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from '@/hooks/useTheme';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 /* ─── Constants ─── */
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -283,8 +284,8 @@ export default function MyPlanView() {
                 <TouchableOpacity style={[s.cancelBtnPremium, { borderColor: colors.border }]} onPress={() => setIsCreatePlanModalVisible(false)}>
                   <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: colors.primary }]} onPress={() => { setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
-                  <Text style={[s.addBtnTextPremium, { color: colors.background }]}>Done</Text>
+                <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: buttonBackground(colors) }]} onPress={() => { setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
+                  <Text style={[s.addBtnTextPremium, { color: buttonForeground(colors) }]}>Done</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -321,8 +322,8 @@ export default function MyPlanView() {
               <TouchableOpacity style={[s.cancelBtnPremium, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => setIsMapModalVisible(false)}>
                 <Text style={[s.cancelBtnTextPremium, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: colors.primary }]} onPress={() => { setIsMapModalVisible(false); setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
-                <Text style={[s.addBtnTextPremium, { color: colors.background }]}>Confirm</Text>
+              <TouchableOpacity style={[s.addBtnPremium, { backgroundColor: buttonBackground(colors) }]} onPress={() => { setIsMapModalVisible(false); setIsCreatePlanModalVisible(false); handleAddEvent(); }}>
+                <Text style={[s.addBtnTextPremium, { color: buttonForeground(colors) }]}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -398,7 +399,7 @@ function TimelineSlot({ slot, ev, isCentered, onToggleCenter, onAddPress, colors
                     </View>
                     <View style={s.footerActions}>
                       <TouchableOpacity style={[s.viewBtnSmall, { backgroundColor: colors.background }]}><Text style={[s.viewBtnTextSmall, { color: colors.text }]}>View</Text></TouchableOpacity>
-                      <TouchableOpacity style={[s.addedPillSmall, { backgroundColor: colors.primary }]}><Text style={[s.addedTextSmall, { color: colors.background }]}>Added</Text></TouchableOpacity>
+                      <TouchableOpacity style={[s.addedPillSmall, { backgroundColor: buttonBackground(colors) }]}><Text style={[s.addedTextSmall, { color: buttonForeground(colors) }]}>Added</Text></TouchableOpacity>
                     </View>
                   </View>
                 </TouchableOpacity>

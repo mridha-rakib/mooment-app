@@ -8,6 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/useTheme";
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 
 const USERS = [
   { id: '1', name: 'Dj Koko', handle: '@selfd_d', image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=150', status: 'Share' },
@@ -71,14 +72,14 @@ export default function SharePlanScreen() {
                 s.actionBtn, 
                 user.status === 'Shared' 
                   ? { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 } 
-                  : { backgroundColor: colors.primary }
+                  : { backgroundColor: buttonBackground(colors) }
               ]}
               onPress={() => handleShare(user.id)}
               activeOpacity={0.7}
             >
               <Text style={[
                 s.actionBtnText, 
-                { color: user.status === 'Shared' ? colors.textSecondary : colors.background }
+                { color: user.status === 'Shared' ? colors.textSecondary : buttonForeground(colors) }
               ]}>
                 {user.status}
               </Text>

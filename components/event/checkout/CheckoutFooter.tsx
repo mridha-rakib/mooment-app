@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 interface CheckoutFooterProps {
   onPress: () => void;
   buttonText?: string;
@@ -22,15 +23,15 @@ const CheckoutFooter = ({
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
       <TouchableOpacity 
-        style={[styles.button, { backgroundColor: colors.primary }, (disabled || loading) && styles.disabledButton]}
+        style={[styles.button, { backgroundColor: buttonBackground(colors) }, (disabled || loading) && styles.disabledButton]}
         onPress={onPress}
         disabled={disabled || loading}
         activeOpacity={0.9}
       >
         {loading ? (
-          <ActivityIndicator color={colors.background} />
+          <ActivityIndicator color={buttonForeground(colors)} />
         ) : (
-          <Text style={[styles.text, { color: colors.background }]}>{buttonText}</Text>
+          <Text style={[styles.text, { color: buttonForeground(colors) }]}>{buttonText}</Text>
         )}
       </TouchableOpacity>
     </View>

@@ -22,6 +22,7 @@ import CinematicButton from '@/components/ui/CinematicButton';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { createGroup, getDirectMessageConversations } from '@/lib/chat';
+import { safeBack } from '@/lib/navigation';
 import type { DirectMessageConversationResponse } from '@/lib/chat';
 import { uploadFileToStorage } from '@/lib/storage';
 
@@ -148,7 +149,7 @@ export default function CreateGroupScreen() {
       });
 
       setIsModalVisible(false);
-      router.back();
+      safeBack(router, '/(tabs)/messages');
     } catch (error: unknown) {
       const message =
         (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
@@ -195,7 +196,7 @@ export default function CreateGroupScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <CinematicButton onPress={() => router.back()} icon={ArrowLeft01Icon} size={20} />
+        <CinematicButton onPress={() => safeBack(router, '/(tabs)/messages')} icon={ArrowLeft01Icon} size={20} />
         <Text style={styles.headerTitle}>Create Group</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -261,7 +262,7 @@ export default function CreateGroupScreen() {
 
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomCancelBtn} onPress={() => router.back()} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.bottomCancelBtn} onPress={() => safeBack(router, '/(tabs)/messages')} activeOpacity={0.8}>
           <Text style={styles.bottomCancelText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -450,7 +451,7 @@ const styles = StyleSheet.create({
   bottomCancelText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
   bottomContinueBtn: {
     flex: 1,
-    backgroundColor: '#B2ABBA',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 14,
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#C2B5CD',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingVertical: 14,
     marginBottom: 32,
@@ -516,7 +517,7 @@ const styles = StyleSheet.create({
   modalCancelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   modalCreateBtn: {
     flex: 1,
-    backgroundColor: '#C2B5CD',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     paddingVertical: 12,
     borderRadius: 12,

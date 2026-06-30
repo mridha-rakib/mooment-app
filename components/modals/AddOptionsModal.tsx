@@ -24,12 +24,13 @@ import { useAuthStore } from '@/stores/authStore';
 interface AddOptionsModalProps {
   visible: boolean;
   onClose: () => void;
+  onOpenComplete?: () => void;
 }
 
 const OPTIONS = [
   {
     id: 'moment',
-    label: 'New Mooment',
+    label: 'New Post',
     description: 'Share one to your followers in just about on event you\'re attending',
     icon: PencilEdit01Icon,
     color: '#54268F',
@@ -56,49 +57,49 @@ const OPTIONS = [
   },
 ];
 
-export default function AddOptionsModal({ visible, onClose }: AddOptionsModalProps) {
+export default function AddOptionsModal({ visible, onClose, onOpenComplete }: AddOptionsModalProps) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
-  const [canScanQr, setCanScanQr] = React.useState(false);
-  const visibleOptions = React.useMemo(
-    () => OPTIONS.filter((option) => option.id !== 'scan' || canScanQr),
-    [canScanQr],
-  );
+  const [optionsEnabled, setOptionsEnabled] = React.useState(false);
+  const optionPressLockRef = React.useRef(true);
 
   React.useEffect(() => {
-    if (!visible) {
-      return;
-    }
+    optionPressLockRef.current = true;
+    setOptionsEnabled(false);
+  }, [visible]);
 
-    let isMounted = true;
-    setCanScanQr(false);
+  const handleModalShow = () => {
+    optionPressLockRef.current = false;
+    setOptionsEnabled(true);
+    onOpenComplete?.();
+  };
 
-    const loadEventAccess = async () => {
+  const handleOption = async (optionId: string, route: string) => {
+    if (optionPressLockRef.current) return;
+
+    optionPressLockRef.current = true;
+    setOptionsEnabled(false);
+
+    if (optionId === 'scan') {
       try {
         const profileEvents = await getMyProfileEvents();
 
-        if (isMounted) {
-          setCanScanQr(profileEvents.active.length > 0);
+        if (profileEvents.active.length === 0) {
+          optionPressLockRef.current = false;
+          setOptionsEnabled(true);
+          return;
         }
       } catch {
-        if (isMounted) {
-          setCanScanQr(false);
-        }
+        optionPressLockRef.current = false;
+        setOptionsEnabled(true);
+        return;
       }
-    };
+    }
 
-    void loadEventAccess();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [visible]);
-
-  const handleOption = (optionId: string, route: string) => {
     if (optionId === 'event') {
       onClose();
       requireBusinessAccountForEvent({
@@ -118,7 +119,8 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
+      onShow={handleModalShow}
       onRequestClose={onClose}
     >
       <TouchableOpacity 
@@ -143,12 +145,13 @@ export default function AddOptionsModal({ visible, onClose }: AddOptionsModalPro
           <Text style={[styles.sheetTitle, { color: colors.text }]}>Select to proceed</Text>
 
           <View style={styles.optionsList}>
-            {visibleOptions.map((opt) => (
+            {OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.id}
                 style={[styles.optionRow, { backgroundColor: colors.card, borderColor: colors.border }]}
                 onPress={() => handleOption(opt.id, opt.route)}
                 activeOpacity={0.75}
+                disabled={!optionsEnabled}
               >
                 <View style={[styles.optionIcon, { backgroundColor: opt.bg }]}>
                   <HugeiconsIcon icon={opt.icon} size={22} color={opt.color} strokeWidth={1.5} />

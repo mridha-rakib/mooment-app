@@ -1,6 +1,7 @@
 import FeedPost, { type PostData } from '@/components/post/FeedPost';
 import { useTheme } from '@/hooks/useTheme';
 import { normalizeHashtag } from '@/lib/hashtags';
+import { safeBack } from '@/lib/navigation';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { getHashtagMoments } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
@@ -49,7 +50,7 @@ export default function HashtagPostsScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]}>
+        <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/explore')} style={[styles.backButton, { backgroundColor: colors.card }]}>
           <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>#{tag}</Text>

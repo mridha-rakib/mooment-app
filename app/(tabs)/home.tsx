@@ -29,6 +29,7 @@ import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
 import { useAuthStore } from "@/stores/authStore";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const SUGGESTED_USERS_INSERT_AFTER = 4;
 const MILES_TO_KM = 1.609344;
 
@@ -50,12 +51,16 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
     const latestStory = sortedStories[sortedStories.length - 1];
     const title = latestStory.author?.name ?? 'Story';
     const storyItems = sortedStories
-      .filter((story) => Boolean(story.mediaUrl))
       .map((story) => ({
         id: story.id,
-        mediaUri: story.mediaUrl as string,
+        mediaType: story.mediaType,
+        mediaUri: story.mediaUrl,
+        contentType: story.contentType,
         durationSeconds: story.durationSeconds || 15,
         caption: story.caption,
+        textContent: story.textContent,
+        textBackground: story.textBackground,
+        textOverlay: story.textOverlay,
         createdAt: story.createdAt,
       }));
 
@@ -67,6 +72,11 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
       authorName: title,
       imageUri: latestStory.author?.avatarUrl ?? null,
       mediaUri: latestStory.mediaUrl,
+      contentType: latestStory.contentType,
+      mediaType: latestStory.mediaType,
+      textContent: latestStory.textContent,
+      textBackground: latestStory.textBackground,
+      textOverlay: latestStory.textOverlay,
       seen: storyItems.length > 0 && storyItems.every((story) => seenStoryIds.has(story.id)),
       storyItems,
     };
@@ -459,14 +469,14 @@ export default function HomeFeed() {
             </Text>
 
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: colors.primary }]}
+              style={[styles.modalButton, { backgroundColor: buttonBackground(colors) }]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowSuccessModal(false);
                 router.push('/profile-screen/edit-profile');
               }}
             >
-              <Text style={[styles.modalButtonText, { color: colors.background }]}>Add My Profile</Text>
+              <Text style={[styles.modalButtonText, { color: buttonForeground(colors) }]}>Add My Profile</Text>
             </TouchableOpacity>
           </View>
         </View>

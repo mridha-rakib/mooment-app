@@ -22,6 +22,7 @@ import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-i
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { scanTicketQrCode } from '@/lib/payments';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const { width, height } = Dimensions.get('window');
 const FRAME = width * 0.65;
 
@@ -41,8 +42,8 @@ export default function ScanQRScreen() {
         <SafeAreaView style={styles.center}>
           <Feather name="camera-off" size={48} color={colors.textSecondary} />
           <Text style={[styles.permText, { color: colors.textSecondary }]}>Camera access needed to scan QR</Text>
-          <TouchableOpacity style={[styles.permBtn, { backgroundColor: colors.primary }]} onPress={requestPermission} activeOpacity={0.8}>
-            <Text style={[styles.permBtnText, { color: colors.background }]}>Allow Camera</Text>
+          <TouchableOpacity style={[styles.permBtn, { backgroundColor: buttonBackground(colors) }]} onPress={requestPermission} activeOpacity={0.8}>
+            <Text style={[styles.permBtnText, { color: buttonForeground(colors) }]}>Allow Camera</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 12 }} activeOpacity={0.8}>
             <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
@@ -132,7 +133,7 @@ export default function ScanQRScreen() {
       {/* Capture / torch circle at bottom */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          style={[styles.captureCircle, { backgroundColor: colors.primary }]}
+          style={[styles.captureCircle, { backgroundColor: buttonBackground(colors) }]}
           onPress={() => setIsScanning(false)}
           activeOpacity={0.9}
         />

@@ -20,6 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Spinner } from "@/components/ui/spinner";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type AccountType = "personal" | "business";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
@@ -263,15 +264,15 @@ export default function SignUp() {
           )}
 
           <TouchableOpacity 
-            style={[styles.signupButton, { backgroundColor: colors.primary }, isLoading && styles.signupButtonDisabled]} 
+            style={[styles.signupButton, { backgroundColor: buttonBackground(colors) }, isLoading && styles.signupButtonDisabled]} 
             activeOpacity={0.8}
             onPress={handleSignUp}
             disabled={isLoading}
           >
             {isLoading ? (
-              <Spinner color={colors.background} />
+              <Spinner color={buttonForeground(colors)} />
             ) : (
-              <Text style={[styles.signupButtonText, { color: colors.background }]}>Sign Up</Text>
+              <Text style={[styles.signupButtonText, { color: buttonForeground(colors) }]}>Sign Up</Text>
             )}
           </TouchableOpacity>
 
@@ -302,14 +303,14 @@ export default function SignUp() {
             </Text>
 
             <TouchableOpacity 
-              style={[styles.modalButton, { backgroundColor: colors.primary }]}
+              style={[styles.modalButton, { backgroundColor: buttonBackground(colors) }]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowSuccessModal(false);
                 router.push('/profile-screen/edit-profile');
               }}
             >
-              <Text style={[styles.modalButtonText, { color: colors.background }]}>Add My Profile</Text>
+              <Text style={[styles.modalButtonText, { color: buttonForeground(colors) }]}>Add My Profile</Text>
             </TouchableOpacity>
           </View>
         </View>

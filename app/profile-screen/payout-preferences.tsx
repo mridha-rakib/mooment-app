@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type Option = {
   value: PayoutPreference;
   label: string;
@@ -164,16 +165,16 @@ export default function PayoutPreferencesScreen() {
             <TouchableOpacity
               style={[
                 styles.saveBtn,
-                { backgroundColor: colors.primary },
+                { backgroundColor: buttonBackground(colors) },
                 (isSaving || selected === settings?.payoutPreference) && styles.saveBtnDisabled,
               ]}
               onPress={handleSave}
               disabled={isSaving || selected === settings?.payoutPreference}
             >
               {isSaving ? (
-                <Spinner color={colors.background} />
+                <Spinner color={buttonForeground(colors)} />
               ) : (
-                <Text style={[styles.saveBtnText, { color: colors.background }]}>Save Preference</Text>
+                <Text style={[styles.saveBtnText, { color: buttonForeground(colors) }]}>Save Preference</Text>
               )}
             </TouchableOpacity>
           </View>

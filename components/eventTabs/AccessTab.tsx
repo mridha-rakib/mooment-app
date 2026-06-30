@@ -10,6 +10,7 @@ import SegmentedControl from "../ui/SegmentedControl";
 import { Spinner } from "@/components/ui/spinner";
 import UserAvatar from "../ui/UserAvatar";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type TicketStat = { sold: number; available: number; capacity: number };
 
 const resolveAvatarUri = (avatarKey?: string | null, avatarUrl?: string | null) => {
@@ -236,15 +237,15 @@ const AccessTab = ({
 
     return (
       <TouchableOpacity
-        style={[styles.requestBtn, { backgroundColor: colors.primary, opacity: submittingJoinRequest ? 0.7 : 1 }]}
+        style={[styles.requestBtn, { backgroundColor: buttonBackground(colors), opacity: submittingJoinRequest ? 0.7 : 1 }]}
         disabled={submittingJoinRequest}
         onPress={onSubmitJoinRequest}
         activeOpacity={0.8}
       >
         {submittingJoinRequest ? (
-          <ActivityIndicator size="small" color={colors.background} />
+          <ActivityIndicator size="small" color={buttonForeground(colors)} />
         ) : (
-          <Text style={[styles.requestBtnText, { color: colors.background }]}>Request</Text>
+          <Text style={[styles.requestBtnText, { color: buttonForeground(colors) }]}>Request</Text>
         )}
       </TouchableOpacity>
     );
@@ -413,7 +414,7 @@ const AccessTab = ({
           <View style={[styles.alertBanner, { backgroundColor: "rgba(22, 216, 105, 0.1)", marginBottom: 8 }]}>
             <Feather name="user-check" size={24} color="#1D9E75" />
             <Text style={[styles.alertText, { color: "#1D9E75" }]}>
-              You've been invited to this private event and can purchase tickets.
+              You&apos;ve been invited to this private event and can purchase tickets.
             </Text>
           </View>
         )}
@@ -841,11 +842,11 @@ const AccessTab = ({
                       >
                         {isClaiming ? (
                           <View style={styles.claimBtnContent}>
-                            <Spinner size="small" color={colors.background} />
-                            <Text style={[styles.claimRewardBtnText, { color: colors.background }]}>Claiming...</Text>
+                            <Spinner size="small" color={buttonForeground(colors)} />
+                            <Text style={[styles.claimRewardBtnText, { color: buttonForeground(colors) }]}>Claiming...</Text>
                           </View>
                         ) : (
-                          <Text style={[styles.claimRewardBtnText, { color: colors.background }]}>
+                          <Text style={[styles.claimRewardBtnText, { color: buttonForeground(colors) }]}>
                             {isExpired ? "Expired" : isFullyClaimed ? "Sold Out" : "Claim Reward"}
                           </Text>
                         )}

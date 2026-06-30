@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const stripeConnectCallbackPath =
   process.env.EXPO_PUBLIC_STRIPE_CONNECT_CALLBACK_PATH || "/profile-screen/bank-account";
 
@@ -223,18 +224,18 @@ export default function BankAccountScreen() {
               <TouchableOpacity
                 style={[
                   styles.connectBtn,
-                  { backgroundColor: colors.primary },
+                  { backgroundColor: buttonBackground(colors) },
                   isConnecting && styles.connectBtnDisabled,
                 ]}
                 onPress={handleConnectStripe}
                 disabled={isConnecting}
               >
                 {isConnecting ? (
-                  <Spinner color={colors.background} />
+                  <Spinner color={buttonForeground(colors)} />
                 ) : (
                   <>
-                    <Feather name="external-link" size={16} color={colors.background} />
-                    <Text style={[styles.connectBtnText, { color: colors.background }]}>
+                    <Feather name="external-link" size={16} color={buttonForeground(colors)} />
+                    <Text style={[styles.connectBtnText, { color: buttonForeground(colors) }]}>
                       Manage Account
                     </Text>
                   </>
@@ -256,18 +257,18 @@ export default function BankAccountScreen() {
               <TouchableOpacity
                 style={[
                   styles.connectBtn,
-                  { backgroundColor: colors.primary },
+                  { backgroundColor: buttonBackground(colors) },
                   isConnecting && styles.connectBtnDisabled,
                 ]}
                 onPress={handleConnectStripe}
                 disabled={isConnecting}
               >
                 {isConnecting ? (
-                  <Spinner color={colors.background} />
+                  <Spinner color={buttonForeground(colors)} />
                 ) : (
                   <>
-                    <Feather name="link" size={16} color={colors.background} />
-                    <Text style={[styles.connectBtnText, { color: colors.background }]}>
+                    <Feather name="link" size={16} color={buttonForeground(colors)} />
+                    <Text style={[styles.connectBtnText, { color: buttonForeground(colors) }]}>
                       Connect Bank Account
                     </Text>
                   </>

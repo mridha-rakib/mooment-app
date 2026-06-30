@@ -5,6 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/hooks/useTheme";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function ChangePassword() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -82,11 +83,11 @@ export default function ChangePassword() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.doneButton, { backgroundColor: colors.primary }]} 
+            style={[styles.doneButton, { backgroundColor: buttonBackground(colors) }]} 
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/success-changed')}
           >
-            <Text style={[styles.doneButtonText, { color: colors.background }]}>Done</Text>
+            <Text style={[styles.doneButtonText, { color: buttonForeground(colors) }]}>Done</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

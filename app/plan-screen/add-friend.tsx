@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 
 import { useTheme } from "@/hooks/useTheme";
 import UserAvatar from "@/components/ui/UserAvatar";
@@ -192,7 +193,7 @@ export default function AddFriendScreen() {
                     s.actionBtn,
                     isSelected
                       ? { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }
-                      : { backgroundColor: colors.primary },
+                      : { backgroundColor: buttonBackground(colors) },
                     isSaving && s.actionBtnDisabled,
                   ]}
                   onPress={() => toggleFriend(friend)}
@@ -200,9 +201,9 @@ export default function AddFriendScreen() {
                   disabled={isSaving || Boolean(savingFriendId && savingFriendId !== friend.id)}
                 >
                   {isSaving ? (
-                    <ActivityIndicator size="small" color={isSelected ? colors.textSecondary : colors.background} />
+                    <ActivityIndicator size="small" color={isSelected ? colors.textSecondary : buttonForeground(colors)} />
                   ) : (
-                    <Text style={[s.actionBtnText, { color: isSelected ? colors.textSecondary : colors.background }]}>
+                    <Text style={[s.actionBtnText, { color: isSelected ? colors.textSecondary : buttonForeground(colors) }]}>
                       {isSelected ? "Added" : "Add"}
                     </Text>
                   )}

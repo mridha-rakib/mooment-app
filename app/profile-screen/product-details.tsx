@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AddProductModal from "@/components/profile/AddProductModal";
 import BackButton from "@/components/ui/BackButton";
 import { deleteProduct, getMyProduct, type Product } from "@/lib/products";
+import { safeBack } from "@/lib/navigation";
 import { getStorageFileUrl } from "@/lib/storage";
 
 const { width } = Dimensions.get("window");
@@ -124,7 +125,7 @@ export default function ProductDetailsScreen() {
         onPress: async () => {
           try {
             await deleteProduct(product.id);
-            router.back();
+            safeBack(router, '/(tabs)/profile');
           } catch {
             Alert.alert("Unable to delete product", "Please try deleting the product again.");
           }

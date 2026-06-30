@@ -27,6 +27,7 @@ import { getAuthErrorMessage } from "@/lib/authErrors";
 import { createProduct, updateProduct, type Product } from "@/lib/products";
 import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type ProductImageItem = {
   uri: string;
   key?: string;
@@ -271,17 +272,17 @@ export default function AddProductModal({ visible, onClose, onSaved, initialData
                     </ImageBackground>
                   ))}
                 </ScrollView>
-                <TouchableOpacity style={[styles.uploadBtnSmall, { backgroundColor: colors.primary }]} onPress={handleUpload}>
-                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color={colors.background} />
-                  <Text style={[styles.uploadBtnText, { color: colors.background }]}>Upload Image</Text>
+                <TouchableOpacity style={[styles.uploadBtnSmall, { backgroundColor: buttonBackground(colors) }]} onPress={handleUpload}>
+                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color={buttonForeground(colors)} />
+                  <Text style={[styles.uploadBtnText, { color: buttonForeground(colors) }]}>Upload Image</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity style={[styles.uploadBox, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.7} onPress={handleUpload}>
                 <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>You can upload multiple images</Text>
-                <View style={[styles.uploadBtn, { backgroundColor: colors.primary }]}>
-                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color={colors.background} />
-                  <Text style={[styles.uploadBtnText, { color: colors.background }]}>Upload Image</Text>
+                <View style={[styles.uploadBtn, { backgroundColor: buttonBackground(colors) }]}>
+                  <HugeiconsIcon icon={UploadCircle01Icon} size={20} color={buttonForeground(colors)} />
+                  <Text style={[styles.uploadBtnText, { color: buttonForeground(colors) }]}>Upload Image</Text>
                 </View>
                 <Text style={[styles.fileHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
               </TouchableOpacity>
@@ -366,8 +367,8 @@ export default function AddProductModal({ visible, onClose, onSaved, initialData
               <TouchableOpacity style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={onClose}>
                 <Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: colors.primary }]} onPress={handlePublish} disabled={isPublishing}>
-                <Text style={[styles.publishText, { color: colors.background }]}>{initialData ? 'Save Changes' : 'Publish'}</Text>
+              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: buttonBackground(colors) }]} onPress={handlePublish} disabled={isPublishing}>
+                <Text style={[styles.publishText, { color: buttonForeground(colors) }]}>{initialData ? 'Save Changes' : 'Publish'}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

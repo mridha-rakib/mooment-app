@@ -15,6 +15,7 @@ import { KeyboardAvoidingView,
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const { colors, isDark } = useTheme();
@@ -50,11 +51,11 @@ export default function ForgotPassword() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.continueButton, { backgroundColor: colors.primary }]} 
+            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]} 
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/verify-email')}
           >
-            <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+            <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>

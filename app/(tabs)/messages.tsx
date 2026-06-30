@@ -8,6 +8,7 @@ import type { DirectMessageConversationResponse, GroupConversationResponse } fro
 import { getDirectMessageConversations, getGroupConversations } from '@/lib/chat';
 import { createRealtimeSocket } from '@/lib/realtime';
 import { useAuthStore } from '@/stores/authStore';
+import { useChatUnreadStore } from '@/stores/chatUnreadStore';
 import {
     Feather,
     Ionicons
@@ -21,9 +22,9 @@ import React, {
 } from 'react';
 import {
     ActivityIndicator,
+    AppState,
     Dimensions,
     FlatList,
-    Image,
     RefreshControl,
     StatusBar,
     StyleSheet,
@@ -140,6 +141,10 @@ export default function MessagesScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
   const currentUserIdRef = useRef<string | undefined>(currentUser?.id);
+  const activeDirectConversationIdRef = useRef<string | null>(null);
+  const activeDirectConversationId = useChatUnreadStore((state) => state.activeDirectConversationId);
+  const clearDirectUnread = useChatUnreadStore((state) => state.clearDirectUnread);
+  const setDirectUnreadCountsFromConversations = useChatUnreadStore((state) => state.setDirectUnreadCountsFromConversations);
 
   useFocusEffect(
     useCallback(() => {
@@ -153,6 +158,7 @@ export default function MessagesScreen() {
           const dms = await getDirectMessageConversations();
 
           if (isMounted) {
+            setDirectUnreadCountsFromConversations(dms);
             setDmConversations(dms.map(toConversationData));
           }
         } catch {
@@ -171,7 +177,7 @@ export default function MessagesScreen() {
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [setDirectUnreadCountsFromConversations]),
   );
 
   useEffect(() => {
@@ -210,6 +216,10 @@ export default function MessagesScreen() {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    activeDirectConversationIdRef.current = activeDirectConversationId;
+  }, [activeDirectConversationId]);
+
+  useEffect(() => {
     if (!accessToken) return;
 
     const socket = createRealtimeSocket({
@@ -237,8 +247,10 @@ export default function MessagesScreen() {
           const conv = { ...updated[idx] };
           conv.lastMessage = message.text;
           conv.time = formatConversationTime(message.createdAt);
-          if (message.senderId !== currentUserId) {
+          if (message.senderId !== currentUserId && activeDirectConversationIdRef.current !== partnerId) {
             conv.unread = (conv.unread ?? 0) + 1;
+          } else if (activeDirectConversationIdRef.current === partnerId) {
+            conv.unread = 0;
           }
           updated.splice(idx, 1);
           return [conv, ...updated];
@@ -254,6 +266,15 @@ export default function MessagesScreen() {
     };
   }, [accessToken]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && socketRef.current) {
+        socketRef.current.reconnect();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     setDmsError(null);
@@ -263,6 +284,7 @@ export default function MessagesScreen() {
         getDirectMessageConversations(),
         getGroupConversations(),
       ]);
+      setDirectUnreadCountsFromConversations(dms);
       setDmConversations(dms.map(toConversationData));
       setGroupConversations(groups.map(toGroupConversationData));
     } catch {
@@ -270,7 +292,7 @@ export default function MessagesScreen() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [setDirectUnreadCountsFromConversations]);
 
   const sourceConversations = subTab === 'DMs' ? dmConversations : groupConversations;
 
@@ -284,8 +306,8 @@ export default function MessagesScreen() {
     if (item.isGroup && item.groupAvatars) {
       return (
         <View style={styles.groupAvatarWrap}>
-          <Image source={{ uri: item.groupAvatars[0] }} style={[styles.groupAv1, { borderColor: colors.background }]} />
-          <Image source={{ uri: item.groupAvatars[1] }} style={[styles.groupAv2, { borderColor: colors.background }]} />
+          <UserAvatar uri={item.groupAvatars[0]} size={34} style={[styles.groupAv1, { borderColor: colors.background }]} />
+          <UserAvatar uri={item.groupAvatars[1]} size={28} style={[styles.groupAv2, { borderColor: colors.background }]} />
         </View>
       );
     }
@@ -306,10 +328,32 @@ export default function MessagesScreen() {
     );
   };
 
+  const handleOpenConversation = (item: ConversationData) => {
+    if (!item.isGroup) {
+      clearDirectUnread(item.id);
+      setDmConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === item.id ? { ...conversation, unread: 0 } : conversation,
+        ),
+      );
+    }
+
+    router.push({
+      pathname: '/chat-screen/chat-detail',
+      params: {
+        id: item.id,
+        name: item.name,
+        ...(item.avatar ? { avatar: item.avatar } : {}),
+        ...(item.isGroup ? { isGroup: 'true' } : {}),
+        ...(!item.isGroup ? { isOnline: item.isOnline ? 'true' : 'false', isBlocked: item.isBlocked ? 'true' : 'false' } : {}),
+      },
+    });
+  };
+
   const renderConvoItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
       style={styles.convoCard}
-      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, ...(item.avatar ? { avatar: item.avatar } : {}), isOnline: item.isOnline ? 'true' : 'false', isBlocked: item.isBlocked ? 'true' : 'false' } })}
+      onPress={() => handleOpenConversation(item)}
       activeOpacity={0.85}
     >
       {renderAvatar(item)}
@@ -333,7 +377,11 @@ export default function MessagesScreen() {
             )}
             {renderMessage(item)}
           </View>
-          {item.unread > 0 && <View style={styles.unreadDot} />}
+          {item.unread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -342,16 +390,10 @@ export default function MessagesScreen() {
   const renderGroupItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
       style={[styles.groupCard, { backgroundColor: colors.card }]}
-      onPress={() => router.push({ pathname: '/chat-screen/chat-detail', params: { id: item.id, name: item.name, ...(item.avatar ? { avatar: item.avatar } : {}), isGroup: 'true' } })}
+      onPress={() => handleOpenConversation(item)}
       activeOpacity={0.85}
     >
-      {item.avatar ? (
-        <UserAvatar uri={item.avatar} name={item.name} size={52} style={styles.groupCardAvatar} />
-      ) : (
-        <View style={[styles.groupCardAvatar, styles.groupCardAvatarFallback]}>
-          <Text style={styles.groupCardAvatarLetter}>{item.name.charAt(0).toUpperCase()}</Text>
-        </View>
-      )}
+      <UserAvatar uri={item.avatar} name={item.name} size={44} style={styles.groupCardAvatar} />
       <View style={styles.groupCardMeta}>
         <View style={styles.groupCardTopRow}>
           <Text style={[styles.groupCardName, { color: colors.text }]} numberOfLines={1}>
@@ -370,7 +412,11 @@ export default function MessagesScreen() {
           <Text style={[styles.groupCardMsg, { color: colors.textSecondary }]} numberOfLines={1}>
             {item.lastMessage}
           </Text>
-          {item.unread > 0 && <View style={styles.groupCardUnreadDot} />}
+          {item.unread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -387,7 +433,7 @@ export default function MessagesScreen() {
           style={styles.roomAvatarWrap}
           onPress={() => router.push('/profile-screen/user-profile')}
         >
-          <Image source={{ uri: item.hostAvatar }} style={[styles.roomAvatar, { borderColor: colors.primary }]} />
+          <UserAvatar uri={item.hostAvatar} name={item.hostName} size={54} style={[styles.roomAvatar, { borderColor: colors.primary }]} />
           <View style={[styles.roomOnlineDot, { borderColor: '#0D0D25' }]} />
         </TouchableOpacity>
         
@@ -422,7 +468,7 @@ export default function MessagesScreen() {
               key={idx}
               onPress={() => router.push('/profile-screen/user-profile')}
             >
-              <Image source={{ uri: av }} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0, borderColor: colors.background }]} />
+              <UserAvatar uri={av} size={16} style={[styles.roomListenerAvatar, { marginLeft: idx > 0 ? -8 : 0, borderColor: colors.background }]} />
             </TouchableOpacity>
           ))}
         </View>
@@ -622,7 +668,22 @@ const styles = StyleSheet.create({
   lastMsg: { color: '#B3B3B3', fontSize: 14, flex: 1, lineHeight: 16 },
   lastMsgUnread: { color: '#FFFFFF', fontWeight: '500' },
   typingText: { color: '#D4B0EB', fontStyle: 'italic' },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F2245C', marginLeft: 8 },
+  unreadBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#F2245C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    marginLeft: 8,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { color: '#454555', fontSize: 14 },

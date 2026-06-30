@@ -19,6 +19,7 @@ import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventPrivacy } from '@/lib/events';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function CreateEventStep5() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -224,12 +225,12 @@ export default function CreateEventStep5() {
           <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.publishButton, { backgroundColor: colors.primary }]}
+          style={[styles.publishButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={handlePublish}
           disabled={isPublishing}
           activeOpacity={0.85}
         >
-          <Text style={[styles.publishButtonText, { color: colors.background }]}>
+          <Text style={[styles.publishButtonText, { color: buttonForeground(colors) }]}>
             {isPublishing
               ? (isEditingPublished ? 'Saving...' : 'Publishing...')
               : (isEditingPublished ? 'Save Changes' : 'Publish Event')}

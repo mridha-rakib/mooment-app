@@ -103,6 +103,13 @@ type RealtimeSocketOptions = {
   onUserOffline?: (userId: string) => void;
 };
 
+const MAX_RECONNECT_ATTEMPTS = 8;
+const BASE_RECONNECT_DELAY_MS = 1000;
+
+const log = __DEV__
+  ? (msg: string, data?: object) => console.log(`[Realtime] ${msg}`, data !== undefined ? data : '')
+  : () => {};
+
 const buildRealtimeUrl = (accessToken: string) => {
   const apiBaseUrl = api.defaults.baseURL;
 
@@ -138,126 +145,187 @@ export const createRealtimeSocket = ({
   onUserOnline,
   onUserOffline,
 }: RealtimeSocketOptions) => {
-  const socket = new WebSocket(buildRealtimeUrl(accessToken));
+  let socket: WebSocket | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempts = 0;
+  let isClosed = false;
   const pendingMessages: string[] = [];
 
-  const sendPayload = (payload: unknown) => {
-    const serializedPayload = JSON.stringify(payload);
+  const dispatchEvent = (payload: RealtimeEvent) => {
+    if (payload.type === "ready") {
+      log("Ready — authenticated");
+      onReady?.();
+      return;
+    }
+    if (payload.type === "dm:message") {
+      log("dm:message received", { id: payload.message.id });
+      onDirectMessage?.(payload.message);
+      return;
+    }
+    if (payload.type === "dm:message:updated") {
+      onDirectMessageUpdated?.(payload.message);
+      return;
+    }
+    if (payload.type === "dm:message:deleted") {
+      onDirectMessageDeleted?.({ conversationId: payload.conversationId, messageId: payload.messageId });
+      return;
+    }
+    if (payload.type === "dm:typing") {
+      onDirectTyping?.(payload.typing);
+      return;
+    }
+    if (payload.type === "group:message") {
+      log("group:message received", { id: payload.message.id, groupId: payload.message.groupId });
+      onGroupMessage?.(payload.message);
+      return;
+    }
+    if (payload.type === "group:message:updated") {
+      onGroupMessageUpdated?.(payload.message);
+      return;
+    }
+    if (payload.type === "group:message:deleted") {
+      onGroupMessageDeleted?.({ groupId: payload.groupId, messageId: payload.messageId });
+      return;
+    }
+    if (payload.type === "live:message") {
+      onLiveMessage?.(payload.roomId, payload.message);
+      return;
+    }
+    if (payload.type === "notification:new") {
+      onNotification?.(payload.notification);
+      return;
+    }
+    if (payload.type === "notification:read") {
+      onNotificationRead?.({ notificationId: payload.notificationId, unreadCount: payload.unreadCount });
+      return;
+    }
+    if (payload.type === "notification:read-all") {
+      onNotificationsReadAll?.({ unreadCount: payload.unreadCount });
+      return;
+    }
+    if (payload.type === "user:online") {
+      onUserOnline?.(payload.userId);
+      return;
+    }
+    if (payload.type === "user:offline") {
+      onUserOffline?.(payload.userId);
+      return;
+    }
+    if (payload.type === "error") {
+      log("Server error", { code: payload.code, message: payload.message });
+      onError?.({ code: payload.code, message: payload.message });
+    }
+  };
 
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(serializedPayload);
+  const scheduleReconnect = () => {
+    if (isClosed || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        log(`Giving up after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts`);
+      }
+      return;
+    }
+    const delay = Math.min(BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts), 30_000);
+    reconnectAttempts += 1;
+    log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  };
+
+  const connect = () => {
+    if (isClosed) return;
+
+    let wsUrl: string;
+    try {
+      wsUrl = buildRealtimeUrl(accessToken);
+    } catch (error) {
+      log("Failed to build WebSocket URL", { error });
+      onError?.({ message: "Realtime connection error." });
       return;
     }
 
-    pendingMessages.push(serializedPayload);
-  };
-
-  socket.onopen = () => {
-    while (pendingMessages.length > 0 && socket.readyState === WebSocket.OPEN) {
-      const payload = pendingMessages.shift();
-
-      if (payload) {
-        socket.send(payload);
-      }
-    }
-  };
-
-  socket.onmessage = (event) => {
     try {
-      const payload = JSON.parse(String(event.data)) as RealtimeEvent;
+      socket = new WebSocket(wsUrl);
+    } catch (error) {
+      log("WebSocket constructor threw", { error });
+      scheduleReconnect();
+      return;
+    }
 
-      if (payload.type === "ready") {
-        onReady?.();
-        return;
+    socket.onopen = () => {
+      log("Connected");
+      reconnectAttempts = 0;
+      while (pendingMessages.length > 0 && socket?.readyState === WebSocket.OPEN) {
+        const payload = pendingMessages.shift();
+        if (payload) socket.send(payload);
       }
+    };
 
-      if (payload.type === "dm:message") {
-        onDirectMessage?.(payload.message);
-        return;
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(String(event.data)) as RealtimeEvent;
+        dispatchEvent(payload);
+      } catch {
+        onError?.({ message: "Invalid realtime response." });
       }
+    };
 
-      if (payload.type === "dm:message:updated") {
-        onDirectMessageUpdated?.(payload.message);
-        return;
-      }
+    socket.onerror = () => {
+      log("Socket error");
+      onError?.({ message: "Realtime connection error." });
+    };
 
-      if (payload.type === "dm:message:deleted") {
-        onDirectMessageDeleted?.({
-          conversationId: payload.conversationId,
-          messageId: payload.messageId,
-        });
-        return;
+    socket.onclose = (event) => {
+      log("Disconnected", { code: event.code, wasClean: event.wasClean });
+      socket = null;
+      if (!isClosed) {
+        if (event.code === 1008) {
+          log("Auth failed — not reconnecting");
+          onError?.({ code: "AUTH_FAILED", message: "Realtime authentication failed." });
+          return;
+        }
+        scheduleReconnect();
       }
+    };
+  };
 
-      if (payload.type === "dm:typing") {
-        onDirectTyping?.(payload.typing);
-        return;
-      }
-
-      if (payload.type === "group:message") {
-        onGroupMessage?.(payload.message);
-        return;
-      }
-
-      if (payload.type === "group:message:updated") {
-        onGroupMessageUpdated?.(payload.message);
-        return;
-      }
-
-      if (payload.type === "group:message:deleted") {
-        onGroupMessageDeleted?.({ groupId: payload.groupId, messageId: payload.messageId });
-        return;
-      }
-
-      if (payload.type === "live:message") {
-        onLiveMessage?.(payload.roomId, payload.message);
-        return;
-      }
-
-      if (payload.type === "notification:new") {
-        onNotification?.(payload.notification);
-        return;
-      }
-
-      if (payload.type === "notification:read") {
-        onNotificationRead?.({
-          notificationId: payload.notificationId,
-          unreadCount: payload.unreadCount,
-        });
-        return;
-      }
-
-      if (payload.type === "notification:read-all") {
-        onNotificationsReadAll?.({
-          unreadCount: payload.unreadCount,
-        });
-        return;
-      }
-
-      if (payload.type === "user:online") {
-        onUserOnline?.(payload.userId);
-        return;
-      }
-
-      if (payload.type === "user:offline") {
-        onUserOffline?.(payload.userId);
-        return;
-      }
-
-      if (payload.type === "error") {
-        onError?.({ code: payload.code, message: payload.message });
-      }
-    } catch {
-      onError?.({ message: "Invalid realtime response." });
+  const sendPayload = (payload: unknown) => {
+    const serialized = JSON.stringify(payload);
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(serialized);
+    } else {
+      pendingMessages.push(serialized);
     }
   };
 
-  socket.onerror = () => {
-    onError?.({ message: "Realtime connection error." });
-  };
+  connect();
 
   return {
-    close: () => socket.close(),
+    close: () => {
+      isClosed = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      socket?.close();
+      socket = null;
+      log("Socket closed by caller");
+    },
+
+    reconnect: () => {
+      if (isClosed) return;
+      log("Manual reconnect triggered");
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      socket?.close();
+      socket = null;
+      reconnectAttempts = 0;
+      connect();
+    },
+
     joinLiveRoom: (roomId: string) => sendPayload({ roomId, type: "live:join" }),
     leaveLiveRoom: (roomId: string) => sendPayload({ roomId, type: "live:leave" }),
     sendDirectMessage: (
@@ -275,11 +343,7 @@ export const createRealtimeSocket = ({
         type: "dm:message",
       }),
     sendDirectTyping: (recipientId: string, isTyping: boolean) =>
-      sendPayload({
-        isTyping,
-        recipientId,
-        type: "dm:typing",
-      }),
+      sendPayload({ isTyping, recipientId, type: "dm:typing" }),
     editDirectMessage: (messageId: string, text: string) =>
       sendPayload({ messageId, text, type: "dm:message:edit" }),
     deleteDirectMessage: (messageId: string) =>
@@ -303,11 +367,6 @@ export const createRealtimeSocket = ({
     deleteGroupMessage: (messageId: string) =>
       sendPayload({ messageId, type: "group:message:delete" }),
     sendLiveMessage: (roomId: string, text: string, clientMessageId?: string) =>
-      sendPayload({
-        clientMessageId,
-        roomId,
-        text,
-        type: "live:message",
-      }),
+      sendPayload({ clientMessageId, roomId, text, type: "live:message" }),
   };
 };

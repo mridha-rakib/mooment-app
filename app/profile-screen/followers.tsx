@@ -1,13 +1,15 @@
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, getUserFollowers, unfollowUser, type ProfileFollowUserResponse } from "@/lib/users";
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const getHandle = (username?: string) => (username ? `@${username.replace(/^@/, "")}` : "@xenog");
@@ -21,7 +23,6 @@ export default function FollowersScreen() {
   const [followers, setFollowers] = useState<ProfileFollowUserResponse[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [failedAvatarIds, setFailedAvatarIds] = useState(new Set<string>());
 
   useEffect(() => {
     let isMounted = true;
@@ -131,19 +132,7 @@ export default function FollowersScreen() {
                 activeOpacity={0.7}
               >
                 <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
-                  {avatarUri && !failedAvatarIds.has(user.id) ? (
-                    <Image
-                      source={{ uri: avatarUri }}
-                      style={styles.avatar}
-                      onError={() => setFailedAvatarIds((prev) => new Set([...prev, user.id]))}
-                    />
-                  ) : (
-                    <View style={[styles.avatarFallback, { backgroundColor: colors.card }]}>
-                      <Text style={[styles.avatarInitial, { color: colors.text }]}>
-                        {user.name.trim().charAt(0).toUpperCase() || "?"}
-                      </Text>
-                    </View>
-                  )}
+                  <UserAvatar uri={avatarUri} name={user.name} size={40} />
                 </View>
                 <View style={styles.userInfo}>
                   <Text style={[styles.userName, { color: colors.text }]}>{user.name}</Text>
@@ -154,7 +143,7 @@ export default function FollowersScreen() {
                 <TouchableOpacity
                   style={[
                     styles.followBtn,
-                    { backgroundColor: colors.primary },
+                    { backgroundColor: buttonBackground(colors) },
                     user.isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }],
                   ]}
                   disabled={pendingUserIds.includes(user.id)}
@@ -162,7 +151,7 @@ export default function FollowersScreen() {
                 >
                   <Text style={[
                     styles.followBtnText,
-                    { color: colors.background },
+                    { color: buttonForeground(colors) },
                     user.isFollowing && [styles.followingBtnText, { color: colors.text }],
                   ]}>
                     {user.isFollowing ? "Following" : "Follow"}
@@ -221,22 +210,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     padding: 2,
     marginRight: 15,
-  },
-  avatar: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 20,
-  },
-  avatarFallback: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarInitial: {
-    fontSize: 16,
-    fontWeight: "700",
   },
   userClickableArea: {
     flexDirection: "row",

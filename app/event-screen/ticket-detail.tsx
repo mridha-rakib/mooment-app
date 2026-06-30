@@ -2,6 +2,7 @@ import BackButton from "@/components/ui/BackButton";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { safeBack } from "@/lib/navigation";
 import { getEventTicket, type EventResponse, type EventTicketPayload } from "@/lib/events";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
@@ -37,6 +38,7 @@ import {
 } from "@/lib/payments";
 import { getFriendUsers, type FriendUserResponse } from "@/lib/users";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
 const { width } = Dimensions.get("window");
@@ -553,7 +555,7 @@ const TicketDetailScreen = () => {
             />
 
             <View style={[styles.walletHeader, { paddingTop: insets.top + 10 }]}>
-              <BackButton color="#FFFFFF" onPress={() => router.back()} />
+              <BackButton color="#FFFFFF" onPress={() => safeBack(router, '/(tabs)/home')} />
               <Text style={styles.walletHeaderTitle}>Ticket Detail</Text>
               <View style={styles.walletHeaderSpacer} />
             </View>
@@ -824,7 +826,7 @@ const TicketDetailScreen = () => {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-        <BackButton color={colors.text} onPress={() => router.back()} />
+        <BackButton color={colors.text} onPress={() => safeBack(router, '/(tabs)/home')} />
         <Text style={[styles.emptyTitle, { color: colors.text }]}>Ticket not found</Text>
         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
           {errorMessage ?? "This ticket is no longer available."}
@@ -849,7 +851,7 @@ const TicketDetailScreen = () => {
           />
 
           <View style={[styles.headerTop, { paddingTop: insets.top + 10 }]}>
-            <BackButton color="#FFFFFF" onPress={() => router.back()} />
+            <BackButton color="#FFFFFF" onPress={() => safeBack(router, '/(tabs)/home')} />
             <Text style={styles.headerTitle}>Ticket Detail</Text>
             <View style={styles.headerSpacer} />
           </View>
@@ -921,13 +923,13 @@ const TicketDetailScreen = () => {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.background + "F2" }]}>
         {isHostMode ? (
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={handleEditTicket}>
-            <Feather name="edit-2" size={18} color={colors.background} />
-            <Text style={[styles.primaryBtnText, { color: colors.background }]}>Edit Ticket</Text>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: buttonBackground(colors) }]} onPress={handleEditTicket}>
+            <Feather name="edit-2" size={18} color={buttonForeground(colors)} />
+            <Text style={[styles.primaryBtnText, { color: buttonForeground(colors) }]}>Edit Ticket</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-            <Text style={[styles.primaryBtnText, { color: colors.background }]}>Back to Tickets</Text>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: buttonBackground(colors) }]} onPress={() => safeBack(router, '/(tabs)/home')}>
+            <Text style={[styles.primaryBtnText, { color: buttonForeground(colors) }]}>Back to Tickets</Text>
           </TouchableOpacity>
         )}
       </View>

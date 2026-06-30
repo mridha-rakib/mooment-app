@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const formatDateTime = (value?: string | null) => {
   if (!value) {
     return 'Date TBA';
@@ -177,12 +178,12 @@ export default function TicketPreviewScreen() {
           <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Done</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          style={[styles.primaryButton, { backgroundColor: buttonBackground(colors) }]}
           activeOpacity={0.82}
           onPress={() => router.push({ pathname: '/create-event/ticket-details', params: { localId: ticket.localId } })}
         >
-          <Feather name="edit-3" size={17} color={colors.background} />
-          <Text style={[styles.primaryButtonText, { color: colors.background }]}>Edit</Text>
+          <Feather name="edit-3" size={17} color={buttonForeground(colors)} />
+          <Text style={[styles.primaryButtonText, { color: buttonForeground(colors) }]}>Edit</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

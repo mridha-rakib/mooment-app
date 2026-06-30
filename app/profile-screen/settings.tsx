@@ -13,6 +13,7 @@ import { writeThemePreference } from "@/lib/themePreference";
 import { useAuthStore } from "@/stores/authStore";
 import { useLocationSharingStore } from "@/stores/locationSharingStore";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type SettingItemProps = {
   icon: string;
   label: string;
@@ -378,14 +379,14 @@ export default function SettingsScreen() {
                 <Text style={[styles.cancelModalText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.doneModalBtn, { backgroundColor: colors.primary }, isSwitchingAccountType && { opacity: 0.7 }]}
+                style={[styles.doneModalBtn, { backgroundColor: buttonBackground(colors) }, isSwitchingAccountType && { opacity: 0.7 }]}
                 onPress={handleAccountTypeDone}
                 disabled={isSwitchingAccountType}
               >
                 {isSwitchingAccountType ? (
-                  <Spinner color={colors.background} />
+                  <Spinner color={buttonForeground(colors)} />
                 ) : (
-                  <Text style={[styles.doneModalText, { color: colors.background }]}>Done</Text>
+                  <Text style={[styles.doneModalText, { color: buttonForeground(colors) }]}>Done</Text>
                 )}
               </TouchableOpacity>
             </View>

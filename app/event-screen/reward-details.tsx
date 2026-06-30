@@ -38,6 +38,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const isRewardType = (value: unknown): value is EventRewardType =>
   value === "ticket" || value === "product";
 
@@ -718,17 +719,17 @@ export default function RewardDetailsScreen() {
             <Text style={[styles.cancelButtonText, { color: isSaving ? colors.textSecondary : colors.text }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.confirmButton, { backgroundColor: colors.primary }]}
+            style={[styles.confirmButton, { backgroundColor: buttonBackground(colors) }]}
             disabled={isSaving}
             onPress={handleConfirm}
           >
             {isSaving ? (
               <View style={styles.buttonContent}>
-                <Spinner color={colors.background} size="small" />
-                <Text style={[styles.confirmButtonText, { color: colors.background }]}>Saving...</Text>
+                <Spinner color={buttonForeground(colors)} size="small" />
+                <Text style={[styles.confirmButtonText, { color: buttonForeground(colors) }]}>Saving...</Text>
               </View>
             ) : (
-              <Text style={[styles.confirmButtonText, { color: colors.background }]}>Confirm</Text>
+              <Text style={[styles.confirmButtonText, { color: buttonForeground(colors) }]}>Confirm</Text>
             )}
           </TouchableOpacity>
         </View>

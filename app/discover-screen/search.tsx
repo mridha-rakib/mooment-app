@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Image } from 'react-native';
+import { ActivityIndicator, Image, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -10,6 +10,8 @@ import { getMyProducts, type Product } from '@/lib/products';
 import { getStorageFileUrl } from '@/lib/storage';
 import { getSuggestedUsers } from '@/lib/users';
 import { normalizeHashtag } from '@/lib/hashtags';
+import { safeBack } from '@/lib/navigation';
+import UserAvatar from '@/components/ui/UserAvatar';
 
 type SearchFilter = 'All' | 'People' | 'Events' | 'Products' | 'Hashtags';
 type SearchSection = {
@@ -220,15 +222,7 @@ export default function SearchScreen() {
                 },
               })}
             >
-              {person.avatarUrl ? (
-                <Image source={{ uri: person.avatarUrl }} style={styles.personAvatar} />
-              ) : (
-                <View style={[styles.personAvatarFallback, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.personAvatarInitial, { color: colors.text }]}>
-                    {person.name.trim().charAt(0).toUpperCase() || '?'}
-                  </Text>
-                </View>
-              )}
+              <UserAvatar uri={person.avatarUrl} name={person.name} size={52} style={styles.personAvatar} />
               <View style={styles.listTextContainer}>
                 <Text style={[styles.listTitle, { color: colors.text }]}>{person.name}</Text>
                 <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{person.handle}</Text>
@@ -355,7 +349,7 @@ export default function SearchScreen() {
               autoCorrect={false}
             />
           </View>
-          <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn}>
+          <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/explore')} style={styles.cancelBtn}>
             <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -485,19 +479,6 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     marginRight: 14,
-  },
-  personAvatarFallback: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    marginRight: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  personAvatarInitial: {
-    fontSize: 18,
-    fontWeight: '700',
   },
   squareImage: {
     width: 52,

@@ -8,6 +8,7 @@ import LottieView from 'lottie-react-native';
 import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from "@/hooks/useTheme";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function SuccessVerified() {
   const [showConfetti, setShowConfetti] = useState(false);
   const { colors, isDark } = useTheme();
@@ -54,11 +55,11 @@ export default function SuccessVerified() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.continueButton, { backgroundColor: colors.primary }]} 
+            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]} 
             activeOpacity={0.8}
             onPress={() => router.push('/auth-screen/onboarding-settings')}
           >
-            <Text style={[styles.continueButtonText, { color: colors.background }]}>Continue</Text>
+            <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 

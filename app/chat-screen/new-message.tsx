@@ -7,15 +7,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Image,
   TextInput,
   Platform,
   StatusBar,
 } from 'react-native';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { safeBack } from '@/lib/navigation';
 import { checkDirectMessageAccess } from '@/lib/chat';
 import { getFriendUsers } from '@/lib/users';
 import { getStorageFileUrl } from '@/lib/storage';
@@ -128,7 +129,7 @@ export default function NewMessageScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
+        <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/messages')} style={styles.backBtn} activeOpacity={0.8}>
           <Feather name="x" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.title}>New Message</Text>
@@ -153,13 +154,7 @@ export default function NewMessageScreen() {
         <View style={styles.pillsWrap}>
           {selected.map(c => (
             <TouchableOpacity key={c.id} style={styles.pill} onPress={() => toggle(c)} activeOpacity={0.8}>
-              {c.avatar ? (
-                <Image source={{ uri: c.avatar }} style={styles.pillAvatar} />
-              ) : (
-                <View style={[styles.pillAvatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarFallbackText}>{c.name.charAt(0).toUpperCase()}</Text>
-                </View>
-              )}
+              <UserAvatar uri={c.avatar} name={c.name} size={24} style={styles.pillAvatar} />
               <Text style={styles.pillName}>{c.name.split(' ')[0]}</Text>
               <Feather name="x" size={11} color="#D4B0EB" style={{ marginLeft: 3 }} />
             </TouchableOpacity>
@@ -200,13 +195,7 @@ export default function NewMessageScreen() {
             return (
               <TouchableOpacity style={styles.contactRow} onPress={() => toggle(item)} activeOpacity={0.85}>
                 <View style={styles.avatarWrap}>
-                  {item.avatar ? (
-                    <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarFallback]}>
-                      <Text style={styles.avatarFallbackText}>{item.name.charAt(0).toUpperCase()}</Text>
-                    </View>
-                  )}
+                  <UserAvatar uri={item.avatar} name={item.name} size={50} style={styles.avatar} />
                   {item.isOnline && <View style={styles.onlineDot} />}
                 </View>
                 <View style={styles.contactInfo}>
@@ -230,7 +219,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#13131A', justifyContent: 'center', alignItems: 'center' },
   title: { flex: 1, color: '#FFFFFF', fontWeight: 'bold', fontSize: 18, marginLeft: 12 },
-  nextBtn: { backgroundColor: '#D4B0EB', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
+  nextBtn: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
   nextBtnDisabled: { opacity: 0.35 },
   nextBtnText: { color: '#0e0d12', fontWeight: 'bold', fontSize: 13 },
   pillsWrap: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
@@ -244,8 +233,6 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   avatarWrap: { position: 'relative', marginRight: 14 },
   avatar: { width: 50, height: 50, borderRadius: 25 },
-  avatarFallback: { backgroundColor: '#13131A', justifyContent: 'center', alignItems: 'center' },
-  avatarFallbackText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   onlineDot: { position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2.5, borderColor: '#0e0d12' },
   contactInfo: { flex: 1 },
   contactName: { color: '#FFFFFF', fontWeight: '600', fontSize: 15, marginBottom: 2 },

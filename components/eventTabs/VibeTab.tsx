@@ -2,6 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getEventMoments } from "@/lib/moments";
 import type { Moment } from "@/lib/moments";
 import HashtagText from '@/components/post/HashtagText';
+import PostInteractionBar from '@/components/post/PostInteractionBar';
 import { getStorageFileUrl } from "@/lib/storage";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -157,8 +158,10 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
                 style={styles.avatarContainer}
                 onPress={() => router.push("/profile-screen/user-profile")}
               >
-                <Image
-                  source={{ uri: room.hostAvatar }}
+                <UserAvatar
+                  uri={room.hostAvatar}
+                  name={room.host}
+                  size={54}
                   style={[styles.roomAvatar, { borderColor: colors.primary }]}
                 />
                 <View
@@ -305,28 +308,12 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
                   <Image source={{ uri: mediaUrl }} style={styles.postImage} contentFit="cover" />
                 )}
 
-                <View style={styles.postFooter}>
-                  <View style={styles.footerStat}>
-                    <Feather name="heart" size={16} color={colors.textSecondary} />
-                    <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>
-                      {item.likesCount}
-                    </Text>
-                  </View>
-                  <View style={styles.footerStat}>
-                    <Feather name="message-circle" size={16} color={colors.textSecondary} />
-                    <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>
-                      {item.commentsCount}
-                    </Text>
-                  </View>
-                  {item.sharesCount > 0 && (
-                    <View style={styles.footerStat}>
-                      <Feather name="share-2" size={16} color={colors.textSecondary} />
-                      <Text style={[styles.footerStatText, { color: colors.textSecondary }]}>
-                        {item.sharesCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                <PostInteractionBar
+                  likesCount={item.likesCount}
+                  commentsCount={item.commentsCount}
+                  sharesCount={item.sharesCount}
+                  isLiked={item.isLiked}
+                />
               </View>
             );
           })}
@@ -506,17 +493,5 @@ const styles = StyleSheet.create({
     aspectRatio: 1.8,
     borderRadius: 12,
     marginBottom: 14,
-  },
-  postFooter: {
-    flexDirection: "row",
-    gap: 20,
-  },
-  footerStat: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  footerStatText: {
-    fontSize: 13,
   },
 });

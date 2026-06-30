@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, Dimensions, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
+import { safeBack } from '@/lib/navigation';
+import PostInteractionBar from '@/components/post/PostInteractionBar';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,7 +32,7 @@ export default function ViewPostScreen() {
         
         {/* Header Navigation */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)' }]} activeOpacity={0.8}>
+          <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/home')} style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)' }]} activeOpacity={0.8}>
             <Feather name="chevron-left" size={20} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -42,23 +44,13 @@ export default function ViewPostScreen() {
 
         {/* Right Side Actions */}
         <View style={styles.actionsCol}>
-          <TouchableOpacity 
-            style={styles.actionBtn} 
-            activeOpacity={0.8}
-            onPress={() => setIsLiked(!isLiked)}
-          >
-            <Ionicons name="heart" size={28} color={isLiked ? "#F2245C" : colors.text} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-            <Feather name="message-circle" size={26} color={colors.text} />
-            <Text style={[styles.actionText, { color: colors.text }]}>{MOCK_POST.comments}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-            <Feather name="share" size={26} color={colors.text} />
-            <Text style={[styles.actionText, { color: colors.text }]}>{MOCK_POST.likes}</Text>
-          </TouchableOpacity>
+          <PostInteractionBar
+            showLike
+            commentsCount={MOCK_POST.comments}
+            sharesCount={MOCK_POST.likes}
+            isLiked={isLiked}
+            onLikePress={() => setIsLiked(!isLiked)}
+          />
         </View>
 
         {/* Bottom Info Overlay */}
@@ -133,15 +125,6 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 160,
     alignItems: 'center',
-  },
-  actionBtn: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 4,
   },
   bottomOverlay: {
     position: 'absolute',

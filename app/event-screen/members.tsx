@@ -31,6 +31,7 @@ import {
 } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 
+import { buttonBackground } from "@/lib/buttonTheme";
 const CONNECTION_LIMIT = 200;
 
 const resolveAvatar = (key?: string | null, url?: string | null) => {
@@ -210,7 +211,7 @@ export default function EventMembersScreen() {
         )}
       </View>
       <TouchableOpacity
-        style={[styles.addBtn, { backgroundColor: colors.primary }]}
+        style={[styles.addBtn, { backgroundColor: buttonBackground(colors) }]}
         activeOpacity={0.8}
         onPress={() => handleAdd(item)}
         disabled={addingUserId === item.id}

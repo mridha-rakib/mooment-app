@@ -2,6 +2,7 @@ import EventFeedCard from "@/components/home/EventFeedCard";
 import { isEventCategory } from "@/constants/eventCategories";
 import { useTheme } from "@/hooks/useTheme";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
+import { safeBack } from "@/lib/navigation";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -47,7 +48,7 @@ export default function EventCategoryScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]}>
+        <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/explore')} style={[styles.backButton, { backgroundColor: colors.card }]}>
           <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>

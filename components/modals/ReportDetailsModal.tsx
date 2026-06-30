@@ -13,20 +13,30 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 interface ReportDetailsModalProps {
   visible: boolean;
   onClose: () => void;
-  onDone: (details: string) => void;
+  onDone: (details: string) => Promise<void> | void;
+  isSubmitting?: boolean;
 }
 
-export default function ReportDetailsModal({ visible, onClose, onDone }: ReportDetailsModalProps) {
+export default function ReportDetailsModal({ visible, onClose, onDone, isSubmitting = false }: ReportDetailsModalProps) {
   const [details, setDetails] = useState('');
   const { colors, isDark } = useTheme();
 
-  const handleDone = () => {
-    onDone(details);
-    setDetails('');
-    onClose();
+  const handleDone = async () => {
+    if (!details.trim() || isSubmitting) {
+      return;
+    }
+
+    try {
+      await onDone(details);
+      setDetails('');
+      onClose();
+    } catch {
+      // The caller owns user-facing error feedback and may keep the sheet open.
+    }
   };
 
   return (
@@ -63,6 +73,7 @@ export default function ReportDetailsModal({ visible, onClose, onDone }: ReportD
                   value={details}
                   onChangeText={setDetails}
                   autoFocus
+                  editable={!isSubmitting}
                 />
               </View>
 
@@ -74,13 +85,15 @@ export default function ReportDetailsModal({ visible, onClose, onDone }: ReportD
                 <TouchableOpacity 
                   style={[
                     styles.doneBtn, 
-                    { backgroundColor: colors.primary },
-                    !details.trim() && styles.doneBtnDisabled
+                    { backgroundColor: buttonBackground(colors) },
+                    (!details.trim() || isSubmitting) && styles.doneBtnDisabled
                   ]} 
                   onPress={handleDone}
-                  disabled={!details.trim()}
+                  disabled={!details.trim() || isSubmitting}
                 >
-                  <Text style={[styles.doneBtnText, { color: colors.background }]}>Done</Text>
+                  <Text style={[styles.doneBtnText, { color: buttonForeground(colors) }]}>
+                    {isSubmitting ? 'Submitting...' : 'Done'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>

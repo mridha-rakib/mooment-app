@@ -37,18 +37,16 @@ import { followUser, unfollowUser } from "@/lib/users";
 import { toggleMomentReaction, shareMoment, type MomentInteractionSummary } from "@/lib/moments";
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
+import PostInteractionBar from "@/components/post/PostInteractionBar";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import { Feather } from "@expo/vector-icons";
 import {
     Bookmark01Icon,
-    Comment02Icon,
     Delete02Icon,
-    FavouriteIcon,
     Flag01Icon,
     MoreHorizontalIcon,
-    Share01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -691,7 +689,7 @@ const EventScreen = () => {
 
                 try {
                   await deleteEvent(event.id);
-                  router.back();
+                  goBackOrHome(router);
                 } catch (error) {
                   Alert.alert("Unable to delete event", getAuthErrorMessage(error, "Please try again."));
                 } finally {
@@ -1232,7 +1230,7 @@ const EventScreen = () => {
 
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
-      <BackButton color={colors.text} onPress={() => router.back()} />
+      <BackButton color={colors.text} onPress={() => goBackOrHome(router)} />
       {isHostMode && event?.privacy !== "private" && !isEventCompleted && !isEventCancelled && (
         <TouchableOpacity
           style={styles.privacyPill}
@@ -1364,20 +1362,16 @@ const EventScreen = () => {
               </Text>
             </View>
 
-            <View style={styles.actionStatsRow}>
-              <TouchableOpacity style={styles.actionStat} activeOpacity={0.7} onPress={handleLike} disabled={isLikePending}>
-                <HugeiconsIcon icon={FavouriteIcon} size={18} color={localIsLiked ? "#F2245C" : colors.textSecondary} />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>{localLikesCount}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionStat} activeOpacity={0.7} onPress={() => setShowComments(true)}>
-                <HugeiconsIcon icon={Comment02Icon} size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>{localCommentsCount}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionStat} activeOpacity={0.7} onPress={handleShare}>
-                <HugeiconsIcon icon={Share01Icon} size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionStatText, { color: colors.text }]}>{localSharesCount}</Text>
-              </TouchableOpacity>
-            </View>
+            <PostInteractionBar
+              likesCount={localLikesCount}
+              commentsCount={localCommentsCount}
+              sharesCount={localSharesCount}
+              isLiked={localIsLiked}
+              onLikePress={handleLike}
+              onCommentPress={() => setShowComments(true)}
+              onSharePress={handleShare}
+              likeDisabled={isLikePending}
+            />
           </View>
         </View>
 
@@ -1974,19 +1968,6 @@ const styles = StyleSheet.create({
   statsText: {
     fontSize: 13,
   },
-  actionStatsRow: {
-    flexDirection: "row",
-    gap: 20,
-  },
-  actionStat: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  actionStatText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
   contentPadding: {
     paddingHorizontal: 16,
   },
@@ -2062,7 +2043,7 @@ const styles = StyleSheet.create({
   },
   startEventBtn: {
     alignItems: "center",
-    backgroundColor: "#B2ABBA",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     flexDirection: "row",
     gap: 8,

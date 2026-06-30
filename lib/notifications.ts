@@ -47,3 +47,11 @@ export const getUnreadNotificationCount = async (): Promise<number> => {
 
   return typeof count === "number" ? count : 0;
 };
+
+export const registerFcmToken = async (token: string, platform?: string): Promise<void> => {
+  await api.post("/notifications/fcm-token", { token, platform: platform ?? "android" });
+};
+
+export const removeFcmToken = async (token: string): Promise<void> => {
+  await api.delete("/notifications/fcm-token", { data: { token } });
+};

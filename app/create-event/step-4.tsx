@@ -18,6 +18,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function CreateEventStep4() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -178,11 +179,11 @@ export default function CreateEventStep4() {
       >
         {/* Create Ticket Button */}
         <TouchableOpacity 
-          style={[styles.createTicketButton, { backgroundColor: colors.primary }]}
+          style={[styles.createTicketButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={() => router.push('/create-event/ticket-details')}
         >
-          <Ionicons name="add" size={20} color={colors.background} style={{ marginRight: 8 }} />
-          <Text style={[styles.createTicketText, { color: colors.background }]}>Create Ticket</Text>
+          <Ionicons name="add" size={20} color={buttonForeground(colors)} style={{ marginRight: 8 }} />
+          <Text style={[styles.createTicketText, { color: buttonForeground(colors) }]}>Create Ticket</Text>
         </TouchableOpacity>
 
         {tickets.map((ticket) => {
@@ -257,11 +258,11 @@ export default function CreateEventStep4() {
       {/* Footer */}
       <View style={[styles.footer, { backgroundColor: colors.background }]}>
         <TouchableOpacity 
-          style={[styles.nextButton, { backgroundColor: colors.primary }]}
+          style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={handleNext}
           disabled={isSaving}
         >
-          <Text style={[styles.nextButtonText, { color: colors.background }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
+          <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
         </TouchableOpacity>
       </View>
       <DeleteModal

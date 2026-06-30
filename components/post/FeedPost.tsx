@@ -1,6 +1,4 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { Comment02Icon, Share01Icon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView,
   useVideoPlayer } from 'expo-video';
@@ -8,7 +6,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
+import { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
@@ -20,6 +18,8 @@ import ReportModal from '../modals/ReportModal';
 import UserAvatar from '../ui/UserAvatar';
 import MoreMenuModal from "./MoreMenuModal";
 import HashtagText from './HashtagText';
+import PostInteractionBar from './PostInteractionBar';
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 // Hardcoded visual waveform for Audio posts
 const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38, 22, 16, 32, 24, 14, 28, 36, 18, 12, 30, 42, 24, 16, 38, 28, 14, 45, 20, 12, 32, 24, 18, 10, 26, 14, 10];
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
@@ -309,12 +309,12 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
           onPress={handleTogglePlayback}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color={colors.background} />
+            <ActivityIndicator size="small" color={buttonForeground(colors)} />
           ) : (
             <Ionicons
               name={status.playing ? 'pause' : 'play'}
               size={16}
-              color={colors.background}
+              color={buttonForeground(colors)}
               style={status.playing ? undefined : { marginLeft: 2 }}
             />
           )}
@@ -883,11 +883,11 @@ export default function FeedPost({
               <Text style={[styles.productFooterPrice, { color: colors.text }]}>{post.productDetails.price}</Text>
             </View>
             <TouchableOpacity 
-              style={[styles.productViewBtn, { backgroundColor: colors.primary }]} 
+              style={[styles.productViewBtn, { backgroundColor: buttonBackground(colors) }]}
               activeOpacity={0.8}
               onPress={() => router.push('/product-screen/product-details')}
             >
-              <Text style={[styles.productViewBtnText, { color: colors.background }]}>{post.productDetails.buttonText}</Text>
+              <Text style={[styles.productViewBtnText, { color: buttonForeground(colors) }]}>{post.productDetails.buttonText}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -895,36 +895,16 @@ export default function FeedPost({
         {/* Normal Post Footer Actions */}
         {post.postType !== 'product' && (post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
           <View style={styles.postFooter}>
-            <View style={styles.footerStats}>
-              {likesCount !== undefined && (
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  activeOpacity={0.7}
-                  onPress={handleLike}
-                >
-                  <Animated.View style={heartAnimatedStyle}>
-                    <Ionicons
-                      name={isLiked ? "heart" : "heart-outline"}
-                      size={22}
-                      color={isLiked ? "#F2245C" : colors.textSecondary}
-                    />
-                  </Animated.View>
-                  <Text style={[styles.actionText, { color: colors.text }]}>{likesCount}</Text>
-                </TouchableOpacity>
-              )}
-              {post.commentsCount !== undefined && (
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => onCommentPress?.(post)}>
-                  <HugeiconsIcon icon={Comment02Icon} size={20} color={colors.textSecondary} />
-                  <Text style={[styles.actionText, { color: colors.text }]}>{commentsCount}</Text>
-                </TouchableOpacity>
-              )}
-              {post.sharesCount !== undefined && (
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => onSharePress?.(post)}>
-                  <HugeiconsIcon icon={Share01Icon} size={20} color={colors.textSecondary} />
-                  <Text style={[styles.actionText, { color: colors.text }]}>{sharesCount}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <PostInteractionBar
+              likesCount={post.likesCount !== undefined ? likesCount : undefined}
+              commentsCount={post.commentsCount !== undefined ? commentsCount : undefined}
+              sharesCount={post.sharesCount !== undefined ? sharesCount : undefined}
+              isLiked={isLiked}
+              onLikePress={handleLike}
+              onCommentPress={() => onCommentPress?.(post)}
+              onSharePress={() => onSharePress?.(post)}
+              likeIconStyle={heartAnimatedStyle}
+            />
           </View>
         )}
 
@@ -1243,12 +1223,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 16,
   },
-  footerStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   statBtn: {
-    backgroundColor: '#B2ABBA',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
@@ -1257,17 +1233,6 @@ const styles = StyleSheet.create({
     color: '#0e0d12',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 24,
-  },
-  actionText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-    marginLeft: 6,
   },
   /* Event Overlay Styles */
   liveNowBadge: {
@@ -1404,7 +1369,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   productViewBtn: {
-    backgroundColor: '#B2ABBA',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,

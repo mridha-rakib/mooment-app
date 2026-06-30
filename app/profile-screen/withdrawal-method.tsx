@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type Option = {
   value: WithdrawalMethod;
   label: string;
@@ -203,16 +204,16 @@ export default function WithdrawalMethodScreen() {
             <TouchableOpacity
               style={[
                 styles.saveBtn,
-                { backgroundColor: colors.primary },
+                { backgroundColor: buttonBackground(colors) },
                 (isSaving || selected === settings?.withdrawalMethod) && styles.saveBtnDisabled,
               ]}
               onPress={handleSave}
               disabled={isSaving || selected === settings?.withdrawalMethod}
             >
               {isSaving ? (
-                <Spinner color={colors.background} />
+                <Spinner color={buttonForeground(colors)} />
               ) : (
-                <Text style={[styles.saveBtnText, { color: colors.background }]}>Save Method</Text>
+                <Text style={[styles.saveBtnText, { color: buttonForeground(colors) }]}>Save Method</Text>
               )}
             </TouchableOpacity>
           </View>

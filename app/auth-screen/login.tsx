@@ -18,6 +18,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Spinner } from "@/components/ui/spinner";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function Login() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [email, setEmail] = useState("");
@@ -128,15 +129,15 @@ export default function Login() {
           )}
 
           <TouchableOpacity 
-            style={[styles.loginButton, { backgroundColor: colors.primary }, isLoading && styles.loginButtonDisabled]} 
+            style={[styles.loginButton, { backgroundColor: buttonBackground(colors) }, isLoading && styles.loginButtonDisabled]} 
             activeOpacity={0.8}
             onPress={handleLogin}
             disabled={isLoading}
           >
             {isLoading ? (
-              <Spinner color={colors.background} />
+              <Spinner color={buttonForeground(colors)} />
             ) : (
-              <Text style={[styles.loginButtonText, { color: colors.background }]}>Log In</Text>
+              <Text style={[styles.loginButtonText, { color: buttonForeground(colors) }]}>Log In</Text>
             )}
           </TouchableOpacity>
 

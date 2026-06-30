@@ -2,6 +2,7 @@ import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
 import { useTheme } from "@/hooks/useTheme";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { safeBack } from "@/lib/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const getParam = (value: string | string[] | undefined, fallback: string) => {
   const source = Array.isArray(value) ? value[0] : value;
   return source?.trim() || fallback;
@@ -152,7 +154,7 @@ const PaymentSuccessScreen = () => {
         params: { eventId },
       });
     } else {
-      router.back();
+      safeBack(router, '/(tabs)/home');
     }
   };
 
@@ -254,10 +256,10 @@ const PaymentSuccessScreen = () => {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+          style={[styles.primaryBtn, { backgroundColor: buttonBackground(colors) }]}
           onPress={handleViewTicket}
         >
-          <Text style={[styles.primaryBtnText, { color: colors.background }]}>
+          <Text style={[styles.primaryBtnText, { color: buttonForeground(colors) }]}>
             View my ticket
           </Text>
         </TouchableOpacity>

@@ -76,7 +76,15 @@
           "RNMapboxMapsImpl": "mapbox"
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logo.png",
+          "color": "#0E0D12",
+          "defaultChannel": "messages"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -7,6 +7,25 @@ type UploadFilePayload = {
   onProgress?: (progress: number) => void;
 };
 
+const createStorageTiming = (key: string) => {
+  const enabled = __DEV__ && key.startsWith("stories/");
+  const startedAt = Date.now();
+  let previousAt = startedAt;
+
+  return (label: string, extra?: Record<string, unknown>) => {
+    if (!enabled) return;
+
+    const now = Date.now();
+    console.log(`[StoryCreateTiming] storage:${label}`, {
+      key,
+      stepMs: now - previousAt,
+      totalMs: now - startedAt,
+      ...extra,
+    });
+    previousAt = now;
+  };
+};
+
 const getBlobFromUri = (uri: string): Promise<Blob> =>
   new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -61,9 +80,33 @@ const uploadBlobWithProgress = (
   contentType: string,
   timeoutMs: number,
   onProgress?: (progress: number) => void,
+  responseTimeoutAfterUploadMs = 0,
 ) =>
   new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest();
+    let settled = false;
+    let responseTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    const clearResponseTimeout = () => {
+      if (responseTimeout) {
+        clearTimeout(responseTimeout);
+        responseTimeout = undefined;
+      }
+    };
+
+    const complete = () => {
+      if (settled) return;
+      settled = true;
+      clearResponseTimeout();
+      resolve();
+    };
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearResponseTimeout();
+      reject(error);
+    };
 
     request.timeout = timeoutMs;
     request.open("PUT", url, true);
@@ -71,20 +114,29 @@ const uploadBlobWithProgress = (
 
     request.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
-        onProgress?.(Math.min(1, Math.max(0, event.loaded / event.total)));
+        const progress = Math.min(1, Math.max(0, event.loaded / event.total));
+        onProgress?.(progress);
+
+        if (progress >= 1 && responseTimeoutAfterUploadMs > 0 && !responseTimeout) {
+          responseTimeout = setTimeout(() => {
+            request.abort();
+            fail(new Error("File upload response timed out."));
+          }, responseTimeoutAfterUploadMs);
+        }
       }
     };
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) {
         onProgress?.(1);
-        resolve();
+        complete();
         return;
       }
 
-      reject(new Error("Unable to upload file."));
+      fail(new Error("Unable to upload file."));
     };
-    request.onerror = () => reject(new Error("Unable to upload file."));
-    request.ontimeout = () => reject(new Error("File upload timed out."));
+    request.onerror = () => fail(new Error("Unable to upload file."));
+    request.ontimeout = () => fail(new Error("File upload timed out."));
+    request.onabort = () => fail(new Error("File upload was aborted."));
     request.send(blob);
   });
 
@@ -138,40 +190,58 @@ const shouldUseApiUploadProxy = (uploadUrl: string) => {
 };
 
 export const uploadFileToStorage = async ({ uri, key, contentType, onProgress }: UploadFilePayload) => {
+  const mark = createStorageTiming(key);
+  mark("upload-url request start", { contentType });
   const response = await api.post("/storage/upload-url", {
     key,
     contentType,
     expiresIn: contentType.toLowerCase().startsWith("video/") ? 60 * 30 : 60 * 5,
   });
+  mark("upload-url request complete");
   const uploadUrl = response.data?.data?.url as string | undefined;
 
   if (!uploadUrl) {
     throw new Error("The upload URL response was incomplete.");
   }
 
+  mark("blob read start");
   const blob = await getBlobFromUri(uri);
+  mark("blob read complete", { bytes: blob.size });
 
   const isVideo = contentType.toLowerCase().startsWith("video/");
-  const directTimeoutMs = isVideo ? 30 * 60 * 1000 : 90 * 1000;
+  const isStoryMedia = key.startsWith("stories/");
+  const directTimeoutMs = isVideo ? 30 * 60 * 1000 : isStoryMedia ? 20 * 1000 : 90 * 1000;
   const fallbackTimeoutMs = isVideo ? 30 * 60 * 1000 : 60 * 1000;
+  const directResponseTimeoutAfterUploadMs = isVideo ? 30 * 1000 : isStoryMedia ? 5 * 1000 : 10 * 1000;
 
   try {
     if (shouldUseApiUploadProxy(uploadUrl)) {
       throw new Error("Storage host is not reachable from this device.");
     }
 
+    mark("direct upload start");
     if (onProgress) {
-      await uploadBlobWithProgress(uploadUrl, blob, contentType, directTimeoutMs, onProgress);
+      await uploadBlobWithProgress(
+        uploadUrl,
+        blob,
+        contentType,
+        directTimeoutMs,
+        onProgress,
+        directResponseTimeoutAfterUploadMs,
+      );
     } else {
       await uploadBlobWithFetch(uploadUrl, blob, contentType, directTimeoutMs);
     }
+    mark("direct upload complete");
   } catch {
     const fallbackUrl = getStorageUploadUrl(key, contentType);
+    mark("fallback upload start");
     if (onProgress) {
       await uploadBlobWithProgress(fallbackUrl, blob, "application/octet-stream", fallbackTimeoutMs, onProgress);
     } else {
       await uploadBlobWithFetch(fallbackUrl, blob, "application/octet-stream", fallbackTimeoutMs);
     }
+    mark("fallback upload complete");
   }
 
   return key;

@@ -364,7 +364,7 @@ export default EventProductDetailsScreen;
 const styles = StyleSheet.create({
   addToCartBtn: {
     alignItems: "center",
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     flexDirection: "row",
     paddingHorizontal: 24,

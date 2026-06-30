@@ -9,6 +9,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { checkDirectMessageAccess } from "@/lib/chat";
 import { followUser, unfollowUser } from "@/lib/users";
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 
 type ProfileActionsProps = {
   userId?: string;
@@ -123,7 +124,7 @@ export default function ProfileActions({
       <TouchableOpacity
         style={[
           styles.followBtn,
-          { backgroundColor: colors.primary },
+          { backgroundColor: buttonBackground(colors) },
           isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }]
         ]}
         activeOpacity={0.8}
@@ -132,14 +133,14 @@ export default function ProfileActions({
       >
         <View style={styles.followBtnContent}>
           {isFollowLoading || !hasLoadedFollowStatus ? (
-            <ActivityIndicator size="small" color={isFollowing ? colors.text : colors.background} />
+            <ActivityIndicator size="small" color={isFollowing ? colors.text : buttonForeground(colors)} />
           ) : isFollowing && (
             <MaterialCommunityIcons name="check" size={16} color={colors.text} style={{ marginRight: 6 }} />
           )}
           {!isFollowLoading && hasLoadedFollowStatus && (
             <Text style={[
               styles.followBtnText,
-              { color: colors.background },
+              { color: buttonForeground(colors) },
               isFollowing && [styles.followingBtnText, { color: colors.text }]
             ]}>
               {isFollowing ? 'Following' : 'Follow'}

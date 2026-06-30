@@ -1,9 +1,11 @@
-import React, { useCallback, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View, StatusBar } from "react-native";
+import React, { useCallback, useRef, useState } from "react";
+import { Alert, RefreshControl, ScrollView, StyleSheet, View, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import type { MomentInteractionSummary } from "@/lib/moments";
 import CommentsModal from "../post/CommentsModal";
+import ReportDetailsModal from "../modals/ReportDetailsModal";
+import ReportModal from "../modals/ReportModal";
 import { PostData } from "../post/FeedPost";
 import ShareModal from "../post/ShareModal";
 import AddProductModal from "./AddProductModal";
@@ -13,6 +15,10 @@ import ProfileContent from "./ProfileContent";
 import ProfileHeader, { ProfileStats } from "./ProfileHeader";
 import ProfileMenuDrawer from "./ProfileMenuDrawer";
 import ProfileTabs, { ProfileTabType } from "./ProfileTabs";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { createReport } from "@/lib/reports";
+
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 export type UserProfileData = {
   id: string;
@@ -65,6 +71,69 @@ export default function ProfileView({
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [addProductVisible, setAddProductVisible] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportReasonVisible, setReportReasonVisible] = useState(false);
+  const [reportDetailsVisible, setReportDetailsVisible] = useState(false);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
+  const isReportSubmittingRef = useRef(false);
+
+  const handleReportPress = useCallback(() => {
+    if (isOwnProfile) return;
+
+    if (!MONGO_OBJECT_ID_PATTERN.test(user.id)) {
+      Alert.alert("Unable to report profile", "This profile cannot be reported right now.");
+      return;
+    }
+
+    setReportReasonVisible(true);
+  }, [isOwnProfile, user.id]);
+
+  const handleReportReason = useCallback((reason: string) => {
+    setReportReason(reason);
+    setReportReasonVisible(false);
+    setTimeout(() => setReportDetailsVisible(true), 300);
+  }, []);
+
+  const handleReportDetailsClose = useCallback(() => {
+    if (isReportSubmitting) return;
+    setReportDetailsVisible(false);
+    setReportReason(null);
+  }, [isReportSubmitting]);
+
+  const handleSubmitProfileReport = useCallback(async (details: string) => {
+    if (isReportSubmittingRef.current || !reportReason) {
+      return;
+    }
+
+    isReportSubmittingRef.current = true;
+    setIsReportSubmitting(true);
+
+    try {
+      await createReport({
+        reportedUserId: user.id,
+        targetType: "user",
+        targetId: user.id,
+        reason: reportReason,
+        details: details.trim() || null,
+      });
+      setReportDetailsVisible(false);
+      setReportReason(null);
+      Alert.alert("Report submitted", "Thanks for letting us know. Our team will review this profile.");
+    } catch (error) {
+      Alert.alert("Unable to submit report", getAuthErrorMessage(error, "Please try again."));
+      throw error;
+    } finally {
+      isReportSubmittingRef.current = false;
+      setIsReportSubmitting(false);
+    }
+  }, [reportReason, user.id]);
+
+  const handleSavePress = useCallback(() => {
+    Alert.alert(
+      "Save unavailable",
+      "Profile save is not supported by the API yet. No saved state was changed.",
+    );
+  }, []);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -89,6 +158,8 @@ export default function ProfileView({
           accountType={user.accountType}
           isOwnProfile={isOwnProfile}
           onMenuPress={() => setMenuVisible(true)}
+          onReport={!isOwnProfile ? handleReportPress : undefined}
+          onSave={!isOwnProfile ? handleSavePress : undefined}
         />
         <ProfileBio
           name={user.name}
@@ -139,6 +210,8 @@ export default function ProfileView({
           }}
           isOwnProfile={isOwnProfile}
           profileUserId={user.id}
+          profileIsFollowing={user.isFollowing}
+          onFollowChange={onFollowChange}
         />
         
         <View style={{ height: 100 }} />
@@ -197,6 +270,18 @@ export default function ProfileView({
       <AddProductModal 
         visible={addProductVisible} 
         onClose={() => setAddProductVisible(false)} 
+      />
+
+      <ReportModal
+        visible={reportReasonVisible}
+        onClose={() => setReportReasonVisible(false)}
+        onReport={handleReportReason}
+      />
+      <ReportDetailsModal
+        visible={reportDetailsVisible}
+        onClose={handleReportDetailsClose}
+        onDone={handleSubmitProfileReport}
+        isSubmitting={isReportSubmitting}
       />
     </SafeAreaView>
   );

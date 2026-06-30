@@ -1,7 +1,9 @@
-const { existsSync, readFileSync } = require("fs");
+const { existsSync, readFileSync, readdirSync, rmSync } = require("fs");
 const http = require("http");
 const { join } = require("path");
 const { spawn, spawnSync } = require("child_process");
+const { deserialize } = require("v8");
+const { tmpdir } = require("os");
 
 const env = { ...process.env };
 const ADB_TIMEOUT_MS = 15000;
@@ -223,6 +225,24 @@ async function waitForMetro(timeoutMs) {
 
 const expoCli = require.resolve("expo/bin/cli");
 
+function isPortInUse(port) {
+  if (process.platform === "win32") {
+    const r = spawnSync("cmd", ["/c", `netstat -ano | findstr :${port} | findstr LISTENING`], {
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    return !!(r.stdout && r.stdout.trim());
+  }
+  const r = spawnSync("sh", ["-c", `lsof -ti:${port}`], { encoding: "utf8", stdio: "pipe" });
+  return !!(r.stdout && r.stdout.trim());
+}
+
+function syncSleep(ms) {
+  // Synchronous sleep via a blocking child Node process. Used only when we need
+  // to give Metro a grace period to flush its file-map cache before force-killing.
+  spawnSync(process.execPath, ["-e", `setTimeout(()=>{},${ms})`], { stdio: "ignore", timeout: ms + 1000 });
+}
+
 function killProcessOnPort(port) {
   let killedProcess = false;
 
@@ -236,7 +256,14 @@ function killProcessOnPort(port) {
         const parts = line.trim().split(/\s+/);
         const pid = parts[parts.length - 1];
         if (pid && /^\d+$/.test(pid) && parseInt(pid) > 0) {
-          spawnSync("taskkill", ["/F", "/PID", pid], { stdio: "ignore" });
+          // Graceful shutdown first: lets Metro call DiskCacheManager.end() and
+          // flush the file-map cache cleanly before the file handle is torn away.
+          spawnSync("taskkill", ["/PID", pid], { stdio: "ignore" });
+          syncSleep(3000);
+          // Force-kill only if the process did not exit on its own.
+          if (isPortInUse(port)) {
+            spawnSync("taskkill", ["/F", "/PID", pid], { stdio: "ignore" });
+          }
           killedProcess = true;
         }
       }
@@ -248,7 +275,12 @@ function killProcessOnPort(port) {
     });
 
     for (const pid of (result.stdout || "").trim().split(/\s+/).filter(Boolean)) {
-      spawnSync("kill", ["-9", pid], { stdio: "ignore" });
+      // SIGTERM first, then SIGKILL after a grace period.
+      spawnSync("kill", [pid], { stdio: "ignore" });
+      syncSleep(3000);
+      if (isPortInUse(port)) {
+        spawnSync("kill", ["-9", pid], { stdio: "ignore" });
+      }
       killedProcess = true;
     }
   }
@@ -256,7 +288,30 @@ function killProcessOnPort(port) {
   return killedProcess;
 }
 
+function clearCorruptMetroFileMapCache() {
+  const tmp = tmpdir();
+  let entries;
+  try {
+    entries = readdirSync(tmp).filter((e) => e.startsWith("metro-file-map"));
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const fullPath = join(tmp, entry);
+    try {
+      deserialize(readFileSync(fullPath));
+    } catch {
+      try {
+        rmSync(fullPath, { force: true });
+        console.log(`Removed corrupt Metro file-map cache: ${fullPath}`);
+      } catch {}
+    }
+  }
+}
+
 async function startMetro() {
+  clearCorruptMetroFileMapCache();
+
   const metroWasRunning = await isMetroRunning();
 
   if (metroWasRunning) {

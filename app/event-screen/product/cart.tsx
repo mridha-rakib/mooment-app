@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   },
   checkoutBtn: {
     alignItems: "center",
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     paddingVertical: 16,
   },

@@ -26,6 +26,7 @@ import {
 } from '@/lib/locationSearch';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 type MapViewMode = 'map2d' | 'map3d' | 'satellite2d' | 'satellite3d';
@@ -478,10 +479,10 @@ export default function LocationPickerScreen() {
           <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.confirmButton, { backgroundColor: colors.primary }]}
+          style={[styles.confirmButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={handleConfirm}
         >
-          <Text style={[styles.confirmButtonText, { color: colors.background }]}>Confirm</Text>
+          <Text style={[styles.confirmButtonText, { color: buttonForeground(colors) }]}>Confirm</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

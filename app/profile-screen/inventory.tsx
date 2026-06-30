@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   viewBtn: {
-    backgroundColor: '#B2ABBA',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,

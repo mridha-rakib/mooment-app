@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
+import PostInteractionBar from "@/components/post/PostInteractionBar";
 
 const YOUTUBE_SHORTS_ID = '-3q9lRkLqhI';
 const YOUTUBE_SHORTS_URL = `https://www.youtube.com/shorts/${YOUTUBE_SHORTS_ID}`;
@@ -76,18 +77,14 @@ export default function LiveVideo() {
 
         {/* Right Action Column */}
         <View style={styles.rightActionsCol}>
-          <TouchableOpacity style={styles.actionBtn}>
-            <Ionicons name="heart" size={32} color="#F2245C" />
-            <Text style={styles.actionText}>25</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentModalVisible(true)}>
-            <Feather name="message-circle" size={30} color="#FFFFFF" />
-            <Text style={styles.actionText}>25</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setShareModalVisible(true)}>
-            <Feather name="share" size={28} color="#FFFFFF" />
-            <Text style={styles.actionText}>25</Text>
-          </TouchableOpacity>
+          <PostInteractionBar
+            likesCount={25}
+            commentsCount={25}
+            sharesCount={25}
+            isLiked
+            onCommentPress={() => setCommentModalVisible(true)}
+            onSharePress={() => setShareModalVisible(true)}
+          />
         </View>
 
         {/* Bottom Info Section */}
@@ -209,16 +206,6 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 120,
     alignItems: 'center',
-  },
-  actionBtn: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  actionText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 6,
   },
   bottomInfoContainer: {
     paddingHorizontal: 16,

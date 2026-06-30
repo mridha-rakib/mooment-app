@@ -15,6 +15,8 @@ import ReportModal from "@/components/modals/ReportModal";
 import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
+import PostInteractionBar from "@/components/post/PostInteractionBar";
+import UserAvatar from "@/components/ui/UserAvatar";
 
 const timeAgo = (dateStr?: string | Date | null): string => {
   if (!dateStr) return "";
@@ -54,7 +56,6 @@ type Props = { event: EventResponse };
 export default function EventFeedCard({ event }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [bannerFailed, setBannerFailed] = useState(false);
-  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const bannerUri = useMemo(() => {
     if (!event.bannerImageKey || bannerFailed) return null;
@@ -62,12 +63,11 @@ export default function EventFeedCard({ event }: Props) {
   }, [bannerFailed, event.bannerImageKey]);
 
   const hostAvatarUri = useMemo(() => {
-    if (avatarFailed) return null;
     if (event.host?.avatarKey) {
       try { return getStorageFileUrl(event.host.avatarKey); } catch { /* fall through */ }
     }
     return event.host?.avatarUrl ?? null;
-  }, [avatarFailed, event.host?.avatarKey, event.host?.avatarUrl]);
+  }, [event.host?.avatarKey, event.host?.avatarUrl]);
 
   const hostName = event.host?.name?.trim() || event.host?.username?.trim() || "Event host";
   const categories = event.categories?.length > 0 ? event.categories : event.category ? [event.category] : [];
@@ -307,17 +307,7 @@ export default function EventFeedCard({ event }: Props) {
       {/* ── Header ──────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.hostRow}>
-          {hostAvatarUri ? (
-            <Image
-              source={{ uri: hostAvatarUri }}
-              style={styles.avatar}
-              onError={() => setAvatarFailed(true)}
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Feather name="user" size={16} color="#666" />
-            </View>
-          )}
+          <UserAvatar uri={hostAvatarUri} name={hostName} size={40} style={styles.avatar} />
           <View style={styles.hostMeta}>
             <Text style={styles.hostName} numberOfLines={1}>{hostName}</Text>
             <View style={styles.hostSubRow}>
@@ -445,33 +435,18 @@ export default function EventFeedCard({ event }: Props) {
 
       {/* ── Action bar ──────────────────────────────────────────── */}
       <View style={styles.actionBar}>
-        <TouchableOpacity
-          style={styles.actionItem}
-          activeOpacity={0.7}
-          disabled={isLikePending || !event.interactionMomentId}
-          onPress={handleLike}
-        >
-          <Ionicons name={isLiked ? "heart" : "heart-outline"} size={18} color={isLiked ? "#EF2C2C" : "#B3B3B3"} />
-          <Text style={styles.actionCount}>{likesCount}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionItem}
-          activeOpacity={0.7}
-          disabled={!event.interactionMomentId}
-          onPress={() => setCommentsVisible(true)}
-        >
-          <Feather name="message-circle" size={18} color="#B3B3B3" />
-          <Text style={styles.actionCount}>{commentsCount}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionItem}
-          activeOpacity={0.7}
-          disabled={!event.interactionMomentId}
-          onPress={() => setShareVisible(true)}
-        >
-          <Feather name="share-2" size={18} color="#B3B3B3" />
-          <Text style={styles.actionCount}>{sharesCount}</Text>
-        </TouchableOpacity>
+        <PostInteractionBar
+          likesCount={likesCount}
+          commentsCount={commentsCount}
+          sharesCount={sharesCount}
+          isLiked={isLiked}
+          onLikePress={handleLike}
+          onCommentPress={() => setCommentsVisible(true)}
+          onSharePress={() => setShareVisible(true)}
+          likeDisabled={isLikePending || !event.interactionMomentId}
+          commentDisabled={!event.interactionMomentId}
+          shareDisabled={!event.interactionMomentId}
+        />
       </View>
 
       <CommentsModal
@@ -552,11 +527,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-  },
-  avatarFallback: {
-    backgroundColor: "#222",
-    alignItems: "center",
-    justifyContent: "center",
   },
   hostMeta: {
     flex: 1,
@@ -667,7 +637,7 @@ const styles = StyleSheet.create({
   accentBar: {
     width: 4,
     borderRadius: 999,
-    backgroundColor: "#B2ABBA",
+    backgroundColor: "#FFFFFF",
   },
   infoPanel: {
     flex: 1,
@@ -743,7 +713,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.08,
   },
   viewBtn: {
-    backgroundColor: "#B2ABBA",
+    backgroundColor: "#FFFFFF",
     borderRadius: 8,
     paddingLeft: 8,
     paddingRight: 4,
@@ -767,17 +737,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 20,
-  },
-  actionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  actionCount: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "500",
-    letterSpacing: -0.08,
   },
 });

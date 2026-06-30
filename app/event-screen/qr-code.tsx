@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   walletButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#B2ABBA',
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     flexDirection: 'row',
     gap: 7,
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
   shareQrButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#C2B9CB',
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     flexDirection: 'row',
     gap: 7,
@@ -885,7 +885,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   shareQrButtonActive: {
-    backgroundColor: '#A8D8BA',
+    backgroundColor: '#FFFFFF',
   },
   shareQrButtonText: {
     color: '#111111',

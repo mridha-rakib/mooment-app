@@ -3,6 +3,7 @@ import UserAvatar from "@/components/ui/UserAvatar";
 import { Spinner, SpinnerCustom } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { safeBack } from "@/lib/navigation";
 import { getStorageDownloadUrl, getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
@@ -37,6 +38,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,40}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENDER_OPTIONS = ["Male", "Female", "Others"] as const;
@@ -819,7 +821,7 @@ export default function EditProfileScreen() {
         name: validatedProfile.name,
         username: validatedProfile.username,
       });
-      router.back();
+      safeBack(router, '/(tabs)/profile');
     } catch (error) {
       Alert.alert("Unable to save profile", getAuthErrorMessage(error, "Please try again."));
     }
@@ -844,8 +846,8 @@ export default function EditProfileScreen() {
         <View style={styles.centerState}>
           <Text style={[styles.stateTitle, { color: colors.text }]}>Unable to load profile</Text>
           <Text style={[styles.stateText, { color: colors.textSecondary }]}>{profileLoadError}</Text>
-          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={loadProfile}>
-            <Text style={[styles.retryBtnText, { color: colors.background }]}>Try Again</Text>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: buttonBackground(colors) }]} onPress={loadProfile}>
+            <Text style={[styles.retryBtnText, { color: buttonForeground(colors) }]}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -891,9 +893,9 @@ export default function EditProfileScreen() {
                 <TouchableOpacity
                   disabled={isBusy}
                   onPress={handlePickAvatar}
-                  style={[styles.cameraBadge, { backgroundColor: colors.primary, borderColor: colors.background }]}
+                  style={[styles.cameraBadge, { backgroundColor: buttonBackground(colors), borderColor: colors.background }]}
                 >
-                  <Feather name="camera" size={14} color={colors.background} />
+                  <Feather name="camera" size={14} color={buttonForeground(colors)} />
                 </TouchableOpacity>
               </View>
 
@@ -1037,10 +1039,10 @@ export default function EditProfileScreen() {
                     <TouchableOpacity
                       disabled={isBusy}
                       onPress={handlePickDocument}
-                      style={[styles.uploadBtn, { backgroundColor: colors.primary }]}
+                      style={[styles.uploadBtn, { backgroundColor: buttonBackground(colors) }]}
                     >
-                      <Feather name="upload-cloud" size={16} color={colors.background} style={styles.uploadIcon} />
-                      <Text style={[styles.uploadBtnText, { color: colors.background }]}>Upload PDF</Text>
+                      <Feather name="upload-cloud" size={16} color={buttonForeground(colors)} style={styles.uploadIcon} />
+                      <Text style={[styles.uploadBtnText, { color: buttonForeground(colors) }]}>Upload PDF</Text>
                     </TouchableOpacity>
                   ) : (
                     <View style={[styles.uploadedDocCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -1132,7 +1134,7 @@ export default function EditProfileScreen() {
           >
             <TouchableOpacity
               disabled={isLoading}
-              onPress={() => router.back()}
+              onPress={() => safeBack(router, '/(tabs)/profile')}
               style={[styles.cancelBtn, { backgroundColor: colors.card }, isLoading && styles.disabledButton]}
             >
               <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
@@ -1140,12 +1142,12 @@ export default function EditProfileScreen() {
             <TouchableOpacity
               disabled={isLoading}
               onPress={handleSave}
-              style={[styles.saveBtn, { backgroundColor: colors.primary }, isLoading && styles.disabledButton]}
+              style={[styles.saveBtn, { backgroundColor: buttonBackground(colors) }, isLoading && styles.disabledButton]}
             >
               {isLoading ? (
-                <Spinner color={colors.background} />
+                <Spinner color={buttonForeground(colors)} />
               ) : (
-                <Text style={[styles.saveBtnText, { color: colors.background }]}>Save</Text>
+                <Text style={[styles.saveBtnText, { color: buttonForeground(colors) }]}>Save</Text>
               )}
             </TouchableOpacity>
           </View>
