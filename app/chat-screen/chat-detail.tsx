@@ -19,10 +19,12 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -71,6 +73,9 @@ type Message = {
   eventDate?: string;
   eventLocation?: string;
   eventImage?: string;
+  postPreview?: string;
+  postAuthor?: string;
+  postImage?: string;
   locationTitle?: string;
   locationDesc?: string;
   reactions?: Reaction[];
@@ -105,6 +110,15 @@ type PendingAttachment = {
 };
 
 const WAVEFORM_HEIGHTS = [8, 14, 20, 12, 28, 16, 24, 10, 18, 22, 14, 26, 8, 20, 16, 12, 24, 18, 10, 14];
+
+const COMMON_EMOJIS = [
+  '😀','😂','🥹','😊','😍','🥰','😘','😎','😅','🙏',
+  '❤️','🔥','👍','👏','🎉','✨','💯','🙌','💪','🤣',
+  '😭','😢','😤','😠','😱','🤔','🫶','😴','🤩','🥳',
+  '🌹','🌸','💐','🍕','🍔','🎂','🎁','⚽','🏆','🌟',
+  '👀','💀','🫠','🥺','😬','🤯','🫡','🤝','✌️','🤞',
+  '🐶','🐱','🐻','🦊','🐼','🦁','🐸','🐧','🦋','🌈',
+];
 
 const formatRealtimeTime = (value: string) =>
   new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -176,6 +190,9 @@ const getAttachmentPreviewUri = (attachment?: ChatMessageAttachment | null) => {
   if (attachment.type === 'event') {
     return attachment.coverImageUrl ?? null;
   }
+  if (attachment.type === 'post') {
+    return attachment.imageUrl ?? null;
+  }
   return undefined;
 };
 
@@ -227,6 +244,12 @@ const toMessageFromAttachment = (
       : attachment.locationName || attachment.address || '';
     message.eventLocation = attachment.locationName || attachment.address || '';
     message.eventImage = previewUri || undefined;
+  }
+
+  if (attachment?.type === 'post') {
+    message.postPreview = attachment.preview || text || 'Shared post';
+    message.postAuthor = attachment.authorName || 'Mooment user';
+    message.postImage = previewUri || undefined;
   }
 
   return message;
@@ -493,7 +516,7 @@ function EventBubble({ msg }: { msg: Message }) {
           activeOpacity={0.8}
           onPress={() => {
             if (eventId) {
-              router.push({ pathname: '/event-screen/event', params: { id: eventId } } as any);
+              router.push({ pathname: '/event-screen/event', params: { eventId } } as any);
             }
           }}
         >
@@ -504,6 +527,29 @@ function EventBubble({ msg }: { msg: Message }) {
         <Text style={styles.eventBubbleTime}>{msg.time}</Text>
       </View>
     </View>
+  );
+}
+
+function PostBubble({ msg }: { msg: Message }) {
+  const router = useRouter();
+  const postId = msg.attachment?.type === 'post' ? msg.attachment.postId : null;
+
+  return (
+    <TouchableOpacity
+      style={[styles.sharedPostBubble, msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem]}
+      activeOpacity={0.82}
+      onPress={() => postId && router.push({ pathname: '/post-screen/view-post', params: { postId } } as any)}
+    >
+      {msg.postImage ? <Image source={{ uri: msg.postImage }} style={styles.sharedPostImage} /> : (
+        <View style={[styles.sharedPostImage, styles.mediaFallback]}><Feather name="image" size={28} color="#8E8E9B" /></View>
+      )}
+      <View style={styles.sharedPostInfo}>
+        <Text style={styles.eventBubbleTagText}>POST</Text>
+        <Text style={styles.sharedPostAuthor} numberOfLines={1}>{msg.postAuthor}</Text>
+        <Text style={styles.sharedPostPreview} numberOfLines={3}>{msg.postPreview}</Text>
+        <Text style={styles.eventBubbleTime}>{msg.time}</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -754,6 +800,20 @@ export default function ChatDetailScreen() {
   const isSendingTypingRef = useRef(false);
   const isLocationLoadingRef = useRef(false);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const toggleEmojiPicker = () => {
+    const next = !showEmojiPicker;
+    if (next) {
+      Keyboard.dismiss();
+      setShowAttach(false);
+    }
+    setShowEmojiPicker(next);
+  };
+
+  const insertEmoji = (emoji: string) => {
+    handleInputTextChange(inputText + emoji);
+  };
 
   const name = params.name || 'Chat';
   const avatar = params.avatar?.trim() || null;
@@ -1564,6 +1624,7 @@ export default function ChatDetailScreen() {
       case 'video': return <VideoBubble msg={item} />;
       case 'audio': return <AudioBubble msg={item} />;
       case 'event': return <EventBubble msg={item} />;
+      case 'post': return <PostBubble msg={item} />;
       case 'location': return <TextBubble msg={item} />;
       default: return <TextBubble msg={item} />;
     }
@@ -1738,28 +1799,49 @@ export default function ChatDetailScreen() {
           onRetry={retryPendingAttachment}
         />
 
+        {/* ── Emoji Picker ── */}
+        {showEmojiPicker && (
+          <View style={styles.emojiPanel}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.emojiGrid}>
+                {COMMON_EMOJIS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={styles.emojiItem}
+                    onPress={() => insertEmoji(emoji)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.emojiText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        )}
+
         {/* ── Input Bar ── */}
         <View style={styles.inputBar}>
           <View style={styles.inputWrap}>
-            <TouchableOpacity style={styles.emojiBtn} activeOpacity={0.8}>
-              <Feather name="smile" size={20} color="#8E8E9B" />
+            <TouchableOpacity style={styles.emojiBtn} activeOpacity={0.8} onPress={toggleEmojiPicker}>
+              <Feather name={showEmojiPicker ? 'x' : 'smile'} size={20} color={showEmojiPicker ? '#FFFFFF' : '#8E8E9B'} />
             </TouchableOpacity>
             <TextInput
               style={styles.input}
-              placeholder="Add Comment"
+              placeholder="Add text"
               placeholderTextColor="#8E8E9B"
               value={inputText}
               onChangeText={handleInputTextChange}
+              onFocus={() => setShowEmojiPicker(false)}
               multiline
               maxLength={500}
             />
-            <TouchableOpacity style={styles.fileBtn} activeOpacity={0.8} onPress={() => setShowAttach((current) => !current)}>
+            <TouchableOpacity style={styles.fileBtn} activeOpacity={0.8} onPress={() => { setShowEmojiPicker(false); setShowAttach((current) => !current); }}>
               <HugeiconsIcon icon={AttachmentIcon} size={20} color="#8E8E9B" />
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} activeOpacity={0.8}>
-            <Feather name="send" size={18} color="#FFFFFF" style={{ marginLeft: -2, marginTop: 2 }} />
+            <Feather name="send" size={18} color="#111111" style={{ marginLeft: -2, marginTop: 2 }} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -2062,6 +2144,11 @@ const styles = StyleSheet.create({
   eventBubbleBtnText: { color: '#180F22', fontWeight: '800', fontSize: 13 },
   eventBubbleTimeWrap: { position: 'absolute', left: 14, right: 14, bottom: 12 },
   eventBubbleTime: { color: 'rgba(255,255,255,0.72)', fontSize: 11 },
+  sharedPostBubble: { width: Math.min(width * 0.74, 310), borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  sharedPostImage: { width: '100%', height: 132, backgroundColor: '#19191F' },
+  sharedPostInfo: { padding: 12, gap: 4 },
+  sharedPostAuthor: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  sharedPostPreview: { color: 'rgba(255,255,255,0.78)', fontSize: 13, lineHeight: 18, marginBottom: 4 },
 
   /* Reactions */
   reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
@@ -2095,6 +2182,12 @@ const styles = StyleSheet.create({
   progressTrack: { height: 3, backgroundColor: '#2A2A3A', borderRadius: 2, marginTop: 6, overflow: 'hidden' },
   progressFill: { height: 3, backgroundColor: '#D4B0EB', borderRadius: 2 },
   pendingIconBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#24242C', alignItems: 'center', justifyContent: 'center' },
+
+  /* Emoji Picker */
+  emojiPanel: { backgroundColor: '#13131A', borderTopWidth: 1, borderTopColor: '#1A1A2E', maxHeight: 180, paddingHorizontal: 4, paddingVertical: 8 },
+  emojiGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  emojiItem: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
+  emojiText: { fontSize: 26 },
 
   /* Input Bar */
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, backgroundColor: '#0e0d12', gap: 10 },

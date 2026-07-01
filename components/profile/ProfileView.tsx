@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { Alert, RefreshControl, ScrollView, StyleSheet, View, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
-import type { MomentInteractionSummary } from "@/lib/moments";
+import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
 import CommentsModal from "../post/CommentsModal";
 import ReportDetailsModal from "../modals/ReportDetailsModal";
 import ReportModal from "../modals/ReportModal";
@@ -34,8 +34,9 @@ export type UserProfileData = {
 type ProfileViewProps = {
   user: UserProfileData;
   posts: PostData[];
+  reposts?: MomentTimelineItem[];
   isOwnProfile?: boolean;
-  onRepost?: (post: PostData) => Promise<void> | void;
+  onRepost?: (post: PostData, payload: RepostPayload) => Promise<void> | void;
   onDeletePost?: (post: PostData) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   onFollowChange?: (isFollowing: boolean) => void;
@@ -45,6 +46,7 @@ type ProfileViewProps = {
 export default function ProfileView({
   user,
   posts,
+  reposts = [],
   isOwnProfile = true,
   onRepost,
   onDeletePost,
@@ -185,6 +187,7 @@ export default function ProfileView({
         <ProfileContent 
           activeTab={activeTab} 
           posts={posts} 
+          reposts={reposts}
           onCommentPress={(post) => {
             setSelectedCommentPost(post);
             setCommentsVisible(true);
@@ -212,6 +215,7 @@ export default function ProfileView({
           profileUserId={user.id}
           profileIsFollowing={user.isFollowing}
           onFollowChange={onFollowChange}
+          onRepostSuccess={onRefresh}
         />
         
         <View style={{ height: 100 }} />
@@ -246,14 +250,19 @@ export default function ProfileView({
         onClose={() => setShareVisible(false)}
         onRepost={
           selectedSharePost && onRepost
-            ? async () => {
-                await onRepost(selectedSharePost);
+            ? async (payload) => {
+                await onRepost(selectedSharePost, payload);
                 setShareVisible(false);
                 setSelectedSharePost(null);
               }
             : undefined
         }
         shareUrl={selectedSharePost ? `https://mooment.app/moments/${selectedSharePost.id}` : undefined}
+        item={selectedSharePost ? {
+          type: 'post', id: selectedSharePost.id, preview: selectedSharePost.caption,
+          imageUrl: selectedSharePost.mediaItems?.[0]?.uri ?? selectedSharePost.mediaUris?.[0],
+          authorName: selectedSharePost.authorName,
+        } : undefined}
       />
       
       <ProfileMenuDrawer 

@@ -2,16 +2,11 @@ import {
   useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import {
-  Add01Icon,
   Analytics01Icon,
-  Archive01Icon,
   Bookmark02Icon,
-  Calendar01Icon,
   Calendar03Icon,
   Logout01Icon,
   Settings02Icon,
-  ShoppingBag01Icon,
-  ShoppingCart01Icon,
   Ticket01Icon,
   UserEdit01Icon,
 } from "@hugeicons/core-free-icons";
@@ -29,6 +24,7 @@ import { Modal,
 import { SafeAreaView } from "react-native-safe-area-context";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { useAuthStore } from "@/stores/authStore";
+import { useTicketWalletShortcutStore } from "@/stores/ticketWalletShortcutStore";
 
 type MenuDrawerProps = {
   visible: boolean;
@@ -70,6 +66,9 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
   const user = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
+  const isTicketShortcutVisible = useTicketWalletShortcutStore((state) => state.isVisible);
+  const restoreTicketShortcut = useTicketWalletShortcutStore((state) => state.restore);
+  const hideTicketShortcut = useTicketWalletShortcutStore((state) => state.hide);
 
   const handleLogout = async () => {
     onClose();
@@ -175,6 +174,16 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               onPress={() => {
                 onClose();
                 router.push('/event-screen/wallet');
+              }}
+              hideSeparator
+            />
+            <MenuItem
+              icon={Ticket01Icon}
+              label={isTicketShortcutVisible ? "Hide Wallet Shortcut" : "Show Wallet Shortcut"}
+              colors={colors}
+              onPress={() => {
+                onClose();
+                void (isTicketShortcutVisible ? hideTicketShortcut() : restoreTicketShortcut()).catch(() => undefined);
               }}
               hideSeparator
             />

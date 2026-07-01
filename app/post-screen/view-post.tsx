@@ -1,195 +1,86 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, Dimensions, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import FeedPost, { type PostData } from '@/components/post/FeedPost';
 import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getMoment, type MomentInteractionSummary } from '@/lib/moments';
+import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { safeBack } from '@/lib/navigation';
-import PostInteractionBar from '@/components/post/PostInteractionBar';
-
-const { width, height } = Dimensions.get('window');
-
-const MOCK_POST = {
-  authorAvatar: 'https://images.unsplash.com/photo-1542385151-efd9000785a0?q=80&w=150&auto=format&fit=crop',
-  authorName: 'Jane Cooper',
-  timeAgo: '2 min ago',
-  caption: 'Explore the vibrant cit... see more',
-  imageUri: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop',
-  likes: 25,
-  comments: 25,
-};
+import { getStorageFileUrl } from '@/lib/storage';
 
 export default function ViewPostScreen() {
-  const { colors, isDark } = useTheme();
   const router = useRouter();
-  const [isLiked, setIsLiked] = useState(true); // Red heart in mockup
-  const [isFollowing, setIsFollowing] = useState(false);
+  const { colors } = useTheme();
+  const params = useLocalSearchParams<{ postId?: string | string[] }>();
+  const postId = Array.isArray(params.postId) ? params.postId[0] : params.postId;
+  const [post, setPost] = useState<PostData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPost = useCallback(async () => {
+    if (!postId) {
+      setError('This post is unavailable.');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const moment = await getMoment(postId);
+      const mapped = mapMomentToPost(moment, { storageUrlResolver: getStorageFileUrl });
+      if (!mapped) throw new Error('This post has no displayable content.');
+      setPost(mapped);
+    } catch (requestError) {
+      setError(getAuthErrorMessage(requestError, 'This post was deleted, is private, or is unavailable.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [postId]);
+
+  useEffect(() => { void loadPost(); }, [loadPost]);
+
+  const applyInteraction = (id: string, summary: MomentInteractionSummary) => {
+    setPost((current) => current?.id === id ? {
+      ...current,
+      likesCount: summary.likesCount,
+      commentsCount: summary.commentsCount,
+      sharesCount: summary.sharesCount,
+      isLiked: summary.isLiked,
+    } : current);
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <SafeAreaView style={styles.safeArea}>
-        
-        {/* Header Navigation */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/home')} style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)' }]} activeOpacity={0.8}>
-            <Feather name="chevron-left" size={20} color={colors.text} />
-          </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => safeBack(router, '/(tabs)/home')} style={[styles.back, { borderColor: colors.border }]}>
+          <Feather name="chevron-left" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.text }]}>Post</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+      {loading ? <ActivityIndicator style={styles.center} color={colors.primary} /> : post ? (
+        <FeedPost post={post} onInteractionChange={applyInteraction} />
+      ) : (
+        <View style={styles.center}>
+          <Feather name="alert-circle" size={30} color={colors.textSecondary} />
+          <Text style={[styles.error, { color: colors.textSecondary }]}>{error}</Text>
+          <TouchableOpacity onPress={loadPost}><Text style={[styles.retry, { color: colors.primary }]}>Try again</Text></TouchableOpacity>
         </View>
-
-        {/* Centered Media */}
-        <View style={styles.mediaContainer}>
-          <Image source={{ uri: MOCK_POST.imageUri }} style={styles.mediaImage} resizeMode="cover" />
-        </View>
-
-        {/* Right Side Actions */}
-        <View style={styles.actionsCol}>
-          <PostInteractionBar
-            showLike
-            commentsCount={MOCK_POST.comments}
-            sharesCount={MOCK_POST.likes}
-            isLiked={isLiked}
-            onLikePress={() => setIsLiked(!isLiked)}
-          />
-        </View>
-
-        {/* Bottom Info Overlay */}
-        <View style={styles.bottomOverlay}>
-          <View style={styles.authorRow}>
-            <Image source={{ uri: MOCK_POST.authorAvatar }} style={[styles.avatar, { borderColor: colors.border }]} />
-            <View style={styles.authorTextCol}>
-              <Text style={[styles.authorName, { color: colors.text }]}>{MOCK_POST.authorName}</Text>
-              <Text style={[styles.timeAgo, { color: colors.textSecondary }]}>{MOCK_POST.timeAgo}</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.followBtn, { borderColor: colors.primary }, isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: 'transparent' }]]} 
-              activeOpacity={0.8}
-              onPress={() => setIsFollowing(!isFollowing)}
-            >
-              <Text style={[styles.followBtnText, { color: colors.primary }, isFollowing && { color: colors.text }]}>
-                {isFollowing ? 'Following' : '+ Follow'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.moreBtn}>
-              <Feather name="more-horizontal" size={20} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={[styles.caption, { color: colors.text }]}>{MOCK_POST.caption}</Text>
-
-          {/* Progress Bar Mock */}
-          <View style={styles.progressRow}>
-            <View style={[styles.progressBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
-              <View style={[styles.progressBarFill, { backgroundColor: colors.primary, width: '40%' }]} />
-            </View>
-            <Text style={[styles.progressText, { color: colors.textSecondary }]}>0:41/1:21:12</Text>
-          </View>
-        </View>
-
-      </SafeAreaView>
-    </View>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
-  },
-  header: {
-    paddingHorizontal: 20,
-    marginTop: 10,
-    zIndex: 10,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 18,
-  },
-  mediaContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mediaImage: {
-    width: width,
-    height: height * 0.4, // Roughly 40% of screen height, centered
-  },
-  actionsCol: {
-    position: 'absolute',
-    right: 16,
-    bottom: 160,
-    alignItems: 'center',
-  },
-  bottomOverlay: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-  },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-    borderWidth: 1,
-  },
-  authorTextCol: {
-    flex: 1,
-  },
-  authorName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  timeAgo: {
-    fontSize: 11,
-  },
-  followBtn: {
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 12,
-  },
-  followingBtn: {
-  },
-  followBtnText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  moreBtn: {
-    padding: 4,
-  },
-  caption: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressBarTrack: {
-    flex: 1,
-    height: 2,
-    borderRadius: 1,
-    marginRight: 10,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 1,
-  },
-  progressText: {
-    fontSize: 10,
-    fontVariant: ['tabular-nums'],
-  },
+  container: { flex: 1 },
+  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
+  back: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 17, fontWeight: '700' },
+  headerSpacer: { width: 38 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 32 },
+  error: { textAlign: 'center', fontSize: 14, lineHeight: 20 },
+  retry: { fontSize: 14, fontWeight: '700' },
 });

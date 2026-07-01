@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useLocationSharingStore } from '@/stores/locationSharingStore';
 import { installLogBoxStackGuard } from '@/lib/installLogBoxStackGuard';
 import { registerFcmToken } from '@/lib/notifications';
+import TicketWalletShortcut from '@/components/ticket/TicketWalletShortcut';
 
 installLogBoxStackGuard();
 
@@ -133,6 +134,16 @@ function PushNotificationGate() {
           }),
         });
 
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('messages', {
+            name: 'Messages',
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+            showBadge: true,
+          });
+        }
+
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
 
@@ -149,13 +160,28 @@ function PushNotificationGate() {
         const tokenData = await Notifications.getDevicePushTokenAsync();
         const token = tokenData.data as string;
 
-        if (__DEV__) console.log('[Push] FCM token obtained', token);
+        if (__DEV__) console.log('[Push] FCM token exists:', Boolean(token), 'platform:', Platform.OS);
 
-        await registerFcmToken(token, Platform.OS).catch(() => undefined);
+        const attemptRegister = async (fcmToken: string, attempt = 0): Promise<void> => {
+          if (__DEV__) console.log('[Push] Registration attempt', attempt + 1, 'platform:', Platform.OS);
+          try {
+            await registerFcmToken(fcmToken, Platform.OS);
+            if (__DEV__) console.log('[Push] Registration success');
+          } catch (e: unknown) {
+            const httpStatus = (e as { response?: { status?: number } })?.response?.status;
+            if (__DEV__) console.log('[Push] Registration failed, status:', httpStatus ?? 'network error');
+            if (attempt < 2) {
+              await new Promise<void>((resolve) => setTimeout(resolve, 3000 * (attempt + 1)));
+              return attemptRegister(fcmToken, attempt + 1);
+            }
+          }
+        };
+
+        await attemptRegister(token);
 
         tokenSubscription = Notifications.addPushTokenListener((newToken) => {
-          if (__DEV__) console.log('[Push] FCM token refreshed', newToken.data);
-          registerFcmToken(newToken.data as string, Platform.OS).catch(() => undefined);
+          if (__DEV__) console.log('[Push] FCM token refreshed, exists:', Boolean(newToken?.data), 'platform:', Platform.OS);
+          void attemptRegister(newToken.data as string);
         });
 
         const navigateFromNotification = (data: Record<string, string> | undefined) => {
@@ -241,6 +267,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      <TicketWalletShortcut />
       <ThemePreferenceGate />
       <AuthSessionGate />
       <LocationSharingGate />

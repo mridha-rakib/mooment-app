@@ -1,0 +1,220 @@
+
+> xenog@1.0.0 start:clean
+> npm run clean:metro && expo start --dev-client --clear --max-workers 1
+
+
+> xenog@1.0.0 clean:metro
+> node ./scripts/clean-metro-cache.js
+
+Removed C:\Users\rakib\AppData\Local\Temp\metro-file-map-ef2c912aca17ff1dc29d47f58abd35ba-0e3209878a5403fbc5960c7958e575d2
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_APP_SCHEME EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN EXPO_PUBLIC_STRIPE_CONNECT_CALLBACK_PATH EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY RNMAPBOX_MAPS_DOWNLOAD_TOKEN
+Starting project at C:\Users\rakib\projects\spark-tech\xenog\xenog-app
+React Compiler enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\expo-router\entry.js ▓░░░░░░░░░░░░░░░  9.0% ( 21/155)
+Android node_modules\expo-router\entry.js ▓░░░░░░░░░░░░░░░ 10.7% (156/476)
+Android node_modules\expo-router\entry.js ▓▓▓▓░░░░░░░░░░░░ 30.7% (470/897)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 51.7% ( 885/1243)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 60.6% (1228/1577)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 65.1% (1540/1908)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.5% (1871/2168)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 81.1% (2122/2357)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 91.2% (2440/2556)
+Android Bundled 82215ms node_modules\expo-router\entry.js (2700 modules)
+ WARN  Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/LogBox/Data/LogBoxLog'). Source: C:\Users\rakib\projects\spark-tech\xenog\xenog-app\lib\installLogBoxStackGuard.ts 27:28
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 1, "storyCount": 3}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 17, "responseMs": 3699, "storyCount": 3, "totalMs": 3716}
+Android node_modules\expo-notifications\build\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\expo-notifications\build\index.js ▓▓▓▓▓▓░░░░░░░░░░ 41.5% (230/357)
+Android node_modules\expo-notifications\build\index.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 78.9% (494/556)
+Android node_modules\expo-notifications\build\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.6% (713/737)
+Android Bundled 15357ms node_modules\expo-notifications\build\index.js (758 modules)
+ LOG  [Push] FCM token exists: true platform: android
+ LOG  [Push] Registration attempt 1 platform: android
+ LOG  [Push] Registration success
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Disconnected {"code": 1008, "wasClean": false}
+ LOG  [Realtime] Auth failed — not reconnecting 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Ready — authenticated 
+ WARN  "hand" is not a valid icon name for family "feather"
+ LOG  [Realtime] Manual reconnect triggered 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Reconnecting in 1000ms (attempt 1/8) 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Disconnected {"code": 1008, "wasClean": false}
+ LOG  [Realtime] Auth failed — not reconnecting 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 1, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 4, "responseMs": 2323, "storyCount": 5, "totalMs": 2327}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2557, "storyCount": 5, "totalMs": 2558}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 1520, "storyCount": 5, "totalMs": 1521}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 3, "responseMs": 2690, "storyCount": 5, "totalMs": 2693}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2581, "storyCount": 5, "totalMs": 2582}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+Android node_modules\expo-location\build\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\expo-location\build\index.js ▓▓▓▓▓▓░░░░░░░░░░ 39.9% ( 58/170)
+Android node_modules\expo-location\build\index.js ▓▓▓▓▓▓▓░░░░░░░░░ 46.4% (293/430)
+Android node_modules\expo-location\build\index.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 77.4% (431/490)
+Android node_modules\expo-location\build\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 91.8% (619/658)
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Push] FCM token exists: true platform: android
+ LOG  [Push] Registration attempt 1 platform: android
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 3, "responseMs": 1502, "storyCount": 5, "totalMs": 1505}
+ LOG  [Realtime] Connected 
+ LOG  [Push] Registration success
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] dm:message received {"id": "6a4597488c411ddca0f507ed"}
+ LOG  [Realtime] dm:message received {"id": "6a4597488c411ddca0f507ed"}
+ LOG  [Realtime] dm:message received {"id": "6a4597488c411ddca0f507ed"}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+Android Bundled 25167ms node_modules\expo-location\build\index.js (701 modules)
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] dm:message received {"id": "6a45975f8c411ddca0f5080c"}
+ LOG  [Realtime] dm:message received {"id": "6a45975f8c411ddca0f5080c"}
+ LOG  [Realtime] dm:message received {"id": "6a45975f8c411ddca0f5080c"}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2746, "storyCount": 5, "totalMs": 2747}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 2, "responseMs": 1351, "storyCount": 5, "totalMs": 1353}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] dm:message received {"id": "6a4597fe8c411ddca0f508ae"}
+ LOG  [Realtime] dm:message received {"id": "6a4597fe8c411ddca0f508ae"}
+ LOG  [Realtime] dm:message received {"id": "6a4597fe8c411ddca0f508ae"}
+ LOG  [Realtime] dm:message received {"id": "6a4598228c411ddca0f508c4"}
+ LOG  [Realtime] dm:message received {"id": "6a4598228c411ddca0f508c4"}
+ LOG  [Realtime] dm:message received {"id": "6a4598228c411ddca0f508c4"}
+ LOG  [Realtime] dm:message received {"id": "6a4598288c411ddca0f508d1"}
+ LOG  [Realtime] dm:message received {"id": "6a4598288c411ddca0f508d1"}
+ LOG  [Realtime] dm:message received {"id": "6a4598288c411ddca0f508d1"}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 2, "responseMs": 2577, "storyCount": 5, "totalMs": 2579}
+ LOG  [Realtime] Manual reconnect triggered 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Reconnecting in 1000ms (attempt 1/8) 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 1447, "storyCount": 5, "totalMs": 1448}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 1261, "storyCount": 5, "totalMs": 1262}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 1250, "storyCount": 5, "totalMs": 1251}
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Socket closed by caller 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Connected 
+ LOG  [Push] FCM token exists: true platform: android
+ LOG  [Push] Registration attempt 1 platform: android
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 2, "responseMs": 1360, "storyCount": 5, "totalMs": 1362}
+ LOG  [Push] Registration success
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 1, "storyCount": 5}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 2, "responseMs": 1847, "storyCount": 5, "totalMs": 1849}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 1418, "storyCount": 6, "totalMs": 1419}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2529, "storyCount": 6, "totalMs": 2530}
+ LOG  [StoryPlaybackTiming] metadata-parsed {"mediaTypes": ["image", "video", "image", "text"], "parseMs": 1, "sinceOpenMs": 123, "storyCount": 4}
+ LOG  [StoryPlaybackTiming] player-initialized {"initializeMs": 204, "sinceOpenMs": 326}
+ LOG  [StoryPlaybackTiming] next-video-preloaded {"preloadMs": 87, "storyId": "6a44e88a4f489ccc551e9ba9"}
+ LOG  [StoryPlaybackTiming] image-request-start {"sinceOpenMs": 533, "storyId": "6a4463ad4f489ccc551e758f"}
+ LOG  [StoryPlaybackTiming] image-displayed {"sinceOpenMs": 536, "storyId": "6a4463ad4f489ccc551e758f"}
+ LOG  [StoryPlaybackTiming] image-loaded {"sinceOpenMs": 553, "storyId": "6a4463ad4f489ccc551e758f"}
+ LOG  [StoryPlaybackTiming] video-request-start {"sinceOpenMs": 3291, "storyId": "6a44e88a4f489ccc551e9ba9"}
+ LOG  [StoryPlaybackTiming] video-status {"oldStatus": "readyToPlay", "sinceRequestMs": 14, "status": "loading", "storyId": "6a44e88a4f489ccc551e9ba9"}
+ LOG  [StoryPlaybackTiming] video-status {"oldStatus": "loading", "sinceRequestMs": 66, "status": "readyToPlay", "storyId": "6a44e88a4f489ccc551e9ba9"}
+ LOG  [StoryPlaybackTiming] video-playing {"requestToPlayingMs": 89, "sinceOpenMs": 3380, "storyId": "6a44e88a4f489ccc551e9ba9"}
+ LOG  [StoryPlaybackTiming] first-frame {"bufferingMs": 52, "requestToFirstFrameMs": 184, "sourceLoadToFirstFrameMs": null, "storyId": "6a44e88a4f489ccc551e9ba9", "storyOpenToFirstFrameMs": 3475}
+ LOG  [StoryPlaybackTiming] video-status {"oldStatus": "readyToPlay", "sinceRequestMs": 2400, "status": "idle", "storyId": "6a44e88a4f489ccc551e9ba9"}
+ LOG  [StoryPlaybackTiming] image-request-start {"sinceOpenMs": 5844, "storyId": "6a458c404f489ccc551ed18f"}
+ LOG  [StoryPlaybackTiming] image-displayed {"sinceOpenMs": 5861, "storyId": "6a458c404f489ccc551ed18f"}
+ LOG  [StoryPlaybackTiming] image-loaded {"sinceOpenMs": 5862, "storyId": "6a458c404f489ccc551ed18f"}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 2, "responseMs": 2802, "storyCount": 6, "totalMs": 2804}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2890, "storyCount": 6, "totalMs": 2891}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2562, "storyCount": 6, "totalMs": 2563}
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2628, "storyCount": 6, "totalMs": 2629}
+ LOG  [Realtime] Manual reconnect triggered 
+ LOG  [Realtime] Disconnected {"code": 1000, "wasClean": false}
+ LOG  [Realtime] Reconnecting in 1000ms (attempt 1/8) 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [Realtime] Connected 
+ LOG  [Realtime] Ready — authenticated 
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2575, "storyCount": 6, "totalMs": 2576}
+ LOG  [StoryPlaybackTiming] media-url-generation {"durationMs": 0, "storyCount": 6}
+ LOG  [StoryPlaybackTiming] story-api {"normalizationMs": 1, "responseMs": 2476, "storyCount": 6, "totalMs": 2477}

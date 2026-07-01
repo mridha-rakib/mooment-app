@@ -88,6 +88,8 @@ export type PostData = {
   ticketsCount?: number;
   likedBy?: string;
   headerLabel?: string;
+  repostCaption?: string | null;
+  repostTaggedFriendNames?: string[];
   isPublic?: boolean;
   likesCount?: number;
   commentsCount?: number;
@@ -121,7 +123,7 @@ function VideoFeedMedia({ uri }: { uri: string }) {
   );
 }
 
-function CroppedFeedImage({ item, frameWidth }: { item: PostMediaItem; frameWidth: number }) {
+function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
   const [imageSize, setImageSize] = useState(() => ({
     width: item.displayCrop?.imageWidth ?? 0,
     height: item.displayCrop?.imageHeight ?? 0,
@@ -161,7 +163,6 @@ function CroppedFeedImage({ item, frameWidth }: { item: PostMediaItem; frameWidt
     );
   }
 
-  const frameHeight = 340;
   const cropPixelWidth = Math.max(crop.width * imageSize.width, 1);
   const cropPixelHeight = Math.max(crop.height * imageSize.height, 1);
   const scale = Math.min(frameWidth / cropPixelWidth, frameHeight / cropPixelHeight);
@@ -335,7 +336,8 @@ export default function FeedPost({
   onAuthorFollowChange,
   onInteractionChange,
   onDeletePress,
-  isOwnPost = false
+  isOwnPost = false,
+  embedded = false,
 }: {
   post: PostData;
   onCommentPress?: (post: PostData) => void;
@@ -345,6 +347,7 @@ export default function FeedPost({
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   onDeletePress?: (post: PostData) => void;
   isOwnPost?: boolean;
+  embedded?: boolean;
 }) {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -366,6 +369,7 @@ export default function FeedPost({
   const isPostByCurrentUser = canCompareAuthorId ? post.authorId === currentUserId : isOwnPost;
   const canDeletePost = isPostByCurrentUser && Boolean(onDeletePress);
   const hasMoreMenuActions = !isPostByCurrentUser || canDeletePost;
+  const isNormalPost = post.postType === 'standard';
 
   // Dynamic Interaction State
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
@@ -624,7 +628,7 @@ export default function FeedPost({
   }
 
   return (
-    <View style={styles.postWrapper}>
+    <View style={[styles.postWrapper, embedded && styles.embeddedPostWrapper]}>
       {/* Header Context Labels */}
       {post.headerLabel && (
         <TouchableOpacity
@@ -638,6 +642,10 @@ export default function FeedPost({
           <Text style={[styles.headerLabelText, { color: colors.textSecondary }]}>{post.headerLabel}</Text>
         </TouchableOpacity>
       )}
+      {post.repostCaption ? <Text style={[styles.repostCaption, { color: colors.text }]}>{post.repostCaption}</Text> : null}
+      {!!post.repostTaggedFriendNames?.length && (
+        <Text style={[styles.repostTags, { color: colors.textSecondary }]}>with {post.repostTaggedFriendNames.join(', ')}</Text>
+      )}
       {post.likedBy && (
         <Text style={[styles.likedByText, { color: colors.text }]}>
           <Text style={[styles.likedByNormal, { color: colors.textSecondary }]}>liked by </Text>
@@ -645,9 +653,18 @@ export default function FeedPost({
         </Text>
       )}
 
-      <View style={[styles.postCard, { backgroundColor: colors.card }]}>
+      <View
+        style={[
+          styles.postCard,
+          { backgroundColor: colors.card },
+          isNormalPost && styles.normalPostCard,
+          isNormalPost && isDark && styles.normalPostCardDark,
+          embedded && styles.embeddedPostCard,
+          embedded && isNormalPost && styles.embeddedNormalPostCard,
+        ]}
+      >
         {/* Post Header */}
-        <View style={styles.postHeader}>
+        <View style={[styles.postHeader, isNormalPost && styles.normalPostHeader]}>
           <TouchableOpacity
             style={styles.postAuthorInfo}
             activeOpacity={0.7}
@@ -661,9 +678,15 @@ export default function FeedPost({
               }
             } as any)}
           >
-            <UserAvatar uri={post.authorAvatar} name={post.authorName} size={36} style={styles.postAvatar} iconSize={16} />
-            <View style={styles.authorTextContainer}>
-              <Text style={styles.authorLine} numberOfLines={2}>
+            <UserAvatar
+              uri={post.authorAvatar}
+              name={post.authorName}
+              size={isNormalPost ? 40 : 36}
+              style={[styles.postAvatar, isNormalPost && styles.normalPostAvatar]}
+              iconSize={isNormalPost ? 18 : 16}
+            />
+            <View style={[styles.authorTextContainer, isNormalPost && styles.normalAuthorTextContainer]}>
+              <Text style={[styles.authorLine, isNormalPost && styles.normalAuthorLine]} numberOfLines={2}>
                 <Text style={[styles.postAuthor, { color: colors.text }]}>{post.authorName}</Text>
                 {post.authorContextNodes?.map((node, i) => (
                   <Text key={i} style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}>
@@ -672,8 +695,8 @@ export default function FeedPost({
                 ))}
               </Text>
 
-              <View style={styles.timeRow}>
-                <Text style={[styles.postTime, { color: colors.textSecondary }]}>{post.timeAgo}</Text>
+              <View style={[styles.timeRow, isNormalPost && styles.normalTimeRow]}>
+                <Text style={[styles.postTime, isNormalPost && styles.normalPostTime, { color: isNormalPost && isDark ? '#777777' : colors.textSecondary }]}>{post.timeAgo}</Text>
                 {post.isPublic && (
                   <>
                     <Text style={[styles.dotSeparator, { color: colors.textSecondary }]}> • </Text>
@@ -683,11 +706,11 @@ export default function FeedPost({
               </View>
             </View>
           </TouchableOpacity>
-          <View style={styles.postHeaderActions}>
+          <View style={[styles.postHeaderActions, isNormalPost && styles.normalPostHeaderActions]}>
             {!isPostByCurrentUser && (
               isFollowing ? (
                 <TouchableOpacity
-                  style={[styles.followingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+                  style={[styles.followingBtn, isNormalPost && styles.normalFollowingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
                   activeOpacity={0.8}
                   disabled={isFollowPending}
                   onPress={toggleFollow}
@@ -696,19 +719,19 @@ export default function FeedPost({
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[styles.followBtn, { borderColor: colors.primary }]}
+                  style={[styles.followBtn, isNormalPost && styles.normalFollowBtn, { borderColor: isNormalPost && isDark ? '#AC86D4' : colors.primary }]}
                   activeOpacity={0.8}
                   disabled={isFollowPending}
                   onPress={toggleFollow}
                 >
-                  <Feather name="plus" size={12} color={colors.primary} />
-                  <Text style={[styles.followBtnText, { color: colors.primary }]}>Follow</Text>
+                  <Feather name="plus" size={12} color={isNormalPost && isDark ? '#AC86D4' : colors.primary} />
+                  <Text style={[styles.followBtnText, isNormalPost && styles.normalFollowBtnText, { color: isNormalPost && isDark ? '#AC86D4' : colors.primary }]}>Follow</Text>
                 </TouchableOpacity>
               )
             )}
             <TouchableOpacity
               ref={moreBtnRef}
-              style={styles.moreBtn}
+              style={[styles.moreBtn, isNormalPost && styles.normalMoreBtn]}
               onPress={handleMorePress}
             >
               <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
@@ -719,7 +742,7 @@ export default function FeedPost({
         {/* Post Text */}
         {post.caption ? (
           <HashtagText
-            style={[styles.postCaption, { color: colors.textSecondary }]}
+            style={[styles.postCaption, isNormalPost && styles.normalPostCaption, { color: isNormalPost && isDark ? '#B3B3B3' : colors.textSecondary }]}
             hashtagStyle={{ color: colors.primary, fontWeight: '700' }}
           >
             {post.caption}
@@ -733,7 +756,11 @@ export default function FeedPost({
 
         {(post.postType === 'standard' || post.postType === 'event' || post.postType === 'product') && mediaItems.length > 0 && (
           <View
-            style={[styles.postMediaContainer, !post.caption && styles.mediaNoTopMargin]}
+            style={[
+              styles.postMediaContainer,
+              !post.caption && !isNormalPost && styles.mediaNoTopMargin,
+              isNormalPost && styles.normalPostMediaContainer,
+            ]}
             onLayout={handleMediaLayout}
           >
             <ScrollView
@@ -759,7 +786,7 @@ export default function FeedPost({
                       accessibilityRole="imagebutton"
                       accessibilityLabel={`Open image ${index + 1} of ${mediaItems.length} full screen`}
                     >
-                      <CroppedFeedImage item={item} frameWidth={mediaFrameWidth} />
+                      <CroppedFeedImage item={item} frameWidth={mediaFrameWidth} frameHeight={isNormalPost ? mediaFrameWidth : 340} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -894,7 +921,7 @@ export default function FeedPost({
 
         {/* Normal Post Footer Actions */}
         {post.postType !== 'product' && (post.likesCount !== undefined || post.commentsCount !== undefined || post.sharesCount !== undefined) && (
-          <View style={styles.postFooter}>
+          <View style={[styles.postFooter, isNormalPost && styles.normalPostFooter]}>
             <PostInteractionBar
               likesCount={post.likesCount !== undefined ? likesCount : undefined}
               commentsCount={post.commentsCount !== undefined ? commentsCount : undefined}
@@ -904,6 +931,7 @@ export default function FeedPost({
               onCommentPress={() => onCommentPress?.(post)}
               onSharePress={() => onSharePress?.(post)}
               likeIconStyle={heartAnimatedStyle}
+              compact={isNormalPost}
             />
           </View>
         )}
@@ -957,6 +985,9 @@ const styles = StyleSheet.create({
   postWrapper: {
     marginBottom: 20,
   },
+  embeddedPostWrapper: {
+    marginBottom: 0,
+  },
   headerLabelText: {
     color: "#8E8E9B",
     fontSize: 14,
@@ -964,6 +995,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
   },
+  repostCaption: { fontSize: 14, lineHeight: 19, marginHorizontal: 16, marginBottom: 5 },
+  repostTags: { fontSize: 12, marginHorizontal: 16, marginBottom: 8 },
   likedByText: {
     color: "#FFFFFF",
     fontSize: 13,
@@ -981,11 +1014,35 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 16,
   },
+  normalPostCard: {
+    borderRadius: 12,
+    padding: 0,
+    overflow: "hidden",
+  },
+  normalPostCardDark: {
+    backgroundColor: "rgba(17, 17, 17, 0.85)",
+  },
+  embeddedPostCard: {
+    marginHorizontal: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.035)",
+  },
+  embeddedNormalPostCard: {
+    borderRadius: 12,
+  },
   postHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 12,
+  },
+  normalPostHeader: {
+    alignItems: "center",
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
   },
   postAuthorInfo: {
     flexDirection: "row",
@@ -997,6 +1054,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginRight: 10,
   },
+  normalPostAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 8,
+  },
   postAvatarFallback: {
     backgroundColor: '#2B2B36',
     alignItems: 'center',
@@ -1007,9 +1070,19 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     justifyContent: "center",
   },
+  normalAuthorTextContainer: {
+    minHeight: 40,
+    paddingRight: 8,
+  },
   authorLine: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  normalAuthorLine: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    letterSpacing: 0,
   },
   postAuthor: {
     color: "#FFFFFF",
@@ -1024,9 +1097,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 2,
   },
+  normalTimeRow: {
+    marginTop: 4,
+    minHeight: 16,
+  },
   postTime: {
     color: "#8E8E9B",
     fontSize: 11,
+  },
+  normalPostTime: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+    letterSpacing: 0,
   },
   dotSeparator: {
     color: "#8E8E9B",
@@ -1036,6 +1119,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
+  },
+  normalPostHeaderActions: {
+    height: 20,
+    marginTop: 0,
   },
   followBtn: {
     flexDirection: "row",
@@ -1047,11 +1134,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 10,
   },
+  normalFollowBtn: {
+    height: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    marginRight: 20,
+  },
   followBtnText: {
     color: "#D4B0EB",
     fontSize: 11,
     fontWeight: "600",
     marginLeft: 4,
+  },
+  normalFollowBtnText: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+    letterSpacing: 0,
   },
   followingBtn: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -1059,6 +1158,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     marginRight: 10,
+  },
+  normalFollowingBtn: {
+    height: 20,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    marginRight: 20,
   },
   followingBtnText: {
     color: "#D0D0D8",
@@ -1068,11 +1174,26 @@ const styles = StyleSheet.create({
   moreBtn: {
     padding: 2,
   },
+  normalMoreBtn: {
+    width: 20,
+    height: 20,
+    padding: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   postCaption: {
     color: "#D0D0D8",
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 16,
+  },
+  normalPostCaption: {
+    fontSize: 16,
+    fontWeight: "400",
+    lineHeight: 22,
+    letterSpacing: 0,
+    marginBottom: 12,
+    paddingHorizontal: 12,
   },
   postMediaContainer: {
     width: "100%",
@@ -1080,6 +1201,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     position: "relative",
+  },
+  normalPostMediaContainer: {
+    aspectRatio: 1,
+    height: undefined,
+    borderRadius: 0,
   },
   mediaNoTopMargin: {
     marginTop: 4,
@@ -1222,6 +1348,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: 'space-between',
     marginTop: 16,
+  },
+  normalPostFooter: {
+    minHeight: 20,
+    marginTop: 12,
+    marginBottom: 12,
+    paddingHorizontal: 12,
   },
   statBtn: {
     backgroundColor: '#FFFFFF',

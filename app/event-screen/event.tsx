@@ -3,7 +3,8 @@ import AccessTab from "@/components/eventTabs/AccessTab";
 import ChatTab from "@/components/eventTabs/ChatTab";
 // ProductTab hidden — preserved for future restoration
 // import ProductTab from "@/components/eventTabs/ProductTab";
-import VibeTab from "@/components/eventTabs/VibeTab";
+import HostEventWindowsTab from "@/components/eventTabs/HostEventWindowsTab";
+import AttendeeEventWindowsTab from "@/components/eventTabs/AttendeeEventWindowsTab";
 import BackButton from "@/components/ui/BackButton";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
@@ -34,7 +35,7 @@ import {
 import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
-import { toggleMomentReaction, shareMoment, type MomentInteractionSummary } from "@/lib/moments";
+import { toggleMomentReaction, shareMoment, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
@@ -349,6 +350,7 @@ const EventScreen = () => {
   const [isLikePending, setIsLikePending] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [footerHeight, setFooterHeight] = useState(0);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -362,9 +364,10 @@ const EventScreen = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  const isHostMode =
-    params.mode === "host" ||
-    Boolean(event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)));
+  const isEventOwner = Boolean(
+    event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)),
+  );
+  const isHostMode = params.mode === "host" || isEventOwner;
 
   const userLocation = useMemo(
     () =>
@@ -630,13 +633,15 @@ const EventScreen = () => {
     setShowShare(true);
   };
 
-  const handleRepost = async () => {
+  const handleRepost = async (payload: RepostPayload) => {
     if (!interactionMomentId) return;
     try {
-      await shareMoment(interactionMomentId);
-      setLocalSharesCount((prev) => prev + 1);
-    } catch {
-      // best-effort — share count is non-critical
+      const share = await shareMoment(interactionMomentId, payload);
+      setLocalSharesCount(share.moment.sharesCount);
+      setShowShare(false);
+    } catch (error) {
+      Alert.alert("Unable to repost", getAuthErrorMessage(error, "Please try again."));
+      throw error;
     }
   };
 
@@ -1270,7 +1275,13 @@ const EventScreen = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       {renderHeader()}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: footerHeight + 24 },
+        ]}
+      >
         <View style={styles.imageContainer}>
           <Image source={{ uri: bannerImageUri }} style={styles.heroImage} contentFit="cover" />
           <LinearGradient
@@ -1470,13 +1481,15 @@ const EventScreen = () => {
             />
           )}
           {activeTab === "Mooments" && eventId && (
-            <VibeTab
-              eventId={eventId}
-              eventName={event?.name ?? "Event"}
-              isHostMode={isHostMode}
-              isParticipant={Object.values(purchasedTicketCounts).some((count) => count > 0)}
-              scheduledAt={event?.scheduledAt}
-            />
+            isEventOwner ? (
+              <HostEventWindowsTab
+                eventId={eventId}
+                eventStartsAt={event?.scheduledAt}
+                eventEndsAt={event?.endAt}
+              />
+            ) : (
+              <AttendeeEventWindowsTab eventId={eventId} />
+            )
           )}
           {activeTab === "Chat" && eventId && (
             <ChatTab
@@ -1497,10 +1510,10 @@ const EventScreen = () => {
           */}
         </View>
 
-        <View style={{ height: 220 }} />
       </ScrollView>
 
       <View
+        onLayout={(layoutEvent) => setFooterHeight(layoutEvent.nativeEvent.layout.height)}
         style={[
           styles.footer,
           {
@@ -1808,8 +1821,19 @@ const EventScreen = () => {
       <ShareModal
         visible={showShare}
         onClose={() => setShowShare(false)}
-        shareUrl={event?.id ? `xenog://events/${event.id}` : undefined}
+        shareUrl={event?.id ? `https://mooment.app/events/${event.id}` : undefined}
         onRepost={handleRepost}
+        item={event ? {
+          type: "event",
+          id: event.id,
+          preview: event.name,
+          imageUrl: event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null,
+          authorName: event.host?.name ?? null,
+          canShareToChat: event.privacy === "public",
+          categoryLabels: event.categories?.length ? event.categories : event.category ? [event.category] : [],
+          dateTimeLabel: event.scheduledAt ? new Date(event.scheduledAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null,
+          locationLabel: event.location?.venue ?? event.location?.address ?? event.location?.searchLabel ?? null,
+        } : undefined}
       />
     </View>
   );

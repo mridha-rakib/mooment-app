@@ -15,7 +15,7 @@ export type DirectMessageConversationResponse = {
   isBlocked: boolean;
 };
 
-export type ChatMessageType = "text" | "image" | "video" | "audio" | "location" | "event";
+export type ChatMessageType = "text" | "image" | "video" | "audio" | "location" | "event" | "post";
 
 export type ChatFileAttachment = {
   type: "image" | "video" | "audio";
@@ -49,7 +49,16 @@ export type ChatEventAttachment = {
   address?: string | null;
 };
 
-export type ChatMessageAttachment = ChatFileAttachment | ChatLocationAttachment | ChatEventAttachment;
+export type ChatPostAttachment = {
+  type: "post";
+  postId: string;
+  preview?: string | null;
+  imageKey?: string | null;
+  imageUrl?: string | null;
+  authorName?: string | null;
+};
+
+export type ChatMessageAttachment = ChatFileAttachment | ChatLocationAttachment | ChatEventAttachment | ChatPostAttachment;
 
 export type DirectChatMessageResponse = {
   id: string;
@@ -91,8 +100,8 @@ export type GroupMessageResponse = {
   updatedAt: string;
 };
 
-export const getDirectMessageConversations = async (): Promise<DirectMessageConversationResponse[]> => {
-  const response = await api.get("/chat/dms");
+export const getDirectMessageConversations = async (options: { includeHidden?: boolean } = {}): Promise<DirectMessageConversationResponse[]> => {
+  const response = await api.get("/chat/dms", { params: options });
   const dms = response.data?.data?.dms;
 
   return Array.isArray(dms) ? (dms as DirectMessageConversationResponse[]) : [];
@@ -112,7 +121,7 @@ export const getDirectMessageHistory = async (
 
 export const sendDirectMessage = async (
   friendId: string,
-  payload: { text?: string; type?: ChatMessageType; attachment?: ChatMessageAttachment } | string,
+  payload: { text?: string; type?: ChatMessageType; attachment?: ChatMessageAttachment; clientMessageId?: string } | string,
 ): Promise<DirectChatMessageResponse> => {
   const body = typeof payload === "string" ? { text: payload } : payload;
   const response = await api.post(`/chat/dms/${friendId}/messages`, body);

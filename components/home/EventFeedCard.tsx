@@ -6,7 +6,7 @@ import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-na
 
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { cancelEvent, toggleEventSave, type EventResponse } from "@/lib/events";
-import { shareMoment, toggleMomentReaction, type MomentInteractionSummary } from "@/lib/moments";
+import { shareMoment, toggleMomentReaction, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
@@ -51,9 +51,16 @@ const getLocation = (event: EventResponse): string =>
   || event.location?.address?.trim()
   || "";
 
-type Props = { event: EventResponse };
+type Props = {
+  event: EventResponse;
+  headerLabel?: string;
+  repostCaption?: string | null;
+  taggedFriendNames?: string[];
+  onRepostSuccess?: () => void;
+  embedded?: boolean;
+};
 
-export default function EventFeedCard({ event }: Props) {
+export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, embedded = false }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [bannerFailed, setBannerFailed] = useState(false);
 
@@ -164,11 +171,11 @@ export default function EventFeedCard({ event }: Props) {
     }
   };
 
-  const handleRepost = async () => {
+  const handleRepost = async (payload: RepostPayload) => {
     if (!event.interactionMomentId) return;
 
     try {
-      const share = await shareMoment(event.interactionMomentId);
+      const share = await shareMoment(event.interactionMomentId, payload);
       applyInteractionSummary({
         momentId: event.interactionMomentId,
         likesCount: share.moment.likesCount,
@@ -177,8 +184,10 @@ export default function EventFeedCard({ event }: Props) {
         isLiked: share.moment.isLiked,
       });
       setShareVisible(false);
+      onRepostSuccess?.();
     } catch (error) {
       Alert.alert("Unable to repost", getAuthErrorMessage(error, "Please try again."));
+      throw error;
     }
   };
 
@@ -303,7 +312,14 @@ export default function EventFeedCard({ event }: Props) {
   }
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, embedded && styles.embeddedCard]}>
+      {headerLabel ? (
+        <View style={styles.repostContext}>
+          <Text style={styles.repostLabel}>{headerLabel}</Text>
+          {repostCaption ? <Text style={styles.repostCaption}>{repostCaption}</Text> : null}
+          {taggedFriendNames.length > 0 ? <Text style={styles.repostTags}>with {taggedFriendNames.join(", ")}</Text> : null}
+        </View>
+      ) : null}
       {/* ── Header ──────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.hostRow}>
@@ -463,6 +479,17 @@ export default function EventFeedCard({ event }: Props) {
         onClose={() => setShareVisible(false)}
         onRepost={handleRepost}
         shareUrl={`https://mooment.app/events/${event.id}`}
+        item={{
+          type: "event",
+          id: event.id,
+          preview: event.name,
+          imageUrl: bannerUri,
+          authorName: hostName,
+          canShareToChat: event.privacy === "public",
+          categoryLabels: displayCategories,
+          dateTimeLabel: [eventDate, eventTime].filter(Boolean).join(" · "),
+          locationLabel: location,
+        }}
       />
 
       <MoreMenuModal
@@ -506,6 +533,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     overflow: "hidden",
   },
+  embeddedCard: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  repostContext: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 2, gap: 4 },
+  repostLabel: { color: "#AFAFB8", fontSize: 12, fontWeight: "700" },
+  repostCaption: { color: "#FFFFFF", fontSize: 14, lineHeight: 19 },
+  repostTags: { color: "#AFAFB8", fontSize: 12 },
 
   // ── Header
   header: {

@@ -5,7 +5,7 @@ import { PostData } from "@/components/post/FeedPost";
 import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { getProfileTimeline, type MomentInteractionSummary } from "@/lib/moments";
+import { getProfileTimeline, type MomentInteractionSummary, type MomentTimelineItem } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getUserById, getUserProfileStats } from "@/lib/users";
@@ -46,6 +46,7 @@ export default function UserProfileScreen() {
   const routeIsFollowing = params.isFollowing === "true" ? true : params.isFollowing === "false" ? false : undefined;
   const [avatarUri, setAvatarUri] = useState<string | null>(params.avatar || null);
   const [posts, setPosts] = useState<PostData[]>([]);
+  const [reposts, setReposts] = useState<MomentTimelineItem[]>([]);
   const [profileUser, setProfileUser] = useState<UserProfileData>({
     id: userId || "unknown",
     name: params.name || FALLBACK_PROFILE_NAME,
@@ -93,7 +94,7 @@ export default function UserProfileScreen() {
         },
       });
       setPosts(
-        timeline.items
+        timeline.items.filter((item) => item.type === "post")
           .map((item) => mapMomentToPost(item.moment, {
             fallbackAvatar: nextAvatar,
             createdAt: item.createdAt,
@@ -102,8 +103,10 @@ export default function UserProfileScreen() {
           }))
           .filter((post): post is PostData => Boolean(post)),
       );
+      setReposts(timeline.items.filter((item) => item.type === "share"));
     } catch (error) {
       setPosts([]);
+      setReposts([]);
       Alert.alert("Unable to load profile", getAuthErrorMessage(error, "Please try again."));
     }
   }, [params.avatar, params.name, routeIsFollowing, userId]);
@@ -149,6 +152,7 @@ export default function UserProfileScreen() {
       <ProfileView
         user={userData}
         posts={posts}
+        reposts={reposts}
         isOwnProfile={false}
         onInteractionChange={handleInteractionChange}
         onFollowChange={handleFollowChange}

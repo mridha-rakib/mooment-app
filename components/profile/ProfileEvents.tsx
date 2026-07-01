@@ -16,7 +16,7 @@ import {
   type ProfileEventGroups,
 } from "@/lib/events";
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { shareMoment, toggleMomentReaction, type MomentInteractionSummary } from "@/lib/moments";
+import { shareMoment, toggleMomentReaction, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { blockUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
@@ -404,13 +404,13 @@ function ProfileEventCard({
     }
   };
 
-  const handleRepost = async () => {
+  const handleRepost = async (payload: RepostPayload) => {
     if (!event.interactionMomentId) {
       return;
     }
 
     try {
-      const share = await shareMoment(event.interactionMomentId);
+      const share = await shareMoment(event.interactionMomentId, payload);
 
       applyInteractionSummary({
         momentId: event.interactionMomentId,
@@ -636,6 +636,17 @@ function ProfileEventCard({
         onClose={() => setShareVisible(false)}
         onRepost={event.interactionMomentId ? handleRepost : undefined}
         shareUrl={`https://mooment.app/events/${event.id}`}
+        item={{
+          type: "event",
+          id: event.id,
+          preview: event.name,
+          imageUrl: bannerUri,
+          authorName: hostName,
+          canShareToChat: event.privacy === "public",
+          categoryLabels: categories,
+          dateTimeLabel: [formatEventDate(event.scheduledAt), formatEventTimeRange(event.scheduledAt, event.endAt)].filter(Boolean).join(" · "),
+          locationLabel: distanceOrLocation,
+        }}
       />
 
       <MoreMenuModal

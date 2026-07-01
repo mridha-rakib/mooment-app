@@ -16,9 +16,10 @@ import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
 import CommentsModal from "@/components/post/CommentsModal";
 import FeedPost, { PostData } from "@/components/post/FeedPost";
 import ShareModal from "@/components/post/ShareModal";
+import RepostFeedCard from "@/components/post/RepostFeedCard";
 
-import { consumePendingNewMoment, deleteMoment, getFeedMoments, shareMoment } from "@/lib/moments";
-import type { MomentInteractionSummary } from "@/lib/moments";
+import { consumePendingNewMoment, deleteMoment, getFeedMoments, getFeedReposts, shareMoment } from "@/lib/moments";
+import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -86,16 +87,19 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
 type FeedItem =
   | { type: 'post'; id: string; data: PostData }
   | { type: 'event'; id: string; data: EventResponse }
+  | { type: 'repost'; id: string; data: MomentTimelineItem }
   | { type: 'suggested_users'; id: string; data: SuggestedUser[] };
 
 const buildFeedItems = (
   posts: PostData[],
   events: EventResponse[],
+  reposts: MomentTimelineItem[],
   suggestedUsers: SuggestedUser[],
 ): FeedItem[] => {
   type ContentItem =
     | { type: 'post'; id: string; data: PostData; sortTime: number }
-    | { type: 'event'; id: string; data: EventResponse; sortTime: number };
+    | { type: 'event'; id: string; data: EventResponse; sortTime: number }
+    | { type: 'repost'; id: string; data: MomentTimelineItem; sortTime: number };
 
   const contentItems: ContentItem[] = [
     ...posts.map((post) => ({
@@ -110,6 +114,12 @@ const buildFeedItems = (
       data: event,
       sortTime: new Date(event.createdAt).getTime(),
     })),
+    ...reposts.map((share) => ({
+      type: 'repost' as const,
+      id: `repost-${share.id}`,
+      data: share,
+      sortTime: new Date(share.createdAt).getTime(),
+    })),
   ].sort((a, b) => b.sortTime - a.sortTime);
 
   const items: FeedItem[] = [];
@@ -118,8 +128,10 @@ const buildFeedItems = (
   for (const item of contentItems) {
     if (item.type === 'post') {
       items.push({ type: 'post', id: item.id, data: item.data });
-    } else {
+    } else if (item.type === 'event') {
       items.push({ type: 'event', id: item.id, data: item.data });
+    } else {
+      items.push({ type: 'repost', id: item.id, data: item.data });
     }
 
     contentCount++;
@@ -148,6 +160,7 @@ export default function HomeFeed() {
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
   const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
+  const [feedReposts, setFeedReposts] = useState<MomentTimelineItem[]>([]);
   const [activeHashtags, setActiveHashtags] = useState<string[]>([]);
   const [nearbyEventFilter, setNearbyEventFilter] = useState<NearbyEventsFilter | null>(null);
   const [isFeedLoading, setIsFeedLoading] = useState(false);
@@ -155,6 +168,7 @@ export default function HomeFeed() {
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const feedRequestIdRef = useRef(0);
+  const feedScrollRef = useRef<ScrollView>(null);
   const params = useLocalSearchParams();
 
   useEffect(() => {
@@ -187,38 +201,45 @@ export default function HomeFeed() {
   const loadFeed = useCallback(async () => {
     const requestId = ++feedRequestIdRef.current;
     setIsFeedLoading(true);
-    const [momentsResult, eventsResult] = await Promise.allSettled([
-      getFeedMoments({ hashtags: activeHashtags }),
-      getFeedEvents(nearbyEventFilter
-        ? {
-            latitude: nearbyEventFilter.latitude,
-            longitude: nearbyEventFilter.longitude,
-            radiusKm: nearbyEventFilter.radiusMiles * MILES_TO_KM,
-            limit: 100,
-          }
-        : {}),
-    ]);
+    try {
+      const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
+        getFeedMoments({ hashtags: activeHashtags }),
+        getFeedEvents(nearbyEventFilter
+          ? {
+              latitude: nearbyEventFilter.latitude,
+              longitude: nearbyEventFilter.longitude,
+              radiusKm: nearbyEventFilter.radiusMiles * MILES_TO_KM,
+              limit: 100,
+            }
+          : {}),
+        getFeedReposts(),
+      ]);
 
-    if (requestId !== feedRequestIdRef.current) return;
+      if (requestId !== feedRequestIdRef.current) return;
 
-    if (momentsResult.status === "fulfilled") {
-      setFeedMomentPosts(
-        momentsResult.value
-          .map((moment) => mapMomentToPost(moment, {
-            storageUrlResolver: getStorageFileUrl,
-          }))
-          .filter((post): post is PostData => Boolean(post)),
+      if (momentsResult.status === "fulfilled") {
+        setFeedMomentPosts(
+          momentsResult.value
+            .map((moment) => mapMomentToPost(moment, {
+              storageUrlResolver: getStorageFileUrl,
+            }))
+            .filter((post): post is PostData => Boolean(post)),
+        );
+      } else {
+        setFeedMomentPosts([]);
+      }
+
+      setFeedEvents(
+        (nearbyEventFilter || activeHashtags.length === 0) && eventsResult.status === "fulfilled"
+          ? eventsResult.value
+          : [],
       );
-    } else {
-      setFeedMomentPosts([]);
+      setFeedReposts(repostsResult.status === 'fulfilled' ? repostsResult.value : []);
+    } finally {
+      if (requestId === feedRequestIdRef.current) {
+        setIsFeedLoading(false);
+      }
     }
-
-    setFeedEvents(
-      (nearbyEventFilter || activeHashtags.length === 0) && eventsResult.status === "fulfilled"
-        ? eventsResult.value
-        : [],
-    );
-    setIsFeedLoading(false);
   }, [activeHashtags, nearbyEventFilter]);
 
   const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
@@ -231,6 +252,13 @@ export default function HomeFeed() {
     await Promise.all([loadStories(), loadFeed()]);
     setIsRefreshing(false);
   }, [loadFeed, loadStories]);
+
+  const refreshFeedAfterRepost = useCallback(async () => {
+    await loadFeed();
+    requestAnimationFrame(() => {
+      feedScrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
+  }, [loadFeed]);
 
   useFocusEffect(
     useCallback(() => {
@@ -310,11 +338,11 @@ export default function HomeFeed() {
     setShareModalVisible(true);
   };
 
-  const handleRepost = useCallback(async () => {
+  const handleRepost = useCallback(async (payload: RepostPayload) => {
     if (!selectedSharePost) return;
 
     try {
-      const share = await shareMoment(selectedSharePost.id);
+      const share = await shareMoment(selectedSharePost.id, payload);
 
       applyInteractionSummary(selectedSharePost.id, {
         momentId: selectedSharePost.id,
@@ -323,13 +351,15 @@ export default function HomeFeed() {
         sharesCount: share.moment.sharesCount,
         isLiked: share.moment.isLiked,
       });
+      setFeedReposts((current) => [share, ...current.filter((item) => item.id !== share.id)]);
       setShareModalVisible(false);
       setSelectedSharePost(null);
-      Alert.alert('Reposted', 'This post now appears on your timeline.');
+      await refreshFeedAfterRepost();
     } catch (error) {
       Alert.alert('Unable to repost', getAuthErrorMessage(error, 'Please try sharing this post again.'));
+      throw error;
     }
-  }, [applyInteractionSummary, selectedSharePost]);
+  }, [applyInteractionSummary, refreshFeedAfterRepost, selectedSharePost]);
 
   const handleAuthorFollowChange = useCallback((authorId: string, isFollowing: boolean) => {
     setFeedMomentPosts((currentPosts) => currentPosts.map((post) => (
@@ -365,7 +395,7 @@ export default function HomeFeed() {
     );
   }, []);
 
-  const feedItems = buildFeedItems(feedMomentPosts, feedEvents, suggestedUsers);
+  const feedItems = buildFeedItems(feedMomentPosts, feedEvents, feedReposts, suggestedUsers);
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -381,6 +411,7 @@ export default function HomeFeed() {
 
         {selectedType === 'Feed' ? (
           <ScrollView
+            ref={feedScrollRef}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -419,7 +450,10 @@ export default function HomeFeed() {
                 );
               }
               if (item.type === 'event') {
-                return <EventFeedCard key={item.id} event={item.data} />;
+                return <EventFeedCard key={item.id} event={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
+              }
+              if (item.type === 'repost') {
+                return <RepostFeedCard key={item.id} share={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
               }
               if (item.type === 'suggested_users') {
                 return <PeopleToFollow key={item.id} users={item.data} />;
@@ -454,6 +488,13 @@ export default function HomeFeed() {
         }}
         onRepost={selectedSharePost ? handleRepost : undefined}
         shareUrl={selectedSharePost ? `https://mooment.app/moments/${selectedSharePost.id}` : undefined}
+        item={selectedSharePost ? {
+          type: 'post',
+          id: selectedSharePost.id,
+          preview: selectedSharePost.caption,
+          imageUrl: selectedSharePost.mediaItems?.[0]?.uri ?? selectedSharePost.mediaUris?.[0],
+          authorName: selectedSharePost.authorName,
+        } : undefined}
       />
 
       <Modal visible={showSuccessModal} transparent animationType="fade">

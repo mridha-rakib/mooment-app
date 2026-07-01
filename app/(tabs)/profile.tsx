@@ -4,7 +4,7 @@ import { PostData } from "@/components/post/FeedPost";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { deleteMoment, getProfileTimeline, shareMoment } from "@/lib/moments";
-import type { MomentInteractionSummary } from "@/lib/moments";
+import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getUserProfileStats } from "@/lib/users";
@@ -40,6 +40,7 @@ export default function ProfileTab() {
   const user = useAuthStore((state) => state.user);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [posts, setPosts] = useState<PostData[]>([]);
+  const [reposts, setReposts] = useState<MomentTimelineItem[]>([]);
   const [profileStats, setProfileStats] = useState(PROFILE_STATS);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function ProfileTab() {
   const loadTimeline = useCallback(async () => {
     if (!user?.id) {
       setPosts([]);
+      setReposts([]);
       setProfileStats(PROFILE_STATS);
       return;
     }
@@ -65,7 +67,7 @@ export default function ProfileTab() {
       ]);
 
       setPosts(
-        timeline.items
+        timeline.items.filter((item) => item.type === 'post')
           .map((item) => mapMomentToPost(item.moment, {
             fallbackAvatar: avatarUri,
             createdAt: item.createdAt,
@@ -74,6 +76,7 @@ export default function ProfileTab() {
           }))
           .filter((post): post is PostData => Boolean(post)),
       );
+      setReposts(timeline.items.filter((item) => item.type === 'share'));
       setProfileStats((currentStats) => ({
         ...currentStats,
         posts: timeline.stats.posts,
@@ -83,6 +86,7 @@ export default function ProfileTab() {
       }));
     } catch {
       setPosts([]);
+      setReposts([]);
       setProfileStats(PROFILE_STATS);
     }
   }, [avatarUri, user?.id]);
@@ -108,13 +112,13 @@ export default function ProfileTab() {
   }, [avatarUri, profileStats, user?.accountType, user?.bio, user?.email, user?.id, user?.name, user?.username]);
 
   const handleRepost = useCallback(
-    async (post: PostData) => {
+    async (post: PostData, payload: RepostPayload) => {
       try {
-        await shareMoment(post.id);
+        await shareMoment(post.id, payload);
         await loadTimeline();
-        Alert.alert('Reposted', 'This post now appears on your timeline.');
       } catch (error) {
         Alert.alert('Unable to repost', getAuthErrorMessage(error, 'Please try sharing this post again.'));
+        throw error;
       }
     },
     [loadTimeline],
@@ -167,6 +171,7 @@ export default function ProfileTab() {
       <ProfileView
         user={profileUser}
         posts={posts}
+        reposts={reposts}
         onRepost={handleRepost}
         onDeletePost={handleDeletePost}
         onInteractionChange={handleInteractionChange}

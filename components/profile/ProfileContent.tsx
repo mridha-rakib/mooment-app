@@ -1,15 +1,16 @@
 import React from "react";
 import { StyleSheet, View, Text } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
-import type { MomentInteractionSummary } from "@/lib/moments";
+import type { MomentInteractionSummary, MomentTimelineItem } from "@/lib/moments";
 import FeedPost, { PostData } from "../post/FeedPost";
+import RepostFeedCard from "../post/RepostFeedCard";
 import ProfileEvents from "./ProfileEvents";
-import ProfileShop from "./ProfileShop";
 import { ProfileTabType } from "./ProfileTabs";
 
 type ProfileContentProps = {
   activeTab: ProfileTabType;
   posts: PostData[];
+  reposts?: MomentTimelineItem[];
   onCommentPress: (post: PostData) => void;
   onSharePress: (post: PostData) => void;
   onDeletePost?: (post: PostData) => void;
@@ -18,11 +19,13 @@ type ProfileContentProps = {
   profileUserId: string;
   profileIsFollowing?: boolean;
   onFollowChange?: (isFollowing: boolean) => void;
+  onRepostSuccess?: () => void;
 };
 
 export default function ProfileContent({ 
   activeTab, 
   posts, 
+  reposts = [],
   onCommentPress, 
   onSharePress,
   onDeletePost,
@@ -31,23 +34,23 @@ export default function ProfileContent({
   profileUserId,
   profileIsFollowing,
   onFollowChange,
+  onRepostSuccess,
 }: ProfileContentProps) {
   const { colors } = useTheme();
+  const feedItems = [
+    ...posts.map((post) => ({ type: 'post' as const, id: post.id, createdAt: post.createdAt ?? '', post })),
+    ...reposts.map((share) => ({ type: 'repost' as const, id: share.id, createdAt: share.createdAt, share })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   
   return (
     <View style={styles.container}>
       {activeTab === 'feed' && (
-        posts.length > 0 ? (
-          posts.map((post) => (
-            <FeedPost 
-              key={post.id} 
-              post={post} 
-              onCommentPress={onCommentPress} 
-              onSharePress={onSharePress} 
-              onDeletePress={onDeletePost}
-              onInteractionChange={onInteractionChange}
-              isOwnPost={isOwnProfile}
-            />
+        feedItems.length > 0 ? (
+          feedItems.map((item) => item.type === 'repost' ? (
+            <RepostFeedCard key={`repost-${item.id}`} share={item.share} labelOverride={isOwnProfile ? 'Shared by you' : undefined} onRepostSuccess={onRepostSuccess} />
+          ) : (
+            <FeedPost key={`post-${item.id}`} post={item.post} onCommentPress={onCommentPress} onSharePress={onSharePress}
+              onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile} />
           ))
         ) : (
           <View style={styles.emptyContainer}>

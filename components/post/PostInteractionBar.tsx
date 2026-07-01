@@ -28,6 +28,7 @@ type PostInteractionBarProps = {
   shareDisabled?: boolean;
   likeIconStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
+  compact?: boolean;
 };
 
 export default function PostInteractionBar({
@@ -44,6 +45,7 @@ export default function PostInteractionBar({
   shareDisabled = false,
   likeIconStyle,
   style,
+  compact = false,
 }: PostInteractionBarProps) {
   const { colors } = useTheme();
 
@@ -51,7 +53,7 @@ export default function PostInteractionBar({
     <View style={[styles.container, style]}>
       {showLike && (
         <TouchableOpacity
-          style={styles.action}
+          style={[styles.action, compact && styles.compactAction]}
           activeOpacity={0.7}
           onPress={onLikePress}
           disabled={likeDisabled || !onLikePress}
@@ -59,37 +61,37 @@ export default function PostInteractionBar({
           <Animated.View style={likeIconStyle}>
             <Ionicons
               name={isLiked ? 'heart' : 'heart-outline'}
-              size={22}
+              size={compact ? 20 : 22}
               color={isLiked ? '#F2245C' : colors.textSecondary}
             />
           </Animated.View>
           {likesCount !== undefined && (
-            <Text style={[styles.count, { color: colors.text }]}>{likesCount}</Text>
+            <Text style={[styles.count, compact && styles.compactCount, { color: colors.text }]}>{likesCount}</Text>
           )}
         </TouchableOpacity>
       )}
 
       {commentsCount !== undefined && (
         <TouchableOpacity
-          style={styles.action}
+          style={[styles.action, compact && styles.compactAction]}
           activeOpacity={0.7}
           onPress={onCommentPress}
           disabled={commentDisabled || !onCommentPress}
         >
           <HugeiconsIcon icon={Comment02Icon} size={20} color={colors.textSecondary} />
-          <Text style={[styles.count, { color: colors.text }]}>{commentsCount}</Text>
+          <Text style={[styles.count, compact && styles.compactCount, { color: colors.text }]}>{commentsCount}</Text>
         </TouchableOpacity>
       )}
 
       {sharesCount !== undefined && (
         <TouchableOpacity
-          style={styles.action}
+          style={[styles.action, compact && styles.compactAction]}
           activeOpacity={0.7}
           onPress={onSharePress}
           disabled={shareDisabled || !onSharePress}
         >
           <HugeiconsIcon icon={Share01Icon} size={20} color={colors.textSecondary} />
-          <Text style={[styles.count, { color: colors.text }]}>{sharesCount}</Text>
+          <Text style={[styles.count, compact && styles.compactCount, { color: colors.text }]}>{sharesCount}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -110,5 +112,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginLeft: 6,
+  },
+  compactAction: {
+    marginRight: 20,
+  },
+  compactCount: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+    marginLeft: 8,
   },
 });

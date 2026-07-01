@@ -51,6 +51,16 @@ export type MomentTimelineItem = {
   createdAt: string;
   sharedAt?: string | null;
   moment: Moment;
+  repostCaption?: string | null;
+  taggedFriends?: MomentAuthor[];
+  sharedBy?: MomentAuthor | null;
+  originalItem?: { type: "post" | "event"; id: string };
+};
+
+export type RepostPayload = {
+  caption?: string | null;
+  taggedFriendIds?: string[];
+  clientRequestId?: string | null;
 };
 
 export type ProfileTimeline = {
@@ -133,6 +143,13 @@ export const getFeedMoments = async (options: { hashtags?: string[]; limit?: num
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 
+export const getMoment = async (momentId: string): Promise<Moment> => {
+  const response = await api.get(`/moments/${encodeURIComponent(momentId)}`);
+  const moment = response.data?.data?.moment as Moment | undefined;
+  if (!moment) throw new Error("The moment response was incomplete.");
+  return moment;
+};
+
 export const getHashtagMoments = async (hashtag: string, limit = 100): Promise<Moment[]> => {
   const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, { params: { limit } });
   return (response.data?.data?.moments ?? []) as Moment[];
@@ -150,8 +167,8 @@ export const getProfileTimeline = async (userId: string): Promise<ProfileTimelin
   };
 };
 
-export const shareMoment = async (momentId: string): Promise<MomentTimelineItem> => {
-  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/share`);
+export const shareMoment = async (momentId: string, payload: RepostPayload = {}): Promise<MomentTimelineItem> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/share`, payload);
   const share = response.data?.data?.share as MomentTimelineItem | undefined;
 
   if (!share) {
@@ -159,6 +176,12 @@ export const shareMoment = async (momentId: string): Promise<MomentTimelineItem>
   }
 
   return share;
+};
+
+export const getFeedReposts = async (limit = 50): Promise<MomentTimelineItem[]> => {
+  const response = await api.get("/moments/shares/feed", { params: { limit } });
+  const shares = response.data?.data?.shares;
+  return Array.isArray(shares) ? (shares as MomentTimelineItem[]) : [];
 };
 
 export const deleteMoment = async (momentId: string): Promise<void> => {
