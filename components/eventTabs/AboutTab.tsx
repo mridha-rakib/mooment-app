@@ -7,6 +7,7 @@ import { Alert, Dimensions, Linking, Modal, StyleSheet, Text, TouchableOpacity, 
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { APP_MAP_STYLE_URL } from "@/lib/mapStyles";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, unfollowUser } from "@/lib/users";
 import type { EventAgeRestriction, EventHost, EventLocation } from "@/lib/events";
@@ -17,8 +18,6 @@ import SegmentedControl from "../ui/SegmentedControl";
 
 const { width } = Dimensions.get("window");
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
-
-const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
 
 const isDirectMediaUrl = (value?: string | null) =>
   Boolean(value && /^(https?:|data:|file:|content:)/i.test(value.trim()));
@@ -198,21 +197,13 @@ const EventLocationMap = ({
     <View style={styles.mapContainer}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={SATELLITE_STYLE_URL}
+        styleURL={APP_MAP_STYLE_URL}
         logoEnabled={false}
         attributionEnabled={false}
         scrollEnabled={false}
         pitchEnabled={false}
         rotateEnabled={false}
       >
-        <Mapbox.RasterLayer
-          id="satellite"
-          existing
-          style={{
-            rasterBrightnessMax: 0.4,
-            rasterSaturation: -0.15,
-          }}
-        />
         <Mapbox.Camera
           ref={cameraRef}
           animationDuration={0}

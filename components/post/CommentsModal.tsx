@@ -9,6 +9,7 @@ import { getAuthErrorMessage } from '@/lib/authErrors';
 import { createMomentComment, getMomentComments, toggleCommentReaction, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
 import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
+import { createStoryComment, getStoryComments, type StoryComment, type StoryInteraction } from '@/lib/stories';
 import UserAvatar from '../ui/UserAvatar';
 
 type CommentType = {
@@ -109,6 +110,18 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
   replies: comment.replies.map(momentCommentToComment),
 });
 
+const storyCommentToComment = (comment: StoryComment): CommentType => ({
+  id: comment.id,
+  authorId: comment.author?.id,
+  authorName: comment.author?.name ?? 'Mooment User',
+  authorAvatar: comment.author?.avatarUrl ?? (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null),
+  text: comment.text,
+  timeAgo: formatCommentTimeAgo(comment.createdAt),
+  likesCount: comment.likesCount,
+  isLiked: comment.isLiked,
+  replies: comment.replies.map(storyCommentToComment),
+});
+
 export default function CommentsModal({
   visible,
   onClose,
@@ -116,6 +129,8 @@ export default function CommentsModal({
   likesCount = 0,
   sharesCount = 0,
   onInteractionChange,
+  entityType = 'moment',
+  onStoryInteractionChange,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -123,6 +138,8 @@ export default function CommentsModal({
   likesCount?: number;
   sharesCount?: number;
   onInteractionChange?: (summary: MomentInteractionSummary) => void;
+  entityType?: 'moment' | 'story';
+  onStoryInteractionChange?: (interaction: StoryInteraction) => void;
 }) {
   const { colors, isDark } = useTheme();
   const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
@@ -151,15 +168,17 @@ export default function CommentsModal({
     setIsLoadingComments(true);
 
     try {
-      const momentComments = await getMomentComments(momentId);
-
-      setComments(momentComments.map(momentCommentToComment));
+      if (entityType === 'story') {
+        setComments((await getStoryComments(momentId)).map(storyCommentToComment));
+      } else {
+        setComments((await getMomentComments(momentId)).map(momentCommentToComment));
+      }
     } catch (error) {
       Alert.alert('Unable to load comments', getAuthErrorMessage(error, 'Please try again.'));
     } finally {
       setIsLoadingComments(false);
     }
-  }, [momentId]);
+  }, [entityType, momentId]);
 
   useEffect(() => {
     if (visible) {
@@ -209,6 +228,7 @@ export default function CommentsModal({
   }, [onClose, visible]);
 
   const toggleCommentLike = async (commentId: string) => {
+    if (entityType === 'story') return;
     if (!canUseCommentsApi) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -278,19 +298,22 @@ export default function CommentsModal({
     setIsSendingComment(true);
 
     try {
-      const result = await createMomentComment(momentId, {
-        text: trimmedText,
-        parentCommentId: replyingTo?.id ?? null,
-      });
+      const payload = { text: trimmedText, parentCommentId: replyingTo?.id ?? null };
+      const result = entityType === 'story'
+        ? await createStoryComment(momentId, payload)
+        : await createMomentComment(momentId, payload);
 
-      const newComment = momentCommentToComment(result.comment);
+      const newComment = entityType === 'story'
+        ? storyCommentToComment(result.comment as StoryComment)
+        : momentCommentToComment(result.comment as MomentComment);
       const parentId = replyingTo?.id ?? null;
 
       // Capture parentId before clearing replyingTo so the setComments
       // updater below can close over the correct value.
       setCommentText('');
       setReplyingTo(null);
-      onInteractionChange?.(result.summary);
+      if ('summary' in result) onInteractionChange?.(result.summary);
+      if ('interaction' in result) onStoryInteractionChange?.(result.interaction);
 
       // Append the server-returned comment directly instead of re-fetching
       // the full list. Re-fetching triggers isLoadingComments true→false which

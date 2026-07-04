@@ -15,9 +15,10 @@ type Props = {
   share: MomentTimelineItem;
   labelOverride?: string;
   onRepostSuccess?: () => void;
+  showLoadingIndicator?: boolean;
 };
 
-export default function RepostFeedCard({ share, labelOverride, onRepostSuccess }: Props) {
+export default function RepostFeedCard({ share, labelOverride, onRepostSuccess, showLoadingIndicator = true }: Props) {
   const { colors } = useTheme();
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [eventLoading, setEventLoading] = useState(false);
@@ -74,7 +75,11 @@ export default function RepostFeedCard({ share, labelOverride, onRepostSuccess }
   );
 
   if (isEvent) {
-    if (eventLoading) return <ActivityIndicator style={styles.loading} color={colors.primary} />;
+    if (eventLoading) {
+      return showLoadingIndicator
+        ? <ActivityIndicator style={styles.loading} color={colors.primary} />
+        : <View style={styles.loadingSpacer} />;
+    }
 
     return (
       <View style={[styles.repostCard, { backgroundColor: colors.card }]}>
@@ -183,6 +188,7 @@ const formatTaggedNames = (names: string[]) => {
 
 const styles = StyleSheet.create({
   loading: { marginVertical: 36 },
+  loadingSpacer: { height: 72 },
   repostCard: {
     marginHorizontal: 16,
     marginBottom: 20,

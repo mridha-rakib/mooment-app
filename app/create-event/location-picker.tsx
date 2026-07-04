@@ -18,6 +18,7 @@ import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import { MAPBOX_PUBLIC_TOKEN } from '@/lib/mapbox';
+import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from '@/lib/mapStyles';
 import {
   reverseGeocodeLocation,
   searchLocations,
@@ -39,7 +40,6 @@ type CameraPreset = {
 
 const TERRAIN_SOURCE_ID = 'create-event-mapbox-dem';
 const TERRAIN_SOURCE_URL = 'mapbox://mapbox.mapbox-terrain-dem-v1';
-const SATELLITE_STYLE_URL = 'mapbox://styles/mapbox/satellite-streets-v12';
 
 const DEFAULT_LOCATION: LocationSearchResult = {
   address: '',
@@ -84,10 +84,8 @@ export default function LocationPickerScreen() {
       ? { animationDuration: 950, heading: -28, pitch: 64, zoomLevel: 16.7 }
       : { animationDuration: 700, heading: 0, pitch: 0, zoomLevel: 14 };
   const mapStyleUrl = isSatelliteMode
-    ? SATELLITE_STYLE_URL
-    : isDark
-      ? Mapbox.StyleURL.Dark
-      : Mapbox.StyleURL.Light;
+    ? SATELLITE_MAP_STYLE_URL
+    : APP_MAP_STYLE_URL;
   const mapModeLabel = {
     map2d: '2D',
     map3d: '3D',

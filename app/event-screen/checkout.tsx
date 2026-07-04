@@ -13,7 +13,6 @@ import {
   CheckoutHeader,
   EventCard,
   OrderSummary,
-  PaymentTypeSelector,
   PaymentMethods,
   SecurityBanner,
   TermsAgreement,
@@ -79,7 +78,6 @@ const EventCheckoutScreen = () => {
     rewardFreeQuantity?: string;
   }>();
   const { colors, isDark } = useTheme();
-  const [paymentType, setPaymentType] = useState("Online");
   const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
@@ -120,11 +118,6 @@ const EventCheckoutScreen = () => {
   const handleContinue = async () => {
     if (!agreed) {
       Alert.alert("Terms required", "Please accept the refund policy and terms before payment.");
-      return;
-    }
-
-    if (paymentType !== "Online") {
-      Alert.alert("Pay at Door", "Pay at Door checkout is not connected yet.");
       return;
     }
 
@@ -223,11 +216,6 @@ const EventCheckoutScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <PaymentTypeSelector 
-          paymentType={paymentType} 
-          onTypeChange={setPaymentType} 
-        />
-        
         <PaymentMethods
           payWith={payWith}
           onMethodChange={setPayWith}

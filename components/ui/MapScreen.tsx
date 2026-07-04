@@ -2,6 +2,7 @@ import { getCategoryColor } from "@/constants/categoryColors";
 import { EVENT_CATEGORIES } from "@/constants/eventCategories";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
 import { useAuthStore } from "@/stores/authStore";
 import { usePlanStore } from "@/stores/planStore";
 import {
@@ -13,6 +14,7 @@ import {
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import type { MapState } from "@rnmapbox/maps";
 import Mapbox from "@rnmapbox/maps";
 import { BlurView } from "expo-blur";
@@ -38,8 +40,6 @@ import EventPreviewModal from "./EventPreviewModal";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const SATELLITE_STYLE_URL = "mapbox://styles/mapbox/satellite-streets-v12";
-const TRAFFIC_DARK_STYLE_URL = "mapbox://styles/mapbox/traffic-night-v2";
 const DEFAULT_MAP_CENTER: [number, number] = [-73.935242, 40.73061];
 const DEFAULT_ZOOM_LEVEL = 12;
 const USER_LOCATION_ZOOM_LEVEL = 14;
@@ -243,6 +243,7 @@ export default function MapScreen({
   onUserLocationChange,
 }: MapScreenProps) {
   const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
   const { colors } = useTheme();
   const plans = usePlanStore((state) => state.plans);
   const restorePlans = usePlanStore((state) => state.restorePlans);
@@ -269,8 +270,8 @@ export default function MapScreen({
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const isSatellite = mapMode === "satellite";
   const currentMapStyle = isSatellite
-    ? SATELLITE_STYLE_URL
-    : TRAFFIC_DARK_STYLE_URL;
+    ? SATELLITE_MAP_STYLE_URL
+    : APP_MAP_STYLE_URL;
 
   // Reset the loaded flag whenever the style URL changes so markers are
   // held back until Mapbox has fully applied the new style.
@@ -561,12 +562,12 @@ export default function MapScreen({
 
         <View pointerEvents="none" style={[styles.mapShade, mapShadeStyle]} />
 
-        <View style={styles.mapControlsLeft}>
+        <View style={[styles.mapControlsLeft, { bottom: tabBarHeight + 20 }]}>
           <CinematicButton icon={Add01Icon} onPress={handleZoomIn} />
           <CinematicButton icon={Remove01Icon} onPress={handleZoomOut} />
         </View>
 
-        <View style={styles.mapControlsRight}>
+        <View style={[styles.mapControlsRight, { bottom: tabBarHeight + 20 }]}>
           <TouchableOpacity
             activeOpacity={0.86}
             onPress={toggleMapStyle}

@@ -40,8 +40,8 @@ type EventDraftState = {
   bannerImageDisplay: EventImageDisplay | null;
   ageRestriction: EventAgeRestriction;
   categories: EventCategory[];
-  scheduledAt: string;
-  endAt: string;
+  scheduledAt: string | null;
+  endAt: string | null;
   location: EventLocation;
   tickets: EventDraftTicket[];
   privacy: EventPrivacy;
@@ -55,8 +55,8 @@ type EventDraftState = {
   setStepTwo: (payload: {
     ageRestriction: EventAgeRestriction;
     categories: EventCategory[];
-    scheduledAt: string;
-    endAt: string;
+    scheduledAt: string | null;
+    endAt: string | null;
   }) => void;
   setStepThree: (payload: { location: EventLocation }) => void;
   setPrivacy: (privacy: EventPrivacy) => void;
@@ -75,30 +75,19 @@ type EventDraftState = {
 
 const DEFAULT_TICKET_ID = "default-general-ticket";
 
-const createDefaultTicket = (scheduledAt?: string | null): EventDraftTicket => ({
+const createDefaultTicket = (): EventDraftTicket => ({
   capacity: 42,
   description: "Entry from 9pm. Standing only.",
   localId: DEFAULT_TICKET_ID,
   name: "General Ticket",
   price: 45,
-  salesEndAt: scheduledAt ?? addHours(new Date(), 24).toISOString(),
+  salesEndAt: null,
   type: "pay",
 });
 
-const addHours = (value: string | Date, hours: number) => {
-  const date = new Date(value);
-  const baseDate = Number.isNaN(date.getTime()) ? new Date() : date;
-
-  return new Date(baseDate.getTime() + hours * 60 * 60 * 1000);
-};
-
-const getDefaultEndAt = (scheduledAt: string | Date) => addHours(scheduledAt, 2).toISOString();
-
 const createInitialState = () => {
-  const scheduledAt = new Date().toISOString();
-
   return {
-    scheduledAt,
+    scheduledAt: null,
     draftId: null,
     isEditingPublishedEvent: false,
     name: "",
@@ -110,7 +99,7 @@ const createInitialState = () => {
     bannerImageDisplay: null,
     ageRestriction: "all_ages" as EventAgeRestriction,
     categories: [],
-    endAt: getDefaultEndAt(scheduledAt),
+    endAt: null,
     location: {},
     tickets: [],
     privacy: "public" as EventPrivacy,
@@ -241,11 +230,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   },
 
   setStepTwo: ({ ageRestriction, categories, scheduledAt, endAt }) => {
-    const currentTickets = get().tickets;
-    const tickets = currentTickets.map((t) =>
-      t.localId === DEFAULT_TICKET_ID && !t.id ? { ...t, salesEndAt: scheduledAt } : t
-    );
-    set({ ageRestriction, categories, scheduledAt, endAt, tickets });
+    set({ ageRestriction, categories, scheduledAt, endAt });
   },
 
   setStepThree: ({ location }) => {
@@ -407,6 +392,9 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
 
     const state = get();
     assertValidCategories(state.categories);
+    if (!state.scheduledAt || !state.endAt) {
+      throw new Error("Select the event start and end dates and times before publishing.");
+    }
     const payload = await buildEventPayload(state);
 
     // Persist newly-uploaded S3 keys immediately so that if the API call fails
@@ -474,8 +462,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       bannerImageDisplay: event.bannerImageDisplay ?? null,
       ageRestriction: event.ageRestriction ?? "all_ages",
       categories: event.categories?.length ? event.categories : event.category ? [event.category] : [],
-      scheduledAt: event.scheduledAt ?? new Date().toISOString(),
-      endAt: event.endAt ?? getDefaultEndAt(event.scheduledAt ?? new Date()),
+      scheduledAt: event.scheduledAt ?? null,
+      endAt: event.endAt ?? null,
       location: event.location ?? {},
       tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [],
       privacy: event.privacy,

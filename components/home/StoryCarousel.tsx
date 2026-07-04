@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { getCachedStoryThumbnail } from '@/lib/storyThumbnails';
 import type { StoryMediaType, StoryTextBackground, StoryTextOverlay } from '@/lib/stories';
 import UserAvatar from '../ui/UserAvatar';
+import { createStoryViewerSession, type StoryViewerTab } from '@/lib/storyViewerSession';
 
 export type StoryData = {
   id: string;
@@ -22,6 +23,8 @@ export type StoryData = {
   title?: string;
   authorName?: string;
   seen?: boolean;
+  authorId?: string;
+  authorAvatar?: string | null;
 };
 
 export type StorySequenceItem = {
@@ -35,6 +38,15 @@ export type StorySequenceItem = {
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
   createdAt?: string;
+  expiresAt?: string;
+  viewsCount?: number;
+  reactionsCount?: number;
+  commentsCount?: number;
+  isReacted?: boolean;
+  isOwner?: boolean;
+  authorId?: string;
+  authorName?: string;
+  authorAvatar?: string | null;
 };
 
 const getCompactStoryName = (fullName?: string) => {
@@ -99,13 +111,31 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
   return <UserAvatar uri={null} name={fallbackName} size={70} style={styles.storyImage} />;
 });
 
-function StoryCarousel({ stories }: { stories: StoryData[] }) {
+function StoryCarousel({ stories, friendStories = [] }: { stories: StoryData[]; friendStories?: StoryData[] }) {
   const router = useRouter();
+  const [activeTab, setActiveTab] = React.useState<StoryViewerTab>('discover');
+  const displayedStories = activeTab === 'discover' ? stories : friendStories;
+  const getGroups = React.useCallback((items: StoryData[]) => items
+    .filter((story) => story.type !== 'add' && story.storyItems?.length)
+    .map((group) => ({
+      title: group.title ?? group.authorName ?? 'Story',
+      authorId: group.authorId,
+      authorAvatar: group.authorAvatar ?? group.imageUri,
+      stories: group.storyItems ?? [],
+    })), []);
+  const groups = displayedStories.filter((story) => story.type !== 'add' && story.storyItems?.length);
 
   return (
     <View style={styles.storiesContainer}>
+      <View style={styles.tabs}>
+        {(['discover', 'friends'] as const).map((tab) => (
+          <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.activeTab]} onPress={() => setActiveTab(tab)}>
+            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab === 'discover' ? 'Discover' : 'Friends'}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storiesScroll}>
-        {stories.map((story) => {
+        {displayedStories.map((story) => {
           if (story.type === 'add') {
             return (
               <TouchableOpacity
@@ -147,6 +177,11 @@ function StoryCarousel({ stories }: { stories: StoryData[] }) {
                         }]
                       : []
                   );
+                  const sessionId = createStoryViewerSession({
+                    activeTab,
+                    discoverGroups: getGroups(stories),
+                    friendGroups: getGroups(friendStories),
+                  });
 
                   router.push({
                     pathname: '/post-screen/view-story',
@@ -154,6 +189,8 @@ function StoryCarousel({ stories }: { stories: StoryData[] }) {
                       stories: JSON.stringify(storyItems),
                       title: story.title ?? story.authorName ?? 'Story',
                       openedAt: String(Date.now()),
+                      storySessionId: sessionId,
+                      groupIndex: String(Math.max(0, groups.findIndex((group) => group.id === story.id))),
                     },
                   });
                   return;
@@ -243,6 +280,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0e0d12",
   },
+  tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, marginBottom: 12 },
+  tab: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: '#23232D' },
+  activeTab: { backgroundColor: '#42B0D5' },
+  tabText: { color: '#9B9BA8', fontSize: 12, fontWeight: '700' },
+  activeTabText: { color: '#FFFFFF' },
   textThumbnail: {
     alignItems: "center",
     justifyContent: "center",

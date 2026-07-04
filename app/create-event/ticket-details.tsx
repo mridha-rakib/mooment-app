@@ -54,6 +54,8 @@ const ticketSchema = z
 type TicketErrors = Partial<{
   name: string;
   description: string;
+  salesEndDate: string;
+  salesEndTime: string;
   capacity: string;
   price: string;
   form: string;
@@ -62,6 +64,7 @@ type TicketErrors = Partial<{
 const BACKEND_FIELD_MAP: Record<string, keyof TicketErrors> = {
   name: 'name',
   description: 'description',
+  salesEndAt: 'salesEndDate',
   capacity: 'capacity',
   price: 'price',
 };
@@ -100,16 +103,6 @@ const isSameCalendarDay = (first: Date, second: Date) =>
   first.getMonth() === second.getMonth() &&
   first.getDate() === second.getDate();
 
-const clampSalesEndAtRange = (value: Date, minimum: Date, maximum?: Date | null) => {
-  const lowerBound = value < minimum ? new Date(minimum) : value;
-
-  if (maximum && lowerBound > maximum) {
-    return new Date(maximum);
-  }
-
-  return lowerBound;
-};
-
 const generateTicketLocalId = () => `ticket-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export default function TicketDetailsScreen() {
@@ -131,25 +124,27 @@ export default function TicketDetailsScreen() {
   );
   const ticketLocalIdRef = useRef(selectedLocalId ?? generateTicketLocalId());
   const eventDate = useMemo(() => {
+    if (!scheduledAt) {
+      return null;
+    }
+
     const parsed = new Date(scheduledAt);
 
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }, [scheduledAt]);
-  const now = new Date();
-  const initialSalesEndAt = selectedTicket?.salesEndAt ? new Date(selectedTicket.salesEndAt) : now;
-  const minimumSalesEndAt = now;
-  const maximumSalesEndAt = eventDate && eventDate >= minimumSalesEndAt ? eventDate : null;
+  const initialSalesEndAt = selectedTicket?.salesEndAt ? new Date(selectedTicket.salesEndAt) : null;
+  const validInitialSalesEndAt = initialSalesEndAt && !Number.isNaN(initialSalesEndAt.getTime())
+    ? initialSalesEndAt
+    : null;
+  const maximumSalesEndAt = eventDate && eventDate >= new Date() ? eventDate : null;
   const [ticketType, setTicketType] = useState<'Free' | 'Pay'>(selectedTicket?.type === 'pay' ? 'Pay' : 'Free');
   const [ticketName, setTicketName] = useState(selectedTicket?.name ?? '');
   const [ticketDescription, setTicketDescription] = useState(selectedTicket?.description ?? '');
   const [capacity, setCapacity] = useState(String(selectedTicket?.capacity ?? 185));
   const defaultTicketPrice = selectedTicket?.price && selectedTicket.price > 0 ? selectedTicket.price : 45;
   const [ticketPrice, setTicketPrice] = useState(String(defaultTicketPrice));
-  const [date, setDate] = useState(() => {
-    const normalizedInitial = Number.isNaN(initialSalesEndAt.getTime()) ? new Date(minimumSalesEndAt) : initialSalesEndAt;
-
-    return clampSalesEndAtRange(normalizedInitial, minimumSalesEndAt, maximumSalesEndAt);
-  });
+  const [salesEndDate, setSalesEndDate] = useState<Date | null>(validInitialSalesEndAt);
+  const [salesEndTime, setSalesEndTime] = useState<Date | null>(validInitialSalesEndAt);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -247,6 +242,26 @@ export default function TicketDetailsScreen() {
     const parsedCapacity = Number.parseInt(capacity, 10);
     const parsedPrice = Number.parseFloat(ticketPrice);
     const type = ticketType === 'Free' ? 'free' : 'pay';
+    const confirmTime = new Date();
+    const salesEndAt = salesEndDate && salesEndTime
+      ? new Date(
+          salesEndDate.getFullYear(),
+          salesEndDate.getMonth(),
+          salesEndDate.getDate(),
+          salesEndTime.getHours(),
+          salesEndTime.getMinutes(),
+          0,
+          0,
+        )
+      : null;
+    let salesEndDateError = salesEndDate ? undefined : 'Sales end date is required';
+    const salesEndTimeError = salesEndTime ? undefined : 'Sales end time is required';
+
+    if (salesEndAt && salesEndAt <= confirmTime) {
+      salesEndDateError = 'Sales end date and time must be in the future.';
+    } else if (salesEndAt && eventDate && salesEndAt > eventDate) {
+      salesEndDateError = 'Sales end date must not be after the event start date and time.';
+    }
 
     const result = ticketSchema.safeParse({
       name: ticketName,
@@ -256,16 +271,22 @@ export default function TicketDetailsScreen() {
       type,
     });
 
-    if (!result.success) {
-      const fieldErrors = result.error.flatten().fieldErrors;
+    if (!result.success || salesEndDateError || salesEndTimeError) {
+      const fieldErrors = result.success ? {} : result.error.flatten().fieldErrors;
 
       setErrors({
         name: fieldErrors.name?.[0],
         description: fieldErrors.description?.[0],
+        salesEndDate: salesEndDateError,
+        salesEndTime: salesEndTimeError,
         capacity: fieldErrors.capacity?.[0],
         price: fieldErrors.price?.[0],
       });
 
+      return;
+    }
+
+    if (!salesEndAt) {
       return;
     }
 
@@ -279,7 +300,7 @@ export default function TicketDetailsScreen() {
         localId: ticketLocalIdRef.current,
         name: result.data.name,
         price: result.data.type === 'free' ? 0 : (result.data.price ?? 0),
-        salesEndAt: date.toISOString(),
+        salesEndAt: salesEndAt.toISOString(),
         type: result.data.type,
       });
       setShowConfetti(true);
@@ -296,21 +317,16 @@ export default function TicketDetailsScreen() {
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      const nextDate = new Date(date);
-      nextDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-      nextDate.setSeconds(0, 0);
-
-      setDate(clampSalesEndAtRange(nextDate, minimumSalesEndAt, maximumSalesEndAt));
+      setSalesEndDate(selectedDate);
+      clearFieldError('salesEndDate');
     }
   };
 
   const onTimeChange = (event: any, selectedTime?: Date) => {
     setShowTimePicker(false);
     if (selectedTime) {
-      const nextDate = new Date(date);
-      nextDate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-
-      setDate(clampSalesEndAtRange(nextDate, minimumSalesEndAt, maximumSalesEndAt));
+      setSalesEndTime(selectedTime);
+      clearFieldError('salesEndTime');
     }
   };
 
@@ -412,29 +428,43 @@ export default function TicketDetailsScreen() {
           <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
             <TouchableOpacity
-              style={[styles.selector, { backgroundColor: colors.card }]}
+              style={[
+                styles.selector,
+                { backgroundColor: colors.card },
+                errors.salesEndDate ? [styles.inputError, { borderColor: colors.danger }] : null,
+              ]}
               onPress={() => setShowDatePicker(true)}
             >
               <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(date)}</Text>
+              <Text style={[styles.selectorText, { color: salesEndDate ? colors.text : colors.textSecondary }]}>
+                {salesEndDate ? formatDate(salesEndDate) : 'Select date'}
+              </Text>
             </TouchableOpacity>
+            {errors.salesEndDate ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.salesEndDate}</Text> : null}
           </View>
 
           <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
             <TouchableOpacity
-              style={[styles.selector, { backgroundColor: colors.card }]}
+              style={[
+                styles.selector,
+                { backgroundColor: colors.card },
+                errors.salesEndTime ? [styles.inputError, { borderColor: colors.danger }] : null,
+              ]}
               onPress={() => setShowTimePicker(true)}
             >
               <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(date)}</Text>
+              <Text style={[styles.selectorText, { color: salesEndTime ? colors.text : colors.textSecondary }]}>
+                {salesEndTime ? formatTime(salesEndTime) : 'Select time'}
+              </Text>
             </TouchableOpacity>
+            {errors.salesEndTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.salesEndTime}</Text> : null}
           </View>
         </View>
 
         {showDatePicker && (
           <DateTimePicker
-            value={date}
+            value={salesEndDate ?? new Date()}
             mode="date"
             minimumDate={startOfToday(new Date())}
             maximumDate={maximumSalesEndAt ?? undefined}
@@ -447,9 +477,9 @@ export default function TicketDetailsScreen() {
 
         {showTimePicker && (
           <DateTimePicker
-            value={date}
+            value={salesEndTime ?? new Date()}
             mode="time"
-            minimumDate={isSameCalendarDay(date, new Date()) ? new Date() : undefined}
+            minimumDate={salesEndDate && isSameCalendarDay(salesEndDate, new Date()) ? new Date() : undefined}
             maximumDate={maximumSalesEndAt ?? undefined}
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
@@ -643,7 +673,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   selector: {
     borderRadius: 12,

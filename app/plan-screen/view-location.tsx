@@ -14,11 +14,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { APP_MAP_STYLE_URL } from "@/lib/mapStyles";
 import { getCategoryColor } from "@/constants/categoryColors";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const DARK_STYLE = "mapbox://styles/mapbox/dark-v11";
 const USER_COLOR = "#2F80ED";
 
 const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -167,7 +167,7 @@ export default function ViewLocationScreen() {
     <View style={styles.container}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={DARK_STYLE}
+        styleURL={APP_MAP_STYLE_URL}
         logoEnabled={false}
         attributionEnabled={false}
         rotateEnabled

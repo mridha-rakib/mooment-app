@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type { EventCategory } from "@/constants/eventCategories";
+import { getMyTicketWallet, type TicketWalletItem } from "@/lib/payments";
 
 export type EventStatus = "draft" | "published" | "live" | "completed" | "cancelled";
 export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
@@ -124,6 +125,7 @@ export type EventResponse = {
   commentsCount?: number;
   sharesCount?: number;
   isLiked?: boolean;
+  isSaved?: boolean;
   status: EventStatus;
   name?: string | null;
   description?: string | null;
@@ -426,6 +428,58 @@ export const getMyProfileEvents = async (): Promise<ProfileEventGroups> => {
     active: Array.isArray(events?.active) ? (events.active as EventResponse[]) : [],
     past: Array.isArray(events?.past) ? (events.past as EventResponse[]) : [],
   };
+};
+
+const ticketWalletEventToEventResponse = (walletItem: TicketWalletItem): EventResponse | null => {
+  const walletEvent = walletItem.event;
+
+  if (!walletEvent?.id) {
+    return null;
+  }
+
+  return {
+    id: walletEvent.id,
+    userId: walletEvent.host?.id ?? "",
+    host: walletEvent.host
+      ? {
+          id: walletEvent.host.id,
+          name: walletEvent.host.name,
+          username: walletEvent.host.username,
+          avatarKey: walletEvent.host.avatarKey ?? null,
+        }
+      : null,
+    status: walletEvent.status as EventStatus,
+    name: walletEvent.name ?? null,
+    bannerImageKey: walletEvent.bannerImageKey ?? null,
+    bannerOriginalImageKey: walletEvent.bannerOriginalImageKey ?? null,
+    categories: [],
+    scheduledAt: walletEvent.scheduledAt ?? null,
+    endAt: walletEvent.endAt ?? null,
+    location: walletEvent.location ?? null,
+    tickets: [],
+    rewards: [],
+    privacy: "locked",
+    createdAt: walletItem.purchasedAt ?? walletEvent.scheduledAt ?? new Date(0).toISOString(),
+    updatedAt: walletItem.purchasedAt ?? walletEvent.scheduledAt ?? new Date(0).toISOString(),
+  };
+};
+
+export const getProfileEventsCount = (events: ProfileEventGroups): number => {
+  const eventIds = new Set([...events.active, ...events.past].map((event) => event.id));
+  return eventIds.size;
+};
+
+export const getMyTicketWalletEvents = async (): Promise<EventResponse[]> => {
+  const walletItems = await getMyTicketWallet();
+  const eventById = new Map<string, EventResponse>();
+
+  for (const event of walletItems.map(ticketWalletEventToEventResponse)) {
+    if (event && !eventById.has(event.id)) {
+      eventById.set(event.id, event);
+    }
+  }
+
+  return [...eventById.values()];
 };
 
 export const getProfileEvents = async (userId: string): Promise<ProfileEventGroups> => {

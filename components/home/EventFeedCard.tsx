@@ -1,12 +1,13 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { cancelEvent, toggleEventSave, type EventResponse } from "@/lib/events";
-import { shareMoment, toggleMomentReaction, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
+import { cancelEvent, type EventResponse } from "@/lib/events";
+import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
@@ -57,10 +58,11 @@ type Props = {
   repostCaption?: string | null;
   taggedFriendNames?: string[];
   onRepostSuccess?: () => void;
+  onEventCancelled?: (eventId: string) => void;
   embedded?: boolean;
 };
 
-export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, embedded = false }: Props) {
+export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, embedded = false }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [bannerFailed, setBannerFailed] = useState(false);
 
@@ -117,7 +119,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
   const [menuTop, setMenuTop] = useState(0);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isSaved, setIsSaved] = useState(Boolean(event.isSaved));
   const [isSavePending, setIsSavePending] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [isLiked, setIsLiked] = useState(Boolean(event.isLiked));
@@ -139,10 +141,11 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
 
   useEffect(() => {
     setIsLiked(Boolean(event.isLiked));
+    setIsSaved(Boolean(event.isSaved));
     setLikesCount(event.likesCount ?? 0);
     setCommentsCount(event.commentsCount ?? 0);
     setSharesCount(event.sharesCount ?? 0);
-  }, [event.commentsCount, event.isLiked, event.likesCount, event.sharesCount]);
+  }, [event.commentsCount, event.isLiked, event.isSaved, event.likesCount, event.sharesCount]);
 
   const applyInteractionSummary = (summary: MomentInteractionSummary) => {
     setIsLiked(summary.isLiked);
@@ -232,6 +235,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
           onPress: async () => {
             try {
               await cancelEvent(event.id);
+              onEventCancelled?.(event.id);
             } catch (error) {
               Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
             }
@@ -242,12 +246,12 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   };
 
   const handleSave = async () => {
-    if (isSavePending) return;
+    if (isSavePending || !event.interactionMomentId) return;
     const prev = isSaved;
     setIsSaved(!prev);
     setIsSavePending(true);
     try {
-      const result = await toggleEventSave(event.id);
+      const result = await toggleMomentSave(event.interactionMomentId);
       if (mountedRef.current) setIsSaved(result.isSaved);
     } catch {
       if (mountedRef.current) setIsSaved(prev);
@@ -374,7 +378,9 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
           <Image
             source={{ uri: bannerUri }}
             style={StyleSheet.absoluteFill}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="disk"
+            recyclingKey={event.id}
             onError={() => setBannerFailed(true)}
           />
         ) : (

@@ -8,12 +8,12 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { APP_MAP_STYLE_URL } from "@/lib/mapStyles";
 import { getCategoryColor } from "@/constants/categoryColors";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 const USER_MARKER_COLOR = "#2F80ED";
-const DARK_STYLE_URL = "mapbox://styles/mapbox/dark-v11";
 
 const firstParam = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
@@ -260,7 +260,7 @@ export default function EventMapScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={DARK_STYLE_URL}
+        styleURL={APP_MAP_STYLE_URL}
         logoEnabled={false}
         attributionEnabled={false}
         rotateEnabled

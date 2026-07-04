@@ -2,7 +2,7 @@ import BackButton from '@/components/ui/BackButton';
 import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constants/eventCategories';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { combineLocalDateAndTime, getEventDateRangeError, getLocalCalendarDaySpan } from '@/lib/eventDateRange';
+import { combineLocalDateAndTime, getEventDateRangeError } from '@/lib/eventDateRange';
 import { fromAgeRestriction, toAgeRestriction, useEventDraftStore } from '@/stores/eventDraftStore';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -39,37 +39,48 @@ const categorySelectionSchema = z
   .min(MIN_CATEGORIES, REQUIRED_CATEGORY_MESSAGE)
   .max(MAX_CATEGORIES, MAX_CATEGORY_MESSAGE);
 
+const requiredDate = (message: string) => z.custom<Date>(
+  (value) => value instanceof Date && !Number.isNaN(value.getTime()),
+  { message },
+);
+
 const createEventStepTwoSchema = z.object({
   ageRestriction: z.enum(AGE_OPTIONS, {
     invalid_type_error: 'Choose an age restriction for this event.',
     required_error: 'Choose an age restriction for this event.',
   }),
   categories: categorySelectionSchema,
-  scheduledAt: z.custom<Date>((value) => value instanceof Date && !Number.isNaN(value.getTime()), {
-    message: 'Choose a valid start date and time.',
-  }),
-  endAt: z.custom<Date>((value) => value instanceof Date && !Number.isNaN(value.getTime()), {
-    message: 'Choose a valid end date and time.',
-  }),
+  startDate: requiredDate('Start date is required'),
+  endDate: requiredDate('End date is required'),
+  startTime: requiredDate('Start time is required'),
+  endTime: requiredDate('End time is required'),
 }).superRefine((value, ctx) => {
+  if (![value.startDate, value.endDate, value.startTime, value.endTime].every(
+    (date) => date instanceof Date && !Number.isNaN(date.getTime()),
+  )) {
+    return;
+  }
+
+  const scheduledAt = combineLocalDateAndTime(value.startDate, value.startTime);
+  const endAt = combineLocalDateAndTime(value.endDate, value.endTime);
   const now = new Date();
 
-  if (value.scheduledAt < now) {
+  if (scheduledAt < now) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Start date and time cannot be in the past.',
-      path: ['scheduledAt'],
+      path: ['startDate'],
     });
     return;
   }
 
-  const message = getEventDateRangeError(value.scheduledAt, value.endAt);
+  const message = getEventDateRangeError(scheduledAt, endAt);
 
   if (message) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message,
-      path: ['endAt'],
+      path: ['endDate'],
     });
   }
 });
@@ -106,16 +117,14 @@ export default function CreateEventStep2() {
     draftCategories.filter(isEventCategory).slice(0, MAX_CATEGORIES),
   );
   const selectedCategoriesRef = useRef(selectedCategories);
-  const [startAt, setStartAt] = useState(() => {
-    const parsedDate = new Date(draftScheduledAt);
-
-    return Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
-  });
-  const [endAt, setEndAt] = useState(() => {
-    const parsedDate = new Date(draftEndAt);
-
-    return Number.isNaN(parsedDate.getTime()) ? new Date(Date.now() + 2 * 60 * 60 * 1000) : parsedDate;
-  });
+  const initialStartAt = draftScheduledAt ? new Date(draftScheduledAt) : null;
+  const initialEndAt = draftEndAt ? new Date(draftEndAt) : null;
+  const validInitialStartAt = initialStartAt && !Number.isNaN(initialStartAt.getTime()) ? initialStartAt : null;
+  const validInitialEndAt = initialEndAt && !Number.isNaN(initialEndAt.getTime()) ? initialEndAt : null;
+  const [startDate, setStartDate] = useState<Date | null>(validInitialStartAt);
+  const [endDate, setEndDate] = useState<Date | null>(validInitialEndAt);
+  const [startTime, setStartTime] = useState<Date | null>(validInitialStartAt);
+  const [endTime, setEndTime] = useState<Date | null>(validInitialEndAt);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
@@ -141,50 +150,32 @@ export default function CreateEventStep2() {
   const onStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartDatePicker(false);
     if (selectedDate) {
-      const daySpan = getLocalCalendarDaySpan(startAt, endAt);
-      const nextStartAt = combineLocalDateAndTime(selectedDate, startAt);
-      const nextEndAt = combineLocalDateAndTime(selectedDate, endAt, daySpan);
-
-      setStartAt(nextStartAt);
-      setEndAt(nextEndAt);
-      clearFieldError('scheduledAt');
-      clearFieldError('endAt');
+      setStartDate(selectedDate);
+      clearFieldError('startDate');
     }
   };
 
   const onEndDateChange = (event: any, selectedDate?: Date) => {
     setShowEndDatePicker(false);
     if (selectedDate) {
-      setEndAt(combineLocalDateAndTime(selectedDate, endAt));
-      clearFieldError('endAt');
+      setEndDate(selectedDate);
+      clearFieldError('endDate');
     }
   };
 
   const onStartTimeChange = (event: any, selectedTime?: Date) => {
     setShowStartTimePicker(false);
     if (selectedTime) {
-      const nextStartAt = new Date(startAt);
-      nextStartAt.setHours(selectedTime.getHours());
-      nextStartAt.setMinutes(selectedTime.getMinutes());
-      nextStartAt.setSeconds(0, 0);
-      setStartAt(nextStartAt);
-      setEndAt((currentEndAt) =>
-        currentEndAt > nextStartAt ? currentEndAt : new Date(nextStartAt.getTime() + 2 * 60 * 60 * 1000),
-      );
-      clearFieldError('scheduledAt');
-      clearFieldError('endAt');
+      setStartTime(selectedTime);
+      clearFieldError('startTime');
     }
   };
 
   const onEndTimeChange = (event: any, selectedTime?: Date) => {
     setShowEndTimePicker(false);
     if (selectedTime) {
-      const nextEndAt = new Date(endAt);
-      nextEndAt.setHours(selectedTime.getHours());
-      nextEndAt.setMinutes(selectedTime.getMinutes());
-      nextEndAt.setSeconds(0, 0);
-      setEndAt(nextEndAt);
-      clearFieldError('endAt');
+      setEndTime(selectedTime);
+      clearFieldError('endTime');
     }
   };
 
@@ -256,11 +247,22 @@ export default function CreateEventStep2() {
   };
 
   const persistStepTwo = (values?: CreateEventStepTwoValues) => {
+    const scheduledAt = values
+      ? combineLocalDateAndTime(values.startDate, values.startTime).toISOString()
+      : startDate && startTime
+        ? combineLocalDateAndTime(startDate, startTime).toISOString()
+        : null;
+    const eventEndAt = values
+      ? combineLocalDateAndTime(values.endDate, values.endTime).toISOString()
+      : endDate && endTime
+        ? combineLocalDateAndTime(endDate, endTime).toISOString()
+        : null;
+
     setStepTwo({
       ageRestriction: toAgeRestriction(values?.ageRestriction ?? selectedAge),
       categories: values?.categories ?? selectedCategories,
-      scheduledAt: (values?.scheduledAt ?? startAt).toISOString(),
-      endAt: (values?.endAt ?? endAt).toISOString(),
+      scheduledAt,
+      endAt: eventEndAt,
     });
   };
 
@@ -293,8 +295,10 @@ export default function CreateEventStep2() {
     const result = createEventStepTwoSchema.safeParse({
       ageRestriction: selectedAge,
       categories: selectedCategories,
-      scheduledAt: startAt,
-      endAt,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
     });
 
     if (!result.success) {
@@ -303,8 +307,10 @@ export default function CreateEventStep2() {
       setErrors({
         ageRestriction: fieldErrors.ageRestriction?.[0],
         categories: fieldErrors.categories?.[0],
-        scheduledAt: fieldErrors.scheduledAt?.[0],
-        endAt: fieldErrors.endAt?.[0],
+        startDate: fieldErrors.startDate?.[0],
+        endDate: fieldErrors.endDate?.[0],
+        startTime: fieldErrors.startTime?.[0],
+        endTime: fieldErrors.endTime?.[0],
       });
 
       return;
@@ -426,13 +432,16 @@ export default function CreateEventStep2() {
               <TouchableOpacity
                 style={[
                   styles.selector,
-                  { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
+                  { backgroundColor: colors.card, borderColor: errors.startDate ? colors.danger : 'transparent' },
                 ]}
                 onPress={() => setShowStartDatePicker(true)}
               >
                 <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.compactSelectorText, { color: colors.text }]} numberOfLines={1}>{formatDate(startAt)}</Text>
+                <Text style={[styles.compactSelectorText, { color: startDate ? colors.text : colors.textSecondary }]} numberOfLines={1}>
+                  {startDate ? formatDate(startDate) : 'Select date'}
+                </Text>
               </TouchableOpacity>
+              {errors.startDate ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.startDate}</Text> : null}
             </View>
 
             <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
@@ -440,13 +449,16 @@ export default function CreateEventStep2() {
               <TouchableOpacity
                 style={[
                   styles.selector,
-                  { backgroundColor: colors.card, borderColor: errors.endAt ? colors.danger : 'transparent' },
+                  { backgroundColor: colors.card, borderColor: errors.endDate ? colors.danger : 'transparent' },
                 ]}
                 onPress={() => setShowEndDatePicker(true)}
               >
                 <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.compactSelectorText, { color: colors.text }]} numberOfLines={1}>{formatDate(endAt)}</Text>
+                <Text style={[styles.compactSelectorText, { color: endDate ? colors.text : colors.textSecondary }]} numberOfLines={1}>
+                  {endDate ? formatDate(endDate) : 'Select date'}
+                </Text>
               </TouchableOpacity>
+              {errors.endDate ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endDate}</Text> : null}
             </View>
           </View>
 
@@ -456,13 +468,16 @@ export default function CreateEventStep2() {
               <TouchableOpacity
                 style={[
                   styles.selector,
-                  { backgroundColor: colors.card, borderColor: errors.scheduledAt ? colors.danger : 'transparent' },
+                  { backgroundColor: colors.card, borderColor: errors.startTime ? colors.danger : 'transparent' },
                 ]}
                 onPress={() => setShowStartTimePicker(true)}
               >
                 <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(startAt)}</Text>
+                <Text style={[styles.selectorText, { color: startTime ? colors.text : colors.textSecondary }]}>
+                  {startTime ? formatTime(startTime) : 'Select time'}
+                </Text>
               </TouchableOpacity>
+              {errors.startTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.startTime}</Text> : null}
             </View>
 
             <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
@@ -470,22 +485,23 @@ export default function CreateEventStep2() {
               <TouchableOpacity
                 style={[
                   styles.selector,
-                  { backgroundColor: colors.card, borderColor: errors.endAt ? colors.danger : 'transparent' },
+                  { backgroundColor: colors.card, borderColor: errors.endTime ? colors.danger : 'transparent' },
                 ]}
                 onPress={() => setShowEndTimePicker(true)}
               >
                 <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(endAt)}</Text>
+                <Text style={[styles.selectorText, { color: endTime ? colors.text : colors.textSecondary }]}>
+                  {endTime ? formatTime(endTime) : 'Select time'}
+                </Text>
               </TouchableOpacity>
+              {errors.endTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endTime}</Text> : null}
             </View>
           </View>
-          {errors.scheduledAt ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.scheduledAt}</Text> : null}
-          {errors.endAt ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endAt}</Text> : null}
         </View>
 
         {showStartDatePicker && (
           <DateTimePicker
-            value={startAt}
+            value={startDate ?? new Date()}
             mode="date"
             minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
             negativeButton={pickerButtonColors.negativeButton}
@@ -497,9 +513,11 @@ export default function CreateEventStep2() {
 
         {showEndDatePicker && (
           <DateTimePicker
-            value={endAt}
+            value={endDate ?? startDate ?? new Date()}
             mode="date"
-            minimumDate={new Date(startAt.getFullYear(), startAt.getMonth(), startAt.getDate())}
+            minimumDate={startDate
+              ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+              : new Date(new Date().setHours(0, 0, 0, 0))}
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
@@ -509,7 +527,7 @@ export default function CreateEventStep2() {
 
         {showStartTimePicker && (
           <DateTimePicker
-            value={startAt}
+            value={startTime ?? new Date()}
             mode="time"
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}
@@ -521,7 +539,7 @@ export default function CreateEventStep2() {
 
         {showEndTimePicker && (
           <DateTimePicker
-            value={endAt}
+            value={endTime ?? new Date()}
             mode="time"
             negativeButton={pickerButtonColors.negativeButton}
             positiveButton={pickerButtonColors.positiveButton}

@@ -5,6 +5,7 @@ import { PostData } from "@/components/post/FeedPost";
 import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { getProfileEvents, getProfileEventsCount, type ProfileEventGroups } from "@/lib/events";
 import { getProfileTimeline, type MomentInteractionSummary, type MomentTimelineItem } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -15,10 +16,15 @@ const FALLBACK_PROFILE_NAME = "Mooment User";
 const FALLBACK_PROFILE_HANDLE = "@mooment_user";
 
 const EMPTY_STATS = {
-  posts: 0,
+  events: 0,
   reviews: 0,
   followers: 0,
   following: 0,
+};
+
+const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
+  active: [],
+  past: [],
 };
 
 const formatHandle = (username?: string | null, email?: string | null) => {
@@ -47,6 +53,7 @@ export default function UserProfileScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(params.avatar || null);
   const [posts, setPosts] = useState<PostData[]>([]);
   const [reposts, setReposts] = useState<MomentTimelineItem[]>([]);
+  const [profileEvents, setProfileEvents] = useState<ProfileEventGroups>(EMPTY_PROFILE_EVENTS);
   const [profileUser, setProfileUser] = useState<UserProfileData>({
     id: userId || "unknown",
     name: params.name || FALLBACK_PROFILE_NAME,
@@ -63,10 +70,11 @@ export default function UserProfileScreen() {
     }
 
     try {
-      const [user, timeline, stats] = await Promise.all([
+      const [user, timeline, stats, events] = await Promise.all([
         getUserById(userId),
         getProfileTimeline(userId),
         getUserProfileStats(userId),
+        getProfileEvents(userId),
       ]);
       const resolvedUserId = user.id ?? user._id ?? userId;
       let nextAvatar = params.avatar || null;
@@ -87,7 +95,7 @@ export default function UserProfileScreen() {
         accountType: user.accountType,
         isFollowing: typeof user.isFollowing === "boolean" ? user.isFollowing : routeIsFollowing,
         stats: {
-          posts: timeline.stats.posts,
+          events: getProfileEventsCount(events),
           reviews: stats.reviews,
           followers: stats.followers,
           following: stats.following,
@@ -104,9 +112,11 @@ export default function UserProfileScreen() {
           .filter((post): post is PostData => Boolean(post)),
       );
       setReposts(timeline.items.filter((item) => item.type === "share"));
+      setProfileEvents(events);
     } catch (error) {
       setPosts([]);
       setReposts([]);
+      setProfileEvents(EMPTY_PROFILE_EVENTS);
       Alert.alert("Unable to load profile", getAuthErrorMessage(error, "Please try again."));
     }
   }, [params.avatar, params.name, routeIsFollowing, userId]);
@@ -157,6 +167,17 @@ export default function UserProfileScreen() {
         onInteractionChange={handleInteractionChange}
         onFollowChange={handleFollowChange}
         onRefresh={loadProfile}
+        profileEvents={profileEvents}
+        onProfileEventsChange={(events) => {
+          setProfileEvents(events);
+          setProfileUser((current) => ({
+            ...current,
+            stats: {
+              ...current.stats,
+              events: getProfileEventsCount(events),
+            },
+          }));
+        }}
       />
     </View>
   );

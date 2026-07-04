@@ -55,6 +55,19 @@ type VerifyEmailPayload = {
   code: string;
 };
 
+type RequestPasswordResetPayload = {
+  email: string;
+};
+
+type ValidatePasswordResetCodePayload = {
+  email: string;
+  code: string;
+};
+
+type ResetPasswordPayload = ValidatePasswordResetCodePayload & {
+  newPassword: string;
+};
+
 type AuthTokens = {
   accessToken: string;
   refreshToken: string;
@@ -96,6 +109,9 @@ type AuthState = {
   register: (payload: RegisterPayload) => Promise<string>;
   verifyEmail: (payload: VerifyEmailPayload) => Promise<AuthUser>;
   resendVerificationCode: (email?: string) => Promise<void>;
+  requestPasswordReset: (payload: RequestPasswordResetPayload) => Promise<string>;
+  validatePasswordResetCode: (payload: ValidatePasswordResetCodePayload) => Promise<void>;
+  resetPassword: (payload: ResetPasswordPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<AuthUser>;
   deleteAccount: () => Promise<void>;
   logout: () => Promise<void>;
@@ -425,6 +441,89 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       const message = getAuthErrorMessage(error, "Unable to resend the verification code. Please try again.");
       set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
+  },
+
+  requestPasswordReset: async ({ email }) => {
+    const normalizedEmail = normalizeRegistrationEmail(email);
+
+    if (!normalizedEmail) {
+      const message = "Enter your email address before requesting a reset code.";
+      set({ error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      const response = await api.post(
+        "/auth/forgot-password",
+        { email: normalizedEmail },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+      const resetEmail = response.data?.data?.email ?? normalizedEmail;
+
+      set({ isLoading: false, error: null, authErrorCode: null });
+      return resetEmail;
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to request a reset code. Please try again.");
+      set({ isLoading: false, error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+  },
+
+  validatePasswordResetCode: async ({ email, code }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.post(
+        "/auth/validate-reset-code",
+        {
+          email: normalizeRegistrationEmail(email),
+          code: code.trim(),
+        },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+
+      set({ isLoading: false, error: null, authErrorCode: null });
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Invalid or expired reset code.");
+      set({ isLoading: false, error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+  },
+
+  resetPassword: async ({ email, code, newPassword }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.post(
+        "/auth/reset-password",
+        {
+          email: normalizeRegistrationEmail(email),
+          code: code.trim(),
+          newPassword,
+        },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+
+      set({ isLoading: false, error: null, authErrorCode: null });
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to reset your password. Please try again.");
+      set({ isLoading: false, error: message, authErrorCode: null });
       throw new Error(message);
     }
   },

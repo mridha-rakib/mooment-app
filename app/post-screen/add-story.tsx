@@ -5,6 +5,7 @@ import {
   BackHandler,
   Keyboard,
   Linking,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,7 +16,7 @@ import {
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { Camera, CameraView } from 'expo-camera';
+import { Camera, CameraView, type CameraType } from 'expo-camera';
 import type { PermissionResponse } from 'expo-modules-core';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,12 +28,15 @@ import { createStory, type StoryMediaSource, type StoryMediaType, type StoryText
 import { generateStoryThumbnail, setCachedStoryThumbnail } from '@/lib/storyThumbnails';
 import { uploadFileToStorage } from '@/lib/storage';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { compressStoryVideoIfNeeded } from '@/lib/videoCompressor';
+import { prepareStoryVideoForUpload } from '@/lib/videoProcessor';
 import { optimizeStoryImageForUpload } from '@/lib/storyImageOptimizer';
 
 const MAX_STORY_SECONDS = 15;
 const DEFAULT_TEXT_DURATION_SECONDS = 5;
 const STORY_IMAGE_QUALITY = 0.82;
+// 720p at 2 Mbps keeps a 15-second camera story near 4 MB while preserving
+// enough headroom for audio and MP4 container overhead.
+const STORY_VIDEO_BITRATE = 2_000_000;
 
 type CameraMode = 'image' | 'video';
 type StoryDraft = {
@@ -189,7 +193,9 @@ export default function AddStoryScreen() {
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
   const recordingFrameRef = useRef<number | null>(null);
+  const cameraSwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cameraMode, setCameraMode] = useState<CameraMode>('image');
+  const [cameraFacing, setCameraFacing] = useState<CameraType>('back');
   const [draft, setDraft] = useState<StoryDraft | null>(null);
   const [storyText, setStoryText] = useState('');
   const [overlayText, setOverlayText] = useState('');
@@ -334,6 +340,10 @@ export default function AddStoryScreen() {
 
   useEffect(() => () => {
     cameraRef.current?.stopRecording();
+    if (cameraSwitchTimeoutRef.current) {
+      clearTimeout(cameraSwitchTimeoutRef.current);
+      cameraSwitchTimeoutRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -401,6 +411,26 @@ export default function AddStoryScreen() {
     setUploadProgress(0);
     setPublishStage('');
   }, []);
+
+  const handleSwitchCameraFacing = useCallback(() => {
+    if (isPublishing || isRecording || isSwitchingCameraMode) return;
+
+    if (cameraSwitchTimeoutRef.current) {
+      clearTimeout(cameraSwitchTimeoutRef.current);
+    }
+
+    setIsSwitchingCameraMode(true);
+    setCameraError(null);
+    setIsCameraReady(false);
+    setCameraPictureSize(undefined);
+
+    cameraSwitchTimeoutRef.current = setTimeout(() => {
+      setCameraFacing((current) => current === 'back' ? 'front' : 'back');
+      setCameraInstanceKey((key) => key + 1);
+      setIsSwitchingCameraMode(false);
+      cameraSwitchTimeoutRef.current = null;
+    }, 160);
+  }, [isPublishing, isRecording, isSwitchingCameraMode]);
 
   const stageDraft = (nextDraft: StoryDraft) => {
     setIsCameraReady(false);
@@ -542,7 +572,11 @@ export default function AddStoryScreen() {
       setElapsedMs(0);
       setIsRecording(true);
       recordingStartedAtRef.current = Date.now();
-      recordingPromiseRef.current = cameraRef.current.recordAsync({ maxDuration: MAX_STORY_SECONDS }) ?? null;
+      recordingPromiseRef.current = cameraRef.current.recordAsync({
+        maxDuration: MAX_STORY_SECONDS,
+        // expo-camera requires an explicit codec on iOS before videoBitrate is applied.
+        ...(Platform.OS === 'ios' ? { codec: 'avc1' as const } : {}),
+      }) ?? null;
 
       const video = await recordingPromiseRef.current;
       setIsRecording(false);
@@ -731,28 +765,26 @@ export default function AddStoryScreen() {
         }
 
         setPublishStage('Preparing...');
-        mark('video compression/check start');
-        const compressed = await compressStoryVideoIfNeeded(
+        mark('video preparation start');
+        const processed = await prepareStoryVideoForUpload(
           draft.uri,
-          draft.durationSeconds,
+          draft.contentType,
           (stage, pct) => setPublishStage(pct > 0 ? `${stage} ${Math.round(pct)}%` : stage),
         );
-        mark('video compression/check complete', {
-          optimizedUriChanged: compressed.uri !== draft.uri,
-          contentType: compressed.contentType,
-          originalBytes: compressed.originalBytes,
-          optimizedBytes: compressed.optimizedBytes,
-          compressed: compressed.compressed,
+        mark('video preparation complete', {
+          optimizedUriChanged: processed.uri !== draft.uri,
+          contentType: processed.contentType,
+          bytes: processed.bytes,
         });
 
         setPublishStage('Uploading media...');
-        const thumbnailPromise = generateStoryThumbnail(compressed.uri);
-        const extension = getVideoExtension(compressed.contentType);
+        const thumbnailPromise = generateStoryThumbnail(processed.uri);
+        const extension = getVideoExtension(processed.contentType);
         mark('storage upload start');
         const storageKey = await uploadFileToStorage({
-          uri: compressed.uri,
+          uri: processed.uri,
           key: `stories/${Date.now()}.${extension}`,
-          contentType: compressed.contentType,
+          contentType: processed.contentType,
           onProgress: updateUploadProgress,
         });
         mark('storage upload complete', {
@@ -766,7 +798,7 @@ export default function AddStoryScreen() {
           mediaType: 'video',
           mediaSource: draft.source,
           storageKey,
-          contentType: compressed.contentType,
+          contentType: processed.contentType,
           durationSeconds: Math.max(0.1, draft.durationSeconds),
           textOverlay: finalOverlay,
         });
@@ -1089,12 +1121,14 @@ export default function AddStoryScreen() {
         </View>
       ) : isFocused && !isSwitchingCameraMode ? (
         <CameraView
-          key={`${cameraInstanceKey}-${cameraMode}`}
+          key={`${cameraInstanceKey}-${cameraMode}-${cameraFacing}`}
           ref={cameraRef}
           active={isFocused && !isPreviewing}
           style={styles.cameraBackground}
-          facing="back"
+          facing={cameraFacing}
           mode={cameraMode === 'video' ? 'video' : 'picture'}
+          videoQuality="720p"
+          videoBitrate={STORY_VIDEO_BITRATE}
           pictureSize={cameraMode === 'image' ? cameraPictureSize : undefined}
           onCameraReady={() => {
             cameraRecoveryAttemptedRef.current = false;
@@ -1176,6 +1210,15 @@ export default function AddStoryScreen() {
         </View>
 
         <View style={styles.rightActionsCol}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            activeOpacity={0.8}
+            disabled={isPublishing || isRecording || isSwitchingCameraMode}
+            accessibilityLabel="Switch camera"
+            onPress={handleSwitchCameraFacing}
+          >
+            <Feather name="refresh-cw" size={23} color="#FFFFFF" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handlePickImage} disabled={isPublishing || isRecording}>
             <Feather name="image" size={23} color="#FFFFFF" />
           </TouchableOpacity>

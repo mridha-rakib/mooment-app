@@ -42,7 +42,33 @@ export type Story = {
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
   audience: "connections";
+  viewsCount: number;
+  reactionsCount: number;
+  commentsCount: number;
+  isReacted: boolean;
+  isOwner: boolean;
+  expiresInSeconds: number;
   expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StoryInteraction = {
+  viewsCount: number;
+  reactionsCount: number;
+  commentsCount: number;
+  isReacted: boolean;
+};
+
+export type StoryComment = {
+  id: string;
+  storyId: string;
+  parentCommentId?: string | null;
+  author?: StoryAuthor | null;
+  text: string;
+  likesCount: number;
+  isLiked: boolean;
+  replies: StoryComment[];
   createdAt: string;
   updatedAt: string;
 };
@@ -93,6 +119,83 @@ export const getMyStories = async (): Promise<Story[]> => {
   const response = await api.get("/stories/mine");
 
   return normalizeStories((response.data?.data?.stories ?? []) as Story[]);
+};
+
+const getStoryList = async (path: string) => {
+  const response = await api.get(path);
+  return normalizeStories((response.data?.data?.stories ?? []) as Story[]);
+};
+
+export const getDiscoverStories = () => getStoryList("/stories/discover");
+export const getFriendStories = () => getStoryList("/stories/friends");
+
+const isStoryInteraction = (value: unknown): value is StoryInteraction => {
+  const interaction = value as Partial<StoryInteraction> | undefined;
+
+  return Boolean(
+    interaction
+    && typeof interaction.viewsCount === "number"
+    && typeof interaction.reactionsCount === "number"
+    && typeof interaction.commentsCount === "number"
+    && typeof interaction.isReacted === "boolean",
+  );
+};
+
+export const recordStoryView = async (storyId: string): Promise<StoryInteraction> => {
+  const response = await api.post(`/stories/${encodeURIComponent(storyId)}/view`);
+  const interaction = response.data?.data?.interaction;
+
+  if (!isStoryInteraction(interaction)) {
+    throw new Error("The story view response was incomplete.");
+  }
+
+  return interaction;
+};
+
+export const toggleStoryReaction = async (storyId: string): Promise<StoryInteraction> => {
+  const response = await api.post(`/stories/${encodeURIComponent(storyId)}/reaction`);
+  const interaction = response.data?.data?.interaction;
+
+  if (!isStoryInteraction(interaction)) {
+    throw new Error("The story reaction response was incomplete.");
+  }
+
+  return interaction;
+};
+
+export const deleteStory = async (storyId: string): Promise<void> => {
+  await api.delete(`/stories/${encodeURIComponent(storyId)}`);
+};
+
+export const getStoryComments = async (storyId: string): Promise<StoryComment[]> => {
+  const response = await api.get(`/stories/${encodeURIComponent(storyId)}/comments`);
+  const comments = response.data?.data?.comments;
+  return Array.isArray(comments) ? comments as StoryComment[] : [];
+};
+
+export const createStoryComment = async (storyId: string, payload: { text: string; parentCommentId?: string | null }) => {
+  const response = await api.post(`/stories/${encodeURIComponent(storyId)}/comments`, payload);
+  const data = response.data?.data as { comment?: StoryComment; interaction?: unknown } | undefined;
+
+  if (!data?.comment || !isStoryInteraction(data.interaction)) {
+    throw new Error("The story comment response was incomplete.");
+  }
+
+  return data as { comment: StoryComment; interaction: StoryInteraction };
+};
+
+export const shareStoryToFeed = async (
+  storyId: string,
+  payload: { caption?: string | null; taggedFriendIds?: string[]; clientRequestId?: string | null },
+) => {
+  const response = await api.post(`/stories/${encodeURIComponent(storyId)}/share`, payload);
+  const share = response.data?.data?.share as { momentId?: string } | undefined;
+
+  if (!share?.momentId) {
+    throw new Error("The story share response was incomplete.");
+  }
+
+  return share as { momentId: string };
 };
 
 const getNonEmptyString = (value?: string | null) => {

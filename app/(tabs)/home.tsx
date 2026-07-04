@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -23,7 +23,7 @@ import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
-import { getFeedStories } from "@/lib/stories";
+import { getDiscoverStories, getFeedStories, getFriendStories } from "@/lib/stories";
 import type { Story } from "@/lib/stories";
 import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
@@ -33,6 +33,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const SUGGESTED_USERS_INSERT_AFTER = 4;
 const MILES_TO_KM = 1.609344;
+const REFRESH_TIMEOUT_MS = 10000;
 
 const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>(), currentUserId?: string): StoryData[] => {
   const groupedStories = new Map<string, Story[]>();
@@ -63,6 +64,15 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
         textBackground: story.textBackground,
         textOverlay: story.textOverlay,
         createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewsCount: story.viewsCount,
+        reactionsCount: story.reactionsCount,
+        commentsCount: story.commentsCount,
+        isReacted: story.isReacted,
+        isOwner: story.isOwner,
+        authorId,
+        authorName: title,
+        authorAvatar: latestStory.author?.avatarUrl ?? null,
       }));
 
     return {
@@ -80,6 +90,8 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
       textOverlay: latestStory.textOverlay,
       seen: storyItems.length > 0 && storyItems.every((story) => seenStoryIds.has(story.id)),
       storyItems,
+      authorId,
+      authorAvatar: latestStory.author?.avatarUrl ?? null,
     };
   });
 };
@@ -157,6 +169,7 @@ export default function HomeFeed() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedType, setSelectedType] = useState('Feed');
   const [stories, setStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
+  const [friendStories, setFriendStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
   const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
@@ -168,7 +181,7 @@ export default function HomeFeed() {
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const feedRequestIdRef = useRef(0);
-  const feedScrollRef = useRef<ScrollView>(null);
+  const feedScrollRef = useRef<FlatList>(null);
   const params = useLocalSearchParams();
 
   useEffect(() => {
@@ -185,16 +198,19 @@ export default function HomeFeed() {
 
   const loadStories = useCallback(async () => {
     try {
-      const [feedStories, seenStoryIds] = await Promise.all([
-        getFeedStories(),
+      const [discover, friends, seenStoryIds] = await Promise.all([
+        getDiscoverStories().catch(() => getFeedStories()),
+        getFriendStories().catch(() => []),
         getSeenStoryIds(),
       ]);
       setStories([
         { id: 'add-story', type: 'add' },
-        ...groupStoriesByAuthor(feedStories, seenStoryIds, userId),
+        ...groupStoriesByAuthor(discover, seenStoryIds, userId),
       ]);
+      setFriendStories([{ id: 'add-story', type: 'add' }, ...groupStoriesByAuthor(friends, seenStoryIds, userId)]);
     } catch {
       setStories([{ id: 'add-story', type: 'add' }]);
+      setFriendStories([{ id: 'add-story', type: 'add' }]);
     }
   }, [userId]);
 
@@ -249,14 +265,20 @@ export default function HomeFeed() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([loadStories(), loadFeed()]);
-    setIsRefreshing(false);
+    try {
+      await Promise.race([
+        Promise.all([loadStories(), loadFeed()]),
+        new Promise((resolve) => setTimeout(resolve, REFRESH_TIMEOUT_MS)),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [loadFeed, loadStories]);
 
   const refreshFeedAfterRepost = useCallback(async () => {
     await loadFeed();
     requestAnimationFrame(() => {
-      feedScrollRef.current?.scrollTo({ y: 0, animated: true });
+      feedScrollRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
   }, [loadFeed]);
 
@@ -276,6 +298,10 @@ export default function HomeFeed() {
 
       void loadStories();
       void loadFeed();
+
+      return () => {
+        setIsRefreshing(false);
+      };
     }, [loadFeed, loadStories]),
   );
 
@@ -410,9 +436,14 @@ export default function HomeFeed() {
         />
 
         {selectedType === 'Feed' ? (
-          <ScrollView
+          <FlatList
             ref={feedScrollRef}
+            data={feedItems}
+            keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            initialNumToRender={3}
+            maxToRenderPerBatch={3}
+            windowSize={5}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -420,25 +451,26 @@ export default function HomeFeed() {
                 tintColor={colors.primary}
               />
             }
-          >
-            <StoryCarousel stories={stories} />
-
-            {nearbyEventFilter ? (
-              <View style={styles.nearbyEventsSection}>
-                <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
-                {!isFeedLoading && feedEvents.length === 0 ? (
-                  <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
-                    No nearby active or upcoming events found.
-                  </Text>
+            ListHeaderComponent={(
+              <>
+                <StoryCarousel stories={stories} friendStories={friendStories} />
+                {nearbyEventFilter ? (
+                  <View style={styles.nearbyEventsSection}>
+                    <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
+                    {!isFeedLoading && feedEvents.length === 0 ? (
+                      <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
+                        No nearby active or upcoming events found.
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
-              </View>
-            ) : null}
-
-            {feedItems.map((item) => {
+              </>
+            )}
+            ListFooterComponent={<View style={{ height: 100 }} />}
+            renderItem={({ item }) => {
               if (item.type === 'post') {
                 return (
                   <FeedPost
-                    key={item.id}
                     post={item.data}
                     onCommentPress={handleCommentPress}
                     onSharePress={handleSharePress}
@@ -450,19 +482,17 @@ export default function HomeFeed() {
                 );
               }
               if (item.type === 'event') {
-                return <EventFeedCard key={item.id} event={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
+                return <EventFeedCard event={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
               }
               if (item.type === 'repost') {
-                return <RepostFeedCard key={item.id} share={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
+                return <RepostFeedCard share={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
               }
               if (item.type === 'suggested_users') {
-                return <PeopleToFollow key={item.id} users={item.data} />;
+                return <PeopleToFollow users={item.data} />;
               }
               return null;
-            })}
-
-            <View style={{ height: 100 }} />
-          </ScrollView>
+            }}
+          />
         ) : (
           <MapContainer onBack={() => setSelectedType('Feed')} />
         )}

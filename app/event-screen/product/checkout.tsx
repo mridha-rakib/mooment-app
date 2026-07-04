@@ -12,7 +12,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import {
   CheckoutHeader,
-  PaymentTypeSelector,
   PaymentMethods,
   SecurityBanner,
   OrderSummary,
@@ -35,7 +34,6 @@ const formatCurrency = (value: number) =>
 
 const ProductCheckoutScreen = () => {
   const router = useRouter();
-  const [paymentType, setPaymentType] = useState("Online");
   const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
@@ -96,11 +94,6 @@ const ProductCheckoutScreen = () => {
       return;
     }
 
-    if (paymentType !== "Online") {
-      Alert.alert("Pay at Door", "Pay at Door checkout is not connected yet.");
-      return;
-    }
-
     if (!cart || cart.items.length === 0) {
       Alert.alert("Cart is empty", "Add products to your cart before checking out.");
       return;
@@ -144,8 +137,6 @@ const ProductCheckoutScreen = () => {
       <CheckoutHeader title="Checkout" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <PaymentTypeSelector paymentType={paymentType} onTypeChange={setPaymentType} />
-
         <PaymentMethods payWith={payWith} onMethodChange={setPayWith} />
 
         <SecurityBanner />

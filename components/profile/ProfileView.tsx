@@ -17,6 +17,7 @@ import ProfileMenuDrawer from "./ProfileMenuDrawer";
 import ProfileTabs, { ProfileTabType } from "./ProfileTabs";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { createReport } from "@/lib/reports";
+import type { EventResponse, ProfileEventGroups } from "@/lib/events";
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
@@ -41,6 +42,9 @@ type ProfileViewProps = {
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   onFollowChange?: (isFollowing: boolean) => void;
   onRefresh?: () => Promise<void>;
+  profileEvents: ProfileEventGroups;
+  onProfileEventsChange?: (events: ProfileEventGroups) => void;
+  profileFeedEvents?: EventResponse[];
 };
 
 export default function ProfileView({
@@ -53,6 +57,9 @@ export default function ProfileView({
   onInteractionChange,
   onFollowChange,
   onRefresh,
+  profileEvents,
+  onProfileEventsChange,
+  profileFeedEvents,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
@@ -162,6 +169,7 @@ export default function ProfileView({
           onMenuPress={() => setMenuVisible(true)}
           onReport={!isOwnProfile ? handleReportPress : undefined}
           onSave={!isOwnProfile ? handleSavePress : undefined}
+          onEventsPress={() => setActiveTab('events')}
         />
         <ProfileBio
           name={user.name}
@@ -216,6 +224,9 @@ export default function ProfileView({
           profileIsFollowing={user.isFollowing}
           onFollowChange={onFollowChange}
           onRepostSuccess={onRefresh}
+          profileEvents={profileEvents}
+          onProfileEventsChange={onProfileEventsChange}
+          profileFeedEvents={profileFeedEvents}
         />
         
         <View style={{ height: 100 }} />

@@ -1,6 +1,6 @@
 import {
   Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React,
   { useState } from "react";
 import {
@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuthStore } from "@/stores/authStore";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function NewPassword() {
@@ -22,8 +24,43 @@ export default function NewPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string; code?: string }>();
+  const resetPassword = useAuthStore((state) => state.resetPassword);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const authError = useAuthStore((state) => state.error);
+
+  const handleContinue = async () => {
+    const email = params.email || "";
+    const code = params.code || "";
+    const isPasswordResetFlow = Boolean(email && code);
+
+    if (!isPasswordResetFlow) {
+      router.push("/auth-screen/success-changed");
+      return;
+    }
+
+    if (password.length < 8) {
+      setLocalError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setLocalError("Passwords do not match.");
+      return;
+    }
+
+    setLocalError(null);
+
+    try {
+      await resetPassword({ email, code, newPassword: password });
+      router.push("/auth-screen/success-changed");
+    } catch {
+      // The store exposes a user-friendly error below the form.
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -54,6 +91,7 @@ export default function NewPassword() {
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
+              editable={!isLoading}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
@@ -82,6 +120,7 @@ export default function NewPassword() {
               secureTextEntry={!showConfirmPassword}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              editable={!isLoading}
             />
             <TouchableOpacity
               onPress={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -95,12 +134,21 @@ export default function NewPassword() {
             </TouchableOpacity>
           </View>
 
+          {(localError || authError) && (
+            <Text style={[styles.errorText, { color: colors.danger }]}>{localError || authError}</Text>
+          )}
+
           <TouchableOpacity
-            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]}
+            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }, isLoading && styles.continueButtonDisabled]}
             activeOpacity={0.8}
-            onPress={() => router.push('/auth-screen/success-changed')}
+            onPress={handleContinue}
+            disabled={isLoading}
           >
-            <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
+            {isLoading ? (
+              <Spinner color={buttonForeground(colors)} />
+            ) : (
+              <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -175,8 +223,17 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     marginTop: 8,
   },
+  continueButtonDisabled: {
+    opacity: 0.75,
+  },
   continueButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
   },
 });

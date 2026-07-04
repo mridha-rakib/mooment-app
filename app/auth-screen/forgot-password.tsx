@@ -14,12 +14,39 @@ import { KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuthStore } from "@/stores/authStore";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const requestPasswordReset = useAuthStore((state) => state.requestPasswordReset);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const authError = useAuthStore((state) => state.error);
+
+  const handleContinue = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setLocalError("Enter your email address.");
+      return;
+    }
+
+    setLocalError(null);
+
+    try {
+      const resetEmail = await requestPasswordReset({ email: normalizedEmail });
+      router.push({
+        pathname: "/auth-screen/reset-password-code",
+        params: { email: resetEmail },
+      });
+    } catch {
+      // The store exposes a user-friendly error below the form.
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -47,15 +74,25 @@ export default function ForgotPassword() {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={!isLoading}
             />
           </View>
 
+          {(localError || authError) && (
+            <Text style={[styles.errorText, { color: colors.danger }]}>{localError || authError}</Text>
+          )}
+
           <TouchableOpacity 
-            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]} 
+            style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }, isLoading && styles.continueButtonDisabled]} 
             activeOpacity={0.8}
-            onPress={() => router.push('/auth-screen/verify-email')}
+            onPress={handleContinue}
+            disabled={isLoading}
           >
-            <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
+            {isLoading ? (
+              <Spinner color={buttonForeground(colors)} />
+            ) : (
+              <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -122,9 +159,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 32,
   },
+  continueButtonDisabled: {
+    opacity: 0.75,
+  },
   continueButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
   },
   footer: {
     alignItems: "center",

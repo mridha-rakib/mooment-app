@@ -2,6 +2,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView,
   useVideoPlayer } from 'expo-video';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -155,10 +156,12 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
   if (!crop || !imageSize.width || !imageSize.height) {
     return (
-      <Image
+      <ExpoImage
         source={{ uri: item.uri }}
         style={[styles.postImage, { width: frameWidth }]}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="disk"
+        recyclingKey={item.uri}
       />
     );
   }
@@ -173,7 +176,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
   return (
     <View style={styles.croppedImageFrame}>
-      <Image
+      <ExpoImage
         source={{ uri: item.uri }}
         style={[
           styles.croppedImage,
@@ -184,7 +187,9 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
             top,
           },
         ]}
-        resizeMode="stretch"
+        contentFit="fill"
+        cachePolicy="disk"
+        recyclingKey={item.uri}
       />
     </View>
   );
@@ -335,6 +340,7 @@ export default function FeedPost({
   onViewMapPress,
   onAuthorFollowChange,
   onInteractionChange,
+  onSaveChange,
   onDeletePress,
   isOwnPost = false,
   embedded = false,
@@ -345,6 +351,7 @@ export default function FeedPost({
   onViewMapPress?: () => void;
   onAuthorFollowChange?: (authorId: string, isFollowing: boolean) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
+  onSaveChange?: (postId: string, isSaved: boolean) => void;
   onDeletePress?: (post: PostData) => void;
   isOwnPost?: boolean;
   embedded?: boolean;
@@ -491,6 +498,7 @@ export default function FeedPost({
       const summary = await toggleMomentSave(post.id);
 
       setIsSaved(summary.isSaved);
+      onSaveChange?.(post.id, summary.isSaved);
     } catch (error) {
       setIsSaved(wasSaved);
       Alert.alert('Unable to save post', getAuthErrorMessage(error, 'Please try again.'));

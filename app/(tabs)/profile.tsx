@@ -3,6 +3,7 @@ import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
 import { PostData } from "@/components/post/FeedPost";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { getMyProfileEvents, getMyTicketWalletEvents, getProfileEventsCount, type EventResponse, type ProfileEventGroups } from "@/lib/events";
 import { deleteMoment, getProfileTimeline, shareMoment } from "@/lib/moments";
 import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
@@ -17,10 +18,15 @@ const FALLBACK_PROFILE_NAME = 'Mooment User';
 const FALLBACK_PROFILE_HANDLE = '@mooment_user';
 
 const PROFILE_STATS = {
-  posts: 0,
+  events: 0,
   reviews: 0,
   followers: 0,
   following: 0,
+};
+
+const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
+  active: [],
+  past: [],
 };
 
 const formatHandle = (username?: string | null, email?: string | null) => {
@@ -42,6 +48,8 @@ export default function ProfileTab() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [reposts, setReposts] = useState<MomentTimelineItem[]>([]);
   const [profileStats, setProfileStats] = useState(PROFILE_STATS);
+  const [profileEvents, setProfileEvents] = useState<ProfileEventGroups>(EMPTY_PROFILE_EVENTS);
+  const [profileFeedEvents, setProfileFeedEvents] = useState<EventResponse[]>([]);
 
   useEffect(() => {
     if (!user?.avatarKey) {
@@ -56,14 +64,18 @@ export default function ProfileTab() {
     if (!user?.id) {
       setPosts([]);
       setReposts([]);
+      setProfileEvents(EMPTY_PROFILE_EVENTS);
+      setProfileFeedEvents([]);
       setProfileStats(PROFILE_STATS);
       return;
     }
 
     try {
-      const [timeline, stats] = await Promise.all([
+      const [timeline, stats, events, walletEvents] = await Promise.all([
         getProfileTimeline(user.id),
         getUserProfileStats(user.id),
+        getMyProfileEvents(),
+        getMyTicketWalletEvents(),
       ]);
 
       setPosts(
@@ -77,9 +89,11 @@ export default function ProfileTab() {
           .filter((post): post is PostData => Boolean(post)),
       );
       setReposts(timeline.items.filter((item) => item.type === 'share'));
+      setProfileEvents(events);
+      setProfileFeedEvents(walletEvents);
       setProfileStats((currentStats) => ({
         ...currentStats,
-        posts: timeline.stats.posts,
+        events: getProfileEventsCount(events),
         reviews: stats.reviews,
         followers: stats.followers,
         following: stats.following,
@@ -87,6 +101,8 @@ export default function ProfileTab() {
     } catch {
       setPosts([]);
       setReposts([]);
+      setProfileEvents(EMPTY_PROFILE_EVENTS);
+      setProfileFeedEvents([]);
       setProfileStats(PROFILE_STATS);
     }
   }, [avatarUri, user?.id]);
@@ -152,10 +168,6 @@ export default function ProfileTab() {
               try {
                 await deleteMoment(post.id);
                 setPosts((currentPosts) => currentPosts.filter((currentPost) => currentPost.id !== post.id));
-                setProfileStats((currentStats) => ({
-                  ...currentStats,
-                  posts: Math.max(0, currentStats.posts - 1),
-                }));
               } catch (error) {
                 Alert.alert('Unable to delete post', getAuthErrorMessage(error, 'Please try again.'));
               }
@@ -176,6 +188,15 @@ export default function ProfileTab() {
         onDeletePost={handleDeletePost}
         onInteractionChange={handleInteractionChange}
         onRefresh={loadTimeline}
+        profileEvents={profileEvents}
+        profileFeedEvents={profileFeedEvents}
+        onProfileEventsChange={(events) => {
+          setProfileEvents(events);
+          setProfileStats((currentStats) => ({
+            ...currentStats,
+            events: getProfileEventsCount(events),
+          }));
+        }}
       />
     </View>
   );

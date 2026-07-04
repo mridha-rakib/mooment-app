@@ -3,10 +3,9 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react-native";
 
 import MoreMenuModal from "../post/MoreMenuModal";
 import BackButton from "../ui/BackButton";
@@ -15,7 +14,7 @@ import CinematicButton from "../ui/CinematicButton";
 import UserAvatar from "../ui/UserAvatar";
 
 export type ProfileStats = {
-  posts: number;
+  events: number;
   reviews: number;
   followers: number;
   following: number;
@@ -34,6 +33,7 @@ type ProfileHeaderProps = {
   onReport?: () => void;
   onSave?: () => void;
   isSaved?: boolean;
+  onEventsPress?: () => void;
 };
 
 export default function ProfileHeader({
@@ -47,33 +47,28 @@ export default function ProfileHeader({
   onReport,
   onSave,
   isSaved = false,
+  onEventsPress,
 }: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
-  const [isSearching, setIsSearching] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
   return (
     <View style={styles.container}>
       {isOwnProfile ? (
         <View style={styles.brandedHeader}>
-          {!isSearching && (
-            <>
-              <CinematicButton
-                icon={Menu01Icon}
-                onPress={onMenuPress}
-                size={24}
-              />
+          <CinematicButton
+            icon={Menu01Icon}
+            onPress={onMenuPress}
+            size={24}
+          />
 
-              <View pointerEvents="none" style={styles.logoSlot}>
-                <Image
-                  source={require('@/assets/images/image.png')}
-                  style={styles.logoImage}
-                  resizeMode="contain"
-                />
-              </View>
-            </>
-          )}
+          <View pointerEvents="none" style={styles.logoSlot}>
+            <Image
+              source={require('@/assets/images/image.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
 
           <CinematicButton
             icon={Search01Icon}
@@ -116,10 +111,16 @@ export default function ProfileHeader({
         </View>
 
         <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{stats.posts}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
-          </View>
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={onEventsPress}
+            disabled={!onEventsPress}
+          >
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stats.events}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Events</Text>
+            </View>
+          </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <TouchableOpacity onPress={() => router.push({
             pathname: '/profile-screen/reviews',

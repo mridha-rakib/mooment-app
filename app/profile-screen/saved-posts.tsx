@@ -4,9 +4,10 @@ import ShareModal from "@/components/post/ShareModal";
 import { useTheme } from '@/hooks/useTheme';
 import { getSavedMoments } from '@/lib/moments';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
+import { getStorageFileUrl } from '@/lib/storage';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function SavedPostsScreen() {
@@ -24,20 +25,20 @@ export default function SavedPostsScreen() {
     try {
       const moments = await getSavedMoments();
       const mapped = moments
-        .map((moment) => mapMomentToPost(moment, {}))
+        .map((moment) => mapMomentToPost(moment, { storageUrlResolver: getStorageFileUrl }))
         .filter((post): post is PostData => post !== null);
 
       setPosts(mapped);
     } catch {
-      setPosts([]);
+      // Keep the last successfully loaded list if a refresh fails.
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadSavedPosts();
-  }, [loadSavedPosts]);
+  useFocusEffect(useCallback(() => {
+    void loadSavedPosts();
+  }, [loadSavedPosts]));
 
   const handleCommentPress = (post: PostData) => {
     setActivePost(post);
@@ -76,6 +77,11 @@ export default function SavedPostsScreen() {
                 post={post}
                 onCommentPress={handleCommentPress}
                 onSharePress={handleSharePress}
+                onSaveChange={(postId, isSaved) => {
+                  if (!isSaved) {
+                    setPosts((current) => current.filter((item) => item.id !== postId));
+                  }
+                }}
               />
             </View>
           ))
