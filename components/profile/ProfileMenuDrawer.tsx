@@ -97,7 +97,11 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            style={styles.menuScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
             <SectionLabel label="ESSENTIALS" colors={colors} />
             <MenuItem
               icon={UserEdit01Icon}
@@ -166,7 +170,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             />
             */}
 
-            <SectionLabel label="WALLET" colors={colors} />
             <MenuItem
               icon={Ticket01Icon}
               label="Ticket Wallet"
@@ -217,8 +220,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             />
             */}
 
-            <View style={{ height: 30 }} />
-
             <MenuItem
               icon={Settings02Icon}
               label="Settings"
@@ -229,7 +230,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               }}
               hideSeparator
             />
-            <View style={{ height: 10 }} />
             <MenuItem
               icon={Logout01Icon}
               label="Logout"
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   drawerContainer: {
-    height: '92%',
+    maxHeight: '92%',
     paddingTop: 10,
   },
   header: {
@@ -279,9 +279,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
+  menuScroll: {
+    flexGrow: 0,
+  },
   scrollContent: {
     paddingHorizontal: 25,
-    paddingBottom: 40,
+    paddingBottom: 16,
   },
   sectionLabel: {
     fontSize: 12,
