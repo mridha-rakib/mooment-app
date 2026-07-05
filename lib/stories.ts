@@ -128,6 +128,7 @@ const getStoryList = async (path: string) => {
 
 export const getDiscoverStories = () => getStoryList("/stories/discover");
 export const getFriendStories = () => getStoryList("/stories/friends");
+export const getUserStories = (userId: string) => getStoryList(`/stories/user/${encodeURIComponent(userId)}`);
 
 const isStoryInteraction = (value: unknown): value is StoryInteraction => {
   const interaction = value as Partial<StoryInteraction> | undefined;
@@ -165,6 +166,18 @@ export const toggleStoryReaction = async (storyId: string): Promise<StoryInterac
 
 export const deleteStory = async (storyId: string): Promise<void> => {
   await api.delete(`/stories/${encodeURIComponent(storyId)}`);
+};
+
+export const getStoryDetails = async (storyId: string): Promise<Story> => {
+  const response = await api.get(`/stories/${encodeURIComponent(storyId)}`);
+  const rawStory = response.data?.data?.story as Story | undefined;
+
+  if (!rawStory) {
+    throw new Error("Story not found");
+  }
+
+  const normalized = normalizeStories([rawStory]);
+  return normalized[0];
 };
 
 export const getStoryComments = async (storyId: string): Promise<StoryComment[]> => {

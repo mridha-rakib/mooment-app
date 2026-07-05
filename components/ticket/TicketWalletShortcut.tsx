@@ -56,7 +56,7 @@ const isNearDismissTarget = (x: number, y: number, width: number, height: number
   const centerX = x + BUTTON_SIZE / 2;
   const centerY = y + BUTTON_SIZE / 2;
   const targetX = width / 2;
-  const targetY = height - Math.max(bottomInset + 36, 60);
+  const targetY = height - (bottomInset + 96) - DISMISS_SIZE / 2;
   const distance = Math.hypot(centerX - targetX, centerY - targetY);
 
   return distance <= DISMISS_SIZE / 2 + BUTTON_SIZE / 2;
@@ -111,22 +111,25 @@ export default function TicketWalletShortcut() {
 
   const bounds = useMemo(() => {
     const bottomClearance = keyboardHeight > 0 ? keyboardHeight + EDGE_GAP : BOTTOM_TAB_CLEARANCE + insets.bottom;
-
+    const dismissBottomInset = keyboardHeight > 0 ? keyboardHeight + insets.bottom : insets.bottom;
+    const dragBottomClearance = keyboardHeight > 0 ? keyboardHeight + EDGE_GAP : dismissBottomInset + 60;
+ 
     return {
       minX: EDGE_GAP,
       maxX: Math.max(EDGE_GAP, width - BUTTON_SIZE - EDGE_GAP),
       minY: Math.max(EDGE_GAP, insets.top + TOP_UI_CLEARANCE),
       maxY: Math.max(insets.top + TOP_UI_CLEARANCE, height - BUTTON_SIZE - bottomClearance),
-      dismissBottomInset: keyboardHeight > 0 ? keyboardHeight + insets.bottom : insets.bottom,
+      dragMaxY: Math.max(insets.top + TOP_UI_CLEARANCE, height - BUTTON_SIZE - dragBottomClearance),
+      dismissBottomInset,
     };
   }, [height, insets.bottom, insets.top, keyboardHeight, width]);
 
   const clampPosition = useCallback(
-    (position: { x: number; y: number }) => ({
+    (position: { x: number; y: number }, isDrag = false) => ({
       x: clamp(position.x, bounds.minX, bounds.maxX),
-      y: clamp(position.y, bounds.minY, bounds.maxY),
+      y: clamp(position.y, bounds.minY, isDrag ? bounds.dragMaxY : bounds.maxY),
     }),
-    [bounds.maxX, bounds.maxY, bounds.minX, bounds.minY],
+    [bounds.maxX, bounds.maxY, bounds.dragMaxY, bounds.minX, bounds.minY],
   );
 
   const syncAnimatedPosition = useCallback(
@@ -284,7 +287,7 @@ export default function TicketWalletShortcut() {
           const nextPosition = clampPosition({
             x: dragStartRef.current.x + gestureState.dx,
             y: dragStartRef.current.y + gestureState.dy,
-          });
+          }, true);
 
           if (!isDraggingRef.current && (Math.abs(gestureState.dx) > TAP_SLOP || Math.abs(gestureState.dy) > TAP_SLOP)) {
             isDraggingRef.current = true;
@@ -302,7 +305,7 @@ export default function TicketWalletShortcut() {
           const nextPosition = clampPosition({
             x: dragStartRef.current.x + gestureState.dx,
             y: dragStartRef.current.y + gestureState.dy,
-          });
+          }, true);
           const didDrag = Math.abs(gestureState.dx) > TAP_SLOP || Math.abs(gestureState.dy) > TAP_SLOP;
 
           isDraggingRef.current = false;
@@ -353,7 +356,7 @@ export default function TicketWalletShortcut() {
           style={[
             styles.dismissTarget,
             {
-              bottom: Math.max(bounds.dismissBottomInset + 16, 24),
+              bottom: bounds.dismissBottomInset + 96,
               backgroundColor: isDark ? "rgba(255,255,255,0.14)" : "rgba(17,17,17,0.12)",
             },
           ]}

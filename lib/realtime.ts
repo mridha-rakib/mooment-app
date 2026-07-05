@@ -150,6 +150,7 @@ export const createRealtimeSocket = ({
   let reconnectAttempts = 0;
   let isClosed = false;
   const pendingMessages: string[] = [];
+  let pingInterval: ReturnType<typeof setInterval> | null = null;
 
   const dispatchEvent = (payload: RealtimeEvent) => {
     if (payload.type === "ready") {
@@ -256,6 +257,12 @@ export const createRealtimeSocket = ({
     socket.onopen = () => {
       log("Connected");
       reconnectAttempts = 0;
+      if (pingInterval) clearInterval(pingInterval);
+      pingInterval = setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) {
+          sendPayload({ type: "ping" });
+        }
+      }, 30000);
       while (pendingMessages.length > 0 && socket?.readyState === WebSocket.OPEN) {
         const payload = pendingMessages.shift();
         if (payload) socket.send(payload);
@@ -279,6 +286,10 @@ export const createRealtimeSocket = ({
     socket.onclose = (event) => {
       log("Disconnected", { code: event.code, wasClean: event.wasClean });
       socket = null;
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
       if (!isClosed) {
         if (event.code === 1008) {
           log("Auth failed — not reconnecting");
@@ -307,6 +318,10 @@ export const createRealtimeSocket = ({
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
+      }
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
       }
       socket?.close();
       socket = null;

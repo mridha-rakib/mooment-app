@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getCachedStoryThumbnail } from '@/lib/storyThumbnails';
+import { getCachedStoryThumbnail, generateStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSource } from '@/lib/storyThumbnails';
 import type { StoryMediaType, StoryTextBackground, StoryTextOverlay } from '@/lib/stories';
 import UserAvatar from '../ui/UserAvatar';
 import { createStoryViewerSession, type StoryViewerTab } from '@/lib/storyViewerSession';
@@ -78,7 +78,27 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
   mediaType?: StoryMediaType;
   textBackground?: StoryTextBackground | null;
 }) {
-  const thumbnailSource = getCachedStoryThumbnail(storyId) ?? (fallbackUri ? { uri: fallbackUri } : null);
+  const [localThumbnail, setLocalThumbnail] = React.useState<StoryThumbnailSource>(() => getCachedStoryThumbnail(storyId));
+
+  React.useEffect(() => {
+    if (localThumbnail) return;
+
+    if (mediaType === 'video' && mediaUri) {
+      let isMounted = true;
+      generateStoryThumbnail(mediaUri).then((thumb) => {
+        if (!isMounted) return;
+        if (thumb) {
+          setCachedStoryThumbnail(storyId, thumb);
+          setLocalThumbnail(thumb);
+        }
+      });
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [storyId, mediaUri, mediaType, localThumbnail]);
+
+  const thumbnailSource = localThumbnail ?? (fallbackUri ? { uri: fallbackUri } : null);
 
   if (mediaType === 'text') {
     return (

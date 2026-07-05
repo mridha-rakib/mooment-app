@@ -239,6 +239,27 @@ export default function ViewStoryScreen() {
   const [hasRenderedFirstFrame, setHasRenderedFirstFrame] = useState(false);
   const [activePlayerSlot, setActivePlayerSlot] = useState<0 | 1>(0);
   const [commentsVisible, setCommentsVisible] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerFeedback = useCallback(() => {
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    setShowFeedback(true);
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setShowFeedback(false);
+      feedbackTimeoutRef.current = null;
+    }, 650);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
   const [shareVisible, setShareVisible] = useState(false);
   const [interaction, setInteraction] = useState({ viewsCount: 0, reactionsCount: 0, commentsCount: 0, isReacted: false });
   const [isReactionSubmitting, setIsReactionSubmitting] = useState(false);
@@ -496,6 +517,10 @@ export default function ViewStoryScreen() {
   }, [activeGroupIndex, activePlayerSlot, currentIndex, groups, player, storyItems]);
 
   useEffect(() => {
+    if (currentStory?.id && playbackTimingRef.current.storyId === currentStory.id) {
+      return;
+    }
+
     const loadRequestId = loadRequestIdRef.current + 1;
 
     loadRequestIdRef.current = loadRequestId;
@@ -727,6 +752,9 @@ export default function ViewStoryScreen() {
 
   useEventListener(player, "statusChange", ({ status, oldStatus }) => {
     setPlayerStatus((current) => current === status ? current : status);
+    if (status === "error") {
+      setLoadFailed(true);
+    }
     const timing = playbackTimingRef.current;
     const now = Date.now();
 
@@ -749,6 +777,10 @@ export default function ViewStoryScreen() {
 
   useEventListener(player, "playingChange", ({ isPlaying }) => {
     setPlayerIsPlaying((current) => current === isPlaying ? current : isPlaying);
+    if (isPlaying) {
+      setHasRenderedFirstFrame(true);
+      setIsLoadingCurrentStory(false);
+    }
     const timing = playbackTimingRef.current;
     if (isPlaying && !timing.playingAt) {
       timing.playingAt = Date.now();
@@ -876,6 +908,7 @@ export default function ViewStoryScreen() {
   }, [currentStory, isCurrentVideo, loadFailed, sourceReady]);
 
   const togglePlay = useCallback(() => {
+    triggerFeedback();
     if (!isCurrentVideo) {
       setIsHolding((holding) => {
         if (holding) {
@@ -900,7 +933,7 @@ export default function ViewStoryScreen() {
       playbackIntentRef.current = true;
       player.play();
     }
-  }, [currentStory?.mediaUri, freezeImagePlaybackProgress, isCurrentVideo, isLoadingStory, isPlaying, player, resumeImagePlaybackProgress]);
+  }, [currentStory?.mediaUri, freezeImagePlaybackProgress, isCurrentVideo, isLoadingStory, isPlaying, player, resumeImagePlaybackProgress, triggerFeedback]);
 
   const pauseForHold = useCallback(() => {
     if (holdActivatedRef.current || isLoadingStory || (!currentStory?.mediaUri && isCurrentVideo)) {
@@ -1178,7 +1211,7 @@ export default function ViewStoryScreen() {
           styles.tapZones,
           {
             top: insets.top + 72,
-            right: 84,
+            right: 0,
             bottom: Math.max(insets.bottom + 112, 148),
           },
         ]}
@@ -1200,17 +1233,24 @@ export default function ViewStoryScreen() {
         />
       </View>
 
-      <Pressable
-        style={[styles.centerPlayButton, isLoadingStory && styles.centerPlayButtonDisabled]}
-        delayLongPress={LONG_PRESS_DELAY_MS}
-        onLongPress={pauseForHold}
-        onPress={() => handlePressAction(togglePlay)}
-        onPressOut={resumeFromHold}
-        disabled={isLoadingStory}
-        accessibilityLabel={isPlaying ? "Pause story" : "Play story"}
-      >
-        <Ionicons name={isPlaying ? "pause" : "play"} size={24} color="#FFFFFF" style={!isPlaying ? styles.playIcon : undefined} />
-      </Pressable>
+      {isCurrentVideo && !loadFailed && !!currentStory && (
+        <Pressable
+          style={[
+            styles.centerPlayButton,
+            isLoadingStory && styles.centerPlayButtonDisabled,
+            { opacity: showFeedback ? 1 : 0 }
+          ]}
+          hitSlop={{ top: 100, bottom: 100, left: 80, right: 80 }}
+          delayLongPress={LONG_PRESS_DELAY_MS}
+          onLongPress={pauseForHold}
+          onPress={() => handlePressAction(togglePlay)}
+          onPressOut={resumeFromHold}
+          disabled={isLoadingStory}
+          accessibilityLabel={isPlaying ? "Pause story" : "Play story"}
+        >
+          <Ionicons name={isPlaying ? "pause" : "play"} size={24} color="#FFFFFF" style={!isPlaying ? styles.playIcon : undefined} />
+        </Pressable>
+      )}
 
       <View style={[styles.topControls, { paddingTop: insets.top + 12 }]} pointerEvents="box-none">
         <View style={styles.topControlRow}>
@@ -1241,68 +1281,72 @@ export default function ViewStoryScreen() {
         </View>
       </View>
 
-      <View style={styles.actionRail}>
-        <PostInteractionBar
-          vertical
-          compact
-          likesCount={interaction.reactionsCount}
-          commentsCount={interaction.commentsCount}
-          sharesCount={0}
-          viewsCount={interaction.viewsCount}
-          isLiked={interaction.isReacted}
-          onLikePress={handleReactionPress}
-          onCommentPress={() => openOverlay('comments')}
-          onSharePress={() => openOverlay('share')}
-          likeDisabled={!currentStory || isReactionSubmitting}
-          commentDisabled={!currentStory}
-          shareDisabled={!currentStory || isShareSubmitting}
-          iconColor="#FFFFFF"
-          countColor="#FFFFFF"
-          actionStyle={styles.railAction}
-        />
-      </View>
+      {!loadFailed && !!currentStory && (
+        <View style={styles.actionRail} pointerEvents="box-none">
+          <PostInteractionBar
+            vertical
+            compact
+            likesCount={interaction.reactionsCount}
+            commentsCount={interaction.commentsCount}
+            sharesCount={0}
+            viewsCount={interaction.viewsCount}
+            isLiked={interaction.isReacted}
+            onLikePress={handleReactionPress}
+            onCommentPress={() => openOverlay('comments')}
+            onSharePress={() => openOverlay('share')}
+            likeDisabled={!currentStory || isReactionSubmitting}
+            commentDisabled={!currentStory}
+            shareDisabled={!currentStory || isShareSubmitting}
+            iconColor="#FFFFFF"
+            countColor="#FFFFFF"
+            actionStyle={styles.railAction}
+          />
+        </View>
+      )}
 
-      <View style={[styles.footer, { bottom: Math.max(insets.bottom + 16, 24) }]}>
-        <View style={styles.footerAuthorRow}>
-          <UserAvatar uri={currentStory?.authorAvatar ?? activeGroup?.authorAvatar} name={currentStory?.authorName ?? activeGroup?.title} size={38} />
-          <View style={styles.authorBlock}>
-            <View style={styles.authorRow}>
-              <Text style={styles.title} numberOfLines={1}>{currentStory?.authorName ?? activeGroup?.title ?? title ?? "Story"}</Text>
-              <Text style={styles.followingPill}>Following</Text>
-              {currentStory?.isOwner ? (
-                <TouchableOpacity onPress={handleMenu} style={styles.moreBtn} accessibilityLabel="Story options">
-                  <Feather name="more-horizontal" size={21} color="#FFFFFF" />
-                </TouchableOpacity>
-              ) : null}
+      {!loadFailed && !!currentStory && (
+        <View style={[styles.footer, { bottom: Math.max(insets.bottom + 16, 24) }]}>
+          <View style={styles.footerAuthorRow}>
+            <UserAvatar uri={currentStory?.authorAvatar ?? activeGroup?.authorAvatar} name={currentStory?.authorName ?? activeGroup?.title} size={38} />
+            <View style={styles.authorBlock}>
+              <View style={styles.authorRow}>
+                <Text style={styles.title} numberOfLines={1}>{currentStory?.authorName ?? activeGroup?.title ?? title ?? "Story"}</Text>
+                <Text style={styles.followingPill}>Following</Text>
+                {currentStory?.isOwner ? (
+                  <TouchableOpacity onPress={handleMenu} style={styles.moreBtn} accessibilityLabel="Story options">
+                    <Feather name="more-horizontal" size={21} color="#FFFFFF" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              <Text style={styles.metaText}>{formatExpiry(currentStory?.expiresAt)}</Text>
             </View>
-            <Text style={styles.metaText}>{formatExpiry(currentStory?.expiresAt)}</Text>
           </View>
-        </View>
-        {currentStory?.caption ? (
-          <Text style={styles.captionText} numberOfLines={2}>{currentStory.caption}</Text>
-        ) : null}
-        <View style={styles.captionMetaRow}>
-          {currentStory?.caption ? <Text style={styles.captionMoreText}>see more</Text> : <View />}
-          {activeGroupIndex < groups.length - 1 ? <Text style={styles.swipeHint}>Swipe up</Text> : null}
-        </View>
-        <View style={styles.progressFooterRow}>
-          <View style={styles.progressSegments}>
-            {storyItems.map((story, index) => {
-              const progress =
-                index < currentIndex ? 1 :
-                  index > currentIndex ? 0 :
-                    currentTime / currentDuration;
+          {currentStory?.caption ? (
+            <Text style={styles.captionText} numberOfLines={2}>{currentStory.caption}</Text>
+          ) : null}
+          <View style={styles.captionMetaRow}>
+            {currentStory?.caption ? <Text style={styles.captionMoreText}>see more</Text> : <View />}
+            {activeGroupIndex < groups.length - 1 ? <Text style={styles.swipeHint}>Swipe up</Text> : null}
+          </View>
+          <View style={styles.progressFooterRow}>
+            <View style={styles.progressSegments}>
+              {storyItems.map((story, index) => {
+                const progress =
+                  index < currentIndex ? 1 :
+                    index > currentIndex ? 0 :
+                      currentTime / currentDuration;
 
-              return (
-                <View key={story.id} style={styles.segmentTrack}>
-                  <View style={[styles.segmentFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
-                </View>
-              );
-            })}
+                return (
+                  <View key={story.id} style={styles.segmentTrack}>
+                    <View style={[styles.segmentFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={styles.durationText}>{Math.ceil(Math.max(currentDuration - currentTime, 0))}s</Text>
           </View>
-          <Text style={styles.durationText}>{Math.ceil(Math.max(currentDuration - currentTime, 0))}s</Text>
         </View>
-      </View>
+      )}
 
       <CommentsModal
         visible={commentsVisible}

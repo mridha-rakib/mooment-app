@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Image,
@@ -63,6 +64,38 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
   const [repostCaption, setRepostCaption] = useState('');
   const [tagQuery, setTagQuery] = useState('');
   const [taggedFriendIds, setTaggedFriendIds] = useState<Set<string>>(new Set());
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setIsKeyboardVisible(true);
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      setKeyboardHeight(0);
+    };
+  }, []);
+
+  const handleRequestClose = () => {
+    if (isKeyboardVisible) {
+      Keyboard.dismiss();
+    } else {
+      onClose();
+    }
+  };
   const shareRequestIds = useRef(new Map<string, string>());
   const repostRequestId = useRef<string | null>(null);
   const repostSubmittingRef = useRef(false);
@@ -187,8 +220,10 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
   };
 
   const handleFriendPress = async (friend: DirectMessageConversationResponse) => {
-    if (!item || pendingFriendId || sentFriendIds.has(friend.friendId)) return;
-    if (item.canShareToChat === false) {
+    if (pendingFriendId || sentFriendIds.has(friend.friendId)) return;
+    if (!item && !shareUrl) return;
+
+    if (item && item.canShareToChat === false) {
       feedback(`This private ${item.type} cannot be shared to chat`);
       return;
     }
@@ -197,21 +232,31 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
       return;
     }
 
-    const key = `${item.type}:${item.id}:${friend.friendId}`;
+    const key = item
+      ? `${item.type}:${item.id}:${friend.friendId}`
+      : `link:${shareUrl}:${friend.friendId}`;
     const clientMessageId = shareRequestIds.current.get(key)
-      ?? `share:${item.type}:${item.id}:${friend.friendId}:${Date.now()}`;
+      ?? `share:${item ? item.type : 'link'}:${item ? item.id : 'url'}:${friend.friendId}:${Date.now()}`;
     shareRequestIds.current.set(key, clientMessageId);
     setPendingFriendId(friend.friendId);
 
     try {
-      await sendDirectMessage(friend.friendId, {
-        type: item.type,
-        text: item.preview?.trim().slice(0, 2000) || undefined,
-        attachment: item.type === 'event'
-          ? { type: 'event', eventId: item.id }
-          : { type: 'post', postId: item.id },
-        clientMessageId,
-      });
+      if (item) {
+        await sendDirectMessage(friend.friendId, {
+          type: item.type,
+          text: item.preview?.trim().slice(0, 2000) || undefined,
+          attachment: item.type === 'event'
+            ? { type: 'event', eventId: item.id }
+            : { type: 'post', postId: item.id },
+          clientMessageId,
+        });
+      } else if (shareUrl) {
+        await sendDirectMessage(friend.friendId, {
+          type: 'text',
+          text: shareUrl,
+          clientMessageId,
+        });
+      }
       setSentFriendIds((current) => new Set(current).add(friend.friendId));
       feedback(`Shared to ${friend.name}`);
     } catch (error) {
@@ -234,10 +279,10 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
   const composerBottomPadding = sheetBottomPadding + 8;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleRequestClose}>
+      <View style={styles.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: sheetBottomPadding }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: sheetBottomPadding + keyboardHeight }]}>
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           <Text style={[styles.title, { color: colors.text }]}>{showRepostComposer ? 'Repost' : 'Share to...'}</Text>
           {showRepostComposer ? (
@@ -338,7 +383,7 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
           </ScrollView>
           </>}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

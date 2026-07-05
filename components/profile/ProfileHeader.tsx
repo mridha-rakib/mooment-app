@@ -3,7 +3,9 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { getUserStories } from "@/lib/stories";
+import { createStoryViewerSession } from "@/lib/storyViewerSession";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 
@@ -52,6 +54,88 @@ export default function ProfileHeader({
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
+  const [stories, setStories] = React.useState<any[]>([]);
+  const [isImageModalVisible, setIsImageModalVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    if (!userId) return;
+
+    const fetchStories = async () => {
+      try {
+        const list = await getUserStories(userId);
+        if (active) {
+          setStories(list);
+        }
+      } catch {
+        // Fallback to empty list
+      }
+    };
+
+    fetchStories();
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  const handleViewStory = () => {
+    if (stories.length === 0) return;
+
+    const viewerGroup = {
+      title: name || 'Story',
+      authorId: userId,
+      authorAvatar: avatar ?? null,
+      stories: stories.map((story) => ({
+        id: story.id,
+        mediaType: story.mediaType,
+        mediaUri: story.mediaUrl,
+        contentType: story.contentType,
+        durationSeconds: story.durationSeconds || 15,
+        caption: story.caption,
+        textContent: story.textContent,
+        textBackground: story.textBackground,
+        textOverlay: story.textOverlay,
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewsCount: story.viewsCount,
+        reactionsCount: story.reactionsCount,
+        commentsCount: story.commentsCount,
+        isReacted: story.isReacted,
+        isOwner: story.isOwner,
+        authorId: story.userId,
+        authorName: story.author?.name || name || 'Story',
+        authorAvatar: story.author?.avatarUrl ?? avatar ?? null,
+      })),
+    };
+
+    const sessionId = createStoryViewerSession([viewerGroup]);
+    router.push({
+      pathname: '/post-screen/view-story',
+      params: { storySessionId: sessionId, groupIndex: 0 },
+    } as any);
+  };
+
+  const handleAvatarPress = () => {
+    if (stories.length > 0) {
+      Alert.alert(
+        "Profile Options",
+        "Select an action",
+        [
+          { text: "View Story", onPress: handleViewStory },
+          { text: "View Profile Picture", onPress: () => setIsImageModalVisible(true) },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+    } else {
+      setIsImageModalVisible(true);
+    }
+  };
+
+  const hasStories = stories.length > 0;
+  const borderRingColor = hasStories
+    ? '#FF850C' // Active story orange ring!
+    : (accountType === 'business' ? BUSINESS_RING_COLOR : colors.primary);
+
   return (
     <View style={styles.container}>
       {isOwnProfile ? (
@@ -103,12 +187,14 @@ export default function ProfileHeader({
       />
 
       <View style={styles.infoRow}>
-        <View
-        style={[styles.avatarBorder, { borderColor: accountType === 'business' ? BUSINESS_RING_COLOR : colors.primary }]}
-        accessibilityLabel={accountType === 'business' ? 'Business account avatar' : 'Personal account avatar'}
-      >
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleAvatarPress}
+          style={[styles.avatarBorder, { borderColor: borderRingColor }]}
+          accessibilityLabel={accountType === 'business' ? 'Business account avatar' : 'Personal account avatar'}
+        >
           <UserAvatar uri={avatar} name={name} size={80} style={styles.avatar} iconSize={36} />
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.statsContainer}>
           <TouchableOpacity
@@ -168,6 +254,36 @@ export default function ProfileHeader({
           </TouchableOpacity>
         </View>
       </View>
+      <Modal
+        visible={isImageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsImageModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalContainer}
+          activeOpacity={1}
+          onPress={() => setIsImageModalVisible(false)}
+        >
+          {avatar ? (
+            <Image
+              source={{ uri: avatar }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={styles.avatarFallbackLarge}>
+              <Feather name="user" size={80} color="#8E8E9B" />
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setIsImageModalVisible(false)}
+          >
+            <Feather name="x" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -289,5 +405,35 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 24,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    width: '90%',
+    height: '70%',
+  },
+  avatarFallbackLarge: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1001,
   },
 });
