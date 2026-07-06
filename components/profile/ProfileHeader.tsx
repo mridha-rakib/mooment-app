@@ -149,7 +149,7 @@ export default function ProfileHeader({
           <View pointerEvents="none" style={styles.logoSlot}>
             <Image
               source={require('@/assets/images/image.png')}
-              style={styles.logoImage}
+              style={[styles.logoImage, { tintColor: colors.text }]}
               resizeMode="contain"
             />
           </View>
