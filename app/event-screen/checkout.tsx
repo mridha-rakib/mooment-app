@@ -194,6 +194,7 @@ const EventCheckoutScreen = () => {
           amount: isFreeTicket ? "0" : String(order.totalAmount),
           currency: order.currency,
           createdAt: order.createdAt,
+          ticketPasses: JSON.stringify(order.ticketPasses),
           ...(isFreeTicket ? { isFree: "true" } : {}),
         },
       });

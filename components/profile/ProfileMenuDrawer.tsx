@@ -39,20 +39,16 @@ type MenuItemProps = {
   label: string;
   onPress: () => void;
   isDestructive?: boolean;
-  hideSeparator?: boolean;
   colors: any;
 };
 
-const MenuItem = ({ icon, label, onPress, isDestructive, hideSeparator, colors }: MenuItemProps) => (
-  <>
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.menuItemLeft}>
-        <HugeiconsIcon icon={icon} size={20} color={isDestructive ? colors.danger || '#FF4B4B' : colors.text} />
-        <Text style={[styles.menuItemLabel, { color: colors.text }, isDestructive && { color: colors.danger || '#FF4B4B' }]}>{label}</Text>
-      </View>
-    </TouchableOpacity>
-    {!hideSeparator && <View style={[styles.itemSeparator, { backgroundColor: colors.border }]} />}
-  </>
+const MenuItem = ({ icon, label, onPress, isDestructive, colors }: MenuItemProps) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
+    <View style={styles.menuItemLeft}>
+      <HugeiconsIcon icon={icon} size={20} color={isDestructive ? colors.danger || '#FF4B4B' : colors.text} />
+      <Text style={[styles.menuItemLabel, { color: colors.text }, isDestructive && { color: colors.danger || '#FF4B4B' }]}>{label}</Text>
+    </View>
+  </TouchableOpacity>
 );
 
 const SectionLabel = ({ label, colors }: { label: string, colors: any }) => (
@@ -97,7 +93,11 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            style={styles.menuScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
             <SectionLabel label="ESSENTIALS" colors={colors} />
             <MenuItem
               icon={UserEdit01Icon}
@@ -151,7 +151,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                   onReady: () => router.push('/profile-screen/creator-dashboard'),
                 });
               }}
-              hideSeparator
             />
             {/* 
             <MenuItem
@@ -162,11 +161,9 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/product/cart');
               }}
-              hideSeparator
             />
             */}
 
-            <SectionLabel label="WALLET" colors={colors} />
             <MenuItem
               icon={Ticket01Icon}
               label="Ticket Wallet"
@@ -175,7 +172,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/wallet');
               }}
-              hideSeparator
             />
             <MenuItem
               icon={Ticket01Icon}
@@ -185,7 +181,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 void (isTicketShortcutVisible ? hideTicketShortcut() : restoreTicketShortcut()).catch(() => undefined);
               }}
-              hideSeparator
             />
             {/* Product Wallet is temporarily hidden */}
             {/* 
@@ -197,7 +192,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/product/wallet');
               }}
-              hideSeparator
             />
             */}
 
@@ -213,11 +207,8 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/profile-screen/inventory');
               }}
-              hideSeparator
             />
             */}
-
-            <View style={{ height: 30 }} />
 
             <MenuItem
               icon={Settings02Icon}
@@ -227,16 +218,13 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/profile-screen/settings');
               }}
-              hideSeparator
             />
-            <View style={{ height: 10 }} />
             <MenuItem
               icon={Logout01Icon}
               label="Logout"
               colors={colors}
               onPress={handleLogout}
               isDestructive
-              hideSeparator
             />
           </ScrollView>
         </SafeAreaView>
@@ -252,7 +240,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   drawerContainer: {
-    height: '92%',
+    maxHeight: '92%',
     paddingTop: 10,
   },
   header: {
@@ -279,9 +267,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
+  menuScroll: {
+    flexGrow: 0,
+  },
   scrollContent: {
     paddingHorizontal: 25,
-    paddingBottom: 40,
+    paddingBottom: 16,
   },
   sectionLabel: {
     fontSize: 12,
@@ -304,9 +295,5 @@ const styles = StyleSheet.create({
   menuItemLabel: {
     fontSize: 14,
     fontWeight: '500',
-  },
-  itemSeparator: {
-    height: 1,
-    marginLeft: 37,
   },
 });

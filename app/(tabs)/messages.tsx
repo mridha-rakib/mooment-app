@@ -68,11 +68,21 @@ const formatConversationTime = (value?: string | null) => {
   return `${Math.floor(diffHours / 24)}d`;
 };
 
+const STORY_LINK_REGEX = /https:\/\/mooment\.app\/stories\/([a-f\d]{24})/i;
+
+const formatLastMessage = (text: string | null | undefined): string => {
+  if (!text) return '';
+  if (STORY_LINK_REGEX.test(text)) {
+    return '🎬 Shared a story';
+  }
+  return text;
+};
+
 const toConversationData = (dm: DirectMessageConversationResponse): ConversationData => ({
   id: dm.friendId || dm.id,
   name: dm.name,
   avatar: dm.avatarUrl ?? null,
-  lastMessage: dm.lastMessage ?? 'Start a conversation',
+  lastMessage: formatLastMessage(dm.lastMessage) || 'Start a conversation',
   time: formatConversationTime(dm.lastMessageAt),
   unread: dm.unreadCount ?? 0,
   isOnline: dm.isOnline ?? false,
@@ -84,7 +94,7 @@ const toGroupConversationData = (group: GroupConversationResponse): Conversation
   id: group.id,
   name: group.name,
   avatar: group.avatarUrl ?? '',
-  lastMessage: group.lastMessage ?? 'No messages yet',
+  lastMessage: formatLastMessage(group.lastMessage) || 'No messages yet',
   time: formatConversationTime(group.lastMessageAt),
   unread: group.unreadCount ?? 0,
   isOnline: false,
@@ -245,7 +255,7 @@ export default function MessagesScreen() {
 
           const updated = [...prev];
           const conv = { ...updated[idx] };
-          conv.lastMessage = message.text;
+          conv.lastMessage = formatLastMessage(message.text);
           conv.time = formatConversationTime(message.createdAt);
           if (message.senderId !== currentUserId && activeDirectConversationIdRef.current !== partnerId) {
             conv.unread = (conv.unread ?? 0) + 1;

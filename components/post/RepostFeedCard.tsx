@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import EventFeedCard from '@/components/home/EventFeedCard';
 import { useTheme } from '@/hooks/useTheme';
 import { getEventById, type EventResponse } from '@/lib/events';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
-import { shareMoment, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
+import { shareMoment, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
 import UserAvatar from '../ui/UserAvatar';
 import FeedPost from './FeedPost';
@@ -25,7 +26,6 @@ export default function RepostFeedCard({ share, labelOverride, onRepostSuccess, 
   const [eventUnavailable, setEventUnavailable] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
   const isEvent = share.originalItem?.type === 'event';
-  const taggedNames = useMemo(() => share.taggedFriends?.map((friend) => friend.name) ?? [], [share.taggedFriends]);
   const reposterName = share.sharedBy?.name?.trim() || share.sharedBy?.username?.trim() || 'Mooment user';
   const reposterAvatar = useMemo(() => {
     if (share.sharedBy?.avatarKey) {
@@ -70,7 +70,7 @@ export default function RepostFeedCard({ share, labelOverride, onRepostSuccess, 
       contextLabel={contextLabel}
       sharedTime={sharedTime}
       caption={share.repostCaption}
-      taggedNames={taggedNames}
+      taggedFriends={share.taggedFriends ?? []}
     />
   );
 
@@ -126,17 +126,32 @@ function RepostHeader({
   contextLabel,
   sharedTime,
   caption,
-  taggedNames,
+  taggedFriends,
 }: {
   reposterName: string;
   reposterAvatar?: string | null;
   contextLabel: string;
   sharedTime: string;
   caption?: string | null;
-  taggedNames: string[];
+  taggedFriends: MomentAuthor[];
 }) {
   const { colors } = useTheme();
-  const taggedText = formatTaggedNames(taggedNames);
+  const router = useRouter();
+  const validTaggedFriends = taggedFriends.filter((friend) => getTaggedFriendName(friend));
+
+  const openTaggedProfile = (friend: MomentAuthor) => {
+    if (!friend.id) return;
+
+    router.push({
+      pathname: '/profile-screen/user-profile',
+      params: {
+        userId: friend.id,
+        name: getTaggedFriendName(friend),
+        isFollowing: String(Boolean(friend.isFollowing)),
+        ...(friend.avatarUrl ? { avatar: friend.avatarUrl } : {}),
+      },
+    } as any);
+  };
 
   return (
     <View style={styles.repostHeader}>
@@ -145,7 +160,27 @@ function RepostHeader({
         <Text style={[styles.contextLabel, { color: colors.textSecondary }]}>{contextLabel}</Text>
         <Text style={[styles.reposterLine, { color: colors.text }]} numberOfLines={2}>
           <Text style={styles.reposterName}>{reposterName}</Text>
-          {taggedText ? <Text style={{ color: colors.textSecondary }}> is with {taggedText}</Text> : null}
+          {validTaggedFriends.length > 0 ? (
+            <Text style={{ color: colors.textSecondary }}>
+              {' is with '}
+              {validTaggedFriends.map((friend, index) => (
+                <React.Fragment key={friend.id ?? `${getTaggedFriendName(friend)}-${index}`}>
+                  {index > 0 ? (
+                    <Text style={{ color: colors.textSecondary }}>
+                      {index === validTaggedFriends.length - 1 ? ' and ' : ', '}
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={[styles.reposterName, { color: colors.text }]}
+                    onPress={() => openTaggedProfile(friend)}
+                    suppressHighlighting
+                  >
+                    {getTaggedFriendName(friend)}
+                  </Text>
+                </React.Fragment>
+              ))}
+            </Text>
+          ) : null}
         </Text>
         {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
         {caption?.trim() ? <Text style={[styles.repostCaption, { color: colors.text }]}>{caption.trim()}</Text> : null}
@@ -180,11 +215,8 @@ const formatTimeAgo = (dateStr?: string | Date | null): string => {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 };
 
-const formatTaggedNames = (names: string[]) => {
-  const validNames = names.map((name) => name.trim()).filter(Boolean);
-  if (validNames.length <= 2) return validNames.join(' and ');
-  return `${validNames[0]} and ${validNames.length - 1} others`;
-};
+const getTaggedFriendName = (friend: MomentAuthor) =>
+  friend.name?.trim() || friend.username?.trim() || 'Mooment user';
 
 const styles = StyleSheet.create({
   loading: { marginVertical: 36 },

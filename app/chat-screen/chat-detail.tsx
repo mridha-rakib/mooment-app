@@ -15,6 +15,7 @@ import React,
   useState } from 'react';
 import {
   Alert,
+  Animated,
   AppState,
   Dimensions,
   FlatList,
@@ -50,6 +51,8 @@ import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { blockUser, unblockUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatUnreadStore } from '@/stores/chatUnreadStore';
+import { getStoryDetails } from '@/lib/stories';
+import { createStoryViewerSession } from '@/lib/storyViewerSession';
 
 const { width } = Dimensions.get('window');
 
@@ -553,6 +556,155 @@ function PostBubble({ msg }: { msg: Message }) {
   );
 }
 
+const STORY_LINK_REGEX = /^https:\/\/mooment\.app\/stories\/([a-f\d]{24})$/i;
+
+function StoryBubble({ msg, storyId }: { msg: Message; storyId: string }) {
+  const router = useRouter();
+  const [story, setStory] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    if (loading) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.75,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.35,
+            duration: 800,
+            useNativeDriver: true,
+          })
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(false);
+
+    getStoryDetails(storyId)
+      .then((data) => {
+        if (active) {
+          setStory(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          console.warn("Failed to load story for chat preview", err);
+          setError(true);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [storyId]);
+
+  const handlePress = () => {
+    if (!story) return;
+
+    const viewerGroup = {
+      title: story.author?.name || 'Story',
+      authorId: story.userId,
+      authorAvatar: story.author?.avatarUrl ?? null,
+      stories: [{
+        id: story.id,
+        mediaType: story.mediaType,
+        mediaUri: story.mediaUrl,
+        contentType: story.contentType,
+        durationSeconds: story.durationSeconds || 15,
+        caption: story.caption,
+        textContent: story.textContent,
+        textBackground: story.textBackground,
+        textOverlay: story.textOverlay,
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewsCount: story.viewsCount,
+        reactionsCount: story.reactionsCount,
+        commentsCount: story.commentsCount,
+        isReacted: story.isReacted,
+        isOwner: story.isOwner,
+        authorId: story.userId,
+        authorName: story.author?.name || 'Story',
+        authorAvatar: story.author?.avatarUrl ?? null,
+      }]
+    };
+
+    const sessionId = createStoryViewerSession([viewerGroup]);
+    router.push({
+      pathname: '/post-screen/view-story',
+      params: { storySessionId: sessionId, groupIndex: 0 },
+    } as any);
+  };
+
+  if (loading) {
+    return (
+      <Animated.View
+        style={[
+          styles.sharedPostBubble,
+          msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem,
+          { flexDirection: 'row', alignItems: 'center', padding: 8, minHeight: 76, opacity: pulseAnim }
+        ]}
+      >
+        <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.12)' }} />
+        <View style={{ flex: 1, marginLeft: 12, gap: 6 }}>
+          <View style={{ width: 45, height: 10, borderRadius: 2, backgroundColor: 'rgba(255, 255, 255, 0.16)' }} />
+          <View style={{ width: '60%', height: 14, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.12)' }} />
+          <View style={{ width: '85%', height: 12, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
+        </View>
+      </Animated.View>
+    );
+  }
+
+  if (error || !story) {
+    return (
+      <View style={[styles.sharedPostBubble, msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem, { alignItems: 'center', justifyContent: 'center', minHeight: 60, flexDirection: 'row', paddingHorizontal: 16 }]}>
+        <Feather name="alert-circle" size={16} color="#FF4D4D" style={{ marginRight: 6 }} />
+        <Text style={{ color: '#E2E2EA', fontSize: 13, fontWeight: '600' }}>Story unavailable or expired</Text>
+      </View>
+    );
+  }
+
+  const hasThumbnail = story.mediaType === 'image' || story.mediaType === 'video';
+
+  return (
+    <TouchableOpacity
+      style={[styles.sharedPostBubble, msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem]}
+      activeOpacity={0.82}
+      onPress={handlePress}
+    >
+      {hasThumbnail && story.mediaUrl ? (
+        <Image source={{ uri: story.mediaUrl }} style={styles.sharedPostImage} />
+      ) : (
+        <View style={[styles.sharedPostImage, styles.mediaFallback, story.mediaType === 'text' && { backgroundColor: story.textBackground?.colors[0] ?? '#37214F' }]}>
+          <Feather name="film" size={24} color="#8E8E9B" />
+        </View>
+      )}
+      <View style={styles.sharedPostInfo}>
+        <Text style={styles.eventBubbleTagText}>STORY</Text>
+        <Text style={styles.sharedPostAuthor} numberOfLines={1}>{story.author?.name || 'Mooment user'}</Text>
+        <Text style={styles.sharedPostPreview} numberOfLines={2}>
+          {story.mediaType === 'text' ? story.textContent : (story.caption || 'Shared story')}
+        </Text>
+        <Text style={styles.eventBubbleTime}>{msg.time}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 function PendingAttachmentTray({
   items,
   onRemove,
@@ -775,6 +927,7 @@ export default function ChatDetailScreen() {
   const currentUser = useAuthStore((state) => state.user);
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [showAttach, setShowAttach] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
@@ -1199,7 +1352,7 @@ export default function ChatDetailScreen() {
 
           setMessages(history.map((message) => toApiTextMessage(message, currentUser?.id)));
         }
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
+        setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }), 100);
       } catch {
         if (isMounted) {
           setMessages([]);
@@ -1268,7 +1421,7 @@ export default function ChatDetailScreen() {
 
               setIsFriendTyping(false);
             }
-            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+            setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
           },
       onDirectTyping: isGroup
         ? undefined
@@ -1347,7 +1500,7 @@ export default function ChatDetailScreen() {
 
               return [...prev, serverMessage];
             });
-            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+            setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
           }
         : undefined,
       onGroupMessageUpdated: isGroup
@@ -1524,7 +1677,7 @@ export default function ChatDetailScreen() {
     setMessages(prev => [...prev, ...newMessages]);
     setInputText('');
     setPendingAttachments([]);
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   };
 
   const retryMessage = (message: Message) => {
@@ -1619,6 +1772,13 @@ export default function ChatDetailScreen() {
   };
 
   const renderBubble = (item: Message) => {
+    if (item.text) {
+      const match = item.text.match(STORY_LINK_REGEX);
+      if (match) {
+        return <StoryBubble msg={item} storyId={match[1]} />;
+      }
+    }
+
     switch (item.type) {
       case 'image': return <ImageBubble msg={item} />;
       case 'video': return <VideoBubble msg={item} />;
@@ -1698,18 +1858,20 @@ export default function ChatDetailScreen() {
         ) : (
         <FlatList
           ref={listRef}
-          data={messages}
+          inverted
+          data={reversedMessages}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.messagesContainer}
-          onLayout={() => listRef.current?.scrollToEnd({ animated: false })}
+          onLayout={() => listRef.current?.scrollToOffset({ offset: 0, animated: false })}
+          onContentSizeChange={() => listRef.current?.scrollToOffset({ offset: 0, animated: false })}
           renderItem={({ item, index }) => {
-            const prevMsg = messages[index - 1];
+            const prevMsg = reversedMessages[index + 1];
             const isSameGroup = prevMsg && prevMsg.fromMe === item.fromMe;
             return (
               <View>
                 {/* Date separator (mock) */}
-                {index === 0 && (
+                {index === reversedMessages.length - 1 && (
                   <View style={styles.dateSep}>
                     <View style={styles.dateSepLine} />
                     <Text style={styles.dateSepText}>Today</Text>

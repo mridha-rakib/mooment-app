@@ -33,6 +33,12 @@ export type CheckoutOrder = {
     unitAmount: number;
     totalAmount: number;
   }[];
+  ticketPasses: {
+    eventId: string;
+    ticketId: string;
+    ticketIndex: number;
+    checkInCode: string;
+  }[];
   stripePaymentIntentId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -117,11 +123,8 @@ export type TicketWalletPass = {
 };
 
 export type ScannedTicket = {
-  eventId: string;
   eventName: string;
-  ticketId: string;
   ticketName: string;
-  orderId: string;
   ticketIndex: number;
   ticketNo: string;
   source: TicketWalletSource;
@@ -364,8 +367,11 @@ export const getMyEarningsByEvent = async (eventId: string): Promise<EventEarnin
   };
 };
 
-export const scanTicketQrCode = async (qrCode: string): Promise<ScannedTicket> => {
-  const response = await api.post("/payments/ticket-scans", { qrCode });
+export const scanTicketQrCode = async (checkInCode: string, eventId?: string): Promise<ScannedTicket> => {
+  const response = await api.post("/payments/ticket-scans", {
+    checkInCode: checkInCode.trim().toUpperCase(),
+    ...(eventId ? { eventId } : {}),
+  });
   const ticket = response.data?.data?.ticket as ScannedTicket | undefined;
 
   if (!ticket) {

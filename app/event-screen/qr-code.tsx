@@ -128,26 +128,18 @@ export default function QRCodeScreen() {
       }
     }
 
-    return Array.from({ length: totalQuantity }, (_, index) => {
-      const ticketIndex = index + 1;
-
-      return {
-        orderId,
-        ticketNo: ticketNo ? `${ticketNo}-${String(ticketIndex).padStart(2, '0')}` : `TICKET-${ticketIndex}`,
-        ticketIndex,
-        qrCode: JSON.stringify({
-          type: 'event-ticket',
-          eventId,
-          ticketId,
+    return ticketNo
+      ? [{
           orderId,
-          ticketIndex,
-        }),
-        status: 'active',
-        usedAt: null,
-        currentShare: null,
-      };
-    });
-  }, [eventId, orderId, params.ticketPasses, ticketId, ticketNo, totalQuantity]);
+          ticketNo,
+          ticketIndex: 1,
+          qrCode: ticketNo,
+          status: 'active' as const,
+          usedAt: null,
+          currentShare: null,
+        }]
+      : [];
+  }, [orderId, params.ticketPasses, ticketNo]);
   const [ticketPasses, setTicketPasses] = useState<TicketWalletPass[]>(initialTicketPasses);
   const [selectedPassIndex, setSelectedPassIndex] = useState(0);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
@@ -161,6 +153,12 @@ export default function QRCodeScreen() {
     [ticketPasses, walletSource],
   );
   const selectedPass = visibleTicketPasses[Math.min(selectedPassIndex, Math.max(0, visibleTicketPasses.length - 1))];
+  const selectedVisiblePassNumber = Math.max(
+    1,
+    visibleTicketPasses.findIndex(
+      (pass) => pass.orderId === selectedPass?.orderId && pass.ticketIndex === selectedPass?.ticketIndex,
+    ) + 1,
+  );
   const selectedTicketNo = selectedPass?.ticketNo ?? ticketNo;
   const selectedQrValue = selectedPass?.qrCode || ticketNo || 'INVALID';
   const selectedCurrentShare = selectedPass?.currentShare ?? null;
@@ -248,11 +246,16 @@ export default function QRCodeScreen() {
     setShareErrorMessage(null);
 
     try {
-      await cancelTicketShare(selectedCurrentShare.id);
+      const cancelledShare = await cancelTicketShare(selectedCurrentShare.id);
       setTicketPasses((passes) =>
         passes.map((pass) =>
           pass.orderId === selectedPass.orderId && pass.ticketIndex === selectedPass.ticketIndex
-            ? { ...pass, currentShare: null }
+            ? {
+                ...pass,
+                ticketNo: cancelledShare.qrCode,
+                qrCode: cancelledShare.qrCode,
+                currentShare: null,
+              }
             : pass,
         ),
       );
@@ -460,7 +463,7 @@ export default function QRCodeScreen() {
             )}
 
             <Text style={[styles.ticketPassCaption, { color: colors.textSecondary }]}>
-              Ticket {selectedPass?.ticketIndex ?? 1} of {visibleTicketPasses.length || 1}
+              Ticket {selectedVisiblePassNumber} of {visibleTicketPasses.length || 1}
             </Text>
 
             {selectedPass?.status === 'used' && (

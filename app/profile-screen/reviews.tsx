@@ -56,6 +56,11 @@ function ReviewCard({ colors, onOpenProfile, review }: ReviewCardProps) {
       <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7}>
         <Text style={[styles.reviewText, { color: colors.text }]}>{review.text}</Text>
       </TouchableOpacity>
+      {review.event?.name ? (
+        <Text style={[styles.eventName, { color: colors.textSecondary }]} numberOfLines={1}>
+          {review.event.name}
+        </Text>
+      ) : null}
       <Text style={[styles.reviewTime, { color: colors.textSecondary }]}>{formatReviewTime(review.createdAt)}</Text>
     </View>
   );
@@ -229,5 +234,10 @@ const styles = StyleSheet.create({
   reviewTime: {
     fontSize: 11,
     alignSelf: "flex-end",
+  },
+  eventName: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 12,
   },
 });

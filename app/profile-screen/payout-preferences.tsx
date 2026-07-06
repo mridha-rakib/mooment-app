@@ -4,6 +4,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
 import { getPayoutSettings, updatePayoutSettings } from "@/lib/payoutSettings";
 import type { PayoutPreference, PayoutSettings } from "@/lib/payoutSettings";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -48,6 +49,7 @@ const OPTIONS: Option[] = [
 export default function PayoutPreferencesScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const router = useRouter();
 
   const [settings, setSettings] = useState<PayoutSettings | null>(null);
   const [selected, setSelected] = useState<PayoutPreference>("manual");
@@ -94,6 +96,8 @@ export default function PayoutPreferencesScreen() {
       setIsSaving(false);
     }
   };
+
+  const hasChanges = selected !== settings?.payoutPreference;
 
   return (
     <View style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -159,6 +163,22 @@ export default function PayoutPreferencesScreen() {
                 </TouchableOpacity>
               );
             })}
+
+            {selected === "manual" ? (
+              <TouchableOpacity
+                style={[styles.manualWithdrawCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                activeOpacity={0.75}
+                onPress={() => router.push("/profile-screen/withdraw")}
+              >
+                <View style={styles.manualWithdrawText}>
+                  <Text style={[styles.manualWithdrawTitle, { color: colors.text }]}>Request Manual Withdrawal</Text>
+                  <Text style={[styles.manualWithdrawDesc, { color: colors.textSecondary }]}>
+                    Enter a USD amount and submit a payout request.
+                  </Text>
+                </View>
+                <Feather name="arrow-right" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            ) : null}
           </ScrollView>
 
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 10, 24) }]}>
@@ -166,10 +186,10 @@ export default function PayoutPreferencesScreen() {
               style={[
                 styles.saveBtn,
                 { backgroundColor: buttonBackground(colors) },
-                (isSaving || selected === settings?.payoutPreference) && styles.saveBtnDisabled,
+                (isSaving || !hasChanges) && styles.saveBtnDisabled,
               ]}
               onPress={handleSave}
-              disabled={isSaving || selected === settings?.payoutPreference}
+              disabled={isSaving || !hasChanges}
             >
               {isSaving ? (
                 <Spinner color={buttonForeground(colors)} />
@@ -233,6 +253,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   radioFill: { width: 10, height: 10, borderRadius: 5 },
+  manualWithdrawCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  manualWithdrawText: { flex: 1 },
+  manualWithdrawTitle: { fontSize: 15, fontWeight: "600", marginBottom: 3 },
+  manualWithdrawDesc: { fontSize: 12, lineHeight: 18 },
   footer: {
     paddingHorizontal: 20,
     paddingTop: 12,

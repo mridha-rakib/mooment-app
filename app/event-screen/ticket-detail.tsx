@@ -292,7 +292,7 @@ const TicketDetailScreen = () => {
 
   const availableLabel = isHostMode && ticketStat
     ? `${ticketStat.available} left`
-    : `${ticket?.capacity ?? 0} left`;
+    : `${Math.max(0, ticket?.availableCount ?? ticket?.capacity ?? 0)} left`;
 
   const details = [
     { label: "Ticket", value: ticket?.name ?? "Ticket unavailable" },
@@ -370,26 +370,17 @@ const TicketDetailScreen = () => {
       }
     }
 
-    return Array.from({ length: walletPurchaseCount }, (_, index) => {
-      const ticketIndex = index + 1;
-      const orderId = getParamValue(params.orderId, "");
-
-      return {
-        orderId,
-        ticketNo: `${walletTicketNo}-${String(ticketIndex).padStart(2, "0")}`,
-        ticketIndex,
-        qrCode: JSON.stringify({
-          type: "event-ticket",
-          eventId: getParamValue(params.eventId, ""),
-          ticketId: getParamValue(params.ticketId, ""),
-          orderId,
-          ticketIndex,
-        }),
-        status: "active",
-        usedAt: null,
-        currentShare: fallbackCurrentShare?.ticketIndex === ticketIndex ? fallbackCurrentShare : null,
-      };
-    });
+    return walletTicketNo
+      ? [{
+          orderId: getParamValue(params.orderId, ""),
+          ticketNo: walletTicketNo,
+          ticketIndex: 1,
+          qrCode: walletTicketNo,
+          status: "active" as const,
+          usedAt: null,
+          currentShare: fallbackCurrentShare,
+        }]
+      : [];
   }, [
     params.currentShareFriendId,
     params.currentShareFriendName,
@@ -398,7 +389,6 @@ const TicketDetailScreen = () => {
     params.orderId,
     params.ticketId,
     params.ticketPasses,
-    walletPurchaseCount,
     walletTicketNo,
   ]);
   const [walletTicketPasses, setWalletTicketPasses] = useState<TicketWalletPass[]>(initialWalletTicketPasses);
@@ -419,7 +409,7 @@ const TicketDetailScreen = () => {
   const hasAnyUsedPass = walletTicketPasses.some((pass) => pass.status === "used");
   const walletStatusLabel = hasAnyUsedPass && walletActiveVisiblePassCount === 0 ? "Used" : hasAnySharedPass && !walletCanShowQr ? "Shared" : "Active";
   const walletDetails = [
-    { label: "Ticket No", value: walletTicketNo },
+    { label: "Ticket No", value: walletVisibleTicketPasses[0]?.ticketNo ?? walletTicketNo },
     { label: "Host", value: walletHostName },
     { label: "Event", value: walletEventTitle },
     { label: "Venue", value: walletLocation },
@@ -519,11 +509,16 @@ const TicketDetailScreen = () => {
     setShareErrorMessage(null);
 
     try {
-      await cancelTicketShare(selectedShare.id);
+      const cancelledShare = await cancelTicketShare(selectedShare.id);
       setWalletTicketPasses((passes) =>
         passes.map((pass) => (
           pass.orderId === selectedSharePass.orderId && pass.ticketIndex === selectedSharePass.ticketIndex
-            ? { ...pass, currentShare: null }
+            ? {
+                ...pass,
+                ticketNo: cancelledShare.qrCode,
+                qrCode: cancelledShare.qrCode,
+                currentShare: null,
+              }
             : pass
         )),
       );
