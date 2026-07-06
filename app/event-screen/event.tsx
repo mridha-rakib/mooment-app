@@ -23,6 +23,7 @@ import {
     getMyEventRewardClaims,
     startEvent,
     submitJoinRequest,
+    submitEventHostReview,
     ticketAlreadyHasReward,
     updateEvent,
     type EventResponse,
@@ -59,11 +60,14 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
     ScrollView,
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -351,6 +355,10 @@ const EventScreen = () => {
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewLiked, setReviewLiked] = useState<boolean | null>(null);
+  const [reviewText, setReviewText] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -555,6 +563,7 @@ const EventScreen = () => {
   const hostName = event?.host?.name ?? "Host";
   const hostHandle = getHostHandle(event);
   const hostAvatarUri = getHostAvatarUri(event);
+  const canReviewHost = Boolean(event?.hostReviewEligibility?.canReview);
 
   const bannerImageUri = getBannerImageUri(event);
   const eventImageUris = useMemo(() => {
@@ -979,6 +988,40 @@ const EventScreen = () => {
     }
 
     handleBuySelectedTicket();
+  };
+
+  const handleSubmitHostReview = async () => {
+    if (!event || reviewLiked === null || isSubmittingReview) {
+      return;
+    }
+
+    setIsSubmittingReview(true);
+
+    try {
+      await submitEventHostReview(event.id, {
+        liked: reviewLiked,
+        text: reviewText.trim() || null,
+      });
+      setReviewModalVisible(false);
+      setReviewLiked(null);
+      setReviewText("");
+      setEvent((currentEvent) =>
+        currentEvent
+          ? {
+              ...currentEvent,
+              hostReviewEligibility: {
+                canReview: false,
+                hasReviewed: true,
+              },
+            }
+          : currentEvent,
+      );
+      Alert.alert("Review submitted", "Thanks for reviewing the host.");
+    } catch (error) {
+      Alert.alert("Unable to submit review", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   const handleDeleteTicket = (ticket: EventTicketPayload) => {
@@ -1555,6 +1598,14 @@ const EventScreen = () => {
               )}
             </View>
           ) : null
+        ) : canReviewHost ? (
+          <TouchableOpacity
+            style={[styles.reviewHostBtn, { backgroundColor: colors.primary }]}
+            activeOpacity={0.85}
+            onPress={() => setReviewModalVisible(true)}
+          >
+            <Text style={styles.reviewHostBtnText}>Review The Host</Text>
+          </TouchableOpacity>
         ) : (
           <>
             <View style={styles.priceContainer}>
@@ -1809,6 +1860,117 @@ const EventScreen = () => {
         </View>
       </Modal>
 
+      <Modal
+        visible={reviewModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isSubmittingReview) {
+            setReviewModalVisible(false);
+          }
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.reviewModalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.reviewModalBackdrop}
+            activeOpacity={1}
+            onPress={() => {
+              if (!isSubmittingReview) {
+                setReviewModalVisible(false);
+              }
+            }}
+          />
+          <View style={[styles.reviewModalSheet, { backgroundColor: isDark ? "#1E1E1E" : colors.card }]}>
+            <View style={styles.rewardDetailHandle} />
+            <View style={styles.reviewModalHeader}>
+              <Text style={[styles.reviewModalTitle, { color: colors.text }]}>Review The Host</Text>
+              <TouchableOpacity
+                style={styles.rewardDetailCloseBtn}
+                activeOpacity={0.7}
+                disabled={isSubmittingReview}
+                onPress={() => setReviewModalVisible(false)}
+              >
+                <Feather name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.reviewChoiceRow}>
+              <TouchableOpacity
+                style={[
+                  styles.reviewChoiceBtn,
+                  {
+                    borderColor: reviewLiked === true ? colors.primary : colors.border,
+                    backgroundColor: reviewLiked === true ? `${colors.primary}22` : "transparent",
+                  },
+                ]}
+                activeOpacity={0.8}
+                disabled={isSubmittingReview}
+                onPress={() => setReviewLiked(true)}
+              >
+                <Feather name="thumbs-up" size={18} color={reviewLiked === true ? colors.primary : colors.text} />
+                <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Like</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.reviewChoiceBtn,
+                  {
+                    borderColor: reviewLiked === false ? colors.primary : colors.border,
+                    backgroundColor: reviewLiked === false ? `${colors.primary}22` : "transparent",
+                  },
+                ]}
+                activeOpacity={0.8}
+                disabled={isSubmittingReview}
+                onPress={() => setReviewLiked(false)}
+              >
+                <Feather name="thumbs-down" size={18} color={reviewLiked === false ? colors.primary : colors.text} />
+                <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Dislike</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={[
+                styles.reviewInput,
+                {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: isDark ? "#111112" : colors.background,
+                },
+              ]}
+              placeholder="Add an optional review"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              maxLength={1000}
+              value={reviewText}
+              editable={!isSubmittingReview}
+              onChangeText={setReviewText}
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.reviewSubmitBtn,
+                {
+                  backgroundColor: reviewLiked === null ? colors.card : colors.primary,
+                  opacity: isSubmittingReview ? 0.7 : 1,
+                },
+              ]}
+              activeOpacity={0.85}
+              disabled={reviewLiked === null || isSubmittingReview}
+              onPress={handleSubmitHostReview}
+            >
+              {isSubmittingReview ? (
+                <ActivityIndicator color="#111111" />
+              ) : (
+                <Text style={styles.reviewSubmitText}>Submit Review</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <CommentsModal
         visible={showComments}
         onClose={() => setShowComments(false)}
@@ -2060,6 +2222,22 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
+  reviewHostBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    flex: 1,
+    height: 52,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  reviewHostBtnText: {
+    color: "#111111",
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 24,
+    textAlign: "center",
+  },
   hostFooterBtns: {
     flex: 1,
     flexDirection: "column",
@@ -2266,5 +2444,71 @@ const styles = StyleSheet.create({
   rewardDetailDesc: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  reviewModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  reviewModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  reviewModalSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  reviewModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  reviewModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  reviewChoiceRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+  },
+  reviewChoiceBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 13,
+  },
+  reviewChoiceText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  reviewInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 14,
+    minHeight: 110,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+    textAlignVertical: "top",
+  },
+  reviewSubmitBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 50,
+    justifyContent: "center",
+    marginTop: 16,
+  },
+  reviewSubmitText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

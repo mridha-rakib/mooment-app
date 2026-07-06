@@ -144,6 +144,10 @@ export type EventResponse = {
   memberCount?: number;
   isMember?: boolean;
   myJoinRequestStatus?: JoinRequestStatus | null;
+  hostReviewEligibility?: {
+    canReview: boolean;
+    hasReviewed: boolean;
+  };
   publishedAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -202,6 +206,24 @@ export type RewardClaim = {
 export type ProfileEventGroups = {
   active: EventResponse[];
   past: EventResponse[];
+};
+
+export type EventHostReviewResponse = {
+  id: string;
+  author: {
+    id: string;
+    name: string;
+    username?: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  text: string;
+  liked: boolean;
+  event?: {
+    id: string;
+    name?: string | null;
+  } | null;
+  createdAt: string;
 };
 
 export type PostTagEventStatus = "live" | "active" | "upcoming";
@@ -391,6 +413,20 @@ export const getEventById = async (eventId: string): Promise<EventResponse> => {
   const response = await api.get(`/events/${encodeURIComponent(eventId)}`);
 
   return getEventFromResponse(response);
+};
+
+export const submitEventHostReview = async (
+  eventId: string,
+  payload: { liked: boolean; text?: string | null },
+): Promise<EventHostReviewResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/host-reviews`, payload);
+  const review = response.data?.data?.review as EventHostReviewResponse | undefined;
+
+  if (!review) {
+    throw new Error("The review response was incomplete.");
+  }
+
+  return review;
 };
 
 export const getMyEvents = async (): Promise<EventResponse[]> => {

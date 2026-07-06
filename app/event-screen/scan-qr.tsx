@@ -26,6 +26,7 @@ import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-i
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { scanTicketQrCode } from '@/lib/payments';
 import { getMyProfileEvents, type EventResponse } from '@/lib/events';
+import { safeBack } from '@/lib/navigation';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const { width, height } = Dimensions.get('window');
@@ -185,7 +186,7 @@ export default function ScanQRScreen() {
           <TouchableOpacity style={[styles.permBtn, { backgroundColor: buttonBackground(colors) }]} onPress={requestPermission} activeOpacity={0.8}>
             <Text style={[styles.permBtnText, { color: buttonForeground(colors) }]}>Allow Camera</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 12 }} activeOpacity={0.8}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={{ marginTop: 12 }} activeOpacity={0.8}>
             <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -252,7 +253,7 @@ export default function ScanQRScreen() {
       {/* Header */}
       <SafeAreaView style={styles.header}>
         <CinematicButton
-          onPress={() => router.back()}
+          onPress={() => safeBack(router)}
           icon={ArrowLeft01Icon}
           size={22}
           color="#FFFFFF"
