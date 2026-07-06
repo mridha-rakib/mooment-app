@@ -20,6 +20,7 @@ type TicketWalletShortcutState = {
   position: ShortcutPosition | null;
   restore: () => Promise<void>;
   hide: () => Promise<void>;
+  remove: () => Promise<void>;
   setPosition: (position: ShortcutPosition) => Promise<void>;
   hydrate: () => Promise<void>;
 };
@@ -90,6 +91,10 @@ export const useTicketWalletShortcutStore = create<TicketWalletShortcutState>((s
   position: null,
 
   hydrate: async () => {
+    if (get().isHydrated) {
+      return;
+    }
+
     const persisted = await readPersistedState();
 
     set({
@@ -102,19 +107,24 @@ export const useTicketWalletShortcutStore = create<TicketWalletShortcutState>((s
   restore: async () => {
     const position = get().position;
 
-    set({ isVisible: true });
+    set({ isHydrated: true, isVisible: true });
     await writeStoredValue({ isVisible: true, position });
   },
 
   hide: async () => {
     const position = get().position;
 
-    set({ isVisible: false });
+    set({ isHydrated: true, isVisible: false });
     await writeStoredValue({ isVisible: false, position });
   },
 
+  remove: async () => {
+    set({ isHydrated: true, isVisible: false, position: null });
+    await writeStoredValue({ isVisible: false, position: null });
+  },
+
   setPosition: async (position) => {
-    set({ position });
+    set({ isHydrated: true, position });
     await writeStoredValue({ isVisible: get().isVisible, position });
   },
 }));

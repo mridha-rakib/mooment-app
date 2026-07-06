@@ -4,13 +4,17 @@ import { Spinner, SpinnerCustom } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { safeBack } from "@/lib/navigation";
-import { getStorageDownloadUrl, getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
+import {
+  // getStorageDownloadUrl,
+  getStorageFileUrl,
+  uploadFileToStorage,
+} from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
-import * as DocumentPicker from "expo-document-picker";
+// import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
+// import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -20,7 +24,7 @@ import {
   KeyboardAvoidingView,
   KeyboardTypeOptions,
   LayoutChangeEvent,
-  Linking,
+  // Linking,
   Modal,
   Platform,
   ScrollView,
@@ -36,7 +40,10 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,40}$/;
@@ -49,7 +56,14 @@ type ProfileType = "personal" | "business";
 type GenderOption = (typeof GENDER_OPTIONS)[number];
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
-type ProfileField = "name" | "username" | "email" | "gender" | "age" | "address" | "bio";
+type ProfileField =
+  | "name"
+  | "username"
+  | "email"
+  | "gender"
+  | "age"
+  | "address"
+  | "bio";
 type MeasurableFieldRef = {
   measureInWindow: View["measureInWindow"];
 };
@@ -65,13 +79,13 @@ type PendingDocument = PendingUpload & {
   size?: number | null;
 };
 
-type DocumentMeta = {
-  contentType?: string | null;
-  key?: string | null;
-  name: string;
-  size?: number | null;
-  uri?: string | null;
-};
+// type DocumentMeta = {
+//   contentType?: string | null;
+//   key?: string | null;
+//   name: string;
+//   size?: number | null;
+//   uri?: string | null;
+// };
 
 type CustomInputProps = {
   autoCapitalize?: TextInputProps["autoCapitalize"];
@@ -96,46 +110,51 @@ type CustomInputProps = {
   value: string;
 };
 
-const getFileNameFromKey = (key?: string | null) => {
-  if (!key) {
-    return "Business document.pdf";
-  }
+// const getFileNameFromKey = (key?: string | null) => {
+//   if (!key) {
+//     return "Business document.pdf";
+//   }
 
-  return decodeURIComponent(key.split("/").pop() || "Business document.pdf");
-};
+//   return decodeURIComponent(key.split("/").pop() || "Business document.pdf");
+// };
 
-const formatFileSize = (size?: number | null) => {
-  if (!size) {
-    return null;
-  }
+// const formatFileSize = (size?: number | null) => {
+//   if (!size) {
+//     return null;
+//   }
 
-  if (size < 1024) {
-    return `${size} B`;
-  }
+//   if (size < 1024) {
+//     return `${size} B`;
+//   }
 
-  const units = ["KB", "MB", "GB"];
-  let value = size / 1024;
-  let unitIndex = 0;
+//   const units = ["KB", "MB", "GB"];
+//   let value = size / 1024;
+//   let unitIndex = 0;
 
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
+//   while (value >= 1024 && unitIndex < units.length - 1) {
+//     value /= 1024;
+//     unitIndex += 1;
+//   }
 
-  const roundedValue = value >= 10 ? Math.round(value).toString() : value.toFixed(1);
+//   const roundedValue =
+//     value >= 10 ? Math.round(value).toString() : value.toFixed(1);
 
-  return `${roundedValue} ${units[unitIndex]}`;
-};
+//   return `${roundedValue} ${units[unitIndex]}`;
+// };
 
-const getDocumentMetaText = (document: DocumentMeta | null) => {
-  const fileType = document?.contentType?.split("/").pop()?.toUpperCase() || "PDF";
-  const fileSize = formatFileSize(document?.size);
+// const getDocumentMetaText = (document: DocumentMeta | null) => {
+//   const fileType =
+//     document?.contentType?.split("/").pop()?.toUpperCase() || "PDF";
+//   const fileSize = formatFileSize(document?.size);
 
-  return [fileType, fileSize].filter(Boolean).join(" • ");
-};
+//   return [fileType, fileSize].filter(Boolean).join(" • ");
+// };
 
 const getUploadExtension = (contentType: string, fallback: string) => {
-  const extension = contentType.split("/")[1]?.split(";")[0]?.replace("jpeg", "jpg");
+  const extension = contentType
+    .split("/")[1]
+    ?.split(";")[0]
+    ?.replace("jpeg", "jpg");
 
   return extension || fallback;
 };
@@ -172,7 +191,14 @@ const CustomInput = ({
     ]}
     onLayout={onLayout}
   >
-    {icon ? <Feather name={icon} size={16} color={colors.textSecondary} style={styles.inputIcon} /> : null}
+    {icon ? (
+      <Feather
+        name={icon}
+        size={16}
+        color={colors.textSecondary}
+        style={styles.inputIcon}
+      />
+    ) : null}
     <TextInput
       autoCapitalize={autoCapitalize}
       disableFullscreenUI={Platform.OS === "android"}
@@ -189,12 +215,21 @@ const CustomInput = ({
       placeholder={placeholder}
       placeholderTextColor={colors.textSecondary}
       returnKeyType={returnKeyType}
-      style={[styles.input, { color: editable ? colors.text : colors.textSecondary }, multiline && styles.inputMultiline]}
+      style={[
+        styles.input,
+        { color: editable ? colors.text : colors.textSecondary },
+        multiline && styles.inputMultiline,
+      ]}
       textAlignVertical={multiline ? "top" : "center"}
       value={value}
     />
     {rightIcon ? (
-      <Feather name={rightIcon} size={16} color={colors.textSecondary} style={styles.inputRightIcon} />
+      <Feather
+        name={rightIcon}
+        size={16}
+        color={colors.textSecondary}
+        style={styles.inputRightIcon}
+      />
     ) : null}
   </View>
 );
@@ -204,8 +239,11 @@ export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const router = useRouter();
-  const { type, mode } = useLocalSearchParams<{ type?: ProfileType; mode?: string }>();
-  const isSwitchMode = mode === 'switch';
+  const { type, mode } = useLocalSearchParams<{
+    type?: ProfileType;
+    mode?: string;
+  }>();
+  const isSwitchMode = mode === "switch";
   const user = useAuthStore((state) => state.user);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const restoreAuthSession = useAuthStore((state) => state.restoreAuthSession);
@@ -214,7 +252,9 @@ export default function EditProfileScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const activeFieldRef = useRef<ProfileField | null>(null);
   const fieldLayoutsRef = useRef<Partial<Record<ProfileField, number>>>({});
-  const fieldRefs = useRef<Partial<Record<ProfileField, MeasurableFieldRef | null>>>({});
+  const fieldRefs = useRef<
+    Partial<Record<ProfileField, MeasurableFieldRef | null>>
+  >({});
   const scrollOffsetRef = useRef(0);
   const keyboardHeightRef = useRef(0);
   const keyboardTopRef = useRef(windowHeight);
@@ -231,22 +271,33 @@ export default function EditProfileScreen() {
 
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
-  const [profileType, setProfileType] = useState<ProfileType>(type || user?.accountType || "personal");
-  const [hasImage, setHasImage] = useState(Boolean(user?.avatarKey));
-  const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null);
-  const [avatarKey, setAvatarKey] = useState<string | null>(user?.avatarKey ?? null);
-  const [pendingAvatar, setPendingAvatar] = useState<PendingUpload | null>(null);
-  const [businessDocumentKey, setBusinessDocumentKey] = useState<string | null>(user?.businessDocumentKey ?? null);
-  const [pendingDocument, setPendingDocument] = useState<PendingDocument | null>(null);
-  const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(
-    user?.businessDocumentKey
-      ? {
-          contentType: "application/pdf",
-          key: user.businessDocumentKey,
-          name: getFileNameFromKey(user.businessDocumentKey),
-        }
-      : null,
+  const [profileType, setProfileType] = useState<ProfileType>(
+    type || user?.accountType || "personal",
   );
+  const [hasImage, setHasImage] = useState(Boolean(user?.avatarKey));
+  const [avatarUri, setAvatarUri] = useState<string | null>(
+    user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null,
+  );
+  const [avatarKey, setAvatarKey] = useState<string | null>(
+    user?.avatarKey ?? null,
+  );
+  const [pendingAvatar, setPendingAvatar] = useState<PendingUpload | null>(
+    null,
+  );
+  const [businessDocumentKey, setBusinessDocumentKey] = useState<string | null>(
+    user?.businessDocumentKey ?? null,
+  );
+  const [pendingDocument, setPendingDocument] =
+    useState<PendingDocument | null>(null);
+  // const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(
+  //   user?.businessDocumentKey
+  //     ? {
+  //         contentType: "application/pdf",
+  //         key: user.businessDocumentKey,
+  //         name: getFileNameFromKey(user.businessDocumentKey),
+  //       }
+  //     : null,
+  // );
   const [name, setName] = useState(user?.name ?? "");
   const [username, setUsername] = useState(user?.username ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -257,20 +308,24 @@ export default function EditProfileScreen() {
   const [address, setAddress] = useState(user?.address ?? "");
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
-  const documentActionRef = useRef<'view' | 'download' | null>(null);
-  const [documentAction, setDocumentAction] = useState<'view' | 'download' | null>(null);
+  // const documentActionRef = useRef<"view" | "download" | null>(null);
+  // const [documentAction, setDocumentAction] = useState<
+  //   "view" | "download" | null
+  // >(null);
 
   const isBusiness = profileType === "business";
-  const hasDocument = Boolean(businessDocumentKey || pendingDocument);
+  // const hasDocument = Boolean(businessDocumentKey || pendingDocument);
   const isBusy = isLoading || isProfileLoading;
 
-  const handleFieldLayout = (field: ProfileField) => (event: LayoutChangeEvent) => {
-    fieldLayoutsRef.current[field] = event.nativeEvent.layout.y;
-  };
+  const handleFieldLayout =
+    (field: ProfileField) => (event: LayoutChangeEvent) => {
+      fieldLayoutsRef.current[field] = event.nativeEvent.layout.y;
+    };
 
-  const setFieldRef = (field: ProfileField) => (node: MeasurableFieldRef | null) => {
-    fieldRefs.current[field] = node;
-  };
+  const setFieldRef =
+    (field: ProfileField) => (node: MeasurableFieldRef | null) => {
+      fieldRefs.current[field] = node;
+    };
 
   const ensureFieldVisible = useCallback(
     (field: ProfileField) => {
@@ -295,9 +350,13 @@ export default function EditProfileScreen() {
         requestAnimationFrame(() => {
           if (fieldRef?.measureInWindow) {
             fieldRef.measureInWindow((_, fieldY, __, fieldHeight) => {
-              const keyboardTop = keyboardHeightRef.current > 0 ? keyboardTopRef.current : windowHeight;
+              const keyboardTop =
+                keyboardHeightRef.current > 0
+                  ? keyboardTopRef.current
+                  : windowHeight;
               const footerTop = windowHeight - footerHeightRef.current;
-              const visibleBottom = Math.min(keyboardTop, footerTop) - FIELD_VISIBLE_MARGIN;
+              const visibleBottom =
+                Math.min(keyboardTop, footerTop) - FIELD_VISIBLE_MARGIN;
               const visibleTop = FIELD_VISIBLE_MARGIN;
               const fieldTop = fieldY - FIELD_VISIBLE_MARGIN;
               const fieldBottom = fieldY + fieldHeight + FIELD_VISIBLE_MARGIN;
@@ -438,11 +497,15 @@ export default function EditProfileScreen() {
       const restoredUser = await restoreAuthSession(true);
 
       if (!restoredUser && isMountedRef.current) {
-        setProfileLoadError("Unable to load your profile. Please sign in again.");
+        setProfileLoadError(
+          "Unable to load your profile. Please sign in again.",
+        );
       }
     } catch (error) {
       if (isMountedRef.current) {
-        setProfileLoadError(getAuthErrorMessage(error, "Unable to load your profile."));
+        setProfileLoadError(
+          getAuthErrorMessage(error, "Unable to load your profile."),
+        );
       }
     } finally {
       if (isMountedRef.current) {
@@ -481,15 +544,15 @@ export default function EditProfileScreen() {
     setHasImage(Boolean(user.avatarKey));
     setBusinessDocumentKey(user.businessDocumentKey ?? null);
     setPendingDocument(null);
-    setDocumentMeta(
-      user.businessDocumentKey
-        ? {
-            contentType: "application/pdf",
-            key: user.businessDocumentKey,
-            name: getFileNameFromKey(user.businessDocumentKey),
-          }
-        : null,
-    );
+    // setDocumentMeta(
+    //   user.businessDocumentKey
+    //     ? {
+    //         contentType: "application/pdf",
+    //         key: user.businessDocumentKey,
+    //         name: getFileNameFromKey(user.businessDocumentKey),
+    //       }
+    //     : null,
+    // );
   }, [type, user]);
 
   useEffect(() => {
@@ -508,12 +571,16 @@ export default function EditProfileScreen() {
   }, [windowHeight]);
 
   useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
       keyboardHeightRef.current = event.endCoordinates.height;
-      keyboardTopRef.current = event.endCoordinates.screenY || windowHeight - event.endCoordinates.height;
+      keyboardTopRef.current =
+        event.endCoordinates.screenY ||
+        windowHeight - event.endCoordinates.height;
       setKeyboardHeight(event.endCoordinates.height);
 
       requestAnimationFrame(() => {
@@ -566,7 +633,10 @@ export default function EditProfileScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Permission required", "Please allow photo library access to update your profile image.");
+      Alert.alert(
+        "Permission required",
+        "Please allow photo library access to update your profile image.",
+      );
       return;
     }
 
@@ -603,52 +673,57 @@ export default function EditProfileScreen() {
     setPendingAvatar(null);
   };
 
-  const handlePickDocument = async () => {
-    if (isBusy) {
-      return;
-    }
+  // const handlePickDocument = async () => {
+  //   if (isBusy) {
+  //     return;
+  //   }
 
-    const result = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
-      multiple: false,
-      type: "application/pdf",
-    });
+  //   const result = await DocumentPicker.getDocumentAsync({
+  //     copyToCacheDirectory: true,
+  //     multiple: false,
+  //     type: "application/pdf",
+  //   });
 
-    if (result.canceled || !result.assets[0]) {
-      return;
-    }
+  //   if (result.canceled || !result.assets[0]) {
+  //     return;
+  //   }
 
-    const asset = result.assets[0];
-    const isPdf = asset.mimeType === "application/pdf" || asset.name.toLowerCase().endsWith(".pdf");
+  //   const asset = result.assets[0];
+  //   const isPdf =
+  //     asset.mimeType === "application/pdf" ||
+  //     asset.name.toLowerCase().endsWith(".pdf");
 
-    if (!isPdf) {
-      Alert.alert("PDF required", "Please upload a PDF business registration document.");
-      return;
-    }
+  //   if (!isPdf) {
+  //     Alert.alert(
+  //       "PDF required",
+  //       "Please upload a PDF business registration document.",
+  //     );
+  //     return;
+  //   }
 
-    const key = `users/${user?.id ?? "me"}/business-document-${Date.now()}.pdf`;
-    const document: PendingDocument = {
-      contentType: "application/pdf",
-      key,
-      name: asset.name || "Business document.pdf",
-      size: asset.size ?? null,
-      uri: asset.uri,
-    };
+  //   const key = `users/${user?.id ?? "me"}/business-document-${Date.now()}.pdf`;
+  //   const document: PendingDocument = {
+  //     contentType: "application/pdf",
+  //     key,
+  //     name: asset.name || "Business document.pdf",
+  //     size: asset.size ?? null,
+  //     uri: asset.uri,
+  //   };
 
-    setBusinessDocumentKey(key);
-    setPendingDocument(document);
-    setDocumentMeta(document);
-  };
+  //   setBusinessDocumentKey(key);
+  //   setPendingDocument(document);
+  //   // setDocumentMeta(document);
+  // };
 
-  const handleDeleteDocument = () => {
-    if (isBusy) {
-      return;
-    }
+  // const handleDeleteDocument = () => {
+  //   if (isBusy) {
+  //     return;
+  //   }
 
-    setBusinessDocumentKey(null);
-    setPendingDocument(null);
-    setDocumentMeta(null);
-  };
+  //   setBusinessDocumentKey(null);
+  //   setPendingDocument(null);
+  //   setDocumentMeta(null);
+  // };
 
   const handleGenderSelect = (selectedGender: GenderOption) => {
     setGender(selectedGender);
@@ -684,57 +759,69 @@ export default function EditProfileScreen() {
     }
   }, [completeGenderPickerClose, isGenderDropdownVisible]);
 
-  const handleViewDocument = async () => {
-    if (documentActionRef.current) return;
+  // const handleViewDocument = async () => {
+  //   if (documentActionRef.current) return;
 
-    if (pendingDocument) {
-      Alert.alert("Document not saved yet", "Save your profile first to preview this document.");
-      return;
-    }
+  //   if (pendingDocument) {
+  //     Alert.alert(
+  //       "Document not saved yet",
+  //       "Save your profile first to preview this document.",
+  //     );
+  //     return;
+  //   }
 
-    if (!businessDocumentKey) {
-      Alert.alert("No document", "Upload a PDF document first.");
-      return;
-    }
+  //   if (!businessDocumentKey) {
+  //     Alert.alert("No document", "Upload a PDF document first.");
+  //     return;
+  //   }
 
-    documentActionRef.current = 'view';
-    setDocumentAction('view');
-    try {
-      const url = await getStorageDownloadUrl(businessDocumentKey);
-      await WebBrowser.openBrowserAsync(url);
-    } catch (error) {
-      Alert.alert("Unable to view document", getAuthErrorMessage(error, "Please try again."));
-    } finally {
-      documentActionRef.current = null;
-      setDocumentAction(null);
-    }
-  };
+  //   documentActionRef.current = "view";
+  //   setDocumentAction("view");
+  //   try {
+  //     const url = await getStorageDownloadUrl(businessDocumentKey);
+  //     await WebBrowser.openBrowserAsync(url);
+  //   } catch (error) {
+  //     Alert.alert(
+  //       "Unable to view document",
+  //       getAuthErrorMessage(error, "Please try again."),
+  //     );
+  //   } finally {
+  //     documentActionRef.current = null;
+  //     setDocumentAction(null);
+  //   }
+  // };
 
-  const handleDownloadDocument = async () => {
-    if (documentActionRef.current) return;
+  // const handleDownloadDocument = async () => {
+  //   if (documentActionRef.current) return;
 
-    if (pendingDocument) {
-      Alert.alert("Document not saved yet", "Save your profile first to download this document.");
-      return;
-    }
+  //   if (pendingDocument) {
+  //     Alert.alert(
+  //       "Document not saved yet",
+  //       "Save your profile first to download this document.",
+  //     );
+  //     return;
+  //   }
 
-    if (!businessDocumentKey) {
-      Alert.alert("No document", "Upload a PDF document first.");
-      return;
-    }
+  //   if (!businessDocumentKey) {
+  //     Alert.alert("No document", "Upload a PDF document first.");
+  //     return;
+  //   }
 
-    documentActionRef.current = 'download';
-    setDocumentAction('download');
-    try {
-      const url = await getStorageDownloadUrl(businessDocumentKey);
-      await Linking.openURL(url);
-    } catch (error) {
-      Alert.alert("Unable to download document", getAuthErrorMessage(error, "Please try again."));
-    } finally {
-      documentActionRef.current = null;
-      setDocumentAction(null);
-    }
-  };
+  //   documentActionRef.current = "download";
+  //   setDocumentAction("download");
+  //   try {
+  //     const url = await getStorageDownloadUrl(businessDocumentKey);
+  //     await Linking.openURL(url);
+  //   } catch (error) {
+  //     Alert.alert(
+  //       "Unable to download document",
+  //       getAuthErrorMessage(error, "Please try again."),
+  //     );
+  //   } finally {
+  //     documentActionRef.current = null;
+  //     setDocumentAction(null);
+  //   }
+  // };
 
   const validateProfile = () => {
     const trimmedName = name.trim();
@@ -743,12 +830,18 @@ export default function EditProfileScreen() {
     const trimmedAge = age.trim();
 
     if (trimmedName.length < 2) {
-      Alert.alert("Name required", "Enter at least 2 characters for your name.");
+      Alert.alert(
+        "Name required",
+        "Enter at least 2 characters for your name.",
+      );
       return null;
     }
 
     if (!USERNAME_PATTERN.test(trimmedUsername)) {
-      Alert.alert("Invalid username", "Username must be 3-40 characters and use only letters, numbers, or underscores.");
+      Alert.alert(
+        "Invalid username",
+        "Username must be 3-40 characters and use only letters, numbers, or underscores.",
+      );
       return null;
     }
 
@@ -761,7 +854,10 @@ export default function EditProfileScreen() {
       const parsedAge = Number(trimmedAge);
 
       if (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 130) {
-        Alert.alert("Invalid age", "Age must be a whole number between 0 and 130.");
+        Alert.alert(
+          "Invalid age",
+          "Age must be a whole number between 0 and 130.",
+        );
         return null;
       }
 
@@ -787,7 +883,10 @@ export default function EditProfileScreen() {
     }
 
     if (!user) {
-      Alert.alert("Profile unavailable", "Please sign in again before updating your profile.");
+      Alert.alert(
+        "Profile unavailable",
+        "Please sign in again before updating your profile.",
+      );
       return;
     }
 
@@ -821,33 +920,57 @@ export default function EditProfileScreen() {
         name: validatedProfile.name,
         username: validatedProfile.username,
       });
-      safeBack(router, '/(tabs)/profile');
+      safeBack(router, "/(tabs)/profile");
     } catch (error) {
-      Alert.alert("Unable to save profile", getAuthErrorMessage(error, "Please try again."));
+      Alert.alert(
+        "Unable to save profile",
+        getAuthErrorMessage(error, "Please try again."),
+      );
     }
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.background }]}
+      edges={["top", "bottom"]}
+    >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          Edit Profile
+        </Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {isProfileLoading ? (
         <View style={styles.centerState}>
           <SpinnerCustom color={colors.textSecondary} size="large" />
-          <Text style={[styles.stateText, { color: colors.textSecondary }]}>Loading profile...</Text>
+          <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+            Loading profile...
+          </Text>
         </View>
       ) : profileLoadError ? (
         <View style={styles.centerState}>
-          <Text style={[styles.stateTitle, { color: colors.text }]}>Unable to load profile</Text>
-          <Text style={[styles.stateText, { color: colors.textSecondary }]}>{profileLoadError}</Text>
-          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: buttonBackground(colors) }]} onPress={loadProfile}>
-            <Text style={[styles.retryBtnText, { color: buttonForeground(colors) }]}>Try Again</Text>
+          <Text style={[styles.stateTitle, { color: colors.text }]}>
+            Unable to load profile
+          </Text>
+          <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+            {profileLoadError}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.retryBtn,
+              { backgroundColor: buttonBackground(colors) },
+            ]}
+            onPress={loadProfile}
+          >
+            <Text
+              style={[styles.retryBtnText, { color: buttonForeground(colors) }]}
+            >
+              Try Again
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -868,34 +991,79 @@ export default function EditProfileScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.scrollContent,
-                { paddingBottom: Math.max(40, footerHeight + 40 + keyboardHeight) },
+                {
+                  paddingBottom: Math.max(
+                    40,
+                    footerHeight + 40 + keyboardHeight,
+                  ),
+                },
               ]}
             >
               <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>IMAGE</Text>
+                <Text
+                  style={[styles.sectionTitle, { color: colors.textSecondary }]}
+                >
+                  IMAGE
+                </Text>
                 {hasImage ? (
-                  <TouchableOpacity onPress={handleDeleteAvatar} disabled={isBusy}>
-                    <Feather name="trash-2" size={16} color={colors.textSecondary} />
+                  <TouchableOpacity
+                    onPress={handleDeleteAvatar}
+                    disabled={isBusy}
+                  >
+                    <Feather
+                      name="trash-2"
+                      size={16}
+                      color={colors.textSecondary}
+                    />
                   </TouchableOpacity>
                 ) : null}
               </View>
 
               <View style={styles.avatarWrapper}>
-                <View style={[styles.avatarContainer, { backgroundColor: colors.card }]}>
+                <View
+                  style={[
+                    styles.avatarContainer,
+                    { backgroundColor: colors.card },
+                  ]}
+                >
                   {hasImage ? (
-                    <UserAvatar uri={avatarUri} name={name} size={96} style={styles.avatar} />
+                    <UserAvatar
+                      uri={avatarUri}
+                      name={name}
+                      size={96}
+                      style={styles.avatar}
+                    />
                   ) : (
-                    <View style={[styles.emptyAvatar, { backgroundColor: colors.border }]}>
-                      <Feather name="user" size={40} color={colors.textSecondary} />
+                    <View
+                      style={[
+                        styles.emptyAvatar,
+                        { backgroundColor: colors.border },
+                      ]}
+                    >
+                      <Feather
+                        name="user"
+                        size={40}
+                        color={colors.textSecondary}
+                      />
                     </View>
                   )}
                 </View>
                 <TouchableOpacity
                   disabled={isBusy}
                   onPress={handlePickAvatar}
-                  style={[styles.cameraBadge, { backgroundColor: buttonBackground(colors), borderColor: colors.background }]}
+                  style={[
+                    styles.cameraBadge,
+                    {
+                      backgroundColor: buttonBackground(colors),
+                      borderColor: colors.background,
+                    },
+                  ]}
                 >
-                  <Feather name="camera" size={14} color={buttonForeground(colors)} />
+                  <Feather
+                    name="camera"
+                    size={14}
+                    color={buttonForeground(colors)}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -914,7 +1082,7 @@ export default function EditProfileScreen() {
                   onLayout={handleFieldLayout("name")}
                   onChangeText={setName}
                   onSubmitEditing={() => focusNextField("name")}
-                  placeholder={isBusiness ? "Business name" : "Fullname"}
+                  placeholder={"Fullname"}
                   returnKeyType="next"
                   value={name}
                 />
@@ -958,139 +1126,178 @@ export default function EditProfileScreen() {
                   value={email}
                 />
 
-                {isBusiness ? (
-                  <CustomInput
-                    containerRef={setFieldRef("address")}
-                    colors={colors}
-                    editable={!isBusy}
-                    enterKeyHint="next"
-                    icon="map-pin"
-                    inputRef={addressInputRef}
-                    onFocus={() => {
-                      activeFieldRef.current = "address";
-                      ensureFieldVisible("address");
-                    }}
-                    onLayout={handleFieldLayout("address")}
-                    onChangeText={setAddress}
-                    onSubmitEditing={() => focusNextField("address")}
-                    placeholder="Address"
-                    returnKeyType="next"
-                    value={address}
+                {/* {isBusiness ? ( */}
+
+                <CustomInput
+                  containerRef={setFieldRef("address")}
+                  colors={colors}
+                  editable={!isBusy}
+                  enterKeyHint="next"
+                  icon="map-pin"
+                  inputRef={addressInputRef}
+                  onFocus={() => {
+                    activeFieldRef.current = "address";
+                    ensureFieldVisible("address");
+                  }}
+                  onLayout={handleFieldLayout("address")}
+                  onChangeText={setAddress}
+                  onSubmitEditing={() => focusNextField("address")}
+                  placeholder="Address"
+                  returnKeyType="next"
+                  value={address}
+                />
+                {/* ) : ( */}
+                <TouchableOpacity
+                  ref={setFieldRef("gender")}
+                  activeOpacity={0.75}
+                  disabled={isBusy}
+                  onLayout={handleFieldLayout("gender")}
+                  onPress={() => {
+                    openGenderPicker();
+                  }}
+                  style={[
+                    styles.inputContainer,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                    },
+                    isBusy && styles.disabledButton,
+                  ]}
+                >
+                  <Feather
+                    name="target"
+                    size={16}
+                    color={colors.textSecondary}
+                    style={styles.inputIcon}
                   />
-                ) : (
-                  <TouchableOpacity
-                    ref={setFieldRef("gender")}
-                    activeOpacity={0.75}
-                    disabled={isBusy}
-                    onLayout={handleFieldLayout("gender")}
-                    onPress={() => {
-                      openGenderPicker();
-                    }}
+                  <Text
                     style={[
-                      styles.inputContainer,
-                      { backgroundColor: colors.card, borderColor: colors.border },
-                      isBusy && styles.disabledButton,
+                      styles.input,
+                      { color: gender ? colors.text : colors.textSecondary },
                     ]}
                   >
-                    <Feather name="target" size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                    <Text style={[styles.input, { color: gender ? colors.text : colors.textSecondary }]}>
-                      {gender || "Gender"}
-                    </Text>
-                    <Feather name="chevron-down" size={16} color={colors.textSecondary} style={styles.inputRightIcon} />
-                  </TouchableOpacity>
-                )}
+                    {gender || "Gender"}
+                  </Text>
+                  <Feather
+                    name="chevron-down"
+                    size={16}
+                    color={colors.textSecondary}
+                    style={styles.inputRightIcon}
+                  />
+                </TouchableOpacity>
+                {/* )} */}
               </View>
 
-              {!isBusiness ? (
-                <View style={styles.section}>
-                  <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AGE</Text>
-                  <CustomInput
-                    blurOnSubmit={false}
-                    containerRef={setFieldRef("age")}
-                    colors={colors}
-                    editable={!isBusy}
-                    enterKeyHint="next"
-                    inputAccessoryViewID={Platform.OS === "ios" ? AGE_INPUT_ACCESSORY_ID : undefined}
-                    inputRef={ageInputRef}
-                    keyboardType={Platform.OS === "android" ? "numeric" : "number-pad"}
-                    onFocus={() => {
-                      activeFieldRef.current = "age";
-                      ensureFieldVisible("age");
-                    }}
-                    onLayout={handleFieldLayout("age")}
-                    onChangeText={setAge}
-                    onSubmitEditing={() => focusNextField("age")}
-                    placeholder="21"
-                    returnKeyType="next"
-                    value={age}
-                  />
-                </View>
-              ) : null}
+              {/* {!isBusiness ? ( */}
+              <View style={styles.section}>
+                <Text
+                  style={[styles.sectionTitle, { color: colors.textSecondary }]}
+                >
+                  AGE
+                </Text>
+                <CustomInput
+                  blurOnSubmit={false}
+                  containerRef={setFieldRef("age")}
+                  colors={colors}
+                  editable={!isBusy}
+                  enterKeyHint="next"
+                  inputAccessoryViewID={
+                    Platform.OS === "ios" ? AGE_INPUT_ACCESSORY_ID : undefined
+                  }
+                  inputRef={ageInputRef}
+                  keyboardType={
+                    Platform.OS === "android" ? "numeric" : "number-pad"
+                  }
+                  onFocus={() => {
+                    activeFieldRef.current = "age";
+                    ensureFieldVisible("age");
+                  }}
+                  onLayout={handleFieldLayout("age")}
+                  onChangeText={setAge}
+                  onSubmitEditing={() => focusNextField("age")}
+                  placeholder="21"
+                  returnKeyType="next"
+                  value={age}
+                />
+              </View>
+              {/* ) : null} */}
 
-              {isBusiness ? (
+              {/* {isBusiness ? (
                 <View style={styles.section}>
-                  <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SUBMIT BUSINESS DOCUMENTS FOR REVIEW</Text>
-                  <Text style={[styles.docDesc, { color: colors.textSecondary }]}>
-                    To confirm your business is legitimate, we require an official registration document (PDF). Our team
-                    will review this in the background while you use your account.
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    SUBMIT BUSINESS DOCUMENTS FOR REVIEW
+                  </Text>
+                  <Text
+                    style={[styles.docDesc, { color: colors.textSecondary }]}
+                  >
+                    To confirm your business is legitimate, we require an
+                    official registration document (PDF). Our team will review
+                    this in the background while you use your account.
                   </Text>
 
                   {!hasDocument ? (
                     <TouchableOpacity
                       disabled={isBusy}
                       onPress={handlePickDocument}
-                      style={[styles.uploadBtn, { backgroundColor: buttonBackground(colors) }]}
+                      style={[
+                        styles.uploadBtn,
+                        { backgroundColor: buttonBackground(colors) },
+                      ]}
                     >
-                      <Feather name="upload-cloud" size={16} color={buttonForeground(colors)} style={styles.uploadIcon} />
-                      <Text style={[styles.uploadBtnText, { color: buttonForeground(colors) }]}>Upload PDF</Text>
+                      <Feather
+                        name="upload-cloud"
+                        size={16}
+                        color={buttonForeground(colors)}
+                        style={styles.uploadIcon}
+                      />
+                      <Text
+                        style={[
+                          styles.uploadBtnText,
+                          { color: buttonForeground(colors) },
+                        ]}
+                      >
+                        Upload PDF
+                      </Text>
                     </TouchableOpacity>
                   ) : (
-                    <View style={[styles.uploadedDocCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <View style={[styles.docIconWrapper, { backgroundColor: colors.border }]}>
-                        <Feather name="file-text" size={20} color={colors.textSecondary} />
+                    <View
+                      style={[
+                        styles.uploadedDocCard,
+                        {
+                          backgroundColor: colors.card,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.docIconWrapper,
+                          { backgroundColor: colors.border },
+                        ]}
+                      >
+                        <Feather
+                          name="file-text"
+                          size={20}
+                          color={colors.textSecondary}
+                        />
                       </View>
-                      <View style={styles.docInfo}>
-                        <Text numberOfLines={1} style={[styles.docName, { color: colors.text }]}>
-                          {documentMeta?.name ?? getFileNameFromKey(businessDocumentKey)}
-                        </Text>
-                        <Text style={[styles.docMeta, { color: colors.textSecondary }]}>
-                          {getDocumentMetaText(documentMeta) || "PDF"}
-                        </Text>
-                      </View>
-                      <View style={styles.docActions}>
-                        <TouchableOpacity
-                          style={styles.docActionBtn}
-                          onPress={() => void handleDownloadDocument()}
-                          disabled={isBusy || documentAction !== null}
-                        >
-                          {documentAction === 'download' ? (
-                            <Spinner size={16} color={colors.textSecondary} />
-                          ) : (
-                            <Feather name="download" size={16} color={colors.textSecondary} />
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.docActionBtn}
-                          onPress={() => void handleViewDocument()}
-                          disabled={isBusy || documentAction !== null}
-                        >
-                          {documentAction === 'view' ? (
-                            <Spinner size={16} color={colors.textSecondary} />
-                          ) : (
-                            <Feather name="eye" size={16} color={colors.textSecondary} />
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.docActionBtn} onPress={handleDeleteDocument} disabled={isBusy || documentAction !== null}>
-                          <Feather name="x" size={16} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                      </View>
+                     
                     </View>
                   )}
                 </View>
-              ) : null}
+              ) : null} */}
 
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BIO</Text>
+                <Text
+                  style={[styles.sectionTitle, { color: colors.textSecondary }]}
+                >
+                  BIO
+                </Text>
                 <CustomInput
                   blurOnSubmit
                   containerRef={setFieldRef("bio")}
@@ -1105,7 +1312,11 @@ export default function EditProfileScreen() {
                   }}
                   onLayout={handleFieldLayout("bio")}
                   onChangeText={setBio}
-                  placeholder={isBusiness ? "Detail about business" : "Detail about yourself"}
+                  placeholder={
+                    // isBusiness
+                    //   ? "Detail about business" :
+                    "Detail about yourself"
+                  }
                   returnKeyType="done"
                   style={styles.bioInput}
                   value={bio}
@@ -1116,9 +1327,27 @@ export default function EditProfileScreen() {
 
           {Platform.OS === "ios" ? (
             <InputAccessoryView nativeID={AGE_INPUT_ACCESSORY_ID}>
-              <View style={[styles.ageInputAccessory, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-                <TouchableOpacity onPress={() => focusNextField("age")} style={styles.ageInputAccessoryButton}>
-                  <Text style={[styles.ageInputAccessoryText, { color: colors.primary }]}>Next</Text>
+              <View
+                style={[
+                  styles.ageInputAccessory,
+                  {
+                    backgroundColor: colors.card,
+                    borderTopColor: colors.border,
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  onPress={() => focusNextField("age")}
+                  style={styles.ageInputAccessoryButton}
+                >
+                  <Text
+                    style={[
+                      styles.ageInputAccessoryText,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    Next
+                  </Text>
                 </TouchableOpacity>
               </View>
             </InputAccessoryView>
@@ -1134,20 +1363,37 @@ export default function EditProfileScreen() {
           >
             <TouchableOpacity
               disabled={isLoading}
-              onPress={() => safeBack(router, '/(tabs)/profile')}
-              style={[styles.cancelBtn, { backgroundColor: colors.card }, isLoading && styles.disabledButton]}
+              onPress={() => safeBack(router, "/(tabs)/profile")}
+              style={[
+                styles.cancelBtn,
+                { backgroundColor: colors.card },
+                isLoading && styles.disabledButton,
+              ]}
             >
-              <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+              <Text style={[styles.cancelBtnText, { color: colors.text }]}>
+                Cancel
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               disabled={isLoading}
               onPress={handleSave}
-              style={[styles.saveBtn, { backgroundColor: buttonBackground(colors) }, isLoading && styles.disabledButton]}
+              style={[
+                styles.saveBtn,
+                { backgroundColor: buttonBackground(colors) },
+                isLoading && styles.disabledButton,
+              ]}
             >
               {isLoading ? (
                 <Spinner color={buttonForeground(colors)} />
               ) : (
-                <Text style={[styles.saveBtnText, { color: buttonForeground(colors) }]}>Save</Text>
+                <Text
+                  style={[
+                    styles.saveBtnText,
+                    { color: buttonForeground(colors) },
+                  ]}
+                >
+                  Save
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -1162,15 +1408,38 @@ export default function EditProfileScreen() {
             <TouchableWithoutFeedback onPress={closeGenderPicker}>
               <View style={styles.dropdownOverlay}>
                 <TouchableWithoutFeedback>
-                  <View style={[styles.dropdownSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }]}>
+                  <View
+                    style={[
+                      styles.dropdownSheet,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        paddingBottom: Math.max(insets.bottom, 16),
+                      },
+                    ]}
+                  >
                     {/* Drag handle */}
                     <View style={styles.dropdownHandle}>
-                      <View style={[styles.dropdownHandleBar, { backgroundColor: colors.border }]} />
+                      <View
+                        style={[
+                          styles.dropdownHandleBar,
+                          { backgroundColor: colors.border },
+                        ]}
+                      />
                     </View>
 
                     {/* Title */}
-                    <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
-                      <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Gender</Text>
+                    <View
+                      style={[
+                        styles.dropdownHeader,
+                        { borderBottomColor: colors.border },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.dropdownTitle, { color: colors.text }]}
+                      >
+                        Select Gender
+                      </Text>
                     </View>
 
                     {/* Options */}
@@ -1181,20 +1450,32 @@ export default function EditProfileScreen() {
                         onPress={() => handleGenderSelect(option)}
                         style={[
                           styles.dropdownOption,
-                          index < GENDER_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                          index < GENDER_OPTIONS.length - 1 && {
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                          },
                         ]}
                       >
                         <Text
                           style={[
                             styles.dropdownOptionText,
-                            { color: gender === option ? colors.primary : colors.text },
+                            {
+                              color:
+                                gender === option
+                                  ? colors.primary
+                                  : colors.text,
+                            },
                             gender === option && styles.dropdownOptionSelected,
                           ]}
                         >
                           {option}
                         </Text>
                         {gender === option ? (
-                          <Feather name="check" size={16} color={colors.primary} />
+                          <Feather
+                            name="check"
+                            size={16}
+                            color={colors.primary}
+                          />
                         ) : null}
                       </TouchableOpacity>
                     ))}
@@ -1203,9 +1484,19 @@ export default function EditProfileScreen() {
                     <TouchableOpacity
                       activeOpacity={0.7}
                       onPress={closeGenderPicker}
-                      style={[styles.dropdownCancel, { borderTopColor: colors.border }]}
+                      style={[
+                        styles.dropdownCancel,
+                        { borderTopColor: colors.border },
+                      ]}
                     >
-                      <Text style={[styles.dropdownCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                      <Text
+                        style={[
+                          styles.dropdownCancelText,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        Cancel
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableWithoutFeedback>

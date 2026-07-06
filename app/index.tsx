@@ -1,7 +1,7 @@
+import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { StyleSheet, Image, View } from "react-native";
-import { useAuthStore } from "@/stores/authStore";
+import { Image, StyleSheet, View } from "react-native";
 
 export default function Splash() {
   const router = useRouter();
@@ -9,13 +9,26 @@ export default function Splash() {
   const isRestoring = useAuthStore((state) => state.isRestoring);
   const hasRestored = useAuthStore((state) => state.hasRestored);
 
+  console.log(
+    "Splash screen rendered. isAuthenticated:",
+    isAuthenticated,
+    "isRestoring:",
+    isRestoring,
+    "hasRestored:",
+    hasRestored,
+  );
+
   useEffect(() => {
     if (isRestoring || !hasRestored) {
       return;
     }
 
     const timer = setTimeout(() => {
-      router.replace(isAuthenticated ? '/(tabs)/home' as any : '/auth-screen/onboarding' as any);
+      router.replace(
+        isAuthenticated
+          ? ("/(tabs)/home" as any)
+          : ("/auth-screen/onboarding" as any),
+      );
     }, 1200);
 
     return () => clearTimeout(timer);
@@ -23,7 +36,7 @@ export default function Splash() {
 
   return (
     <View style={styles.container}>
-      <Image 
+      <Image
         source={require("../assets/images/Splash-logo.png")}
         style={styles.logo}
         resizeMode="contain"
