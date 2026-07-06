@@ -1,16 +1,41 @@
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
-import { getAuthErrorMessage } from '@/lib/authErrors';
-import { createMomentComment, getMomentComments, toggleCommentReaction, type MomentComment, type MomentInteractionSummary } from '@/lib/moments';
-import { getStorageFileUrl } from '@/lib/storage';
-import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
-import { createStoryComment, getStoryComments, type StoryComment, type StoryInteraction } from '@/lib/stories';
-import UserAvatar from '../ui/UserAvatar';
+import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import {
+  createMomentComment,
+  getMomentComments,
+  toggleCommentReaction,
+  type MomentComment,
+  type MomentInteractionSummary,
+} from "@/lib/moments";
+import { getStorageFileUrl } from "@/lib/storage";
+import {
+  createStoryComment,
+  getStoryComments,
+  type StoryComment,
+  type StoryInteraction,
+} from "@/lib/stories";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Keyboard,
+  Modal,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import UserAvatar from "../ui/UserAvatar";
 
 type CommentType = {
   id: string;
@@ -28,57 +53,60 @@ type CommentType = {
 
 const INITIAL_COMMENTS: CommentType[] = [
   {
-    id: '1',
-    authorName: 'Del Ray',
+    id: "1",
+    authorName: "Del Ray",
     authorAvatar: null,
-    text: 'What an amazing DJ party! The atmosphere was electric and everyone had a blast.',
-    timeAgo: '5h',
+    text: "What an amazing DJ party! The atmosphere was electric and everyone had a blast.",
+    timeAgo: "5h",
     likesCount: 0,
   },
   {
-    id: '2',
-    authorName: 'Somia Kasem',
+    id: "2",
+    authorName: "Somia Kasem",
     authorAvatar: null,
-    text: 'This party was so much fun! The DJ played fantastic tracks that kept everyone dancing.',
-    timeAgo: '5h',
+    text: "This party was so much fun! The DJ played fantastic tracks that kept everyone dancing.",
+    timeAgo: "5h",
     likesCount: 5000,
     viewMoreReplies: 4,
   },
   {
-    id: '3',
-    authorName: 'Somia Kasem',
+    id: "3",
+    authorName: "Somia Kasem",
     authorAvatar: null,
-    text: 'I had a great time at the DJ event! The music was on point and the vibe was incredible.',
-    timeAgo: '5h',
+    text: "I had a great time at the DJ event! The music was on point and the vibe was incredible.",
+    timeAgo: "5h",
     likesCount: 5000,
     replies: [
       {
-        id: '3-1',
-        authorName: 'Kasem Khondokar',
+        id: "3-1",
+        authorName: "Kasem Khondokar",
         authorAvatar: null,
-        text: 'What a fantastic night at the DJ party! The energy was high and the crowd was loving it.',
-        timeAgo: '5h',
+        text: "What a fantastic night at the DJ party! The energy was high and the crowd was loving it.",
+        timeAgo: "5h",
         likesCount: 5000,
       },
       {
-        id: '3-2',
-        authorName: 'Yasin Kasem',
+        id: "3-2",
+        authorName: "Yasin Kasem",
         authorAvatar: null,
-        text: 'Everyone is loving the concert! The atmosphere is electric, and the performers are amazing.',
-        timeAgo: '5h',
+        text: "Everyone is loving the concert! The atmosphere is electric, and the performers are amazing.",
+        timeAgo: "5h",
         likesCount: 5000,
-      }
-    ]
-  }
+      },
+    ],
+  },
 ];
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 const formatCommentTimeAgo = (createdAt: string) => {
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000));
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000),
+  );
 
   if (elapsedSeconds < 60) {
-    return 'Just now';
+    return "Just now";
   }
 
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
@@ -101,8 +129,13 @@ const formatCommentTimeAgo = (createdAt: string) => {
 const momentCommentToComment = (comment: MomentComment): CommentType => ({
   id: comment.id,
   authorId: comment.author?.id,
-  authorName: comment.author?.name ?? 'Mooment User',
-  authorAvatar: (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null) ?? comment.author?.avatarUrl ?? null,
+  authorName: comment.author?.name ?? "Mooment User",
+  authorAvatar:
+    (comment.author?.avatarKey
+      ? getStorageFileUrl(comment.author.avatarKey)
+      : null) ??
+    comment.author?.avatarUrl ??
+    null,
   text: comment.text,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
   likesCount: comment.likesCount,
@@ -113,8 +146,12 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
 const storyCommentToComment = (comment: StoryComment): CommentType => ({
   id: comment.id,
   authorId: comment.author?.id,
-  authorName: comment.author?.name ?? 'Mooment User',
-  authorAvatar: comment.author?.avatarUrl ?? (comment.author?.avatarKey ? getStorageFileUrl(comment.author.avatarKey) : null),
+  authorName: comment.author?.name ?? "Mooment User",
+  authorAvatar:
+    comment.author?.avatarUrl ??
+    (comment.author?.avatarKey
+      ? getStorageFileUrl(comment.author.avatarKey)
+      : null),
   text: comment.text,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
   likesCount: comment.likesCount,
@@ -129,7 +166,7 @@ export default function CommentsModal({
   likesCount = 0,
   sharesCount = 0,
   onInteractionChange,
-  entityType = 'moment',
+  entityType = "moment",
   onStoryInteractionChange,
 }: {
   visible: boolean;
@@ -138,26 +175,75 @@ export default function CommentsModal({
   likesCount?: number;
   sharesCount?: number;
   onInteractionChange?: (summary: MomentInteractionSummary) => void;
-  entityType?: 'moment' | 'story';
+  entityType?: "moment" | "story";
   onStoryInteractionChange?: (interaction: StoryInteraction) => void;
 }) {
   const { colors, isDark } = useTheme();
   const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
-  const [replyingTo, setReplyingTo] = useState<{ id: string, name: string } | null>(null);
-  const [commentText, setCommentText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [commentText, setCommentText] = useState("");
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const inputRef = useRef<TextInput>(null);
   const isInputFocusedRef = useRef(false);
   const wasKeyboardVisibleRef = useRef(false);
+  const translateY = useRef(new Animated.Value(0)).current;
+  const dragOffsetRef = useRef(0);
   // Android: set to true when the send button receives a touch-start.
   // Checked in TextInput.onBlur so we can send even though Android's Dialog
   // consumes the first tap to dismiss the keyboard before onPress fires.
   const sendBtnPressedRef = useRef(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const canUseCommentsApi = Boolean(momentId && MONGO_OBJECT_ID_PATTERN.test(momentId));
+  const canUseCommentsApi = Boolean(
+    momentId && MONGO_OBJECT_ID_PATTERN.test(momentId),
+  );
+  const dragResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          Math.abs(gesture.dy) > 4,
+        onPanResponderGrant: () => {
+          dragOffsetRef.current = 0;
+          translateY.stopAnimation();
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const nextOffset = Math.max(-72, Math.min(240, gesture.dy));
+          dragOffsetRef.current = nextOffset;
+          translateY.setValue(nextOffset);
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const shouldClose =
+            gesture.dy > 120 || gesture.vy > 0.9 || dragOffsetRef.current > 120;
+
+          if (shouldClose) {
+            onClose();
+            return;
+          }
+
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 70,
+            friction: 10,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 70,
+            friction: 10,
+          }).start();
+        },
+      }),
+    [onClose, translateY],
+  );
 
   const loadComments = useCallback(async () => {
     if (!momentId || !MONGO_OBJECT_ID_PATTERN.test(momentId)) {
@@ -168,13 +254,20 @@ export default function CommentsModal({
     setIsLoadingComments(true);
 
     try {
-      if (entityType === 'story') {
-        setComments((await getStoryComments(momentId)).map(storyCommentToComment));
+      if (entityType === "story") {
+        setComments(
+          (await getStoryComments(momentId)).map(storyCommentToComment),
+        );
       } else {
-        setComments((await getMomentComments(momentId)).map(momentCommentToComment));
+        setComments(
+          (await getMomentComments(momentId)).map(momentCommentToComment),
+        );
       }
     } catch (error) {
-      Alert.alert('Unable to load comments', getAuthErrorMessage(error, 'Please try again.'));
+      Alert.alert(
+        "Unable to load comments",
+        getAuthErrorMessage(error, "Please try again."),
+      );
     } finally {
       setIsLoadingComments(false);
     }
@@ -183,30 +276,34 @@ export default function CommentsModal({
   useEffect(() => {
     if (visible) {
       setReplyingTo(null);
-      setCommentText('');
+      setCommentText("");
+      translateY.setValue(0);
       void loadComments();
+      return;
     }
-  }, [loadComments, visible]);
+    translateY.setValue(0);
+  }, [loadComments, translateY, visible]);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
 
-    const showSubscription = Keyboard.addListener('keyboardDidShow', (e) => {
+    const showSubscription = Keyboard.addListener("keyboardDidShow", (e) => {
       // Track keyboard height so we can manually pad content above the keyboard.
       // This replaces KeyboardAvoidingView, which has a known Android bug where
       // behavior="height" doesn't fully restore height after keyboard dismiss,
       // leaving a transparent gap that exposes the activity tab bar underneath.
       setKeyboardHeight(e.endCoordinates.height);
-      if (Platform.OS === 'android') {
+      if (Platform.OS === "android") {
         wasKeyboardVisibleRef.current = true;
       }
     });
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
       setKeyboardHeight(0);
-      if (Platform.OS === 'android') {
-        const shouldClose = isInputFocusedRef.current && wasKeyboardVisibleRef.current;
+      if (Platform.OS === "android") {
+        const shouldClose =
+          isInputFocusedRef.current && wasKeyboardVisibleRef.current;
         wasKeyboardVisibleRef.current = false;
 
         // Android sends Back to the IME before the Modal. Close the sheet when
@@ -224,16 +321,20 @@ export default function CommentsModal({
       setKeyboardHeight(0);
       isInputFocusedRef.current = false;
       wasKeyboardVisibleRef.current = false;
+      translateY.setValue(0);
     };
-  }, [onClose, visible]);
+  }, [onClose, translateY, visible]);
 
   const toggleCommentLike = async (commentId: string) => {
-    if (entityType === 'story') return;
+    if (entityType === "story") return;
     if (!canUseCommentsApi) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const findInTree = (items: CommentType[], id: string): CommentType | undefined => {
+    const findInTree = (
+      items: CommentType[],
+      id: string,
+    ): CommentType | undefined => {
       for (const item of items) {
         if (item.id === id) return item;
         const found = item.replies ? findInTree(item.replies, id) : undefined;
@@ -248,23 +349,36 @@ export default function CommentsModal({
     const prevIsLiked = target.isLiked ?? false;
     const prevLikesCount = target.likesCount;
 
-    const applyUpdate = (items: CommentType[], isLiked: boolean, likesCount: number): CommentType[] =>
-      items.map(item => {
+    const applyUpdate = (
+      items: CommentType[],
+      isLiked: boolean,
+      likesCount: number,
+    ): CommentType[] =>
+      items.map((item) => {
         if (item.id === commentId) return { ...item, isLiked, likesCount };
-        if (item.replies?.length) return { ...item, replies: applyUpdate(item.replies, isLiked, likesCount) };
+        if (item.replies?.length)
+          return {
+            ...item,
+            replies: applyUpdate(item.replies, isLiked, likesCount),
+          };
         return item;
       });
 
     // Optimistic update
     const newIsLiked = !prevIsLiked;
-    const newLikesCount = newIsLiked ? prevLikesCount + 1 : Math.max(0, prevLikesCount - 1);
-    setComments(prev => applyUpdate(prev, newIsLiked, newLikesCount));
+    const newLikesCount = newIsLiked
+      ? prevLikesCount + 1
+      : Math.max(0, prevLikesCount - 1);
+    setComments((prev) => applyUpdate(prev, newIsLiked, newLikesCount));
 
     try {
-      const { isLiked, likesCount } = await toggleCommentReaction(momentId!, commentId);
-      setComments(prev => applyUpdate(prev, isLiked, likesCount));
+      const { isLiked, likesCount } = await toggleCommentReaction(
+        momentId!,
+        commentId,
+      );
+      setComments((prev) => applyUpdate(prev, isLiked, likesCount));
     } catch {
-      setComments(prev => applyUpdate(prev, prevIsLiked, prevLikesCount));
+      setComments((prev) => applyUpdate(prev, prevIsLiked, prevLikesCount));
     }
   };
 
@@ -278,12 +392,12 @@ export default function CommentsModal({
     // Use a small timeout to allow modal to close before navigating
     setTimeout(() => {
       router.push({
-        pathname: '/profile-screen/user-profile',
+        pathname: "/profile-screen/user-profile",
         params: {
           userId: item.authorId ?? item.id,
           name: item.authorName,
           ...(item.authorAvatar ? { avatar: item.authorAvatar } : {}),
-        }
+        },
       } as any);
     }, 300);
   };
@@ -298,22 +412,28 @@ export default function CommentsModal({
     setIsSendingComment(true);
 
     try {
-      const payload = { text: trimmedText, parentCommentId: replyingTo?.id ?? null };
-      const result = entityType === 'story'
-        ? await createStoryComment(momentId, payload)
-        : await createMomentComment(momentId, payload);
+      const payload = {
+        text: trimmedText,
+        parentCommentId: replyingTo?.id ?? null,
+      };
+      const result =
+        entityType === "story"
+          ? await createStoryComment(momentId, payload)
+          : await createMomentComment(momentId, payload);
 
-      const newComment = entityType === 'story'
-        ? storyCommentToComment(result.comment as StoryComment)
-        : momentCommentToComment(result.comment as MomentComment);
+      const newComment =
+        entityType === "story"
+          ? storyCommentToComment(result.comment as StoryComment)
+          : momentCommentToComment(result.comment as MomentComment);
       const parentId = replyingTo?.id ?? null;
 
       // Capture parentId before clearing replyingTo so the setComments
       // updater below can close over the correct value.
-      setCommentText('');
+      setCommentText("");
       setReplyingTo(null);
-      if ('summary' in result) onInteractionChange?.(result.summary);
-      if ('interaction' in result) onStoryInteractionChange?.(result.interaction);
+      if ("summary" in result) onInteractionChange?.(result.summary);
+      if ("interaction" in result)
+        onStoryInteractionChange?.(result.interaction);
 
       // Append the server-returned comment directly instead of re-fetching
       // the full list. Re-fetching triggers isLoadingComments true→false which
@@ -331,60 +451,111 @@ export default function CommentsModal({
         );
       });
     } catch (error) {
-      Alert.alert('Unable to post comment', getAuthErrorMessage(error, 'Please try again.'));
+      Alert.alert(
+        "Unable to post comment",
+        getAuthErrorMessage(error, "Please try again."),
+      );
     } finally {
       setIsSendingComment(false);
     }
   };
 
-  const renderComment = (item: CommentType, isChild = false, isLast = false) => {
-    const formattedLikes = item.likesCount >= 1000 ? `${(item.likesCount / 1000).toFixed(0)}K` : item.likesCount;
-    
+  const renderComment = (
+    item: CommentType,
+    isChild = false,
+    isLast = false,
+  ) => {
+    const formattedLikes =
+      item.likesCount >= 1000
+        ? `${(item.likesCount / 1000).toFixed(0)}K`
+        : item.likesCount;
+
     return (
-      <View key={item.id} style={[styles.commentRow, isChild && styles.childCommentRow]}>
+      <View
+        key={item.id}
+        style={[styles.commentRow, isChild && styles.childCommentRow]}
+      >
         {/* Connection line for replies */}
         {isChild && (
-          <View style={[
-            styles.replyLineVertical,
-            { borderColor: colors.border },
-            isLast ? styles.replyLineVerticalLast : undefined
-          ]} />
+          <View
+            style={[
+              styles.replyLineVertical,
+              { borderColor: colors.border },
+              isLast ? styles.replyLineVerticalLast : undefined,
+            ]}
+          />
         )}
         {isChild && (
-          <View style={[styles.replyLineHorizontal, { borderColor: colors.border }]} />
+          <View
+            style={[styles.replyLineHorizontal, { borderColor: colors.border }]}
+          />
         )}
-        
-        <TouchableOpacity activeOpacity={0.7} onPress={() => handleProfilePress(item)}>
-          <UserAvatar uri={item.authorAvatar} name={item.authorName} size={36} style={styles.commentAvatar} iconSize={14} />
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => handleProfilePress(item)}
+        >
+          <UserAvatar
+            uri={item.authorAvatar}
+            name={item.authorName}
+            size={36}
+            style={styles.commentAvatar}
+            iconSize={14}
+          />
         </TouchableOpacity>
-        
+
         <View style={styles.commentContent}>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => handleProfilePress(item)}>
-            <Text style={[styles.commentName, { color: colors.text }]}>{item.authorName}</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => handleProfilePress(item)}
+          >
+            <Text style={[styles.commentName, { color: colors.text }]}>
+              {item.authorName}
+            </Text>
           </TouchableOpacity>
-          <Text style={[styles.commentText, { color: colors.textSecondary }]}>{item.text}</Text>
-          
+          <Text style={[styles.commentText, { color: colors.textSecondary }]}>
+            {item.text}
+          </Text>
+
           <View style={styles.commentActions}>
-            <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>{item.timeAgo}</Text>
-            
+            <Text
+              style={[styles.actionMutedText, { color: colors.textSecondary }]}
+            >
+              {item.timeAgo}
+            </Text>
+
             <TouchableOpacity onPress={() => toggleCommentLike(item.id)}>
-              <Text style={[
-                item.isLiked ? styles.actionPurpleText : styles.actionMutedText, 
-                { color: item.isLiked ? colors.primary : colors.textSecondary }
-              ]}>
-                {item.likesCount > 0 ? `${formattedLikes} ` : ''}Like
+              <Text
+                style={[
+                  item.isLiked
+                    ? styles.actionPurpleText
+                    : styles.actionMutedText,
+                  {
+                    color: item.isLiked ? colors.primary : colors.textSecondary,
+                  },
+                ]}
+              >
+                {item.likesCount > 0 ? `${formattedLikes} ` : ""}Like
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => handleReplyPress(item.id, item.authorName)}>
-              <Text style={[styles.actionMutedText, { color: colors.textSecondary }]}>Reply</Text>
+            <TouchableOpacity
+              onPress={() => handleReplyPress(item.id, item.authorName)}
+            >
+              <Text
+                style={[
+                  styles.actionMutedText,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Reply
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
     );
   };
-
 
   return (
     <Modal
@@ -403,152 +574,258 @@ export default function CommentsModal({
           gap that exposes the activity tab bar underneath. */}
       <View style={styles.modalOverlay}>
         {/* Clickable background to dismiss */}
-        <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
+        <TouchableOpacity
+          style={styles.backgroundDismiss}
+          onPress={onClose}
+          activeOpacity={1}
+        />
 
-        {/* Comment Heading Outside Container */}
-        <View style={styles.headerLabelContainer}>
-          <Text style={[styles.headerLabel, { color: colors.textSecondary }]}>Comment</Text>
-        </View>
-
-        <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
-          {/* Top Indicator */}
-          <View style={styles.grabberContainer}>
-            <View style={[styles.grabber, { backgroundColor: colors.border }]} />
+        <Animated.View
+          style={[styles.sheetWrapper, { transform: [{ translateY }] }]}
+        >
+          {/* Comment Heading Outside Container */}
+          <View style={styles.headerLabelContainer}>
+            <Text style={[styles.headerLabel, { color: colors.textSecondary }]}>
+              Comment
+            </Text>
           </View>
-
-          {/* Content area: paddingBottom shifts the scrollview + input above the
-              keyboard. The modalContainer itself stays at fixed 85% height so its
-              opaque background always covers the tab bar — we never change the
-              panel's height, only the internal content padding. */}
-          <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
-
-          {/* Stats Header */}
-          <View style={styles.statsHeader}>
-            <View style={styles.statsLeft}>
-              <Ionicons name="heart" size={16} color="#F2245C" />
-              <Text style={[styles.statsText, { color: colors.textSecondary }]}>{likesCount}</Text>
-            </View>
-            <Text style={[styles.statsShares, { color: colors.textSecondary }]}>{sharesCount} shares</Text>
-          </View>
-
-          {/* Comments List */}
-          <ScrollView
-            style={styles.scrollList}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="always"
-          >
-            {isLoadingComments ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color={colors.primary} />
-              </View>
-            ) : comments.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No comments yet</Text>
-            ) : (
-              comments.map((comment) => (
-                <View key={comment.id}>
-                  {renderComment(comment)}
-                  {comment.viewMoreReplies ? (
-                    <View style={styles.viewMoreRow}>
-                      <View style={[styles.viewMoreLine, { borderColor: colors.border }]} />
-                      <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>
-                        View {comment.viewMoreReplies} replies
-                      </Text>
-                    </View>
-                  ) : null}
-                  {comment.replies && comment.replies.length > 0 ? (
-                    <View style={styles.repliesContainer}>
-                      {comment.replies.map((reply, index, arr) =>
-                        renderComment(reply, true, index === arr.length - 1)
-                      )}
-                    </View>
-                  ) : null}
-                </View>
-              ))
-            )}
-            <View style={{ height: 20 }} />
-          </ScrollView>
 
           <View
-            style={[
-              styles.inputSection,
-              {
-                backgroundColor: colors.card,
-                borderTopColor: colors.border,
-                paddingBottom: Platform.OS === 'android' ? insets.bottom + 12 : 12,
-              },
-            ]}
+            style={[styles.modalContainer, { backgroundColor: colors.card }]}
           >
-            {replyingTo && (
-              <View style={[styles.replyContextBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}>
-                <Text style={[styles.replyContextText, { color: colors.textSecondary }]}>
-                  Replying to <Text style={{ color: colors.primary, fontWeight: 'bold' }}>@{replyingTo.name}</Text>
-                </Text>
-                <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                  <Feather name="x" size={14} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            )}
-            <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-              <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <TextInput
-                  ref={inputRef}
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder={replyingTo ? `Reply to ${replyingTo.name}...` : "Add Comment"}
-                  placeholderTextColor={colors.textSecondary}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  onFocus={() => {
-                    isInputFocusedRef.current = true;
-                  }}
-                  onBlur={() => {
-                    isInputFocusedRef.current = false;
-                    // On Android the Dialog-level keyboard dismiss consumes the
-                    // first tap before onPress reaches JS. If the send button
-                    // was touched (flag set in onTouchStart below), send now.
-                    if (Platform.OS === 'android' && sendBtnPressedRef.current) {
-                      sendBtnPressedRef.current = false;
-                      handleSendComment();
-                    }
-                  }}
-                />
-              </View>
-              {/* View wrapper captures onTouchStart at the native level — fires
-                  before Android's Dialog dismisses the keyboard and before
-                  TextInput.onBlur, so the ref is set when onBlur checks it. */}
+            {/* Top Indicator */}
+            <View
+              {...dragResponder.panHandlers}
+              style={styles.grabberContainer}
+            >
               <View
-                onTouchStart={() => {
-                  if (Platform.OS === 'android' && isInputFocusedRef.current) {
-                    sendBtnPressedRef.current = true;
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (Platform.OS === 'android') {
-                    // Delay reset so onBlur can read the flag first
-                    setTimeout(() => { sendBtnPressedRef.current = false; }, 500);
-                  }
-                }}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.sendBtn,
-                    { backgroundColor: buttonBackground(colors) },
-                    (!commentText.trim() || !canUseCommentsApi || isSendingComment) && styles.sendBtnDisabled,
-                  ]}
-                  activeOpacity={0.8}
-                  disabled={!commentText.trim() || !canUseCommentsApi || isSendingComment}
-                  onPress={handleSendComment}
+                style={[styles.grabber, { backgroundColor: colors.border }]}
+              />
+              <View style={styles.statsHeader}>
+                <View style={styles.statsLeft}>
+                  <Ionicons name="heart" size={16} color="#F2245C" />
+                  <Text
+                    style={[styles.statsText, { color: colors.textSecondary }]}
+                  >
+                    {likesCount}
+                  </Text>
+                </View>
+                <Text
+                  style={[styles.statsShares, { color: colors.textSecondary }]}
                 >
-                  {isSendingComment ? (
-                    <ActivityIndicator size="small" color={buttonForeground(colors)} />
-                  ) : (
-                    <Feather name="send" size={18} color={buttonForeground(colors)} />
-                  )}
-                </TouchableOpacity>
+                  {sharesCount} shares
+                </Text>
+              </View>
+            </View>
+
+            {/* Content area: paddingBottom shifts the scrollview + input above the
+                keyboard. The modalContainer itself stays at fixed 85% height so its
+                opaque background always covers the tab bar — we never change the
+                panel's height, only the internal content padding. */}
+            <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
+              {/* Stats Header */}
+
+              {/* Comments List */}
+              <ScrollView
+                style={styles.scrollList}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+              >
+                {isLoadingComments ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator color={colors.primary} />
+                  </View>
+                ) : comments.length === 0 ? (
+                  <Text
+                    style={[styles.emptyText, { color: colors.textSecondary }]}
+                  >
+                    No comments yet
+                  </Text>
+                ) : (
+                  comments.map((comment) => (
+                    <View key={comment.id}>
+                      {renderComment(comment)}
+                      {comment.viewMoreReplies ? (
+                        <View style={styles.viewMoreRow}>
+                          <View
+                            style={[
+                              styles.viewMoreLine,
+                              { borderColor: colors.border },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.viewMoreText,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
+                            View {comment.viewMoreReplies} replies
+                          </Text>
+                        </View>
+                      ) : null}
+                      {comment.replies && comment.replies.length > 0 ? (
+                        <View style={styles.repliesContainer}>
+                          {comment.replies.map((reply, index, arr) =>
+                            renderComment(
+                              reply,
+                              true,
+                              index === arr.length - 1,
+                            ),
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  ))
+                )}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+
+              <View
+                style={[
+                  styles.inputSection,
+                  {
+                    backgroundColor: colors.card,
+                    borderTopColor: colors.border,
+                    paddingBottom:
+                      Platform.OS === "android" ? insets.bottom + 12 : 12,
+                  },
+                ]}
+              >
+                {replyingTo && (
+                  <View
+                    style={[
+                      styles.replyContextBar,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.05)"
+                          : "rgba(0,0,0,0.03)",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.replyContextText,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      Replying to{" "}
+                      <Text
+                        style={{ color: colors.primary, fontWeight: "bold" }}
+                      >
+                        @{replyingTo.name}
+                      </Text>
+                    </Text>
+                    <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                      <Feather
+                        name="x"
+                        size={14}
+                        color={colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    width: "100%",
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <TextInput
+                      ref={inputRef}
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder={
+                        replyingTo
+                          ? `Reply to ${replyingTo.name}...`
+                          : "Add Comment"
+                      }
+                      placeholderTextColor={colors.textSecondary}
+                      value={commentText}
+                      onChangeText={setCommentText}
+                      onFocus={() => {
+                        isInputFocusedRef.current = true;
+                      }}
+                      onBlur={() => {
+                        isInputFocusedRef.current = false;
+                        // On Android the Dialog-level keyboard dismiss consumes the
+                        // first tap before onPress reaches JS. If the send button
+                        // was touched (flag set in onTouchStart below), send now.
+                        if (
+                          Platform.OS === "android" &&
+                          sendBtnPressedRef.current
+                        ) {
+                          sendBtnPressedRef.current = false;
+                          handleSendComment();
+                        }
+                      }}
+                    />
+                  </View>
+                  {/* View wrapper captures onTouchStart at the native level — fires
+                    before Android's Dialog dismisses the keyboard and before
+                    TextInput.onBlur, so the ref is set when onBlur checks it. */}
+                  <View
+                    onTouchStart={() => {
+                      if (
+                        Platform.OS === "android" &&
+                        isInputFocusedRef.current
+                      ) {
+                        sendBtnPressedRef.current = true;
+                      }
+                    }}
+                    onTouchEnd={() => {
+                      if (Platform.OS === "android") {
+                        // Delay reset so onBlur can read the flag first
+                        setTimeout(() => {
+                          sendBtnPressedRef.current = false;
+                        }, 500);
+                      }
+                    }}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.sendBtn,
+                        { backgroundColor: buttonBackground(colors) },
+                        (!commentText.trim() ||
+                          !canUseCommentsApi ||
+                          isSendingComment) &&
+                          styles.sendBtnDisabled,
+                      ]}
+                      activeOpacity={0.8}
+                      disabled={
+                        !commentText.trim() ||
+                        !canUseCommentsApi ||
+                        isSendingComment
+                      }
+                      onPress={handleSendComment}
+                    >
+                      {isSendingComment ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={buttonForeground(colors)}
+                        />
+                      ) : (
+                        <Feather
+                          name="send"
+                          size={18}
+                          color={buttonForeground(colors)}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
-          </View>{/* flex:1 paddingBottom keyboard wrapper */}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -557,8 +834,8 @@ export default function CommentsModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(58, 58, 58, 0.7)', 
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(58, 58, 58, 0.7)",
   },
   backgroundDismiss: {
     ...StyleSheet.absoluteFillObject,
@@ -569,17 +846,22 @@ const styles = StyleSheet.create({
   },
   headerLabel: {
     fontSize: 16,
-    fontWeight: 'normal',
+    fontWeight: "normal",
+  },
+  sheetWrapper: {
+    width: "100%",
   },
   modalContainer: {
-    height: '85%',
+    height: "90%",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 0,
-    overflow: 'hidden',
+    paddingBottom: Platform.OS === "ios" ? 24 : 0,
+    overflow: "hidden",
   },
   grabberContainer: {
-    alignItems: 'center',
+    // backgroundColor: "red",
+    alignItems: "center",
+    gap: 8,
     paddingTop: 10,
     paddingBottom: 20,
   },
@@ -587,16 +869,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
+    overflow: "hidden",
   },
   statsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    width: "100%",
+    // backgroundColor: "red",
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     marginBottom: 16,
   },
   statsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   statsText: {
     fontSize: 13,
@@ -611,20 +896,20 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     paddingVertical: 30,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 13,
     paddingVertical: 30,
   },
   commentRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 20,
   },
   childCommentRow: {
-    marginLeft: 18, 
-    position: 'relative',
+    marginLeft: 18,
+    position: "relative",
   },
   commentAvatar: {
     width: 36,
@@ -634,16 +919,16 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   commentAvatarFallback: {
-    backgroundColor: '#2B2B36',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#2B2B36",
+    alignItems: "center",
+    justifyContent: "center",
   },
   commentContent: {
     flex: 1,
   },
   commentName: {
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
   },
   commentText: {
@@ -652,20 +937,20 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   commentActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 16,
   },
   actionMutedText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   actionPurpleText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   viewMoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginLeft: 18,
     marginBottom: 20,
   },
@@ -680,13 +965,13 @@ const styles = StyleSheet.create({
   },
   viewMoreText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   repliesContainer: {
-    position: 'relative',
+    position: "relative",
   },
   replyLineVertical: {
-    position: 'absolute',
+    position: "absolute",
     left: -18,
     top: -30, // Connect from previous comment
     bottom: -20, // Continue to next comment
@@ -699,7 +984,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
   },
   replyLineHorizontal: {
-    position: 'absolute',
+    position: "absolute",
     left: -18,
     top: 18, // Center of the 36x36 avatar
     width: 18,
@@ -712,9 +997,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   replyContextBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -738,10 +1023,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendBtnDisabled: {
     opacity: 0.5,
-  }
+  },
 });

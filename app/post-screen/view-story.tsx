@@ -1,21 +1,55 @@
-import { useEventListener } from "expo";
-import { Feather, Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { useVideoPlayer, VideoView, type VideoSource } from "expo-video";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, type AppStateStatus, BackHandler, PanResponder, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { markStoriesSeen } from "@/lib/storySeen";
-import { safeBack } from "@/lib/navigation";
-import { deleteStory, getDiscoverStories, getFriendStories, recordStoryView, shareStoryToFeed, toggleStoryReaction, type Story, type StoryMediaType, type StoryTextBackground, type StoryTextOverlay } from "@/lib/stories";
 import CommentsModal from "@/components/post/CommentsModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import ShareModal from "@/components/post/ShareModal";
 import UserAvatar from "@/components/ui/UserAvatar";
-import { getStoryViewerSession, type StoryViewerTab, type ViewerGroup } from "@/lib/storyViewerSession";
+import { safeBack } from "@/lib/navigation";
+import {
+  deleteStory,
+  getDiscoverStories,
+  getFriendStories,
+  recordStoryView,
+  shareStoryToFeed,
+  toggleStoryReaction,
+  type Story,
+  type StoryMediaType,
+  type StoryTextBackground,
+  type StoryTextOverlay,
+} from "@/lib/stories";
+import { markStoriesSeen } from "@/lib/storySeen";
+import {
+  getStoryViewerSession,
+  type StoryViewerTab,
+  type ViewerGroup,
+} from "@/lib/storyViewerSession";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useEventListener } from "expo";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useVideoPlayer, VideoView, type VideoSource } from "expo-video";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  BackHandler,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type AppStateStatus,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type StorySequenceItem = {
   id: string;
@@ -39,35 +73,63 @@ type StorySequenceItem = {
   authorAvatar?: string | null;
 };
 
-type StoryGroup = { title: string; authorId?: string; authorAvatar?: string | null; stories: StorySequenceItem[] };
+type StoryGroup = {
+  title: string;
+  authorId?: string;
+  authorAvatar?: string | null;
+  stories: StorySequenceItem[];
+};
 
 const LONG_PRESS_DELAY_MS = 160;
 const MIN_AUTO_ADVANCE_VISIBLE_MS = 400;
 
 const formatExpiry = (expiresAt?: string) => {
-  const seconds = Math.max(0, Math.ceil(((expiresAt ? new Date(expiresAt).getTime() : Date.now()) - Date.now()) / 1000));
+  const seconds = Math.max(
+    0,
+    Math.ceil(
+      ((expiresAt ? new Date(expiresAt).getTime() : Date.now()) - Date.now()) /
+        1000,
+    ),
+  );
   if (seconds >= 3600) return `${Math.ceil(seconds / 3600)}h left`;
   if (seconds >= 60) return `${Math.ceil(seconds / 60)}m left`;
   return `${seconds}s left`;
 };
 
-const parseStoryItems = (stories?: string, mediaUri?: string): StorySequenceItem[] => {
+const parseStoryItems = (
+  stories?: string,
+  mediaUri?: string,
+): StorySequenceItem[] => {
   if (stories) {
     try {
       const parsedStories = JSON.parse(stories) as StorySequenceItem[];
 
-      return parsedStories.filter((story) => story.mediaType === "text" || Boolean(story.mediaUri));
+      return parsedStories.filter(
+        (story) => story.mediaType === "text" || Boolean(story.mediaUri),
+      );
     } catch {
       return [];
     }
   }
 
-  return mediaUri ? [{ id: "story", mediaType: "video", mediaUri, contentType: null, durationSeconds: 15 }] : [];
+  return mediaUri
+    ? [
+        {
+          id: "story",
+          mediaType: "video",
+          mediaUri,
+          contentType: null,
+          durationSeconds: 15,
+        },
+      ]
+    : [];
 };
 
 const normalizeGroups = (groups?: ViewerGroup[]): StoryGroup[] =>
   groups
-    ?.filter((group) => Array.isArray(group.stories) && group.stories.length > 0)
+    ?.filter(
+      (group) => Array.isArray(group.stories) && group.stories.length > 0,
+    )
     .map((group) => ({
       title: group.title,
       authorId: group.authorId,
@@ -88,7 +150,8 @@ const groupStoriesByAuthor = (stories: Story[]): StoryGroup[] => {
 
   return Array.from(grouped.entries()).map(([authorId, authorStories]) => {
     const sortedStories = [...authorStories].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
     const latestStory = sortedStories[sortedStories.length - 1];
     const title = latestStory.author?.name ?? "Story";
@@ -125,7 +188,10 @@ const groupStoriesByAuthor = (stories: Story[]): StoryGroup[] => {
 
 const removeStoryFromGroupList = (groups: StoryGroup[], storyId: string) =>
   groups
-    .map((group) => ({ ...group, stories: group.stories.filter((story) => story.id !== storyId) }))
+    .map((group) => ({
+      ...group,
+      stories: group.stories.filter((story) => story.id !== storyId),
+    }))
     .filter((group) => group.stories.length > 0);
 
 const getStoryVideoSource = (mediaUri?: string | null): VideoSource =>
@@ -136,27 +202,54 @@ const getVideoSourceUri = (source: VideoSource) => {
     return source;
   }
 
-  return typeof source === "object" && source && "uri" in source ? source.uri : null;
+  return typeof source === "object" && source && "uri" in source
+    ? source.uri
+    : null;
 };
 
-function StoryBackground({ background, children }: { background?: StoryTextBackground | null; children?: React.ReactNode }) {
-  const colors = background?.colors?.length ? background.colors : ["#37214F", "#111827"];
+function StoryBackground({
+  background,
+  children,
+}: {
+  background?: StoryTextBackground | null;
+  children?: React.ReactNode;
+}) {
+  const colors = background?.colors?.length
+    ? background.colors
+    : ["#37214F", "#111827"];
 
-  if ((background?.type === "gradient" || colors.length > 1) && colors.length >= 2) {
+  if (
+    (background?.type === "gradient" || colors.length > 1) &&
+    colors.length >= 2
+  ) {
     return (
-      <LinearGradient colors={[colors[0], colors[1]]} style={styles.textStoryBackground}>
+      <LinearGradient
+        colors={[colors[0], colors[1]]}
+        style={styles.textStoryBackground}
+      >
         {children}
       </LinearGradient>
     );
   }
 
-  return <View style={[styles.textStoryBackground, { backgroundColor: colors[0] }]}>{children}</View>;
+  return (
+    <View style={[styles.textStoryBackground, { backgroundColor: colors[0] }]}>
+      {children}
+    </View>
+  );
 }
 
 export default function ViewStoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mediaUri, stories, title, storySessionId, groupIndex: groupIndexParam, openedAt: openedAtParam } = useLocalSearchParams<{
+  const {
+    mediaUri,
+    stories,
+    title,
+    storySessionId,
+    groupIndex: groupIndexParam,
+    openedAt: openedAtParam,
+  } = useLocalSearchParams<{
     mediaUri?: string;
     stories?: string;
     title?: string;
@@ -183,7 +276,7 @@ export default function ViewStoryScreen() {
     return parsed;
   }, [mediaUri, openedAt, stories]);
   const fallbackGroups = useMemo<StoryGroup[]>(
-    () => [{ title: title || 'Story', stories: initialStoryItems }],
+    () => [{ title: title || "Story", stories: initialStoryItems }],
     [initialStoryItems, title],
   );
   const sessionData = useMemo(() => {
@@ -192,41 +285,60 @@ export default function ViewStoryScreen() {
     if (Array.isArray(session)) {
       const legacyGroups = normalizeGroups(session);
       return {
-        initialTab: 'discover' as StoryViewerTab,
+        initialTab: "discover" as StoryViewerTab,
         discoverGroups: legacyGroups.length ? legacyGroups : fallbackGroups,
         friendGroups: [] as StoryGroup[],
       };
     }
 
-    const discoverGroups = normalizeGroups(session?.discoverGroups ?? session?.groups);
+    const discoverGroups = normalizeGroups(
+      session?.discoverGroups ?? session?.groups,
+    );
     const friendGroups = normalizeGroups(session?.friendGroups);
 
     return {
-      initialTab: session?.activeTab ?? 'discover' as StoryViewerTab,
+      initialTab: session?.activeTab ?? ("discover" as StoryViewerTab),
       discoverGroups: discoverGroups.length ? discoverGroups : fallbackGroups,
       friendGroups,
     };
   }, [fallbackGroups, storySessionId]);
-  const [activeStoryTab, setActiveStoryTab] = useState<StoryViewerTab>(sessionData.initialTab);
-  const [storyGroupsByTab, setStoryGroupsByTab] = useState<Record<StoryViewerTab, StoryGroup[]>>({
+  const [activeStoryTab, setActiveStoryTab] = useState<StoryViewerTab>(
+    sessionData.initialTab,
+  );
+  const [storyGroupsByTab, setStoryGroupsByTab] = useState<
+    Record<StoryViewerTab, StoryGroup[]>
+  >({
     discover: sessionData.discoverGroups,
     friends: sessionData.friendGroups,
   });
-  const [resolvedStoryTabs, setResolvedStoryTabs] = useState<Record<StoryViewerTab, boolean>>({
+  const [resolvedStoryTabs, setResolvedStoryTabs] = useState<
+    Record<StoryViewerTab, boolean>
+  >({
     discover: false,
     friends: false,
   });
-  const groups = useMemo(() => (
-    storyGroupsByTab[activeStoryTab].length
-      ? storyGroupsByTab[activeStoryTab]
-      : activeStoryTab === 'discover' && !resolvedStoryTabs.discover
-        ? fallbackGroups
-        : []
-  ), [activeStoryTab, fallbackGroups, resolvedStoryTabs.discover, storyGroupsByTab]);
-  const [activeGroupIndex, setActiveGroupIndex] = useState(() => Math.min(Math.max(Number(groupIndexParam) || 0, 0), groups.length - 1));
+  const groups = useMemo(
+    () =>
+      storyGroupsByTab[activeStoryTab].length
+        ? storyGroupsByTab[activeStoryTab]
+        : activeStoryTab === "discover" && !resolvedStoryTabs.discover
+          ? fallbackGroups
+          : [],
+    [
+      activeStoryTab,
+      fallbackGroups,
+      resolvedStoryTabs.discover,
+      storyGroupsByTab,
+    ],
+  );
+  const [activeGroupIndex, setActiveGroupIndex] = useState(() =>
+    Math.min(Math.max(Number(groupIndexParam) || 0, 0), groups.length - 1),
+  );
   const activeGroup = groups[activeGroupIndex] ?? groups[0];
   const storyItems = useMemo(
-    () => activeGroup?.stories ?? (activeStoryTab === 'discover' ? initialStoryItems : []),
+    () =>
+      activeGroup?.stories ??
+      (activeStoryTab === "discover" ? initialStoryItems : []),
     [activeGroup?.stories, activeStoryTab, initialStoryItems],
   );
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -261,7 +373,12 @@ export default function ViewStoryScreen() {
     };
   }, []);
   const [shareVisible, setShareVisible] = useState(false);
-  const [interaction, setInteraction] = useState({ viewsCount: 0, reactionsCount: 0, commentsCount: 0, isReacted: false });
+  const [interaction, setInteraction] = useState({
+    viewsCount: 0,
+    reactionsCount: 0,
+    commentsCount: 0,
+    isReacted: false,
+  });
   const [isReactionSubmitting, setIsReactionSubmitting] = useState(false);
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const advanceLockRef = useRef(false);
@@ -297,7 +414,10 @@ export default function ViewStoryScreen() {
   const isCurrentVideo = currentMediaType === "video";
   const isCurrentImage = currentMediaType === "image";
   const isCurrentText = currentMediaType === "text";
-  const currentDuration = Math.max(0.1, loadedDuration || currentStory?.durationSeconds || 15);
+  const currentDuration = Math.max(
+    0.1,
+    loadedDuration || currentStory?.durationSeconds || 15,
+  );
   const isOverlayOpen = commentsVisible || shareVisible;
 
   useEffect(() => {
@@ -307,7 +427,11 @@ export default function ViewStoryScreen() {
       friends: sessionData.friendGroups,
     });
     setResolvedStoryTabs({ discover: false, friends: false });
-  }, [sessionData.discoverGroups, sessionData.friendGroups, sessionData.initialTab]);
+  }, [
+    sessionData.discoverGroups,
+    sessionData.friendGroups,
+    sessionData.initialTab,
+  ]);
 
   useEffect(() => {
     let isActive = true;
@@ -323,15 +447,18 @@ export default function ViewStoryScreen() {
       }
 
       setStoryGroupsByTab((current) => ({
-        discover: discoverResult.status === "fulfilled"
-          ? groupStoriesByAuthor(discoverResult.value)
-          : current.discover,
-        friends: friendsResult.status === "fulfilled"
-          ? groupStoriesByAuthor(friendsResult.value)
-          : current.friends,
+        discover:
+          discoverResult.status === "fulfilled"
+            ? groupStoriesByAuthor(discoverResult.value)
+            : current.discover,
+        friends:
+          friendsResult.status === "fulfilled"
+            ? groupStoriesByAuthor(friendsResult.value)
+            : current.friends,
       }));
       setResolvedStoryTabs((current) => ({
-        discover: discoverResult.status === "fulfilled" ? true : current.discover,
+        discover:
+          discoverResult.status === "fulfilled" ? true : current.discover,
         friends: friendsResult.status === "fulfilled" ? true : current.friends,
       }));
     };
@@ -394,7 +521,13 @@ export default function ViewStoryScreen() {
       commentsCount: currentStory?.commentsCount ?? 0,
       isReacted: currentStory?.isReacted ?? false,
     });
-  }, [currentStory?.commentsCount, currentStory?.id, currentStory?.isReacted, currentStory?.reactionsCount, currentStory?.viewsCount]);
+  }, [
+    currentStory?.commentsCount,
+    currentStory?.id,
+    currentStory?.isReacted,
+    currentStory?.reactionsCount,
+    currentStory?.viewsCount,
+  ]);
 
   const playerA = useVideoPlayer(null, (player) => {
     player.loop = false;
@@ -427,11 +560,12 @@ export default function ViewStoryScreen() {
     }
   }, [openedAt]);
   const isPlaying = isCurrentVideo ? playerIsPlaying : !isHolding;
-  const isLoadingStory = isCurrentVideo && !loadFailed && (
-    !hasRenderedFirstFrame ||
-    isLoadingCurrentStory ||
-    (playerStatus === "loading" && !isPlaying)
-  );
+  const isLoadingStory =
+    isCurrentVideo &&
+    !loadFailed &&
+    (!hasRenderedFirstFrame ||
+      isLoadingCurrentStory ||
+      (playerStatus === "loading" && !isPlaying));
   const currentTime = Math.min(progressTime, currentDuration);
 
   useEffect(() => {
@@ -452,7 +586,7 @@ export default function ViewStoryScreen() {
         setActiveGroupIndex((index) => index + 1);
         return;
       }
-      safeBack(router, '/(tabs)/home');
+      safeBack(router, "/(tabs)/home");
       return;
     }
 
@@ -471,7 +605,14 @@ export default function ViewStoryScreen() {
     setProgressTime(0);
     setLoadedDuration(null);
     setCurrentIndex(nextIndex);
-  }, [activeGroupIndex, activePlayerSlot, currentIndex, groups.length, router, storyItems]);
+  }, [
+    activeGroupIndex,
+    activePlayerSlot,
+    currentIndex,
+    groups.length,
+    router,
+    storyItems,
+  ]);
 
   const goToPreviousStory = useCallback(() => {
     if (advanceLockRef.current) {
@@ -500,7 +641,10 @@ export default function ViewStoryScreen() {
     if (activeGroupIndex > 0) {
       advanceLockRef.current = true;
       const previousGroup = groups[activeGroupIndex - 1];
-      pendingStoryIndexRef.current = Math.max((previousGroup?.stories.length ?? 1) - 1, 0);
+      pendingStoryIndexRef.current = Math.max(
+        (previousGroup?.stories.length ?? 1) - 1,
+        0,
+      );
       setProgressTime(0);
       setLoadedDuration(null);
       setActiveGroupIndex((index) => Math.max(0, index - 1));
@@ -514,10 +658,20 @@ export default function ViewStoryScreen() {
     } catch {
       player.pause();
     }
-  }, [activeGroupIndex, activePlayerSlot, currentIndex, groups, player, storyItems]);
+  }, [
+    activeGroupIndex,
+    activePlayerSlot,
+    currentIndex,
+    groups,
+    player,
+    storyItems,
+  ]);
 
   useEffect(() => {
-    if (currentStory?.id && playbackTimingRef.current.storyId === currentStory.id) {
+    if (
+      currentStory?.id &&
+      playbackTimingRef.current.storyId === currentStory.id
+    ) {
       return;
     }
 
@@ -606,7 +760,8 @@ export default function ViewStoryScreen() {
       return;
     }
 
-    void player.replaceAsync(getStoryVideoSource(currentStory.mediaUri))
+    void player
+      .replaceAsync(getStoryVideoSource(currentStory.mediaUri))
       .then(() => {
         if (loadRequestIdRef.current !== loadRequestId) {
           return;
@@ -614,7 +769,8 @@ export default function ViewStoryScreen() {
 
         player.currentTime = 0;
         player.muted = false;
-        preloadedUriRef.current[activePlayerSlot] = currentStory.mediaUri ?? null;
+        preloadedUriRef.current[activePlayerSlot] =
+          currentStory.mediaUri ?? null;
         setProgressTime(0);
         visibleStartedAtRef.current = Date.now();
         sourceReadyRef.current = true;
@@ -633,7 +789,15 @@ export default function ViewStoryScreen() {
           setIsLoadingCurrentStory(false);
         }
       });
-  }, [activePlayerSlot, currentStory, currentStory?.id, currentStory?.mediaUri, isCurrentVideo, openedAt, player]);
+  }, [
+    activePlayerSlot,
+    currentStory,
+    currentStory?.id,
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    openedAt,
+    player,
+  ]);
 
   useEffect(() => {
     if (!nextStory?.mediaUri) return;
@@ -659,7 +823,8 @@ export default function ViewStoryScreen() {
       return;
     }
 
-    void preloadPlayer.replaceAsync(getStoryVideoSource(nextStory.mediaUri))
+    void preloadPlayer
+      .replaceAsync(getStoryVideoSource(nextStory.mediaUri))
       .then(() => {
         if (preloadRequestRef.current !== requestId) return;
         preloadedUriRef.current[preloadSlot] = nextStory.mediaUri ?? null;
@@ -675,10 +840,23 @@ export default function ViewStoryScreen() {
           preloadedUriRef.current[preloadSlot] = null;
         }
       });
-  }, [activePlayerSlot, nextStory, nextStory?.id, nextStory?.mediaUri, playerA, playerB]);
+  }, [
+    activePlayerSlot,
+    nextStory,
+    nextStory?.id,
+    nextStory?.mediaUri,
+    playerA,
+    playerB,
+  ]);
 
   useEffect(() => {
-    if (!currentStory || isCurrentVideo || isHolding || loadFailed || !sourceReady) {
+    if (
+      !currentStory ||
+      isCurrentVideo ||
+      isHolding ||
+      loadFailed ||
+      !sourceReady
+    ) {
       return;
     }
 
@@ -700,16 +878,26 @@ export default function ViewStoryScreen() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [currentDuration, currentStory, goToNextStory, isCurrentVideo, isHolding, loadFailed, sourceReady]);
+  }, [
+    currentDuration,
+    currentStory,
+    goToNextStory,
+    isCurrentVideo,
+    isHolding,
+    loadFailed,
+    sourceReady,
+  ]);
 
   useEffect(() => {
     if (currentStory?.id) {
       void markStoriesSeen([currentStory.id]);
       if (!viewedStoryIdsRef.current.has(currentStory.id)) {
         viewedStoryIdsRef.current.add(currentStory.id);
-        void recordStoryView(currentStory.id).then(setInteraction).catch(() => {
-          viewedStoryIdsRef.current.delete(currentStory.id);
-        });
+        void recordStoryView(currentStory.id)
+          .then(setInteraction)
+          .catch(() => {
+            viewedStoryIdsRef.current.delete(currentStory.id);
+          });
       }
     }
   }, [currentStory?.id]);
@@ -733,7 +921,9 @@ export default function ViewStoryScreen() {
       if (__DEV__) {
         console.log("[StoryPlaybackTiming] video-source-loaded", {
           storyId: timing.storyId,
-          requestToSourceLoadMs: timing.requestStartedAt ? timing.sourceLoadedAt - timing.requestStartedAt : null,
+          requestToSourceLoadMs: timing.requestStartedAt
+            ? timing.sourceLoadedAt - timing.requestStartedAt
+            : null,
           duration,
           sinceOpenMs: timing.sourceLoadedAt - openedAt,
         });
@@ -746,12 +936,17 @@ export default function ViewStoryScreen() {
       return;
     }
 
-    const nextProgress = Math.min(Math.max(nextCurrentTime, 0), currentDuration);
-    setProgressTime((current) => Math.abs(current - nextProgress) >= 0.03 ? nextProgress : current);
+    const nextProgress = Math.min(
+      Math.max(nextCurrentTime, 0),
+      currentDuration,
+    );
+    setProgressTime((current) =>
+      Math.abs(current - nextProgress) >= 0.03 ? nextProgress : current,
+    );
   });
 
   useEventListener(player, "statusChange", ({ status, oldStatus }) => {
-    setPlayerStatus((current) => current === status ? current : status);
+    setPlayerStatus((current) => (current === status ? current : status));
     if (status === "error") {
       setLoadFailed(true);
     }
@@ -760,7 +955,11 @@ export default function ViewStoryScreen() {
 
     if (status === "loading" && oldStatus !== "loading") {
       timing.loadingStartedAt = now;
-    } else if (oldStatus === "loading" && status !== "loading" && timing.loadingStartedAt) {
+    } else if (
+      oldStatus === "loading" &&
+      status !== "loading" &&
+      timing.loadingStartedAt
+    ) {
       timing.bufferingMs += now - timing.loadingStartedAt;
       timing.loadingStartedAt = 0;
     }
@@ -770,13 +969,17 @@ export default function ViewStoryScreen() {
         storyId: timing.storyId,
         oldStatus,
         status,
-        sinceRequestMs: timing.requestStartedAt ? now - timing.requestStartedAt : null,
+        sinceRequestMs: timing.requestStartedAt
+          ? now - timing.requestStartedAt
+          : null,
       });
     }
   });
 
   useEventListener(player, "playingChange", ({ isPlaying }) => {
-    setPlayerIsPlaying((current) => current === isPlaying ? current : isPlaying);
+    setPlayerIsPlaying((current) =>
+      current === isPlaying ? current : isPlaying,
+    );
     if (isPlaying) {
       setHasRenderedFirstFrame(true);
       setIsLoadingCurrentStory(false);
@@ -787,7 +990,9 @@ export default function ViewStoryScreen() {
       if (__DEV__) {
         console.log("[StoryPlaybackTiming] video-playing", {
           storyId: timing.storyId,
-          requestToPlayingMs: timing.requestStartedAt ? timing.playingAt - timing.requestStartedAt : null,
+          requestToPlayingMs: timing.requestStartedAt
+            ? timing.playingAt - timing.requestStartedAt
+            : null,
           sinceOpenMs: timing.playingAt - openedAt,
         });
       }
@@ -816,10 +1021,21 @@ export default function ViewStoryScreen() {
     } catch {
       player.pause();
     }
-  }, [currentStory?.mediaUri, isCurrentVideo, isLoadingStory, loadFailed, player, playerStatus, sourceReady]);
+  }, [
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    isLoadingStory,
+    loadFailed,
+    player,
+    playerStatus,
+    sourceReady,
+  ]);
 
   useEventListener(player, "playToEnd", () => {
-    if (!sourceReadyRef.current || Date.now() - visibleStartedAtRef.current < MIN_AUTO_ADVANCE_VISIBLE_MS) {
+    if (
+      !sourceReadyRef.current ||
+      Date.now() - visibleStartedAtRef.current < MIN_AUTO_ADVANCE_VISIBLE_MS
+    ) {
       return;
     }
 
@@ -853,7 +1069,10 @@ export default function ViewStoryScreen() {
           const elapsedSeconds = visibleStartedAtRef.current
             ? (Date.now() - visibleStartedAtRef.current) / 1000
             : progressTimeRef.current;
-          const frozenProgress = Math.min(currentDuration, Math.max(progressTimeRef.current, elapsedSeconds));
+          const frozenProgress = Math.min(
+            currentDuration,
+            Math.max(progressTimeRef.current, elapsedSeconds),
+          );
 
           progressTimeRef.current = frozenProgress;
           setProgressTime(frozenProgress);
@@ -864,7 +1083,12 @@ export default function ViewStoryScreen() {
 
       if (previousState !== "active" && nextState === "active") {
         if (isCurrentVideo) {
-          if (resumeAfterAppStateRef.current && currentStory?.mediaUri && !isLoadingStory && !loadFailed) {
+          if (
+            resumeAfterAppStateRef.current &&
+            currentStory?.mediaUri &&
+            !isLoadingStory &&
+            !loadFailed
+          ) {
             try {
               player.play();
             } catch {
@@ -876,14 +1100,27 @@ export default function ViewStoryScreen() {
         }
 
         if (currentStory && sourceReady && !loadFailed) {
-          visibleStartedAtRef.current = Date.now() - progressTimeRef.current * 1000;
+          visibleStartedAtRef.current =
+            Date.now() - progressTimeRef.current * 1000;
           setIsHolding(false);
         }
       }
     });
 
     return () => subscription.remove();
-  }, [currentDuration, currentStory, currentStory?.mediaUri, isCurrentVideo, isHolding, isLoadingStory, isOverlayOpen, isPlaying, loadFailed, player, sourceReady]);
+  }, [
+    currentDuration,
+    currentStory,
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    isHolding,
+    isLoadingStory,
+    isOverlayOpen,
+    isPlaying,
+    loadFailed,
+    player,
+    sourceReady,
+  ]);
 
   const freezeImagePlaybackProgress = useCallback(() => {
     if (isCurrentVideo || !currentStory || !sourceReady || loadFailed) {
@@ -893,7 +1130,10 @@ export default function ViewStoryScreen() {
     const elapsedSeconds = visibleStartedAtRef.current
       ? (Date.now() - visibleStartedAtRef.current) / 1000
       : progressTimeRef.current;
-    const frozenProgress = Math.min(currentDuration, Math.max(progressTimeRef.current, elapsedSeconds));
+    const frozenProgress = Math.min(
+      currentDuration,
+      Math.max(progressTimeRef.current, elapsedSeconds),
+    );
 
     progressTimeRef.current = frozenProgress;
     setProgressTime(frozenProgress);
@@ -933,10 +1173,23 @@ export default function ViewStoryScreen() {
       playbackIntentRef.current = true;
       player.play();
     }
-  }, [currentStory?.mediaUri, freezeImagePlaybackProgress, isCurrentVideo, isLoadingStory, isPlaying, player, resumeImagePlaybackProgress, triggerFeedback]);
+  }, [
+    currentStory?.mediaUri,
+    freezeImagePlaybackProgress,
+    isCurrentVideo,
+    isLoadingStory,
+    isPlaying,
+    player,
+    resumeImagePlaybackProgress,
+    triggerFeedback,
+  ]);
 
   const pauseForHold = useCallback(() => {
-    if (holdActivatedRef.current || isLoadingStory || (!currentStory?.mediaUri && isCurrentVideo)) {
+    if (
+      holdActivatedRef.current ||
+      isLoadingStory ||
+      (!currentStory?.mediaUri && isCurrentVideo)
+    ) {
       return;
     }
 
@@ -949,7 +1202,14 @@ export default function ViewStoryScreen() {
     if (isCurrentVideo && isPlaying) {
       player.pause();
     }
-  }, [currentStory?.mediaUri, freezeImagePlaybackProgress, isCurrentVideo, isLoadingStory, isPlaying, player]);
+  }, [
+    currentStory?.mediaUri,
+    freezeImagePlaybackProgress,
+    isCurrentVideo,
+    isLoadingStory,
+    isPlaying,
+    player,
+  ]);
 
   const resumeFromHold = useCallback(() => {
     if (!holdActivatedRef.current) {
@@ -963,12 +1223,23 @@ export default function ViewStoryScreen() {
       resumeImagePlaybackProgress();
     }
 
-    if (resumeAfterHoldRef.current && currentStory?.mediaUri && !isLoadingStory && isCurrentVideo) {
+    if (
+      resumeAfterHoldRef.current &&
+      currentStory?.mediaUri &&
+      !isLoadingStory &&
+      isCurrentVideo
+    ) {
       player.play();
     }
 
     resumeAfterHoldRef.current = false;
-  }, [currentStory?.mediaUri, isCurrentVideo, isLoadingStory, player, resumeImagePlaybackProgress]);
+  }, [
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    isLoadingStory,
+    player,
+    resumeImagePlaybackProgress,
+  ]);
 
   const renderTextOverlay = (overlay?: StoryTextOverlay | null) => {
     if (!overlay?.text) {
@@ -983,7 +1254,11 @@ export default function ViewStoryScreen() {
           {
             left: `${overlay.x * 100}%`,
             top: `${overlay.y * 100}%`,
-            transform: [{ translateX: -140 }, { translateY: -30 }, { scale: overlay.scale }],
+            transform: [
+              { translateX: -140 },
+              { translateY: -30 },
+              { scale: overlay.scale },
+            ],
           },
         ]}
       >
@@ -1020,7 +1295,10 @@ export default function ViewStoryScreen() {
     setInteraction({
       ...previous,
       isReacted: !previous.isReacted,
-      reactionsCount: Math.max(0, previous.reactionsCount + (previous.isReacted ? -1 : 1)),
+      reactionsCount: Math.max(
+        0,
+        previous.reactionsCount + (previous.isReacted ? -1 : 1),
+      ),
     });
     void toggleStoryReaction(currentStory.id)
       .then(setInteraction)
@@ -1028,38 +1306,57 @@ export default function ViewStoryScreen() {
       .finally(() => setIsReactionSubmitting(false));
   };
 
-  const openOverlay = useCallback((kind: 'comments' | 'share') => {
-    resumeAfterOverlayRef.current = isCurrentVideo ? isPlaying : !isHolding;
-    if (!isCurrentVideo) freezeImagePlaybackProgress();
-    setIsHolding(true);
-    if (isCurrentVideo) player.pause();
-    if (kind === 'comments') setCommentsVisible(true);
-    else setShareVisible(true);
-  }, [freezeImagePlaybackProgress, isCurrentVideo, isHolding, isPlaying, player]);
+  const openOverlay = useCallback(
+    (kind: "comments" | "share") => {
+      resumeAfterOverlayRef.current = isCurrentVideo ? isPlaying : !isHolding;
+      if (!isCurrentVideo) freezeImagePlaybackProgress();
+      setIsHolding(true);
+      if (isCurrentVideo) player.pause();
+      if (kind === "comments") setCommentsVisible(true);
+      else setShareVisible(true);
+    },
+    [freezeImagePlaybackProgress, isCurrentVideo, isHolding, isPlaying, player],
+  );
 
   const closeOverlays = useCallback(() => {
     setCommentsVisible(false);
     setShareVisible(false);
     setIsHolding(!resumeAfterOverlayRef.current);
-    if (resumeAfterOverlayRef.current && !isCurrentVideo) resumeImagePlaybackProgress();
-    if (resumeAfterOverlayRef.current && isCurrentVideo && currentStory?.mediaUri && !loadFailed) player.play();
+    if (resumeAfterOverlayRef.current && !isCurrentVideo)
+      resumeImagePlaybackProgress();
+    if (
+      resumeAfterOverlayRef.current &&
+      isCurrentVideo &&
+      currentStory?.mediaUri &&
+      !loadFailed
+    )
+      player.play();
     resumeAfterOverlayRef.current = false;
-  }, [currentStory?.mediaUri, isCurrentVideo, loadFailed, player, resumeImagePlaybackProgress]);
+  }, [
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    loadFailed,
+    player,
+    resumeImagePlaybackProgress,
+  ]);
 
   useEffect(() => {
     if (Platform.OS !== "android") {
       return;
     }
 
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (commentsVisible || shareVisible) {
-        closeOverlays();
-        return true;
-      }
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (commentsVisible || shareVisible) {
+          closeOverlays();
+          return true;
+        }
 
-      router.replace("/(tabs)/home");
-      return true;
-    });
+        router.replace("/(tabs)/home");
+        return true;
+      },
+    );
 
     return () => subscription.remove();
   }, [closeOverlays, commentsVisible, router, shareVisible]);
@@ -1073,76 +1370,107 @@ export default function ViewStoryScreen() {
 
   const handleMenu = () => {
     if (!currentStory?.isOwner) {
-      Alert.alert('Story', 'Only the story owner can delete this story.');
+      Alert.alert("Story", "Only the story owner can delete this story.");
       return;
     }
     const storyId = currentStory.id;
-    Alert.alert('Story options', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete story', style: 'destructive', onPress: () => void deleteStory(storyId)
-        .then(() => {
-          setStoryGroupsByTab((current) => ({
-            discover: removeStoryFromGroupList(current.discover, storyId),
-            friends: removeStoryFromGroupList(current.friends, storyId),
-          }));
-          setResolvedStoryTabs({ discover: true, friends: true });
-          const currentGroupStoryCount = storyItems.length;
-          if (currentGroupStoryCount <= 1 && groups.length <= 1) {
-            safeBack(router, '/(tabs)/home');
-            return;
-          }
-          setCurrentIndex((index) => Math.max(0, Math.min(index, currentGroupStoryCount - 2)));
-        })
-        .catch(() => Alert.alert('Unable to delete story', 'Please try again.')) },
+    Alert.alert("Story options", undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete story",
+        style: "destructive",
+        onPress: () =>
+          void deleteStory(storyId)
+            .then(() => {
+              setStoryGroupsByTab((current) => ({
+                discover: removeStoryFromGroupList(current.discover, storyId),
+                friends: removeStoryFromGroupList(current.friends, storyId),
+              }));
+              setResolvedStoryTabs({ discover: true, friends: true });
+              const currentGroupStoryCount = storyItems.length;
+              if (currentGroupStoryCount <= 1 && groups.length <= 1) {
+                safeBack(router, "/(tabs)/home");
+                return;
+              }
+              setCurrentIndex((index) =>
+                Math.max(0, Math.min(index, currentGroupStoryCount - 2)),
+              );
+            })
+            .catch(() =>
+              Alert.alert("Unable to delete story", "Please try again."),
+            ),
+      },
     ]);
   };
 
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_event, gesture) => {
-      if (isOverlayOpen) return false;
-      const absDx = Math.abs(gesture.dx);
-      const absDy = Math.abs(gesture.dy);
-      return (absDy > 18 && absDy > absDx * 1.15) || (absDx > 24 && absDx > absDy * 1.15);
-    },
-    onMoveShouldSetPanResponderCapture: (_event, gesture) => {
-      if (isOverlayOpen) return false;
-      const absDx = Math.abs(gesture.dx);
-      const absDy = Math.abs(gesture.dy);
-      return (absDy > 18 && absDy > absDx * 1.15) || (absDx > 24 && absDx > absDy * 1.15);
-    },
-    onPanResponderRelease: (_event, gesture) => {
-      const absDx = Math.abs(gesture.dx);
-      const absDy = Math.abs(gesture.dy);
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_event, gesture) => {
+          if (isOverlayOpen) return false;
+          const absDx = Math.abs(gesture.dx);
+          const absDy = Math.abs(gesture.dy);
+          return (
+            (absDy > 18 && absDy > absDx * 1.15) ||
+            (absDx > 24 && absDx > absDy * 1.15)
+          );
+        },
+        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+          if (isOverlayOpen) return false;
+          const absDx = Math.abs(gesture.dx);
+          const absDy = Math.abs(gesture.dy);
+          return (
+            (absDy > 18 && absDy > absDx * 1.15) ||
+            (absDx > 24 && absDx > absDy * 1.15)
+          );
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const absDx = Math.abs(gesture.dx);
+          const absDy = Math.abs(gesture.dy);
 
-      if ((gesture.dy < -56 || gesture.vy < -0.45) && absDy > absDx) {
-        if (activeGroupIndex < groups.length - 1 && !advanceLockRef.current) {
-          advanceLockRef.current = true;
-          pendingStoryIndexRef.current = 0;
-          setCurrentIndex(0);
-          setProgressTime(0);
-          setLoadedDuration(null);
-          setIsHolding(false);
-          setActiveGroupIndex((index) => Math.min(index + 1, groups.length - 1));
-        }
-        return;
-      }
+          if ((gesture.dy < -56 || gesture.vy < -0.45) && absDy > absDx) {
+            if (
+              activeGroupIndex < groups.length - 1 &&
+              !advanceLockRef.current
+            ) {
+              advanceLockRef.current = true;
+              pendingStoryIndexRef.current = 0;
+              setCurrentIndex(0);
+              setProgressTime(0);
+              setLoadedDuration(null);
+              setIsHolding(false);
+              setActiveGroupIndex((index) =>
+                Math.min(index + 1, groups.length - 1),
+              );
+            }
+            return;
+          }
 
-      if ((gesture.dy > 80 || gesture.vy > 0.6) && absDy > absDx) {
-        safeBack(router, '/(tabs)/home');
-        return;
-      }
+          if ((gesture.dy > 80 || gesture.vy > 0.6) && absDy > absDx) {
+            safeBack(router, "/(tabs)/home");
+            return;
+          }
 
-      if ((gesture.dx < -60 || gesture.vx < -0.45) && absDx > absDy) {
-        goToNextStory();
-        return;
-      }
+          if ((gesture.dx < -60 || gesture.vx < -0.45) && absDx > absDy) {
+            goToNextStory();
+            return;
+          }
 
-      if ((gesture.dx > 60 || gesture.vx > 0.45) && absDx > absDy) {
-        goToPreviousStory();
-      }
-    },
-  }), [activeGroupIndex, goToNextStory, goToPreviousStory, groups.length, isOverlayOpen, router]);
+          if ((gesture.dx > 60 || gesture.vx > 0.45) && absDx > absDy) {
+            goToPreviousStory();
+          }
+        },
+      }),
+    [
+      activeGroupIndex,
+      goToNextStory,
+      goToPreviousStory,
+      groups.length,
+      isOverlayOpen,
+      router,
+    ],
+  );
 
   return (
     <View style={styles.container}>
@@ -1164,8 +1492,12 @@ export default function ViewStoryScreen() {
             if (__DEV__) {
               console.log("[StoryPlaybackTiming] first-frame", {
                 storyId: timing.storyId,
-                requestToFirstFrameMs: timing.requestStartedAt ? timing.firstFrameAt - timing.requestStartedAt : null,
-                sourceLoadToFirstFrameMs: timing.sourceLoadedAt ? timing.firstFrameAt - timing.sourceLoadedAt : null,
+                requestToFirstFrameMs: timing.requestStartedAt
+                  ? timing.firstFrameAt - timing.requestStartedAt
+                  : null,
+                sourceLoadToFirstFrameMs: timing.sourceLoadedAt
+                  ? timing.firstFrameAt - timing.sourceLoadedAt
+                  : null,
                 bufferingMs: timing.bufferingMs,
                 storyOpenToFirstFrameMs: timing.firstFrameAt - openedAt,
               });
@@ -1181,13 +1513,25 @@ export default function ViewStoryScreen() {
           transition={100}
           cachePolicy="memory-disk"
           onLoadStart={() => {
-            if (__DEV__) console.log("[StoryPlaybackTiming] image-request-start", { storyId: currentStory.id, sinceOpenMs: Date.now() - openedAt });
+            if (__DEV__)
+              console.log("[StoryPlaybackTiming] image-request-start", {
+                storyId: currentStory.id,
+                sinceOpenMs: Date.now() - openedAt,
+              });
           }}
           onLoad={() => {
-            if (__DEV__) console.log("[StoryPlaybackTiming] image-loaded", { storyId: currentStory.id, sinceOpenMs: Date.now() - openedAt });
+            if (__DEV__)
+              console.log("[StoryPlaybackTiming] image-loaded", {
+                storyId: currentStory.id,
+                sinceOpenMs: Date.now() - openedAt,
+              });
           }}
           onDisplay={() => {
-            if (__DEV__) console.log("[StoryPlaybackTiming] image-displayed", { storyId: currentStory.id, sinceOpenMs: Date.now() - openedAt });
+            if (__DEV__)
+              console.log("[StoryPlaybackTiming] image-displayed", {
+                storyId: currentStory.id,
+                sinceOpenMs: Date.now() - openedAt,
+              });
           }}
         />
       ) : isCurrentText && currentStory && !loadFailed ? (
@@ -1238,7 +1582,7 @@ export default function ViewStoryScreen() {
           style={[
             styles.centerPlayButton,
             isLoadingStory && styles.centerPlayButtonDisabled,
-            { opacity: showFeedback ? 1 : 0 }
+            { opacity: showFeedback ? 1 : 0 },
           ]}
           hitSlop={{ top: 100, bottom: 100, left: 80, right: 80 }}
           delayLongPress={LONG_PRESS_DELAY_MS}
@@ -1248,18 +1592,30 @@ export default function ViewStoryScreen() {
           disabled={isLoadingStory}
           accessibilityLabel={isPlaying ? "Pause story" : "Play story"}
         >
-          <Ionicons name={isPlaying ? "pause" : "play"} size={24} color="#FFFFFF" style={!isPlaying ? styles.playIcon : undefined} />
+          <Ionicons
+            name={isPlaying ? "pause" : "play"}
+            size={24}
+            color="#FFFFFF"
+            style={!isPlaying ? styles.playIcon : undefined}
+          />
         </Pressable>
       )}
 
-      <View style={[styles.topControls, { paddingTop: insets.top + 12 }]} pointerEvents="box-none">
+      <View
+        style={[styles.topControls, { paddingTop: insets.top + 12 }]}
+        pointerEvents="box-none"
+      >
         <View style={styles.topControlRow}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => safeBack(router, '/(tabs)/home')} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => safeBack(router, "/(tabs)/home")}
+            activeOpacity={0.8}
+          >
             <Feather name="chevron-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.viewerTabs}>
-            {(['discover', 'friends'] as StoryViewerTab[]).map((tab) => {
+            {(["discover", "friends"] as StoryViewerTab[]).map((tab) => {
               const isActive = activeStoryTab === tab;
 
               return (
@@ -1269,8 +1625,13 @@ export default function ViewStoryScreen() {
                   onPress={() => handleStoryTabPress(tab)}
                   activeOpacity={0.82}
                 >
-                  <Text style={[styles.viewerTabText, isActive && styles.viewerTabTextActive]}>
-                    {tab === 'discover' ? 'Discover' : 'Friends'}
+                  <Text
+                    style={[
+                      styles.viewerTabText,
+                      isActive && styles.viewerTabTextActive,
+                    ]}
+                  >
+                    {tab === "discover" ? "Discover" : "Friends"}
                   </Text>
                 </TouchableOpacity>
               );
@@ -1292,8 +1653,8 @@ export default function ViewStoryScreen() {
             viewsCount={interaction.viewsCount}
             isLiked={interaction.isReacted}
             onLikePress={handleReactionPress}
-            onCommentPress={() => openOverlay('comments')}
-            onSharePress={() => openOverlay('share')}
+            onCommentPress={() => openOverlay("comments")}
+            onSharePress={() => openOverlay("share")}
             likeDisabled={!currentStory || isReactionSubmitting}
             commentDisabled={!currentStory}
             shareDisabled={!currentStory || isShareSubmitting}
@@ -1305,45 +1666,79 @@ export default function ViewStoryScreen() {
       )}
 
       {!loadFailed && !!currentStory && (
-        <View style={[styles.footer, { bottom: Math.max(insets.bottom + 16, 24) }]}>
+        <View
+          style={[styles.footer, { bottom: Math.max(insets.bottom + 16, 24) }]}
+        >
           <View style={styles.footerAuthorRow}>
-            <UserAvatar uri={currentStory?.authorAvatar ?? activeGroup?.authorAvatar} name={currentStory?.authorName ?? activeGroup?.title} size={38} />
+            <UserAvatar
+              uri={currentStory?.authorAvatar ?? activeGroup?.authorAvatar}
+              name={currentStory?.authorName ?? activeGroup?.title}
+              size={38}
+            />
             <View style={styles.authorBlock}>
               <View style={styles.authorRow}>
-                <Text style={styles.title} numberOfLines={1}>{currentStory?.authorName ?? activeGroup?.title ?? title ?? "Story"}</Text>
+                <Text style={styles.title} numberOfLines={1}>
+                  {currentStory?.authorName ??
+                    activeGroup?.title ??
+                    title ??
+                    "Story"}
+                </Text>
                 <Text style={styles.followingPill}>Following</Text>
                 {currentStory?.isOwner ? (
-                  <TouchableOpacity onPress={handleMenu} style={styles.moreBtn} accessibilityLabel="Story options">
+                  <TouchableOpacity
+                    onPress={handleMenu}
+                    style={styles.moreBtn}
+                    accessibilityLabel="Story options"
+                  >
                     <Feather name="more-horizontal" size={21} color="#FFFFFF" />
                   </TouchableOpacity>
                 ) : null}
               </View>
-              <Text style={styles.metaText}>{formatExpiry(currentStory?.expiresAt)}</Text>
+              <Text style={styles.metaText}>
+                {formatExpiry(currentStory?.expiresAt)}
+              </Text>
             </View>
           </View>
           {currentStory?.caption ? (
-            <Text style={styles.captionText} numberOfLines={2}>{currentStory.caption}</Text>
+            <Text style={styles.captionText} numberOfLines={2}>
+              {currentStory.caption}
+            </Text>
           ) : null}
           <View style={styles.captionMetaRow}>
-            {currentStory?.caption ? <Text style={styles.captionMoreText}>see more</Text> : <View />}
-            {activeGroupIndex < groups.length - 1 ? <Text style={styles.swipeHint}>Swipe up</Text> : null}
+            {currentStory?.caption ? (
+              <Text style={styles.captionMoreText}>see more</Text>
+            ) : (
+              <View />
+            )}
+            {activeGroupIndex < groups.length - 1 ? (
+              <Text style={styles.swipeHint}>Swipe up</Text>
+            ) : null}
           </View>
           <View style={styles.progressFooterRow}>
             <View style={styles.progressSegments}>
               {storyItems.map((story, index) => {
                 const progress =
-                  index < currentIndex ? 1 :
-                    index > currentIndex ? 0 :
-                      currentTime / currentDuration;
+                  index < currentIndex
+                    ? 1
+                    : index > currentIndex
+                      ? 0
+                      : currentTime / currentDuration;
 
                 return (
                   <View key={story.id} style={styles.segmentTrack}>
-                    <View style={[styles.segmentFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
+                    <View
+                      style={[
+                        styles.segmentFill,
+                        { width: `${Math.min(progress, 1) * 100}%` },
+                      ]}
+                    />
                   </View>
                 );
               })}
             </View>
-            <Text style={styles.durationText}>{Math.ceil(Math.max(currentDuration - currentTime, 0))}s</Text>
+            <Text style={styles.durationText}>
+              {Math.ceil(Math.max(currentDuration - currentTime, 0))}s
+            </Text>
           </View>
         </View>
       )}
@@ -1360,7 +1755,11 @@ export default function ViewStoryScreen() {
       <ShareModal
         visible={shareVisible}
         onClose={closeOverlays}
-        shareUrl={currentStory ? `https://mooment.app/stories/${currentStory.id}` : undefined}
+        shareUrl={
+          currentStory
+            ? `https://mooment.app/stories/${currentStory.id}`
+            : undefined
+        }
         onRepost={async (payload) => {
           if (!currentStory) return;
           setIsShareSubmitting(true);
@@ -1527,9 +1926,19 @@ const styles = StyleSheet.create({
     maxWidth: 150,
   },
   authorBlock: { flex: 1 },
-  authorRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-  moreBtn: { alignItems: 'center', height: 30, justifyContent: 'center', width: 34 },
-  metaText: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '600', marginTop: 1 },
+  authorRow: { alignItems: "center", flexDirection: "row", gap: 6 },
+  moreBtn: {
+    alignItems: "center",
+    height: 30,
+    justifyContent: "center",
+    width: 34,
+  },
+  metaText: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 1,
+  },
   followingPill: {
     backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 9,
@@ -1577,7 +1986,12 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  swipeHint: { color: 'rgba(255,255,255,0.78)', fontSize: 10, fontWeight: '700', textAlign: 'right' },
+  swipeHint: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "right",
+  },
   captionText: {
     color: "#FFFFFF",
     fontSize: 14,
