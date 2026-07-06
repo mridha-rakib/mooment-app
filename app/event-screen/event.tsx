@@ -182,13 +182,13 @@ const formatPrice = (tickets: EventResponse["tickets"]) => {
 };
 
 const getTicketsLeft = (tickets: EventResponse["tickets"]) =>
-  tickets.reduce((total, ticket) => total + Math.max(0, ticket.capacity), 0);
+  tickets.reduce((total, ticket) => total + Math.max(0, ticket.availableCount ?? ticket.capacity), 0);
 
 const getTicketKey = (ticket: EventTicketPayload, index: number) =>
   ticket.id ?? `${ticket.name}-${index}`;
 
 const clampTicketQuantity = (quantity: number, ticket: EventTicketPayload) =>
-  Math.min(Math.max(1, quantity), Math.min(2, Math.max(1, ticket.capacity)));
+  Math.min(Math.max(1, quantity), Math.min(2, Math.max(1, ticket.availableCount ?? ticket.capacity)));
 
 const getTicketSalesEndDate = (ticket?: EventTicketPayload | null) => {
   if (!ticket?.salesEndAt) {
@@ -603,7 +603,7 @@ const EventScreen = () => {
 
     const currentTicket = (event?.tickets ?? []).find((ticket, index) => getTicketKey(ticket, index) === selectedTicketKey);
 
-    if (!currentTicket || currentTicket.capacity <= 0) {
+    if (!currentTicket || (currentTicket.availableCount ?? currentTicket.capacity) <= 0) {
       setSelectedTicketKey(null);
       setSelectedTicketQuantity(1);
       return;
@@ -889,7 +889,7 @@ const EventScreen = () => {
   };
 
   const handleSelectTicket = (ticket: EventTicketPayload, ticketKey: string) => {
-    if (ticket.capacity <= 0) {
+    if ((ticket.availableCount ?? ticket.capacity) <= 0) {
       return;
     }
 
@@ -922,7 +922,7 @@ const EventScreen = () => {
     ticketKey: string,
     quantity: number,
   ) => {
-    if (ticket.capacity <= 0 || isTicketSalesEnded(ticket)) {
+    if ((ticket.availableCount ?? ticket.capacity) <= 0 || isTicketSalesEnded(ticket)) {
       return;
     }
 

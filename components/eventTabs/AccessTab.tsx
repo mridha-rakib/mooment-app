@@ -116,6 +116,9 @@ const getTicketDescriptionPreview = (value?: string | null) => {
 const getTicketKey = (ticket: EventTicketPayload, index: number) =>
   ticket.id ?? `${ticket.name}-${index}`;
 
+const getTicketAvailability = (ticket: EventTicketPayload) =>
+  Math.max(0, ticket.availableCount ?? ticket.capacity);
+
 const getTicketSalesEndDate = (ticket: EventTicketPayload) => {
   if (!ticket.salesEndAt) {
     return null;
@@ -213,7 +216,7 @@ const AccessTab = ({
   };
 
   const totalTicketsLeft = useMemo(
-    () => tickets.reduce((total, ticket) => total + Math.max(0, ticket.capacity), 0),
+    () => tickets.reduce((total, ticket) => total + getTicketAvailability(ticket), 0),
     [tickets],
   );
 
@@ -292,7 +295,7 @@ const AccessTab = ({
                   ? { color: "#E83030" }
                   : { color: "#FFFFFF" }
             ]}>
-              {isSalesEnded ? "Sales ended" : isLimitReached ? "Limit reached" : isSoldOut ? "Sold Out" : `${ticket.capacity} left`}
+              {isSalesEnded ? "Sales ended" : isLimitReached ? "Limit reached" : isSoldOut ? "Sold Out" : `${getTicketAvailability(ticket)} left`}
             </Text>
           </View>
         </View>
@@ -464,12 +467,13 @@ const AccessTab = ({
             const ticketId = ticket.id ?? ticketKey;
             const isSelected = selectedTicketKey === ticketKey;
             const isFreeTicket = ticket.type === "free" || ticket.price <= 0;
-            const isSoldOut = ticket.capacity <= 0;
+            const availableCount = getTicketAvailability(ticket);
+            const isSoldOut = availableCount <= 0;
             const isSalesEnded = isTicketSalesEnded(ticket, currentTimeMs);
             const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
             const remainingAllowed = Math.max(0, 2 - alreadyPurchased);
             const isLimitReached = !isSoldOut && alreadyPurchased >= 2;
-            const maxQuantity = Math.min(remainingAllowed, Math.max(0, ticket.capacity));
+            const maxQuantity = Math.min(remainingAllowed, availableCount);
             const isUnavailable = isSoldOut || isLimitReached;
             const quantity = isSelected ? Math.min(Math.max(1, selectedTicketQuantity), maxQuantity || 1) : 0;
 
@@ -747,7 +751,7 @@ const AccessTab = ({
                   <View style={styles.creatorTicketStatAvailable}>
                     <Feather name="check-circle" size={12} color="#1D9E75" />
                     <Text style={styles.creatorTicketStatAvailableValue}>
-                      {statsLoaded ? (stat?.available ?? ticket.capacity) : "—"}
+                      {statsLoaded ? (stat?.available ?? getTicketAvailability(ticket)) : "—"}
                     </Text>
                     <Text style={styles.creatorTicketStatAvailableLabel}>available</Text>
                   </View>

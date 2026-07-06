@@ -292,7 +292,7 @@ const TicketDetailScreen = () => {
 
   const availableLabel = isHostMode && ticketStat
     ? `${ticketStat.available} left`
-    : `${ticket?.capacity ?? 0} left`;
+    : `${Math.max(0, ticket?.availableCount ?? ticket?.capacity ?? 0)} left`;
 
   const details = [
     { label: "Ticket", value: ticket?.name ?? "Ticket unavailable" },
