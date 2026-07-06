@@ -39,20 +39,16 @@ type MenuItemProps = {
   label: string;
   onPress: () => void;
   isDestructive?: boolean;
-  hideSeparator?: boolean;
   colors: any;
 };
 
-const MenuItem = ({ icon, label, onPress, isDestructive, hideSeparator, colors }: MenuItemProps) => (
-  <>
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.menuItemLeft}>
-        <HugeiconsIcon icon={icon} size={20} color={isDestructive ? colors.danger || '#FF4B4B' : colors.text} />
-        <Text style={[styles.menuItemLabel, { color: colors.text }, isDestructive && { color: colors.danger || '#FF4B4B' }]}>{label}</Text>
-      </View>
-    </TouchableOpacity>
-    {!hideSeparator && <View style={[styles.itemSeparator, { backgroundColor: colors.border }]} />}
-  </>
+const MenuItem = ({ icon, label, onPress, isDestructive, colors }: MenuItemProps) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
+    <View style={styles.menuItemLeft}>
+      <HugeiconsIcon icon={icon} size={20} color={isDestructive ? colors.danger || '#FF4B4B' : colors.text} />
+      <Text style={[styles.menuItemLabel, { color: colors.text }, isDestructive && { color: colors.danger || '#FF4B4B' }]}>{label}</Text>
+    </View>
+  </TouchableOpacity>
 );
 
 const SectionLabel = ({ label, colors }: { label: string, colors: any }) => (
@@ -155,7 +151,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                   onReady: () => router.push('/profile-screen/creator-dashboard'),
                 });
               }}
-              hideSeparator
             />
             {/* 
             <MenuItem
@@ -166,7 +161,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/product/cart');
               }}
-              hideSeparator
             />
             */}
 
@@ -178,7 +172,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/wallet');
               }}
-              hideSeparator
             />
             <MenuItem
               icon={Ticket01Icon}
@@ -188,7 +181,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 void (isTicketShortcutVisible ? hideTicketShortcut() : restoreTicketShortcut()).catch(() => undefined);
               }}
-              hideSeparator
             />
             {/* Product Wallet is temporarily hidden */}
             {/* 
@@ -200,7 +192,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/event-screen/product/wallet');
               }}
-              hideSeparator
             />
             */}
 
@@ -216,7 +207,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/profile-screen/inventory');
               }}
-              hideSeparator
             />
             */}
 
@@ -228,7 +218,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
                 onClose();
                 router.push('/profile-screen/settings');
               }}
-              hideSeparator
             />
             <MenuItem
               icon={Logout01Icon}
@@ -236,7 +225,6 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
               colors={colors}
               onPress={handleLogout}
               isDestructive
-              hideSeparator
             />
           </ScrollView>
         </SafeAreaView>
@@ -307,9 +295,5 @@ const styles = StyleSheet.create({
   menuItemLabel: {
     fontSize: 14,
     fontWeight: '500',
-  },
-  itemSeparator: {
-    height: 1,
-    marginLeft: 37,
   },
 });

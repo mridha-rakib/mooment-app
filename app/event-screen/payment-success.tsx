@@ -25,17 +25,6 @@ const parsePositiveInteger = (value: string | string[] | undefined, fallback = 0
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const computeTicketNo = (orderId?: string, createdAt?: string): string | null => {
-  if (!orderId || !createdAt) return null;
-  try {
-    const year = new Date(createdAt).getFullYear();
-    if (Number.isNaN(year)) return null;
-    return `MOM-${year}-${orderId.slice(-4).toUpperCase()}`;
-  } catch {
-    return null;
-  }
-};
-
 const formatAmount = (amount?: string, currency?: string, isFree?: string): string => {
   if (isFree === "true") return "Free";
   const parsed = Number.parseFloat(amount ?? "");
@@ -74,6 +63,7 @@ const PaymentSuccessScreen = () => {
     paidQuantity?: string;
     freeQuantity?: string;
     totalQuantity?: string;
+    ticketPasses?: string;
   }>();
 
   const [showConfetti, setShowConfetti] = useState(false);
@@ -96,9 +86,31 @@ const PaymentSuccessScreen = () => {
   const totalQuantity = parsePositiveInteger(params.totalQuantity, paidQuantity + freeQuantity);
   const quantity = String(totalQuantity);
   const isFree = getParam(params.isFree, "");
-  const ticketNo = useMemo(
-    () => computeTicketNo(orderId, params.createdAt ? getParam(params.createdAt, "") : undefined),
-    [orderId, params.createdAt],
+  const ticketPasses = useMemo(() => {
+    try {
+      const parsed = JSON.parse(getParam(params.ticketPasses, "[]")) as Array<{
+        eventId: string;
+        ticketId: string;
+        ticketIndex: number;
+        checkInCode: string;
+      }>;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [params.ticketPasses]);
+  const ticketNo = ticketPasses[0]?.checkInCode ?? null;
+  const walletTicketPasses = useMemo(
+    () => ticketPasses.map((pass) => ({
+      orderId,
+      ticketNo: pass.checkInCode,
+      ticketIndex: pass.ticketIndex,
+      qrCode: pass.checkInCode,
+      status: "active" as const,
+      usedAt: null,
+      currentShare: null,
+    })),
+    [orderId, ticketPasses],
   );
   const formattedAmount = useMemo(
     () => formatAmount(params.amount, params.currency, isFree),
@@ -143,6 +155,7 @@ const PaymentSuccessScreen = () => {
         totalQuantity: String(totalQuantity),
         amount: getParam(params.amount, "0"),
         currency: getParam(params.currency, "usd"),
+        ticketPasses: JSON.stringify(walletTicketPasses),
       },
     });
   };
