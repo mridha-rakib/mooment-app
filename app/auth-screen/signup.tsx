@@ -1,6 +1,9 @@
+import { Spinner } from "@/components/ui/spinner";
+import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
-import { Building03Icon, UserIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react-native";
+// import { Building03Icon, UserIcon } from "@hugeicons/core-free-icons";
+// import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
@@ -8,25 +11,23 @@ import {
   Modal,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useTheme } from "@/hooks/useTheme";
-import { useAuthStore } from "@/stores/authStore";
-import { Spinner } from "@/components/ui/spinner";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
-type AccountType = "personal" | "business";
+// type AccountType = "personal" | "business";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const normalizeUsername = (value: string) => value.trim().replace(/^@+/, "").toLowerCase();
+const normalizeUsername = (value: string) =>
+  value.trim().replace(/^@+/, "").toLowerCase();
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 const getSignUpValidationError = ({
@@ -65,7 +66,7 @@ const getSignUpValidationError = ({
 
 export default function SignUp() {
   const scrollViewRef = useRef<ScrollView>(null);
-  const [accountType, setAccountType] = useState<AccountType>("personal");
+  // const [accountType, setAccountType] = useState<AccountType>("personal");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -113,11 +114,11 @@ export default function SignUp() {
         username: normalizedUsername,
         email: normalizedEmail,
         password,
-        accountType,
+        accountType: "business",
       });
 
       router.push({
-        pathname: '/auth-screen/verify-email',
+        pathname: "/auth-screen/verify-email",
         params: { email: pendingEmail },
       } as any);
     } catch {
@@ -126,10 +127,12 @@ export default function SignUp() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <KeyboardAvoidingView 
-        style={[styles.container, { backgroundColor: colors.background }]} 
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: colors.background }]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
@@ -141,41 +144,75 @@ export default function SignUp() {
           contentContainerStyle={styles.content}
         >
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Set up your username, and password to successfully sign up to the system</Text>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Create Account
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Set up your username, and password to successfully sign up to the
+              system
+            </Text>
           </View>
 
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity 
-              style={[styles.toggleBtn, { backgroundColor: colors.card, borderColor: colors.border }, accountType === "personal" && { borderColor: colors.primary }]}
+          {/* <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[
+                styles.toggleBtn,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                accountType === "personal" && { borderColor: colors.primary },
+              ]}
               onPress={() => setAccountType("personal")}
               activeOpacity={0.8}
             >
-              <HugeiconsIcon 
-                icon={UserIcon} 
-                size={32} 
-                color={accountType === "personal" ? colors.primary : colors.textSecondary} 
+              <HugeiconsIcon
+                icon={UserIcon}
+                size={32}
+                color={
+                  accountType === "personal"
+                    ? colors.primary
+                    : colors.textSecondary
+                }
               />
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.toggleBtn, { backgroundColor: colors.card, borderColor: colors.border }, accountType === "business" && { borderColor: colors.primary }]}
+            <TouchableOpacity
+              style={[
+                styles.toggleBtn,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                accountType === "business" && { borderColor: colors.primary },
+              ]}
               onPress={() => setAccountType("business")}
               activeOpacity={0.8}
             >
-              <HugeiconsIcon 
-                icon={Building03Icon} 
-                size={32} 
-                color={accountType === "business" ? colors.primary : colors.textSecondary} 
+              <HugeiconsIcon
+                icon={Building03Icon}
+                size={32}
+                color={
+                  accountType === "business"
+                    ? colors.primary
+                    : colors.textSecondary
+                }
               />
             </TouchableOpacity>
-          </View>
+          </View> */}
 
-          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="user" size={20} color={colors.textSecondary} style={styles.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Feather
+              name="user"
+              size={20}
+              color={colors.textSecondary}
+              style={styles.icon}
+            />
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              placeholder={accountType === "personal" ? "Fullname" : "Business Name"}
+              // placeholder={
+              //   accountType === "personal" ? "Fullname" : "Business Name"
+              // }
+              placeholder="Fullname"
               placeholderTextColor={colors.textSecondary}
               value={name}
               onChangeText={(value) => {
@@ -187,8 +224,18 @@ export default function SignUp() {
             />
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="at-sign" size={20} color={colors.textSecondary} style={styles.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Feather
+              name="at-sign"
+              size={20}
+              color={colors.textSecondary}
+              style={styles.icon}
+            />
             <TextInput
               style={[styles.input, { color: colors.text }]}
               placeholder="username"
@@ -205,8 +252,18 @@ export default function SignUp() {
             />
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="mail" size={20} color={colors.textSecondary} style={styles.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Feather
+              name="mail"
+              size={20}
+              color={colors.textSecondary}
+              style={styles.icon}
+            />
             <TextInput
               style={[styles.input, { color: colors.text }]}
               placeholder="name@nocturnal.com"
@@ -224,8 +281,18 @@ export default function SignUp() {
             />
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="lock" size={20} color={colors.textSecondary} style={styles.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Feather
+              name="lock"
+              size={20}
+              color={colors.textSecondary}
+              style={styles.icon}
+            />
             <TextInput
               style={[styles.input, { color: colors.text }]}
               placeholder="........"
@@ -241,30 +308,55 @@ export default function SignUp() {
               onFocus={scrollToFormBottom}
               disableFullscreenUI={Platform.OS === "android"}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color={colors.textSecondary} />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeBtn}
+            >
+              <Feather
+                name={showPassword ? "eye" : "eye-off"}
+                size={20}
+                color={colors.textSecondary}
+              />
             </TouchableOpacity>
           </View>
 
           <View style={styles.optionsContainer}>
-            <TouchableOpacity 
-              style={styles.checkboxContainer} 
+            <TouchableOpacity
+              style={styles.checkboxContainer}
               onPress={() => setKeepSignedIn(!keepSignedIn)}
               activeOpacity={0.7}
             >
-              <View style={[styles.checkbox, { backgroundColor: colors.border }, keepSignedIn && { backgroundColor: colors.primary }]}>
-                {keepSignedIn && <Feather name="check" size={12} color={colors.background} />}
+              <View
+                style={[
+                  styles.checkbox,
+                  { backgroundColor: colors.border },
+                  keepSignedIn && { backgroundColor: colors.primary },
+                ]}
+              >
+                {keepSignedIn && (
+                  <Feather name="check" size={12} color={colors.background} />
+                )}
               </View>
-              <Text style={[styles.checkboxText, { color: colors.textSecondary }]}>Keep me signed in</Text>
+              <Text
+                style={[styles.checkboxText, { color: colors.textSecondary }]}
+              >
+                Keep me signed in
+              </Text>
             </TouchableOpacity>
           </View>
 
           {visibleError && (
-            <Text style={[styles.errorText, { color: colors.danger }]}>{visibleError}</Text>
+            <Text style={[styles.errorText, { color: colors.danger }]}>
+              {visibleError}
+            </Text>
           )}
 
-          <TouchableOpacity 
-            style={[styles.signupButton, { backgroundColor: buttonBackground(colors) }, isLoading && styles.signupButtonDisabled]} 
+          <TouchableOpacity
+            style={[
+              styles.signupButton,
+              { backgroundColor: buttonBackground(colors) },
+              isLoading && styles.signupButtonDisabled,
+            ]}
             activeOpacity={0.8}
             onPress={handleSignUp}
             disabled={isLoading}
@@ -272,45 +364,67 @@ export default function SignUp() {
             {isLoading ? (
               <Spinner color={buttonForeground(colors)} />
             ) : (
-              <Text style={[styles.signupButtonText, { color: buttonForeground(colors) }]}>Sign Up</Text>
+              <Text
+                style={[
+                  styles.signupButtonText,
+                  { color: buttonForeground(colors) },
+                ]}
+              >
+                Sign Up
+              </Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={[styles.footerText, { color: colors.textSecondary }]}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/auth-screen/login')}>
-              <Text style={[styles.loginText, { color: colors.primary }]}>Log In</Text>
+            <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+              Already have an account?{" "}
+            </Text>
+            <TouchableOpacity onPress={() => router.push("/auth-screen/login")}>
+              <Text style={[styles.loginText, { color: colors.primary }]}>
+                Log In
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Post-Signup Success Modal */}
-      <Modal
-        visible={showSuccessModal}
-        transparent={true}
-        animationType="fade"
-      >
+      <Modal visible={showSuccessModal} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
             <View style={styles.starContainer}>
               <Feather name="star" size={60} color={colors.primary} />
             </View>
-            
-            <Text style={[styles.modalTitle, { color: colors.text }]}>One Last step</Text>
-            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-              We just need a few quick details to personalized your experience and get your account fully ready to go
+
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              One Last step
+            </Text>
+            <Text
+              style={[styles.modalSubtitle, { color: colors.textSecondary }]}
+            >
+              We just need a few quick details to personalized your experience
+              and get your account fully ready to go
             </Text>
 
-            <TouchableOpacity 
-              style={[styles.modalButton, { backgroundColor: buttonBackground(colors) }]}
+            <TouchableOpacity
+              style={[
+                styles.modalButton,
+                { backgroundColor: buttonBackground(colors) },
+              ]}
               activeOpacity={0.8}
               onPress={() => {
                 setShowSuccessModal(false);
-                router.push('/profile-screen/edit-profile');
+                router.push("/profile-screen/edit-profile");
               }}
             >
-              <Text style={[styles.modalButtonText, { color: buttonForeground(colors) }]}>Add My Profile</Text>
+              <Text
+                style={[
+                  styles.modalButtonText,
+                  { color: buttonForeground(colors) },
+                ]}
+              >
+                Add My Profile
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

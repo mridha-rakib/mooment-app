@@ -8,7 +8,7 @@
     "start:clean": "npm run clean:metro && expo start --dev-client --clear --max-workers 1",
     "clean:metro": "node ./scripts/clean-metro-cache.js",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "node ./scripts/run-android.js",
+    "android": "expo run:android",
     "reload": "node ./scripts/reload-android.js",
     "reload:android": "node ./scripts/reload-android.js",
     "ios": "expo run:ios",

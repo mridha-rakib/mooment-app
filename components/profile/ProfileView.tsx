@@ -1,11 +1,26 @@
-import React, { useCallback, useRef, useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, View, StatusBar } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
-import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
-import CommentsModal from "../post/CommentsModal";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import type { EventResponse, ProfileEventGroups } from "@/lib/events";
+import type {
+  MomentInteractionSummary,
+  MomentTimelineItem,
+  RepostPayload,
+} from "@/lib/moments";
+import { createReport } from "@/lib/reports";
+import React, { useCallback, useRef, useState } from "react";
+import {
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import ReportDetailsModal from "../modals/ReportDetailsModal";
 import ReportModal from "../modals/ReportModal";
+import CommentsModal from "../post/CommentsModal";
 import { PostData } from "../post/FeedPost";
 import ShareModal from "../post/ShareModal";
 import AddProductModal from "./AddProductModal";
@@ -15,9 +30,6 @@ import ProfileContent from "./ProfileContent";
 import ProfileHeader, { ProfileStats } from "./ProfileHeader";
 import ProfileMenuDrawer from "./ProfileMenuDrawer";
 import ProfileTabs, { ProfileTabType } from "./ProfileTabs";
-import { getAuthErrorMessage } from "@/lib/authErrors";
-import { createReport } from "@/lib/reports";
-import type { EventResponse, ProfileEventGroups } from "@/lib/events";
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
@@ -28,7 +40,7 @@ export type UserProfileData = {
   avatar?: string | null;
   bio: string;
   stats: ProfileStats;
-  accountType?: 'personal' | 'business';
+  accountType?: "personal" | "business";
   isFollowing?: boolean;
 };
 
@@ -39,7 +51,10 @@ type ProfileViewProps = {
   isOwnProfile?: boolean;
   onRepost?: (post: PostData, payload: RepostPayload) => Promise<void> | void;
   onDeletePost?: (post: PostData) => void;
-  onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
+  onInteractionChange?: (
+    postId: string,
+    summary: MomentInteractionSummary,
+  ) => void;
   onFollowChange?: (isFollowing: boolean) => void;
   onRefresh?: () => Promise<void>;
   profileEvents: ProfileEventGroups;
@@ -62,7 +77,8 @@ export default function ProfileView({
   profileFeedEvents,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState<ProfileTabType>('feed');
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<ProfileTabType>("feed");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -76,8 +92,11 @@ export default function ProfileView({
   }, [onRefresh]);
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
-  const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
-  const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
+  const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(
+    null,
+  );
+  const [selectedCommentPost, setSelectedCommentPost] =
+    useState<PostData | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [addProductVisible, setAddProductVisible] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
@@ -90,7 +109,10 @@ export default function ProfileView({
     if (isOwnProfile) return;
 
     if (!MONGO_OBJECT_ID_PATTERN.test(user.id)) {
-      Alert.alert("Unable to report profile", "This profile cannot be reported right now.");
+      Alert.alert(
+        "Unable to report profile",
+        "This profile cannot be reported right now.",
+      );
       return;
     }
 
@@ -109,33 +131,42 @@ export default function ProfileView({
     setReportReason(null);
   }, [isReportSubmitting]);
 
-  const handleSubmitProfileReport = useCallback(async (details: string) => {
-    if (isReportSubmittingRef.current || !reportReason) {
-      return;
-    }
+  const handleSubmitProfileReport = useCallback(
+    async (details: string) => {
+      if (isReportSubmittingRef.current || !reportReason) {
+        return;
+      }
 
-    isReportSubmittingRef.current = true;
-    setIsReportSubmitting(true);
+      isReportSubmittingRef.current = true;
+      setIsReportSubmitting(true);
 
-    try {
-      await createReport({
-        reportedUserId: user.id,
-        targetType: "user",
-        targetId: user.id,
-        reason: reportReason,
-        details: details.trim() || null,
-      });
-      setReportDetailsVisible(false);
-      setReportReason(null);
-      Alert.alert("Report submitted", "Thanks for letting us know. Our team will review this profile.");
-    } catch (error) {
-      Alert.alert("Unable to submit report", getAuthErrorMessage(error, "Please try again."));
-      throw error;
-    } finally {
-      isReportSubmittingRef.current = false;
-      setIsReportSubmitting(false);
-    }
-  }, [reportReason, user.id]);
+      try {
+        await createReport({
+          reportedUserId: user.id,
+          targetType: "user",
+          targetId: user.id,
+          reason: reportReason,
+          details: details.trim() || null,
+        });
+        setReportDetailsVisible(false);
+        setReportReason(null);
+        Alert.alert(
+          "Report submitted",
+          "Thanks for letting us know. Our team will review this profile.",
+        );
+      } catch (error) {
+        Alert.alert(
+          "Unable to submit report",
+          getAuthErrorMessage(error, "Please try again."),
+        );
+        throw error;
+      } finally {
+        isReportSubmittingRef.current = false;
+        setIsReportSubmitting(false);
+      }
+    },
+    [reportReason, user.id],
+  );
 
   const handleSavePress = useCallback(() => {
     Alert.alert(
@@ -169,7 +200,12 @@ export default function ProfileView({
           onMenuPress={() => setMenuVisible(true)}
           onReport={!isOwnProfile ? handleReportPress : undefined}
           onSave={!isOwnProfile ? handleSavePress : undefined}
-          onEventsPress={() => setActiveTab('events')}
+          onEventsPress={() =>
+            router.push({
+              pathname: "/profile-screen/all-events",
+              params: { userId: user.id },
+            })
+          }
         />
         <ProfileBio
           name={user.name}
@@ -190,11 +226,15 @@ export default function ProfileView({
           }
         />
         {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
-        
-        <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} isOwnProfile={isOwnProfile} />
-        <ProfileContent 
-          activeTab={activeTab} 
-          posts={posts} 
+
+        <ProfileTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isOwnProfile={isOwnProfile}
+        />
+        <ProfileContent
+          activeTab={activeTab}
+          posts={posts}
           reposts={reposts}
           onCommentPress={(post) => {
             setSelectedCommentPost(post);
@@ -207,7 +247,7 @@ export default function ProfileView({
           onDeletePost={onDeletePost}
           onInteractionChange={(postId, summary) => {
             onInteractionChange?.(postId, summary);
-            setSelectedCommentPost((currentPost) => (
+            setSelectedCommentPost((currentPost) =>
               currentPost?.id === postId
                 ? {
                     ...currentPost,
@@ -216,8 +256,8 @@ export default function ProfileView({
                     sharesCount: summary.sharesCount,
                     isLiked: summary.isLiked,
                   }
-                : currentPost
-            ));
+                : currentPost,
+            );
           }}
           isOwnProfile={isOwnProfile}
           profileUserId={user.id}
@@ -228,7 +268,7 @@ export default function ProfileView({
           onProfileEventsChange={onProfileEventsChange}
           profileFeedEvents={profileFeedEvents}
         />
-        
+
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -243,7 +283,7 @@ export default function ProfileView({
         sharesCount={selectedCommentPost?.sharesCount ?? 0}
         onInteractionChange={(summary) => {
           onInteractionChange?.(summary.momentId, summary);
-          setSelectedCommentPost((currentPost) => (
+          setSelectedCommentPost((currentPost) =>
             currentPost?.id === summary.momentId
               ? {
                   ...currentPost,
@@ -252,8 +292,8 @@ export default function ProfileView({
                   sharesCount: summary.sharesCount,
                   isLiked: summary.isLiked,
                 }
-              : currentPost
-          ));
+              : currentPost,
+          );
         }}
       />
       <ShareModal
@@ -268,17 +308,29 @@ export default function ProfileView({
               }
             : undefined
         }
-        shareUrl={selectedSharePost ? `https://mooment.app/moments/${selectedSharePost.id}` : undefined}
-        item={selectedSharePost ? {
-          type: 'post', id: selectedSharePost.id, preview: selectedSharePost.caption,
-          imageUrl: selectedSharePost.mediaItems?.[0]?.uri ?? selectedSharePost.mediaUris?.[0],
-          authorName: selectedSharePost.authorName,
-        } : undefined}
+        shareUrl={
+          selectedSharePost
+            ? `https://mooment.app/moments/${selectedSharePost.id}`
+            : undefined
+        }
+        item={
+          selectedSharePost
+            ? {
+                type: "post",
+                id: selectedSharePost.id,
+                preview: selectedSharePost.caption,
+                imageUrl:
+                  selectedSharePost.mediaItems?.[0]?.uri ??
+                  selectedSharePost.mediaUris?.[0],
+                authorName: selectedSharePost.authorName,
+              }
+            : undefined
+        }
       />
-      
-      <ProfileMenuDrawer 
-        visible={menuVisible} 
-        onClose={() => setMenuVisible(false)} 
+
+      <ProfileMenuDrawer
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
         onAddProductPress={() => {
           setMenuVisible(false);
           setAddProductVisible(true);
@@ -287,9 +339,9 @@ export default function ProfileView({
         userHandle={user.handle}
       />
 
-      <AddProductModal 
-        visible={addProductVisible} 
-        onClose={() => setAddProductVisible(false)} 
+      <AddProductModal
+        visible={addProductVisible}
+        onClose={() => setAddProductVisible(false)}
       />
 
       <ReportModal

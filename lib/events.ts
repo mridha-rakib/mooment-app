@@ -434,6 +434,10 @@ export const getMyEvents = async (): Promise<EventResponse[]> => {
   return getEventsFromResponse(response);
 };
 
+export const getMyCreatedEvents = async (): Promise<EventResponse[]> => {
+  return getMyEvents();
+};
+
 export const getMyDraftEvents = async (): Promise<EventResponse[]> => {
   const response = await api.get("/events/mine/drafts");
   return getEventsFromResponse(response);
@@ -516,6 +520,15 @@ export const getMyTicketWalletEvents = async (): Promise<EventResponse[]> => {
   }
 
   return [...eventById.values()];
+};
+
+export const getMyJoinedEvents = async (): Promise<EventResponse[]> => {
+  try {
+    const response = await api.get("/events/mine/joined");
+    return getEventsFromResponse(response);
+  } catch {
+    return getMyTicketWalletEvents();
+  }
 };
 
 export const getProfileEvents = async (userId: string): Promise<ProfileEventGroups> => {

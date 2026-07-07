@@ -1,11 +1,9 @@
 import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { getUserStories } from "@/lib/stories";
-import { createStoryViewerSession } from "@/lib/storyViewerSession";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 
@@ -22,14 +20,14 @@ export type ProfileStats = {
   following: number;
 };
 
-const BUSINESS_RING_COLOR = '#FFD700';
+const BUSINESS_RING_COLOR = "#FFD700";
 
 type ProfileHeaderProps = {
   userId: string;
   name?: string | null;
   avatar?: string | null;
   stats: ProfileStats;
-  accountType?: 'personal' | 'business';
+  accountType?: "personal" | "business";
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
   onReport?: () => void;
@@ -54,101 +52,15 @@ export default function ProfileHeader({
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showMore, setShowMore] = React.useState(false);
-  const [stories, setStories] = React.useState<any[]>([]);
-  const [isImageModalVisible, setIsImageModalVisible] = React.useState(false);
-
-  React.useEffect(() => {
-    let active = true;
-    if (!userId) return;
-
-    const fetchStories = async () => {
-      try {
-        const list = await getUserStories(userId);
-        if (active) {
-          setStories(list);
-        }
-      } catch {
-        // Fallback to empty list
-      }
-    };
-
-    fetchStories();
-    return () => {
-      active = false;
-    };
-  }, [userId]);
-
-  const handleViewStory = () => {
-    if (stories.length === 0) return;
-
-    const viewerGroup = {
-      title: name || 'Story',
-      authorId: userId,
-      authorAvatar: avatar ?? null,
-      stories: stories.map((story) => ({
-        id: story.id,
-        mediaType: story.mediaType,
-        mediaUri: story.mediaUrl,
-        contentType: story.contentType,
-        durationSeconds: story.durationSeconds || 15,
-        caption: story.caption,
-        textContent: story.textContent,
-        textBackground: story.textBackground,
-        textOverlay: story.textOverlay,
-        createdAt: story.createdAt,
-        expiresAt: story.expiresAt,
-        viewsCount: story.viewsCount,
-        reactionsCount: story.reactionsCount,
-        commentsCount: story.commentsCount,
-        isReacted: story.isReacted,
-        isOwner: story.isOwner,
-        authorId: story.userId,
-        authorName: story.author?.name || name || 'Story',
-        authorAvatar: story.author?.avatarUrl ?? avatar ?? null,
-      })),
-    };
-
-    const sessionId = createStoryViewerSession([viewerGroup]);
-    router.push({
-      pathname: '/post-screen/view-story',
-      params: { storySessionId: sessionId, groupIndex: 0 },
-    } as any);
-  };
-
-  const handleAvatarPress = () => {
-    if (stories.length > 0) {
-      Alert.alert(
-        "Profile Options",
-        "Select an action",
-        [
-          { text: "View Story", onPress: handleViewStory },
-          { text: "View Profile Picture", onPress: () => setIsImageModalVisible(true) },
-          { text: "Cancel", style: "cancel" },
-        ]
-      );
-    } else {
-      setIsImageModalVisible(true);
-    }
-  };
-
-  const hasStories = stories.length > 0;
-  const borderRingColor = hasStories
-    ? '#FF850C' // Active story orange ring!
-    : (accountType === 'business' ? BUSINESS_RING_COLOR : colors.primary);
-
   return (
     <View style={styles.container}>
       {isOwnProfile ? (
         <View style={styles.brandedHeader}>
-          <CinematicButton
-            icon={Menu01Icon}
-            onPress={onMenuPress}
-            size={24}
-          />
+          <CinematicButton icon={Menu01Icon} onPress={onMenuPress} size={24} />
 
           <View pointerEvents="none" style={styles.logoSlot}>
             <Image
-              source={require('@/assets/images/image.png')}
+              source={require("@/assets/images/image.png")}
               style={styles.logoImage}
               resizeMode="contain"
             />
@@ -156,7 +68,7 @@ export default function ProfileHeader({
 
           <CinematicButton
             icon={Search01Icon}
-            onPress={() => router.push('/discover-screen/search')}
+            onPress={() => router.push("/discover-screen/search")}
             size={24}
           />
         </View>
@@ -169,7 +81,11 @@ export default function ProfileHeader({
             activeOpacity={0.8}
             onPress={() => setShowMore(true)}
           >
-            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.glassCircle}>
+            <BlurView
+              intensity={20}
+              tint={isDark ? "dark" : "light"}
+              style={styles.glassCircle}
+            >
               <Feather name="more-horizontal" size={20} color={colors.text} />
             </BlurView>
           </TouchableOpacity>
@@ -187,14 +103,30 @@ export default function ProfileHeader({
       />
 
       <View style={styles.infoRow}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleAvatarPress}
-          style={[styles.avatarBorder, { borderColor: borderRingColor }]}
-          accessibilityLabel={accountType === 'business' ? 'Business account avatar' : 'Personal account avatar'}
+        <View
+          style={[
+            styles.avatarBorder,
+            {
+              borderColor:
+                accountType === "business"
+                  ? BUSINESS_RING_COLOR
+                  : colors.primary,
+            },
+          ]}
+          accessibilityLabel={
+            accountType === "business"
+              ? "Business account avatar"
+              : "Personal account avatar"
+          }
         >
-          <UserAvatar uri={avatar} name={name} size={80} style={styles.avatar} iconSize={36} />
-        </TouchableOpacity>
+          <UserAvatar
+            uri={avatar}
+            name={name}
+            size={80}
+            style={styles.avatar}
+            iconSize={36}
+          />
+        </View>
 
         <View style={styles.statsContainer}>
           <TouchableOpacity
@@ -203,49 +135,89 @@ export default function ProfileHeader({
             disabled={!onEventsPress}
           >
             <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>{stats.events}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Events</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats.events}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Events
+              </Text>
             </View>
           </TouchableOpacity>
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity onPress={() => router.push({
-            pathname: '/profile-screen/reviews',
-            params: { userId },
-          })}>
+          <View
+            style={[styles.statDivider, { backgroundColor: colors.border }]}
+          />
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/profile-screen/reviews",
+                params: { userId },
+              })
+            }
+          >
             <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>{stats.reviews}</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats.reviews}
+              </Text>
               <View style={styles.labelRow}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Reviews</Text>
+                <Text
+                  style={[styles.statLabel, { color: colors.textSecondary }]}
+                >
+                  Reviews
+                </Text>
                 <View style={styles.chevronWrapper}>
                   <ChevronRightIcon />
                 </View>
               </View>
             </View>
           </TouchableOpacity>
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity onPress={() => router.push({
-            pathname: '/profile-screen/followers',
-            params: { userId },
-          })}>
+          <View
+            style={[styles.statDivider, { backgroundColor: colors.border }]}
+          />
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/profile-screen/followers",
+                params: { userId },
+              })
+            }
+          >
             <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>{stats.followers}</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats.followers}
+              </Text>
               <View style={styles.labelRow}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
+                <Text
+                  style={[styles.statLabel, { color: colors.textSecondary }]}
+                >
+                  Followers
+                </Text>
                 <View style={styles.chevronWrapper}>
                   <ChevronRightIcon />
                 </View>
               </View>
             </View>
           </TouchableOpacity>
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity onPress={() => router.push({
-            pathname: '/profile-screen/following',
-            params: { userId },
-          })}>
+          <View
+            style={[styles.statDivider, { backgroundColor: colors.border }]}
+          />
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/profile-screen/following",
+                params: { userId },
+              })
+            }
+          >
             <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>{stats.following}</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats.following}
+              </Text>
               <View style={styles.labelRow}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
+                <Text
+                  style={[styles.statLabel, { color: colors.textSecondary }]}
+                >
+                  Following
+                </Text>
                 <View style={styles.chevronWrapper}>
                   <ChevronRightIcon />
                 </View>
@@ -254,36 +226,6 @@ export default function ProfileHeader({
           </TouchableOpacity>
         </View>
       </View>
-      <Modal
-        visible={isImageModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsImageModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalContainer}
-          activeOpacity={1}
-          onPress={() => setIsImageModalVisible(false)}
-        >
-          {avatar ? (
-            <Image
-              source={{ uri: avatar }}
-              style={styles.fullImage}
-              resizeMode="contain"
-            />
-          ) : (
-            <View style={styles.avatarFallbackLarge}>
-              <Feather name="user" size={80} color="#8E8E9B" />
-            </View>
-          )}
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setIsImageModalVisible(false)}
-          >
-            <Feather name="x" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -294,12 +236,12 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   brandedHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 25,
     paddingHorizontal: 5,
-    position: 'relative',
+    position: "relative",
   },
   iconBtn: {
     width: 44,
@@ -311,8 +253,8 @@ const styles = StyleSheet.create({
   },
   searchInputWrap: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
@@ -322,7 +264,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    height: '100%',
+    height: "100%",
     padding: 0,
   },
   logoImage: {
@@ -331,21 +273,21 @@ const styles = StyleSheet.create({
   },
   logoSlot: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 25,
   },
   glassCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
   backBtnWithShadow: {
     shadowColor: "#000",
@@ -356,8 +298,8 @@ const styles = StyleSheet.create({
   },
   moreBtn: {},
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 15,
   },
   avatarBorder: {
@@ -368,26 +310,26 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   avatar: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 40,
   },
   avatarFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   statsContainer: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   statBox: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 2,
   },
   chevronWrapper: {
@@ -396,7 +338,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   statLabel: {
     fontSize: 11,
@@ -405,35 +347,5 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 24,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullImage: {
-    width: '90%',
-    height: '70%',
-  },
-  avatarFallbackLarge: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#1C1C1E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 40,
-    right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1001,
   },
 });

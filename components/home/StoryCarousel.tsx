@@ -1,16 +1,34 @@
-import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getCachedStoryThumbnail, generateStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSource } from '@/lib/storyThumbnails';
-import type { StoryMediaType, StoryTextBackground, StoryTextOverlay } from '@/lib/stories';
-import UserAvatar from '../ui/UserAvatar';
-import { createStoryViewerSession, type StoryViewerTab } from '@/lib/storyViewerSession';
+import type {
+  StoryMediaType,
+  StoryTextBackground,
+  StoryTextOverlay,
+} from "@/lib/stories";
+import {
+  generateStoryThumbnail,
+  getCachedStoryThumbnail,
+  setCachedStoryThumbnail,
+  type StoryThumbnailSource,
+} from "@/lib/storyThumbnails";
+import {
+  createStoryViewerSession,
+  type StoryViewerTab,
+} from "@/lib/storyViewerSession";
+import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
+import React from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import UserAvatar from "../ui/UserAvatar";
 
 export type StoryData = {
   id: string;
-  type: 'add' | 'live' | 'standard' | 'muted';
+  type: "add" | "live" | "standard" | "muted";
   isOwnStory?: boolean;
   imageUri?: string | null;
   mediaUri?: string | null;
@@ -53,7 +71,7 @@ const getCompactStoryName = (fullName?: string) => {
   const nameParts = fullName?.trim().split(/\s+/).filter(Boolean) ?? [];
 
   if (nameParts.length === 0) {
-    return '';
+    return "";
   }
 
   if (nameParts.length === 1) {
@@ -68,7 +86,7 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
   mediaUri,
   fallbackUri,
   fallbackName,
-  mediaType = 'video',
+  mediaType = "video",
   textBackground,
 }: {
   storyId: string;
@@ -78,12 +96,15 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
   mediaType?: StoryMediaType;
   textBackground?: StoryTextBackground | null;
 }) {
-  const [localThumbnail, setLocalThumbnail] = React.useState<StoryThumbnailSource>(() => getCachedStoryThumbnail(storyId));
+  const [localThumbnail, setLocalThumbnail] =
+    React.useState<StoryThumbnailSource>(() =>
+      getCachedStoryThumbnail(storyId),
+    );
 
   React.useEffect(() => {
     if (localThumbnail) return;
 
-    if (mediaType === 'video' && mediaUri) {
+    if (mediaType === "video" && mediaUri) {
       let isMounted = true;
       generateStoryThumbnail(mediaUri).then((thumb) => {
         if (!isMounted) return;
@@ -98,17 +119,26 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
     }
   }, [storyId, mediaUri, mediaType, localThumbnail]);
 
-  const thumbnailSource = localThumbnail ?? (fallbackUri ? { uri: fallbackUri } : null);
+  const thumbnailSource =
+    localThumbnail ?? (fallbackUri ? { uri: fallbackUri } : null);
 
-  if (mediaType === 'text') {
+  if (mediaType === "text") {
     return (
-      <View style={[styles.storyImage, styles.textThumbnail, { backgroundColor: textBackground?.colors[0] ?? '#37214F' }]}>
-        <Text style={styles.textThumbnailText} numberOfLines={3}>{fallbackName || 'Story'}</Text>
+      <View
+        style={[
+          styles.storyImage,
+          styles.textThumbnail,
+          { backgroundColor: textBackground?.colors[0] ?? "#37214F" },
+        ]}
+      >
+        <Text style={styles.textThumbnailText} numberOfLines={3}>
+          {fallbackName || "Story"}
+        </Text>
       </View>
     );
   }
 
-  if (mediaType === 'image' && mediaUri) {
+  if (mediaType === "image" && mediaUri) {
     return (
       <Image
         source={{ uri: mediaUri }}
@@ -128,53 +158,91 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
     );
   }
 
-  return <UserAvatar uri={null} name={fallbackName} size={70} style={styles.storyImage} />;
+  return (
+    <UserAvatar
+      uri={null}
+      name={fallbackName}
+      size={70}
+      style={styles.storyImage}
+    />
+  );
 });
 
-function StoryCarousel({ stories, friendStories = [] }: { stories: StoryData[]; friendStories?: StoryData[] }) {
+function StoryCarousel({
+  stories,
+  friendStories = [],
+}: {
+  stories: StoryData[];
+  friendStories?: StoryData[];
+}) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = React.useState<StoryViewerTab>('discover');
-  const displayedStories = activeTab === 'discover' ? stories : friendStories;
-  const getGroups = React.useCallback((items: StoryData[]) => items
-    .filter((story) => story.type !== 'add' && story.storyItems?.length)
-    .map((group) => ({
-      title: group.title ?? group.authorName ?? 'Story',
-      authorId: group.authorId,
-      authorAvatar: group.authorAvatar ?? group.imageUri,
-      stories: group.storyItems ?? [],
-    })), []);
-  const groups = displayedStories.filter((story) => story.type !== 'add' && story.storyItems?.length);
+  const [activeTab, setActiveTab] = React.useState<StoryViewerTab>("discover");
+  const displayedStories = activeTab === "discover" ? stories : friendStories;
+  const getGroups = React.useCallback(
+    (items: StoryData[]) =>
+      items
+        .filter((story) => story.type !== "add" && story.storyItems?.length)
+        .map((group) => ({
+          title: group.title ?? group.authorName ?? "Story",
+          authorId: group.authorId,
+          authorAvatar: group.authorAvatar ?? group.imageUri,
+          stories: group.storyItems ?? [],
+        })),
+    [],
+  );
+  const groups = displayedStories.filter(
+    (story) => story.type !== "add" && story.storyItems?.length,
+  );
 
   return (
     <View style={styles.storiesContainer}>
       <View style={styles.tabs}>
-        {(['discover', 'friends'] as const).map((tab) => (
-          <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.activeTab]} onPress={() => setActiveTab(tab)}>
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab === 'discover' ? 'Discover' : 'Friends'}</Text>
+        {(["discover", "friends"] as const).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.activeTab]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.activeTabText,
+              ]}
+            >
+              {tab === "discover" ? "Discover" : "Friends"}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storiesScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.storiesScroll}
+      >
         {displayedStories.map((story) => {
-          if (story.type === 'add') {
+          if (story.type === "add") {
             return (
               <TouchableOpacity
                 key={story.id}
                 style={styles.addStoryBtn}
                 activeOpacity={0.8}
-                onPress={() => router.push('/post-screen/add-story')}
+                onPress={() => router.push("/post-screen/add-story")}
               >
                 <Feather name="plus" size={24} color="#bcbccaff" />
               </TouchableOpacity>
             );
           }
 
-          const ringStyle =
-            story.seen ? styles.storyRingSeen :
-              story.type === 'live' ? styles.storyRingLive :
-                story.type === 'standard' ? styles.storyRingStandard :
-                  styles.storyRingMuted;
-          const compactStoryName = getCompactStoryName(story.title ?? story.authorName);
+          const ringStyle = story.seen
+            ? styles.storyRingSeen
+            : story.type === "live"
+              ? styles.storyRingLive
+              : story.type === "standard"
+                ? styles.storyRingStandard
+                : styles.storyRingMuted;
+          const compactStoryName = getCompactStoryName(
+            story.title ?? story.authorName,
+          );
 
           return (
             <TouchableOpacity
@@ -182,21 +250,27 @@ function StoryCarousel({ stories, friendStories = [] }: { stories: StoryData[]; 
               style={styles.storyItem}
               activeOpacity={0.8}
               onPress={() => {
-                if (story.storyItems?.length || story.mediaUri || story.mediaType === 'text') {
-                  const storyItems = story.storyItems ?? (
-                    story.mediaUri || story.mediaType === 'text'
-                      ? [{
-                          id: story.id,
-                          mediaType: story.mediaType ?? 'video',
-                          mediaUri: story.mediaUri,
-                          contentType: null,
-                          durationSeconds: 15,
-                          textContent: story.textContent,
-                          textBackground: story.textBackground,
-                          textOverlay: story.textOverlay,
-                        }]
-                      : []
-                  );
+                if (
+                  story.storyItems?.length ||
+                  story.mediaUri ||
+                  story.mediaType === "text"
+                ) {
+                  const storyItems =
+                    story.storyItems ??
+                    (story.mediaUri || story.mediaType === "text"
+                      ? [
+                          {
+                            id: story.id,
+                            mediaType: story.mediaType ?? "video",
+                            mediaUri: story.mediaUri,
+                            contentType: null,
+                            durationSeconds: 15,
+                            textContent: story.textContent,
+                            textBackground: story.textBackground,
+                            textOverlay: story.textOverlay,
+                          },
+                        ]
+                      : []);
                   const sessionId = createStoryViewerSession({
                     activeTab,
                     discoverGroups: getGroups(stories),
@@ -204,19 +278,24 @@ function StoryCarousel({ stories, friendStories = [] }: { stories: StoryData[]; 
                   });
 
                   router.push({
-                    pathname: '/post-screen/view-story',
+                    pathname: "/post-screen/view-story",
                     params: {
                       stories: JSON.stringify(storyItems),
-                      title: story.title ?? story.authorName ?? 'Story',
+                      title: story.title ?? story.authorName ?? "Story",
                       openedAt: String(Date.now()),
                       storySessionId: sessionId,
-                      groupIndex: String(Math.max(0, groups.findIndex((group) => group.id === story.id))),
+                      groupIndex: String(
+                        Math.max(
+                          0,
+                          groups.findIndex((group) => group.id === story.id),
+                        ),
+                      ),
                     },
                   });
                   return;
                 }
 
-                router.push('/live-screen/live-video');
+                router.push("/live-screen/live-video");
               }}
             >
               <View style={[styles.storyRing, ringStyle]}>
@@ -229,16 +308,18 @@ function StoryCarousel({ stories, friendStories = [] }: { stories: StoryData[]; 
                   textBackground={story.textBackground}
                 />
 
-                {story.type === 'live' && (
+                {story.type === "live" && (
                   <View style={styles.liveBadge}>
                     <View style={styles.liveDot} />
                     <Text style={styles.liveText}>Live</Text>
                   </View>
                 )}
 
-                {story.type === 'standard' && compactStoryName && (
+                {story.type === "standard" && compactStoryName && (
                   <View style={styles.storyOverlayTextContainer}>
-                    <Text style={styles.storyOverlayText} numberOfLines={2}>{compactStoryName}</Text>
+                    <Text style={styles.storyOverlayText} numberOfLines={2}>
+                      {compactStoryName}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -300,11 +381,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0e0d12",
   },
-  tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, marginBottom: 12 },
-  tab: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: '#23232D' },
-  activeTab: { backgroundColor: '#42B0D5' },
-  tabText: { color: '#9B9BA8', fontSize: 12, fontWeight: '700' },
-  activeTabText: { color: '#FFFFFF' },
+  tabs: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: "#23232D",
+  },
+  activeTab: { backgroundColor: "#42B0D5" },
+  tabText: { color: "#9B9BA8", fontSize: 12, fontWeight: "700" },
+  activeTabText: { color: "#FFFFFF" },
   textThumbnail: {
     alignItems: "center",
     justifyContent: "center",
@@ -349,7 +440,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "bold",
     textAlign: "center",
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
