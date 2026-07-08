@@ -21,10 +21,17 @@ import CinematicButton from "@/components/ui/CinematicButton";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { getMyTicketWallet, type TicketWalletItem } from "@/lib/payments";
+import {
+  emitTicketWalletChanged,
+  getActiveTicketWalletCount,
+  getMyTicketWallet,
+  isTicketWalletItemExpired,
+  type TicketWalletItem,
+} from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 
 type WalletTab = "Shared" | "Active" | "Used" | "Canceled";
+type WalletSubFilter = "Active" | "Expired";
 
 type WalletSection = {
   title: string;
@@ -34,6 +41,7 @@ type WalletSection = {
 const DEFAULT_EVENT_IMAGE =
   "https://images.unsplash.com/photo-1514525253361-bee8a187499b?q=80&w=400&auto=format&fit=crop";
 const WALLET_TABS: WalletTab[] = ["Shared", "Active", "Used", "Canceled"];
+const WALLET_SUB_FILTERS: WalletSubFilter[] = ["Active", "Expired"];
 
 function resolveStorageUrl(key?: string | null): string;
 function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
@@ -151,11 +159,16 @@ const getTicketSections = (items: TicketWalletItem[]): WalletSection[] => {
   ].filter((section) => section.items.length > 0);
 };
 
+const getExpiredTicketSections = (items: TicketWalletItem[]): WalletSection[] =>
+  items.length > 0 ? [{ title: "Expired", items }] : [];
+
 const TicketWalletScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<WalletTab>("Active");
+  const [activeSubFilter, setActiveSubFilter] = useState<WalletSubFilter>("Active");
+  const [sharedSubFilter, setSharedSubFilter] = useState<WalletSubFilter>("Active");
   const [tickets, setTickets] = useState<TicketWalletItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -173,6 +186,9 @@ const TicketWalletScreen = () => {
     try {
       const walletTickets = await getMyTicketWallet();
       setTickets(walletTickets);
+      emitTicketWalletChanged({
+        activeTicketCount: getActiveTicketWalletCount(walletTickets),
+      });
     } catch (error) {
       setErrorMessage(getAuthErrorMessage(error, "Unable to load ticket wallet."));
     } finally {
@@ -187,22 +203,79 @@ const TicketWalletScreen = () => {
     }, [loadTickets]),
   );
 
-  const visibleTickets = useMemo(() => {
+  const tabTickets = useMemo(() => {
     return tickets
       .map((ticket) => toTabWalletItem(ticket, activeTab))
       .filter((ticket): ticket is TicketWalletItem => Boolean(ticket));
   }, [activeTab, tickets]);
 
-  const sections = useMemo(() => getTicketSections(visibleTickets), [visibleTickets]);
+  const visibleTickets = useMemo(() => {
+    if (activeTab !== "Shared" && activeTab !== "Active") {
+      return tabTickets;
+    }
+
+    const subFilter = activeTab === "Shared" ? sharedSubFilter : activeSubFilter;
+    const showExpired = subFilter === "Expired";
+    const nowMs = Date.now();
+
+    return tabTickets.filter((ticket) => isTicketWalletItemExpired(ticket, nowMs) === showExpired);
+  }, [activeSubFilter, activeTab, sharedSubFilter, tabTickets]);
+
+  const sections = useMemo(() => {
+    if (
+      (activeTab === "Shared" && sharedSubFilter === "Expired") ||
+      (activeTab === "Active" && activeSubFilter === "Expired")
+    ) {
+      return getExpiredTicketSections(visibleTickets);
+    }
+
+    return getTicketSections(visibleTickets);
+  }, [activeSubFilter, activeTab, sharedSubFilter, visibleTickets]);
 
   const emptyLabel =
     activeTab === "Shared"
-      ? "No shared tickets yet."
+      ? `No ${sharedSubFilter.toLowerCase()} shared tickets yet.`
+      : activeTab === "Active"
+        ? activeSubFilter === "Expired"
+          ? "No expired active tickets yet."
+          : "No active tickets yet."
       : `No ${activeTab.toLowerCase()} tickets yet.`;
 
   const handleSelectTab = (tab: string) => {
     if (WALLET_TABS.includes(tab as WalletTab)) {
       setActiveTab(tab as WalletTab);
+    }
+  };
+
+  const showSubFilter = activeTab === "Shared" || activeTab === "Active";
+  const selectedSubFilter = activeTab === "Shared" ? sharedSubFilter : activeSubFilter;
+  const isExpiredSubFilter = showSubFilter && selectedSubFilter === "Expired";
+  const renderSubFilterOption = (option: string, isSelected: boolean) => {
+    const iconColor = isSelected ? "#FFFFFF" : "#9E96A6";
+
+    return (
+      <View style={styles.subFilterOption}>
+        {option === "Active" ? (
+          <Ionicons name="ticket-outline" size={20} color={iconColor} />
+        ) : (
+          <Feather name="clock" size={18} color={iconColor} />
+        )}
+      </View>
+    );
+  };
+
+  const handleSelectSubFilter = (option: string) => {
+    if (!WALLET_SUB_FILTERS.includes(option as WalletSubFilter)) {
+      return;
+    }
+
+    if (activeTab === "Shared") {
+      setSharedSubFilter(option as WalletSubFilter);
+      return;
+    }
+
+    if (activeTab === "Active") {
+      setActiveSubFilter(option as WalletSubFilter);
     }
   };
 
@@ -228,6 +301,20 @@ const TicketWalletScreen = () => {
           onSelect={handleSelectTab}
         />
       </View>
+      {showSubFilter && (
+        <View style={styles.subFilterContainer}>
+          <SegmentedControl
+            flat
+            options={WALLET_SUB_FILTERS}
+            selectedOption={selectedSubFilter}
+            onSelect={handleSelectSubFilter}
+            containerStyle={styles.subFilterControl}
+            activeSegmentStyle={styles.subFilterActiveSegment}
+            renderOption={renderSubFilterOption}
+            getAccessibilityLabel={(option) => `${option} tickets`}
+          />
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -305,9 +392,21 @@ const TicketWalletScreen = () => {
                       <Text style={[styles.eventTitle, { color: colors.text }]}>{item.event.name ?? item.ticketName}</Text>
                       <Text style={[styles.hostText, { color: colors.textSecondary }]}>by {item.event.host?.name ?? "Host"}</Text>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" }]}>
-                      <Text style={[styles.statusText, { color: colors.success }]}>
-                        {item.walletStatus === "cancelled" ? "Canceled" : item.walletStatus === "used" ? "Used" : "Active"}
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        isExpiredSubFilter
+                          ? styles.expiredStatusBadge
+                          : { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusText,
+                          { color: isExpiredSubFilter ? "#B3B3B3" : colors.success },
+                        ]}
+                      >
+                        {isExpiredSubFilter ? "Expired" : item.walletStatus === "cancelled" ? "Canceled" : item.walletStatus === "used" ? "Used" : "Active"}
                       </Text>
                     </View>
                   </LinearGradient>
@@ -410,7 +509,39 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     paddingHorizontal: 16,
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  subFilterContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 22,
+  },
+  subFilterControl: {
+    width: "100%",
+    height: 44,
+    minHeight: 44,
+    backgroundColor: "rgba(17, 17, 17, 0.78)",
+    borderColor: "rgba(255, 255, 255, 0.09)",
+    borderWidth: 1,
+    borderRadius: 18,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  subFilterActiveSegment: {
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    borderWidth: 1,
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+  },
+  subFilterOption: {
+    alignItems: "center",
+    height: 34,
+    justifyContent: "center",
   },
   tabWrapper: {
     flexDirection: "row",
@@ -506,6 +637,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
+  },
+  expiredStatusBadge: {
+    backgroundColor: "rgba(179, 179, 179, 0.12)",
+    borderColor: "rgba(179, 179, 179, 0.24)",
+    borderWidth: 1,
   },
   statusText: {
     fontSize: 12,

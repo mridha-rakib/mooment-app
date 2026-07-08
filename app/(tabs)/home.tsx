@@ -1,8 +1,8 @@
 import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -34,6 +34,7 @@ import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const SUGGESTED_USERS_INSERT_AFTER = 4;
 const MILES_TO_KM = 1.609344;
 const REFRESH_TIMEOUT_MS = 10000;
+const FEED_VIDEO_VIEWABILITY_THRESHOLD = 60;
 
 const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>(), currentUserId?: string): StoryData[] => {
   const groupedStories = new Map<string, Story[]>();
@@ -160,6 +161,34 @@ const buildFeedItems = (
   return items;
 };
 
+const hasVideoMedia = (post: PostData) => (
+  post.mediaItems?.some((item) => item.type === 'video' && Boolean(item.uri?.trim())) ?? false
+);
+
+const hasVideoRepostMedia = (share: MomentTimelineItem) => (
+  share.originalItem?.type !== 'event' &&
+  share.moment.mediaItems?.some((item) => (
+    item.type === 'video' &&
+    Boolean(item.url?.trim() || item.storageKey?.trim())
+  ))
+);
+
+const hasVideoFeedItem = (item?: FeedItem) => {
+  if (!item) {
+    return false;
+  }
+
+  if (item.type === 'post') {
+    return hasVideoMedia(item.data);
+  }
+
+  if (item.type === 'repost') {
+    return hasVideoRepostMedia(item.data);
+  }
+
+  return false;
+};
+
 export default function HomeFeed() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -180,9 +209,36 @@ export default function HomeFeed() {
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeFeedVideoItemId, setActiveFeedVideoItemId] = useState<string | null>(null);
   const feedRequestIdRef = useRef(0);
   const feedScrollRef = useRef<FlatList>(null);
+  const activeFeedVideoItemIdRef = useRef<string | null>(null);
   const params = useLocalSearchParams();
+
+  const setActiveFeedVideoItemIdIfChanged = useCallback((itemId: string | null) => {
+    if (activeFeedVideoItemIdRef.current === itemId) {
+      return;
+    }
+
+    activeFeedVideoItemIdRef.current = itemId;
+    setActiveFeedVideoItemId(itemId);
+  }, []);
+
+  const feedViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: FEED_VIDEO_VIEWABILITY_THRESHOLD,
+    minimumViewTime: 120,
+  }).current;
+
+  const onViewableFeedItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const nextActiveVideoPost = viewableItems
+      .filter((viewToken) => (
+        viewToken.isViewable &&
+        hasVideoFeedItem(viewToken.item)
+      ))
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))[0];
+
+    setActiveFeedVideoItemIdIfChanged(nextActiveVideoPost?.item.id ?? null);
+  }).current;
 
   useEffect(() => {
     if (params.showSuccess === "true") {
@@ -300,10 +356,17 @@ export default function HomeFeed() {
       void loadFeed();
 
       return () => {
+        setActiveFeedVideoItemIdIfChanged(null);
         setIsRefreshing(false);
       };
-    }, [loadFeed, loadStories]),
+    }, [loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged]),
   );
+
+  useEffect(() => {
+    if (selectedType !== 'Feed') {
+      setActiveFeedVideoItemIdIfChanged(null);
+    }
+  }, [selectedType, setActiveFeedVideoItemIdIfChanged]);
 
   useEffect(() => {
     let isMounted = true;
@@ -359,10 +422,14 @@ export default function HomeFeed() {
     setCommentModalVisible(true);
   };
 
-  const handleSharePress = (post: PostData) => {
+  const handleSharePress = useCallback((post: PostData) => {
+    if (shareModalVisible && selectedSharePost?.id === post.id) {
+      return;
+    }
+
     setSelectedSharePost(post);
     setShareModalVisible(true);
-  };
+  }, [selectedSharePost?.id, shareModalVisible]);
 
   const handleRepost = useCallback(async (payload: RepostPayload) => {
     if (!selectedSharePost) return;
@@ -421,7 +488,10 @@ export default function HomeFeed() {
     );
   }, []);
 
-  const feedItems = buildFeedItems(feedMomentPosts, feedEvents, feedReposts, suggestedUsers);
+  const feedItems = useMemo(
+    () => buildFeedItems(feedMomentPosts, feedEvents, feedReposts, suggestedUsers),
+    [feedEvents, feedMomentPosts, feedReposts, suggestedUsers],
+  );
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -440,10 +510,14 @@ export default function HomeFeed() {
             ref={feedScrollRef}
             data={feedItems}
             keyExtractor={(item) => item.id}
+            extraData={activeFeedVideoItemId}
             showsVerticalScrollIndicator={false}
             initialNumToRender={3}
             maxToRenderPerBatch={3}
             windowSize={5}
+            viewabilityConfig={feedViewabilityConfig}
+            onViewableItemsChanged={onViewableFeedItemsChanged}
+            removeClippedSubviews
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -478,6 +552,7 @@ export default function HomeFeed() {
                     onAuthorFollowChange={handleAuthorFollowChange}
                     onInteractionChange={applyInteractionSummary}
                     onDeletePress={handleDeletePost}
+                    isActiveVideo={activeFeedVideoItemId === item.id}
                   />
                 );
               }
@@ -485,7 +560,13 @@ export default function HomeFeed() {
                 return <EventFeedCard event={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
               }
               if (item.type === 'repost') {
-                return <RepostFeedCard share={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
+                return (
+                  <RepostFeedCard
+                    share={item.data}
+                    onRepostSuccess={refreshFeedAfterRepost}
+                    isActiveVideo={activeFeedVideoItemId === item.id}
+                  />
+                );
               }
               if (item.type === 'suggested_users') {
                 return <PeopleToFollow users={item.data} />;

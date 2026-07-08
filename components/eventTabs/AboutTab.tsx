@@ -351,6 +351,22 @@ const AboutTab = ({
     }
   };
 
+  const openHostProfile = () => {
+    if (!host?.id) return;
+
+    const hostName = host.name?.trim() || host.username?.trim() || "Host";
+
+    router.push({
+      pathname: "/profile-screen/user-profile",
+      params: {
+        userId: host.id,
+        name: hostName,
+        isFollowing: String(isHostFollowing),
+        ...(hostAvatar ? { avatar: hostAvatar } : {}),
+      },
+    } as any);
+  };
+
   const renderGallery = () => (
     <View style={styles.galleryGrid}>
       {galleryImages.map((item) => (
@@ -510,26 +526,28 @@ const AboutTab = ({
                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Host</Text>
                 <View style={[styles.hostCard, { backgroundColor: cardBackground }]}>
                   <View style={styles.hostCardHeader}>
-                    {hostAvatar && !hostAvatarFailed ? (
-                      <Image
-                        source={{ uri: hostAvatar }}
-                        style={styles.hostCardAvatar}
-                        contentFit="cover"
-                        onError={() => setHostAvatarFailed(true)}
-                      />
-                    ) : (
-                      <View style={[styles.hostCardAvatar, styles.hostCardAvatarFallback]}>
-                        <Text style={styles.hostCardAvatarFallbackText}>{hostInitial}</Text>
-                      </View>
-                    )}
-                    <View style={styles.hostCardInfo}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={openHostProfile}>
+                      {hostAvatar && !hostAvatarFailed ? (
+                        <Image
+                          source={{ uri: hostAvatar }}
+                          style={styles.hostCardAvatar}
+                          contentFit="cover"
+                          onError={() => setHostAvatarFailed(true)}
+                        />
+                      ) : (
+                        <View style={[styles.hostCardAvatar, styles.hostCardAvatarFallback]}>
+                          <Text style={styles.hostCardAvatarFallbackText}>{hostInitial}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.hostCardInfo} activeOpacity={0.7} onPress={openHostProfile}>
                       <Text style={[styles.hostCardName, { color: colors.text }]}>{host?.name ?? "Host"}</Text>
                       {!!host?.username && (
                         <Text style={[styles.hostCardUser, { color: colors.textSecondary }]}>
                           @{host.username.replace(/^@+/, "")}
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={[
                         styles.followBtnLarge,

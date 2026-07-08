@@ -14,6 +14,8 @@ import Animated from 'react-native-reanimated';
 
 import { useTheme } from '@/hooks/useTheme';
 
+const ACTION_HIT_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
+
 type PostInteractionBarProps = {
   likesCount?: number;
   commentsCount?: number;
@@ -73,6 +75,7 @@ export default function PostInteractionBar({
           activeOpacity={0.7}
           onPress={onLikePress}
           disabled={likeDisabled || !onLikePress}
+          hitSlop={ACTION_HIT_SLOP}
         >
           <Animated.View style={likeIconStyle}>
             <Ionicons
@@ -93,6 +96,7 @@ export default function PostInteractionBar({
           activeOpacity={0.7}
           onPress={onCommentPress}
           disabled={commentDisabled || !onCommentPress}
+          hitSlop={ACTION_HIT_SLOP}
         >
           <HugeiconsIcon icon={Comment02Icon} size={20} color={resolvedIconColor} />
           <Text style={countStyles}>{commentsCount}</Text>
@@ -105,6 +109,7 @@ export default function PostInteractionBar({
           activeOpacity={0.7}
           onPress={onSharePress}
           disabled={shareDisabled || !onSharePress}
+          hitSlop={ACTION_HIT_SLOP}
         >
           <HugeiconsIcon icon={Share01Icon} size={20} color={resolvedIconColor} />
           <Text style={countStyles}>{sharesCount}</Text>
@@ -137,6 +142,9 @@ const styles = StyleSheet.create({
   action: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+    minHeight: 44,
     marginRight: 24,
   },
   verticalAction: {

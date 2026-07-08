@@ -544,6 +544,22 @@ const EventScreen = () => {
     }
   };
 
+  const handleHostProfilePress = () => {
+    if (!event) return;
+
+    const hostId = event.host?.id ?? event.userId;
+
+    router.push({
+      pathname: "/profile-screen/user-profile",
+      params: {
+        userId: hostId,
+        name: hostName,
+        isFollowing: String(isFollowing),
+        ...(hostAvatarUri ? { avatar: hostAvatarUri } : {}),
+      },
+    } as any);
+  };
+
   const ticketsLeft = getTicketsLeft(event?.tickets ?? []);
   const priceLabel = formatPrice(event?.tickets ?? []);
   const selectedTicket = useMemo(() => {
@@ -1366,16 +1382,18 @@ const EventScreen = () => {
             </View>
 
             <View style={styles.hostRow}>
-              <UserAvatar
-                uri={hostAvatarUri}
-                name={event?.host?.name}
-                size={42}
-                style={[
-                  styles.hostAvatar,
-                  { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
-                ]}
-              />
-              <View style={styles.hostInfo}>
+              <TouchableOpacity activeOpacity={0.7} onPress={handleHostProfilePress}>
+                <UserAvatar
+                  uri={hostAvatarUri}
+                  name={event?.host?.name}
+                  size={42}
+                  style={[
+                    styles.hostAvatar,
+                    { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
+                  ]}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.hostInfo} activeOpacity={0.7} onPress={handleHostProfilePress}>
                 <Text style={[styles.hostName, { color: colors.text }]}>{hostName}</Text>
                 <View style={styles.hostSubRow}>
                   {!!hostHandle && <Text style={[styles.hostUser, { color: colors.textSecondary }]}>{hostHandle}</Text>}
@@ -1387,7 +1405,7 @@ const EventScreen = () => {
                   />
                   <Text style={[styles.privateText, { color: colors.textSecondary }]}> {getPrivacyLabel(event?.privacy)}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
               {!isHostMode && (
                 <TouchableOpacity
                   style={[

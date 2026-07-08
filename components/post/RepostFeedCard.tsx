@@ -17,9 +17,16 @@ type Props = {
   labelOverride?: string;
   onRepostSuccess?: () => void;
   showLoadingIndicator?: boolean;
+  isActiveVideo?: boolean;
 };
 
-export default function RepostFeedCard({ share, labelOverride, onRepostSuccess, showLoadingIndicator = true }: Props) {
+export default function RepostFeedCard({
+  share,
+  labelOverride,
+  onRepostSuccess,
+  showLoadingIndicator = true,
+  isActiveVideo = false,
+}: Props) {
   const { colors } = useTheme();
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [eventLoading, setEventLoading] = useState(false);
@@ -98,7 +105,7 @@ export default function RepostFeedCard({ share, labelOverride, onRepostSuccess, 
       {header}
       {post ? (
         <>
-          <FeedPost post={post} onSharePress={() => setShareVisible(true)} embedded />
+          <FeedPost post={post} onSharePress={() => setShareVisible(true)} embedded isActiveVideo={isActiveVideo} />
           <ShareModal
             visible={shareVisible}
             onClose={() => setShareVisible(false)}

@@ -19,7 +19,7 @@ import {
   CheckoutFooter,
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
-import { createCheckoutIntent, type CheckoutOrder } from "@/lib/payments";
+import { createCheckoutIntent, emitTicketWalletChanged, type CheckoutOrder } from "@/lib/payments";
 import { claimEventReward } from "@/lib/events";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
@@ -166,6 +166,10 @@ const EventCheckoutScreen = () => {
 
       if (rewardId) {
         await claimEventReward(eventId, rewardId).catch(() => {});
+      }
+
+      if (isFreeTicket) {
+        emitTicketWalletChanged();
       }
 
       const ticketLineItem = order.lineItems.find(

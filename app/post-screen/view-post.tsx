@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -13,6 +14,7 @@ import { getStorageFileUrl } from '@/lib/storage';
 
 export default function ViewPostScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { colors } = useTheme();
   const params = useLocalSearchParams<{ postId?: string | string[] }>();
   const postId = Array.isArray(params.postId) ? params.postId[0] : params.postId;
@@ -62,7 +64,7 @@ export default function ViewPostScreen() {
         <View style={styles.headerSpacer} />
       </View>
       {loading ? <ActivityIndicator style={styles.center} color={colors.primary} /> : post ? (
-        <FeedPost post={post} onInteractionChange={applyInteraction} />
+        <FeedPost post={post} onInteractionChange={applyInteraction} isActiveVideo={isFocused} />
       ) : (
         <View style={styles.center}>
           <Feather name="alert-circle" size={30} color={colors.textSecondary} />

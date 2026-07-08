@@ -14,10 +14,12 @@ import {
   type StoryViewerTab,
 } from "@/lib/storyViewerSession";
 import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -177,7 +179,52 @@ function StoryCarousel({
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState<StoryViewerTab>("discover");
+  const [isOpeningAddStory, setIsOpeningAddStory] = React.useState(false);
+  const isOpeningAddStoryRef = React.useRef(false);
+  const openAddStoryTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const displayedStories = activeTab === "discover" ? stories : friendStories;
+  const resetOpeningAddStory = React.useCallback(() => {
+    isOpeningAddStoryRef.current = false;
+
+    if (openAddStoryTimeoutRef.current) {
+      clearTimeout(openAddStoryTimeoutRef.current);
+      openAddStoryTimeoutRef.current = null;
+    }
+
+    setIsOpeningAddStory(false);
+  }, []);
+  const handleAddStoryPress = React.useCallback(() => {
+    if (isOpeningAddStoryRef.current) {
+      return;
+    }
+
+    isOpeningAddStoryRef.current = true;
+    setIsOpeningAddStory(true);
+
+    openAddStoryTimeoutRef.current = setTimeout(resetOpeningAddStory, 2500);
+
+    try {
+      router.push("/post-screen/add-story");
+    } catch {
+      resetOpeningAddStory();
+    }
+  }, [resetOpeningAddStory, router]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      resetOpeningAddStory();
+
+      return () => {
+        if (openAddStoryTimeoutRef.current) {
+          clearTimeout(openAddStoryTimeoutRef.current);
+          openAddStoryTimeoutRef.current = null;
+        }
+      };
+    }, [resetOpeningAddStory]),
+  );
+
   const getGroups = React.useCallback(
     (items: StoryData[]) =>
       items
@@ -224,11 +271,23 @@ function StoryCarousel({
             return (
               <TouchableOpacity
                 key={story.id}
-                style={styles.addStoryBtn}
+                style={[
+                  styles.addStoryBtn,
+                  isOpeningAddStory && styles.addStoryBtnDisabled,
+                ]}
                 activeOpacity={0.8}
-                onPress={() => router.push("/post-screen/add-story")}
+                onPress={handleAddStoryPress}
+                disabled={isOpeningAddStory}
+                accessibilityState={{
+                  disabled: isOpeningAddStory,
+                  busy: isOpeningAddStory,
+                }}
               >
-                <Feather name="plus" size={24} color="#bcbccaff" />
+                {isOpeningAddStory ? (
+                  <ActivityIndicator size="small" color="#bcbccaff" />
+                ) : (
+                  <Feather name="plus" size={24} color="#bcbccaff" />
+                )}
               </TouchableOpacity>
             );
           }
@@ -350,6 +409,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
+  },
+  addStoryBtnDisabled: {
+    opacity: 0.72,
   },
   storyItem: {
     marginRight: 16,

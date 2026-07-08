@@ -1,4 +1,6 @@
 import { api } from "@/lib/api";
+import { isAxiosError } from "axios";
+import { DeviceEventEmitter } from "react-native";
 
 export type CheckoutPaymentMethod = "card" | "apple_pay";
 export type CheckoutPaymentStatus =
@@ -180,6 +182,47 @@ export type TicketWalletItem = {
   };
 };
 
+export type TicketWalletChangedEvent = {
+  activeTicketCount?: number;
+};
+
+export const TICKET_WALLET_CHANGED_EVENT = "xenog.ticketWallet.changed";
+
+export const emitTicketWalletChanged = (payload: TicketWalletChangedEvent = {}) => {
+  DeviceEventEmitter.emit(TICKET_WALLET_CHANGED_EVENT, payload);
+};
+
+export const isTicketWalletItemExpired = (item: TicketWalletItem, nowMs = Date.now()) => {
+  if (!item.event.endAt) {
+    return false;
+  }
+
+  const endDate = new Date(item.event.endAt);
+
+  return Number.isFinite(endDate.getTime()) && endDate.getTime() < nowMs;
+};
+
+export const getActiveTicketWalletCount = (tickets: TicketWalletItem[]) =>
+  tickets.reduce((total, item) => {
+    if (
+      item.walletStatus !== "active" ||
+      item.paymentStatus === "refunded" ||
+      item.paymentStatus === "canceled" ||
+      item.event.status === "cancelled" ||
+      isTicketWalletItemExpired(item)
+    ) {
+      return total;
+    }
+
+    const passes = item.ticketPasses ?? [];
+
+    if (item.source === "shared") {
+      return total + passes.filter((pass) => pass.status === "active").length;
+    }
+
+    return total + passes.filter((pass) => pass.status === "active" && !pass.currentShare).length;
+  }, 0);
+
 export const createCheckoutIntent = async (
   payload: CreateCheckoutIntentPayload,
 ): Promise<CheckoutIntent> => {
@@ -201,6 +244,8 @@ export const confirmCheckoutOrder = async (orderId: string): Promise<CheckoutOrd
     throw new Error("The payment confirmation response was incomplete.");
   }
 
+  emitTicketWalletChanged();
+
   return order;
 };
 
@@ -212,6 +257,8 @@ export const cancelCheckoutOrder = async (orderId: string): Promise<CheckoutOrde
     throw new Error("The cancellation response was incomplete.");
   }
 
+  emitTicketWalletChanged();
+
   return order;
 };
 
@@ -222,6 +269,8 @@ export const refundCheckoutOrder = async (orderId: string): Promise<CheckoutOrde
   if (!order) {
     throw new Error("The refund response was incomplete.");
   }
+
+  emitTicketWalletChanged();
 
   return order;
 };
@@ -278,6 +327,8 @@ export const shareTicketWithFriend = async ({
     throw new Error("The ticket share response was incomplete.");
   }
 
+  emitTicketWalletChanged();
+
   return share;
 };
 
@@ -288,6 +339,8 @@ export const cancelTicketShare = async (shareId: string): Promise<TicketShare> =
   if (!share) {
     throw new Error("The cancel share response was incomplete.");
   }
+
+  emitTicketWalletChanged();
 
   return share;
 };
@@ -343,14 +396,26 @@ export const getMyEarningsSummary = async (): Promise<CreatorEarningsSummary> =>
 };
 
 export const requestWithdrawal = async (params?: { amount?: number }): Promise<import("@/lib/payoutSettings").CreatorPayout> => {
-  const response = await api.post("/payments/creator-earnings/withdraw", params ?? {});
-  const payout = response.data?.data?.payout as import("@/lib/payoutSettings").CreatorPayout | undefined;
+  try {
+    const response = await api.post("/payments/creator-earnings/withdraw", params ?? {});
+    const payout = response.data?.data?.payout as import("@/lib/payoutSettings").CreatorPayout | undefined;
 
-  if (!payout) {
-    throw new Error("Withdrawal response was incomplete.");
+    if (!payout) {
+      throw new Error("Withdrawal response was incomplete.");
+    }
+
+    return payout;
+  } catch (error) {
+    if (isAxiosError(error)) {
+      const message = error.response?.data?.message;
+
+      if (typeof message === "string" && message.trim()) {
+        throw new Error(message);
+      }
+    }
+
+    throw error;
   }
-
-  return payout;
 };
 
 export const getMyEarningsByEvent = async (eventId: string): Promise<EventEarningsSummary> => {
@@ -377,6 +442,8 @@ export const scanTicketQrCode = async (checkInCode: string, eventId?: string): P
   if (!ticket) {
     throw new Error("The ticket scan response was incomplete.");
   }
+
+  emitTicketWalletChanged();
 
   return ticket;
 };

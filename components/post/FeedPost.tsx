@@ -103,26 +103,62 @@ export type PostData = {
   isSaved?: boolean;
 };
 
-function VideoFeedMedia({ uri }: { uri: string }) {
+const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { uri: string; isActive: boolean }) {
   const player = useVideoPlayer(uri, (videoPlayer) => {
     videoPlayer.loop = true;
     videoPlayer.muted = true;
   });
+  const wasActiveRef = useRef(false);
+  const didAutoplayInActiveWindowRef = useRef(false);
+
+  useEffect(() => {
+    if (isActive) {
+      if (!wasActiveRef.current) {
+        didAutoplayInActiveWindowRef.current = false;
+      }
+
+      if (!didAutoplayInActiveWindowRef.current) {
+        didAutoplayInActiveWindowRef.current = true;
+        try {
+          player.play();
+        } catch {
+          // Playback can fail transiently while a recycled native view is attaching.
+        }
+      }
+    } else {
+      if (wasActiveRef.current) {
+        try {
+          player.pause();
+        } catch {
+          // Ignore pause failures during native player teardown.
+        }
+      }
+
+      didAutoplayInActiveWindowRef.current = false;
+    }
+
+    wasActiveRef.current = isActive;
+  }, [isActive, player]);
+
+  useEffect(() => () => {
+    try {
+      player.pause();
+    } catch {
+      // Ignore cleanup failures during native player teardown.
+    }
+  }, [player]);
 
   return (
     <View style={styles.videoMediaFrame}>
       <VideoView
         player={player}
         style={styles.postImage}
-        nativeControls
+        nativeControls={isActive}
         contentFit="cover"
       />
-      <View style={styles.videoBadge}>
-        <Feather name="play" size={12} color="#FFFFFF" />
-      </View>
     </View>
   );
-}
+});
 
 function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
   const [imageSize, setImageSize] = useState(() => ({
@@ -344,6 +380,7 @@ export default function FeedPost({
   onDeletePress,
   isOwnPost = false,
   embedded = false,
+  isActiveVideo = false,
 }: {
   post: PostData;
   onCommentPress?: (post: PostData) => void;
@@ -355,6 +392,7 @@ export default function FeedPost({
   onDeletePress?: (post: PostData) => void;
   isOwnPost?: boolean;
   embedded?: boolean;
+  isActiveVideo?: boolean;
 }) {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -785,7 +823,7 @@ export default function FeedPost({
               {mediaItems.map((item, index) => (
                 <View key={`${item.uri}-${index}`} style={[styles.mediaSlide, { width: mediaFrameWidth }]}>
                   {item.type === 'video' ? (
-                    <VideoFeedMedia uri={item.uri} />
+                    <VideoFeedMedia uri={item.uri} isActive={Boolean(isActiveVideo && currentMediaIndex === index && !showFullScreenMedia)} />
                   ) : (
                     <TouchableOpacity
                       style={styles.mediaImageButton}
@@ -1243,17 +1281,6 @@ const styles = StyleSheet.create({
     height: "100%",
     position: "relative",
     backgroundColor: "#000000",
-  },
-  videoBadge: {
-    position: "absolute",
-    left: 12,
-    bottom: 12,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(0,0,0,0.52)",
-    justifyContent: "center",
-    alignItems: "center",
   },
   /* Audio Post Styles */
   audioContainer: {

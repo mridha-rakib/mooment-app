@@ -18,6 +18,7 @@ interface SegmentedControlProps {
   containerStyle?: object;
   activeSegmentStyle?: object;
   renderOption?: (option: string, isSelected: boolean) => React.ReactNode;
+  getAccessibilityLabel?: (option: string) => string;
   flat?: boolean;
 }
 
@@ -91,6 +92,7 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
   containerStyle,
   activeSegmentStyle,
   renderOption,
+  getAccessibilityLabel,
   flat = false,
 }) => {
   const { colors, isDark } = useTheme();
@@ -144,6 +146,7 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
         {options.map((option) => (
           <TouchableOpacity
             key={option}
+            accessibilityLabel={getAccessibilityLabel?.(option)}
             activeOpacity={0.8}
             onLayout={selectedOption === option ? onSegmentLayout : undefined}
             style={[

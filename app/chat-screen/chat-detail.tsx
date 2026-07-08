@@ -51,6 +51,7 @@ import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { blockUser, unblockUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatUnreadStore } from '@/stores/chatUnreadStore';
+import { getMoment } from '@/lib/moments';
 import { getStoryDetails } from '@/lib/stories';
 import { createStoryViewerSession } from '@/lib/storyViewerSession';
 
@@ -111,6 +112,16 @@ type PendingAttachment = {
   locationTitle?: string | null;
   locationDesc?: string | null;
 };
+
+type SharedPostPreview = {
+  mediaType: 'image' | 'video' | null;
+  mediaUri?: string | null;
+  preview?: string | null;
+  authorName?: string | null;
+};
+
+const sharedPostPreviewCache = new Map<string, SharedPostPreview>();
+const sharedPostPreviewRequests = new Map<string, Promise<SharedPostPreview>>();
 
 const WAVEFORM_HEIGHTS = [8, 14, 20, 12, 28, 16, 24, 10, 18, 22, 14, 26, 8, 20, 16, 12, 24, 18, 10, 14];
 
@@ -197,6 +208,65 @@ const getAttachmentPreviewUri = (attachment?: ChatMessageAttachment | null) => {
     return attachment.imageUrl ?? null;
   }
   return undefined;
+};
+
+const getSharedPostMediaUri = (mediaItem: { url?: string | null; storageKey?: string | null; contentType?: string | null }) => {
+  if (mediaItem.url?.trim()) {
+    return mediaItem.url;
+  }
+
+  if (mediaItem.storageKey?.trim()) {
+    try {
+      return getStorageFileUrl(mediaItem.storageKey, mediaItem.contentType);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const loadSharedPostPreview = (postId: string) => {
+  const cached = sharedPostPreviewCache.get(postId);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+
+  const pending = sharedPostPreviewRequests.get(postId);
+  if (pending) {
+    return pending;
+  }
+
+  const request = getMoment(postId)
+    .then((moment): SharedPostPreview => {
+      const mediaItem = moment.mediaItems?.find((item) => item.type === 'image' || item.type === 'video') ?? null;
+      const preview: SharedPostPreview = {
+        mediaType: mediaItem?.type === 'image' || mediaItem?.type === 'video' ? mediaItem.type : null,
+        mediaUri: mediaItem ? getSharedPostMediaUri(mediaItem) : null,
+        preview: moment.caption?.trim() || null,
+        authorName: moment.author?.name ?? null,
+      };
+
+      sharedPostPreviewCache.set(postId, preview);
+      return preview;
+    })
+    .catch(() => {
+      const fallback: SharedPostPreview = {
+        mediaType: null,
+        mediaUri: null,
+        preview: null,
+        authorName: null,
+      };
+
+      sharedPostPreviewCache.set(postId, fallback);
+      return fallback;
+    })
+    .finally(() => {
+      sharedPostPreviewRequests.delete(postId);
+    });
+
+  sharedPostPreviewRequests.set(postId, request);
+  return request;
 };
 
 const openMapLocation = (latitude: number, longitude: number, label?: string | null) => {
@@ -536,6 +606,39 @@ function EventBubble({ msg }: { msg: Message }) {
 function PostBubble({ msg }: { msg: Message }) {
   const router = useRouter();
   const postId = msg.attachment?.type === 'post' ? msg.attachment.postId : null;
+  const [resolvedPreview, setResolvedPreview] = useState<SharedPostPreview | null>(() => (
+    postId ? sharedPostPreviewCache.get(postId) ?? null : null
+  ));
+
+  useEffect(() => {
+    if (!postId || msg.postImage) {
+      return;
+    }
+
+    let isMounted = true;
+    const cached = sharedPostPreviewCache.get(postId);
+
+    if (cached) {
+      setResolvedPreview(cached);
+      return;
+    }
+
+    loadSharedPostPreview(postId).then((preview) => {
+      if (isMounted) {
+        setResolvedPreview(preview);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [msg.postImage, postId]);
+
+  const mediaUri = msg.postImage ?? resolvedPreview?.mediaUri ?? null;
+  const isVideoPost = resolvedPreview?.mediaType === 'video';
+  const postLabel = isVideoPost ? 'Shared video post' : 'POST';
+  const postAuthor = resolvedPreview?.authorName || msg.postAuthor;
+  const postPreview = resolvedPreview?.preview || msg.postPreview || (isVideoPost ? 'Shared video post' : 'Shared post');
 
   return (
     <TouchableOpacity
@@ -543,13 +646,24 @@ function PostBubble({ msg }: { msg: Message }) {
       activeOpacity={0.82}
       onPress={() => postId && router.push({ pathname: '/post-screen/view-post', params: { postId } } as any)}
     >
-      {msg.postImage ? <Image source={{ uri: msg.postImage }} style={styles.sharedPostImage} /> : (
-        <View style={[styles.sharedPostImage, styles.mediaFallback]}><Feather name="image" size={28} color="#8E8E9B" /></View>
-      )}
+      <View style={styles.sharedPostMediaFrame}>
+        {mediaUri ? (
+          <Image source={{ uri: mediaUri }} style={styles.sharedPostImage} resizeMode="cover" />
+        ) : (
+          <View style={[styles.sharedPostImage, styles.mediaFallback]}>
+            <Feather name={isVideoPost ? 'play-circle' : 'file-text'} size={28} color="#8E8E9B" />
+          </View>
+        )}
+        {isVideoPost ? (
+          <View pointerEvents="none" style={styles.sharedPostPlayBadge}>
+            <Feather name="play" size={18} color="#FFFFFF" />
+          </View>
+        ) : null}
+      </View>
       <View style={styles.sharedPostInfo}>
-        <Text style={styles.eventBubbleTagText}>POST</Text>
-        <Text style={styles.sharedPostAuthor} numberOfLines={1}>{msg.postAuthor}</Text>
-        <Text style={styles.sharedPostPreview} numberOfLines={3}>{msg.postPreview}</Text>
+        <Text style={styles.eventBubbleTagText}>{postLabel}</Text>
+        <Text style={styles.sharedPostAuthor} numberOfLines={1}>{postAuthor}</Text>
+        <Text style={styles.sharedPostPreview} numberOfLines={3}>{postPreview}</Text>
         <Text style={styles.eventBubbleTime}>{msg.time}</Text>
       </View>
     </TouchableOpacity>
@@ -2307,7 +2421,9 @@ const styles = StyleSheet.create({
   eventBubbleTimeWrap: { position: 'absolute', left: 14, right: 14, bottom: 12 },
   eventBubbleTime: { color: 'rgba(255,255,255,0.72)', fontSize: 11 },
   sharedPostBubble: { width: Math.min(width * 0.74, 310), borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  sharedPostImage: { width: '100%', height: 132, backgroundColor: '#19191F' },
+  sharedPostMediaFrame: { width: '100%', height: 132, backgroundColor: '#19191F', position: 'relative' },
+  sharedPostImage: { width: '100%', height: '100%', backgroundColor: '#19191F' },
+  sharedPostPlayBadge: { position: 'absolute', left: '50%', top: '50%', width: 42, height: 42, marginLeft: -21, marginTop: -21, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.58)', alignItems: 'center', justifyContent: 'center' },
   sharedPostInfo: { padding: 12, gap: 4 },
   sharedPostAuthor: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   sharedPostPreview: { color: 'rgba(255,255,255,0.78)', fontSize: 13, lineHeight: 18, marginBottom: 4 },

@@ -21,6 +21,7 @@ import {
   type StoryViewerTab,
   type ViewerGroup,
 } from "@/lib/storyViewerSession";
+import { useAuthStore } from "@/stores/authStore";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useEventListener } from "expo";
 import { Image } from "expo-image";
@@ -82,6 +83,8 @@ type StoryGroup = {
 
 const LONG_PRESS_DELAY_MS = 160;
 const MIN_AUTO_ADVANCE_VISIBLE_MS = 400;
+
+const normalizeId = (id?: string | null) => (id ? id.trim() : "");
 
 const formatExpiry = (expiresAt?: string) => {
   const seconds = Math.max(
@@ -242,6 +245,7 @@ function StoryBackground({
 export default function ViewStoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const {
     mediaUri,
     stories,
@@ -381,6 +385,7 @@ export default function ViewStoryScreen() {
   });
   const [isReactionSubmitting, setIsReactionSubmitting] = useState(false);
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
+  const [isDeletingStory, setIsDeletingStory] = useState(false);
   const advanceLockRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const autoPlayRequestedRef = useRef(false);
@@ -397,6 +402,8 @@ export default function ViewStoryScreen() {
   const pendingStoryIndexRef = useRef<number | null>(null);
   const viewedStoryIdsRef = useRef(new Set<string>());
   const resumeAfterOverlayRef = useRef(false);
+  const resumeAfterDeleteRef = useRef(false);
+  const deletingStoryIdRef = useRef<string | null>(null);
   const preloadedUriRef = useRef<[string | null, string | null]>([null, null]);
   const preloadRequestRef = useRef(0);
   const playbackTimingRef = useRef({
@@ -418,7 +425,19 @@ export default function ViewStoryScreen() {
     0.1,
     loadedDuration || currentStory?.durationSeconds || 15,
   );
-  const isOverlayOpen = commentsVisible || shareVisible;
+  const isOverlayOpen = commentsVisible || shareVisible || isDeletingStory;
+  const isDeletingCurrentStory =
+    isDeletingStory && deletingStoryIdRef.current === currentStory?.id;
+  const currentStoryAuthorId = normalizeId(
+    currentStory?.authorId ?? activeGroup?.authorId,
+  );
+  const normalizedCurrentUserId = normalizeId(currentUserId);
+  const isCurrentStoryByCurrentUser = Boolean(
+    currentStory?.isOwner ||
+      (normalizedCurrentUserId &&
+        currentStoryAuthorId &&
+        normalizedCurrentUserId === currentStoryAuthorId),
+  );
 
   useEffect(() => {
     setActiveStoryTab(sessionData.initialTab);
@@ -1147,6 +1166,61 @@ export default function ViewStoryScreen() {
     visibleStartedAtRef.current = Date.now() - progressTimeRef.current * 1000;
   }, [currentStory, isCurrentVideo, loadFailed, sourceReady]);
 
+  const pausePlaybackForDelete = useCallback(() => {
+    resumeAfterDeleteRef.current = isCurrentVideo ? isPlaying : !isHolding;
+
+    if (!isCurrentVideo) {
+      freezeImagePlaybackProgress();
+    }
+
+    setIsHolding(true);
+
+    if (isCurrentVideo && isPlaying) {
+      try {
+        player.pause();
+      } catch {
+        resumeAfterDeleteRef.current = false;
+      }
+    }
+  }, [
+    freezeImagePlaybackProgress,
+    isCurrentVideo,
+    isHolding,
+    isPlaying,
+    player,
+  ]);
+
+  const resumePlaybackAfterDelete = useCallback(() => {
+    const shouldResume = resumeAfterDeleteRef.current;
+    resumeAfterDeleteRef.current = false;
+
+    setIsHolding(false);
+
+    if (!shouldResume) {
+      return;
+    }
+
+    if (!isCurrentVideo) {
+      resumeImagePlaybackProgress();
+      return;
+    }
+
+    if (currentStory?.mediaUri && !isLoadingStory && !loadFailed) {
+      try {
+        player.play();
+      } catch {
+        // The next playback state change will recover when the player is ready.
+      }
+    }
+  }, [
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    isLoadingStory,
+    loadFailed,
+    player,
+    resumeImagePlaybackProgress,
+  ]);
+
   const togglePlay = useCallback(() => {
     triggerFeedback();
     if (!isCurrentVideo) {
@@ -1188,6 +1262,7 @@ export default function ViewStoryScreen() {
     if (
       holdActivatedRef.current ||
       isLoadingStory ||
+      isDeletingStory ||
       (!currentStory?.mediaUri && isCurrentVideo)
     ) {
       return;
@@ -1206,6 +1281,7 @@ export default function ViewStoryScreen() {
     currentStory?.mediaUri,
     freezeImagePlaybackProgress,
     isCurrentVideo,
+    isDeletingStory,
     isLoadingStory,
     isPlaying,
     player,
@@ -1279,6 +1355,10 @@ export default function ViewStoryScreen() {
   };
 
   const handlePressAction = (action: () => void) => {
+    if (isDeletingStory) {
+      return;
+    }
+
     if (ignoreNextPressRef.current) {
       ignoreNextPressRef.current = false;
       return;
@@ -1362,43 +1442,85 @@ export default function ViewStoryScreen() {
   }, [closeOverlays, commentsVisible, router, shareVisible]);
 
   const handleStoryTabPress = (tab: StoryViewerTab) => {
+    if (isDeletingStory) {
+      return;
+    }
+
     setActiveStoryTab(tab);
     setActiveGroupIndex(0);
     setCurrentIndex(0);
     setProgressTime(0);
   };
 
+  const handleDeleteStory = useCallback(
+    async (
+      storyId: string,
+      currentGroupStoryCount: number,
+      groupCount: number,
+    ) => {
+      if (deletingStoryIdRef.current) {
+        return;
+      }
+
+      deletingStoryIdRef.current = storyId;
+      setIsDeletingStory(true);
+      pausePlaybackForDelete();
+
+      let shouldResumePlayback = true;
+
+      try {
+        await deleteStory(storyId);
+        setStoryGroupsByTab((current) => ({
+          discover: removeStoryFromGroupList(current.discover, storyId),
+          friends: removeStoryFromGroupList(current.friends, storyId),
+        }));
+        setResolvedStoryTabs({ discover: true, friends: true });
+
+        if (currentGroupStoryCount <= 1 && groupCount <= 1) {
+          shouldResumePlayback = false;
+          safeBack(router, "/(tabs)/home");
+          return;
+        }
+
+        setCurrentIndex((index) =>
+          Math.max(0, Math.min(index, currentGroupStoryCount - 2)),
+        );
+      } catch {
+        Alert.alert("Unable to delete story", "Please try again.");
+      } finally {
+        deletingStoryIdRef.current = null;
+        setIsDeletingStory(false);
+
+        if (shouldResumePlayback) {
+          resumePlaybackAfterDelete();
+        } else {
+          resumeAfterDeleteRef.current = false;
+        }
+      }
+    },
+    [pausePlaybackForDelete, resumePlaybackAfterDelete, router],
+  );
+
   const handleMenu = () => {
+    if (isDeletingStory || deletingStoryIdRef.current) {
+      return;
+    }
+
     if (!currentStory?.isOwner) {
       Alert.alert("Story", "Only the story owner can delete this story.");
       return;
     }
     const storyId = currentStory.id;
+    const currentGroupStoryCount = storyItems.length;
+    const groupCount = groups.length;
+
     Alert.alert("Story options", undefined, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete story",
         style: "destructive",
         onPress: () =>
-          void deleteStory(storyId)
-            .then(() => {
-              setStoryGroupsByTab((current) => ({
-                discover: removeStoryFromGroupList(current.discover, storyId),
-                friends: removeStoryFromGroupList(current.friends, storyId),
-              }));
-              setResolvedStoryTabs({ discover: true, friends: true });
-              const currentGroupStoryCount = storyItems.length;
-              if (currentGroupStoryCount <= 1 && groups.length <= 1) {
-                safeBack(router, "/(tabs)/home");
-                return;
-              }
-              setCurrentIndex((index) =>
-                Math.max(0, Math.min(index, currentGroupStoryCount - 2)),
-              );
-            })
-            .catch(() =>
-              Alert.alert("Unable to delete story", "Please try again."),
-            ),
+          void handleDeleteStory(storyId, currentGroupStoryCount, groupCount),
       },
     ]);
   };
@@ -1589,7 +1711,7 @@ export default function ViewStoryScreen() {
           onLongPress={pauseForHold}
           onPress={() => handlePressAction(togglePlay)}
           onPressOut={resumeFromHold}
-          disabled={isLoadingStory}
+          disabled={isLoadingStory || isDeletingStory}
           accessibilityLabel={isPlaying ? "Pause story" : "Play story"}
         >
           <Ionicons
@@ -1655,9 +1777,11 @@ export default function ViewStoryScreen() {
             onLikePress={handleReactionPress}
             onCommentPress={() => openOverlay("comments")}
             onSharePress={() => openOverlay("share")}
-            likeDisabled={!currentStory || isReactionSubmitting}
-            commentDisabled={!currentStory}
-            shareDisabled={!currentStory || isShareSubmitting}
+            likeDisabled={
+              !currentStory || isReactionSubmitting || isDeletingStory
+            }
+            commentDisabled={!currentStory || isDeletingStory}
+            shareDisabled={!currentStory || isShareSubmitting || isDeletingStory}
             iconColor="#FFFFFF"
             countColor="#FFFFFF"
             actionStyle={styles.railAction}
@@ -1683,15 +1807,29 @@ export default function ViewStoryScreen() {
                     title ??
                     "Story"}
                 </Text>
-                <Text style={styles.followingPill}>Following</Text>
+                {!isCurrentStoryByCurrentUser ? (
+                  <Text style={styles.followingPill}>Following</Text>
+                ) : null}
                 {currentStory?.isOwner ? (
-                  <TouchableOpacity
-                    onPress={handleMenu}
-                    style={styles.moreBtn}
-                    accessibilityLabel="Story options"
-                  >
-                    <Feather name="more-horizontal" size={21} color="#FFFFFF" />
-                  </TouchableOpacity>
+                  isDeletingCurrentStory ? (
+                    <View style={styles.deletingStoryStatus}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text style={styles.deletingStoryText}>Deleting...</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={handleMenu}
+                      style={styles.moreBtn}
+                      accessibilityLabel="Story options"
+                      disabled={isDeletingStory}
+                      accessibilityState={{
+                        disabled: isDeletingStory,
+                        busy: isDeletingStory,
+                      }}
+                    >
+                      <Feather name="more-horizontal" size={21} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )
                 ) : null}
               </View>
               <Text style={styles.metaText}>
@@ -1932,6 +2070,20 @@ const styles = StyleSheet.create({
     height: 30,
     justifyContent: "center",
     width: 34,
+  },
+  deletingStoryStatus: {
+    minHeight: 30,
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  deletingStoryText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
   },
   metaText: {
     color: "rgba(255,255,255,0.78)",

@@ -513,6 +513,12 @@
 // });
 
 import { useTheme } from "@/hooks/useTheme";
+import {
+  getActiveTicketWalletCount,
+  getMyTicketWallet,
+  TICKET_WALLET_CHANGED_EVENT,
+  type TicketWalletChangedEvent,
+} from "@/lib/payments";
 import { useAuthStore } from "@/stores/authStore";
 import { useTicketWalletShortcutStore } from "@/stores/ticketWalletShortcutStore";
 import { Cancel01Icon, Ticket02Icon } from "@hugeicons/core-free-icons";
@@ -527,11 +533,13 @@ import React, {
 } from "react";
 import {
   Animated,
+  DeviceEventEmitter,
   Easing,
   Keyboard,
   PanResponder,
   Platform,
   StyleSheet,
+  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -674,6 +682,7 @@ export default function TicketWalletShortcut() {
   const [isDragging, setIsDragging] = useState(false);
   const [isOverDismiss, setIsOverDismiss] = useState(false);
   const [isPositionReady, setIsPositionReady] = useState(false);
+  const [activeTicketCount, setActiveTicketCount] = useState(0);
   const animatedPosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const deleteAnimation = useRef(new Animated.Value(1)).current;
   const dragStartRef = useRef({ x: 0, y: 0 });
@@ -695,6 +704,7 @@ export default function TicketWalletShortcut() {
   const firstSegment = segments[0];
   const secondSegment = segments[1];
   const thirdSegment = segments[2];
+  const routeKey = segments.join("/");
   const isTicketWalletRoute =
     firstSegment === "event-screen" && secondSegment === "wallet";
   const isBlockedRoute =
@@ -769,6 +779,11 @@ export default function TicketWalletShortcut() {
     [setStoredPosition],
   );
 
+  const refreshActiveTicketCount = useCallback(async () => {
+    const walletTickets = await getMyTicketWallet();
+    setActiveTicketCount(getActiveTicketWalletCount(walletTickets));
+  }, []);
+
   const clearDragState = useCallback(() => {
     isDraggingRef.current = false;
     isOverDismissRef.current = false;
@@ -823,6 +838,38 @@ export default function TicketWalletShortcut() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (!hasRestoredAuth || !isAuthenticated) {
+      setActiveTicketCount(0);
+      return;
+    }
+
+    void refreshActiveTicketCount().catch(() => undefined);
+  }, [hasRestoredAuth, isAuthenticated, refreshActiveTicketCount, routeKey]);
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      TICKET_WALLET_CHANGED_EVENT,
+      (event?: TicketWalletChangedEvent) => {
+        if (!hasRestoredAuth || !isAuthenticated) {
+          setActiveTicketCount(0);
+          return;
+        }
+
+        if (typeof event?.activeTicketCount === "number") {
+          setActiveTicketCount(event.activeTicketCount);
+          return;
+        }
+
+        void refreshActiveTicketCount().catch(() => undefined);
+      },
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [hasRestoredAuth, isAuthenticated, refreshActiveTicketCount]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -1083,6 +1130,8 @@ export default function TicketWalletShortcut() {
     return null;
   }
 
+  const badgeLabel = activeTicketCount > 99 ? "99+" : String(activeTicketCount);
+
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {isDragging && (
@@ -1136,6 +1185,11 @@ export default function TicketWalletShortcut() {
           color="#B3B3B3"
           strokeWidth={2}
         />
+        {activeTicketCount > 0 && (
+          <View pointerEvents="none" style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{badgeLabel}</Text>
+          </View>
+        )}
       </Animated.View>
     </View>
   );
@@ -1173,5 +1227,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 999,
     elevation: 10,
+  },
+  countBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 5,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E75737",
+    borderWidth: 2,
+    borderColor: "#101014",
+  },
+  countBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: "700",
   },
 });
