@@ -119,6 +119,7 @@ const styles = StyleSheet.create({
   },
   toggleWrapper: {
     marginHorizontal: 16,
+    marginTop: 10,
     borderRadius: 12,
     overflow: "hidden",
   },

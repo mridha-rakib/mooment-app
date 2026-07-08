@@ -70,13 +70,19 @@ export default function ProfileContent({
   const firstEventRepostId = feedItems.find((item) => (
     item.type === 'repost' && item.share.originalItem?.type === 'event'
   ))?.id;
+  const headerWithGap = listHeaderComponent ? (
+    <>
+      {listHeaderComponent}
+      <View style={styles.afterTabsGap} />
+    </>
+  ) : undefined;
   
   if (activeTab === 'feed') {
     return (
       <FlatList
         data={feedItems}
         keyExtractor={(item) => `${item.type}-${item.id}`}
-        ListHeaderComponent={listHeaderComponent}
+        ListHeaderComponent={headerWithGap}
         refreshControl={refreshControl}
         onEndReachedThreshold={0.5}
         onEndReached={onLoadMoreFeed}
@@ -137,6 +143,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 10,
+  },
+  afterTabsGap: {
+    height: 10,
   },
   emptyContainer: {
     padding: 50,
