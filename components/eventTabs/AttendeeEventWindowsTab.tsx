@@ -37,6 +37,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type AttendeeEventWindowsTabProps = {
   eventId: string;
+  eventStatus?: string | null;
 };
 
 type MediaContentType = Exclude<EventWindowContentType, "text">;
@@ -119,8 +120,9 @@ const getMediaExtension = (contentType: string, type: MediaContentType) => {
   return type === "image" ? "jpg" : type === "video" ? "mp4" : "mp3";
 };
 
-const getWindowMessage = (window: EventWindow) => {
-  if (window.hasPosted) return "Private gallery unlocked.";
+const getWindowMessage = (window: EventWindow, eventEnded: boolean) => {
+  if (window.hasPosted && eventEnded) return "Private gallery unlocked.";
+  if (window.hasPosted) return "Post submitted. Gallery unlocks after the event ends.";
   if (!window.hasAttended) return "Check in at event to unlock posting.";
   if (window.computedStatus === "open" && window.remainingSlots > 0) return "Post to unlock this window.";
   if (window.computedStatus === "scheduled") return "Posting opens when this window starts.";
@@ -167,7 +169,7 @@ function GalleryAudio({ uri, headers, durationSeconds }: { uri: string; headers?
   );
 }
 
-const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
+const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsTabProps) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const currentUserId = useAuthStore((state) => state.user?.id);
@@ -192,6 +194,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
     () => accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     [accessToken],
   );
+  const eventEnded = eventStatus === "completed";
 
   const loadWindows = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
@@ -289,7 +292,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
   };
 
   const loadGallery = useCallback(async (window: EventWindow, cursor: string | null = null) => {
-    if (!window.hasPosted) return;
+    if (!eventEnded || !window.canViewPosts) return;
     setGalleryLoadingId(window.id);
     setGalleryErrors((current) => ({ ...current, [window.id]: "" }));
     try {
@@ -307,10 +310,10 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
     } finally {
       setGalleryLoadingId(null);
     }
-  }, [eventId]);
+  }, [eventEnded, eventId]);
 
   const toggleGallery = (window: EventWindow) => {
-    if (!window.hasPosted) return;
+    if (!eventEnded || !window.canViewPosts) return;
     if (expandedWindowId === window.id) {
       setExpandedWindowId(null);
       return;
@@ -363,14 +366,9 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
         mediaItems,
       });
 
-      const [nextWindows, posts] = await Promise.all([
-        getEventWindows(eventId),
-        getEventWindowPosts(eventId, selectedWindow.id),
-      ]);
+      const nextWindows = await getEventWindows(eventId);
       setWindows(nextWindows);
-      setPostsByWindow((current) => ({ ...current, [selectedWindow.id]: posts.posts }));
-      setGalleryCursors((current) => ({ ...current, [selectedWindow.id]: posts.nextCursor }));
-      setExpandedWindowId(selectedWindow.id);
+      setExpandedWindowId(null);
       setSelectedWindow(null);
       setSelectedMedia(null);
       setText("");
@@ -409,6 +407,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
     const isExpanded = expandedWindowId === window.id;
     const galleryPosts = postsByWindow[window.id];
     const nextCursor = galleryCursors[window.id];
+    const canOpenGallery = eventEnded && window.canViewPosts;
 
     return (
       <View key={window.id} style={[styles.windowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -436,7 +435,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
         </View>
         <View style={[styles.windowMessage, { backgroundColor: isDark ? "#191919" : "#F3F4F6" }]}>
           <Feather name={window.hasPosted ? "unlock" : window.hasAttended ? "lock" : "map-pin"} size={16} color={window.hasPosted ? colors.success : colors.textSecondary} />
-          <Text style={[styles.windowMessageText, { color: colors.textSecondary }]}>{getWindowMessage(window)}</Text>
+          <Text style={[styles.windowMessageText, { color: colors.textSecondary }]}>{getWindowMessage(window, eventEnded)}</Text>
         </View>
 
         {window.canPost ? (
@@ -446,7 +445,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
           </TouchableOpacity>
         ) : null}
 
-        {window.hasPosted ? (
+        {canOpenGallery ? (
           <TouchableOpacity style={[styles.galleryToggle, { borderColor: colors.border }]} onPress={() => toggleGallery(window)}>
             <Feather name="image" size={17} color={colors.text} />
             <Text style={[styles.galleryToggleText, { color: colors.text }]}>Private gallery</Text>
@@ -454,7 +453,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
           </TouchableOpacity>
         ) : null}
 
-        {isExpanded && window.hasPosted ? (
+        {isExpanded && canOpenGallery ? (
           <View style={[styles.gallery, { borderTopColor: colors.border }]}>
             {galleryLoadingId === window.id ? <ActivityIndicator color={colors.primary} /> : null}
             {galleryErrors[window.id] ? (
@@ -501,7 +500,7 @@ const AttendeeEventWindowsTab = ({ eventId }: AttendeeEventWindowsTabProps) => {
       ) : windows.length === 0 ? (
         <View style={[styles.emptyState, { borderColor: colors.border }]}>
           <Feather name="clock" size={30} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No event windows yet</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>{eventEnded ? "No participated windows yet" : "No event windows yet"}</Text>
         </View>
       ) : windows.map(renderWindow)}
 

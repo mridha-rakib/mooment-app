@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useTheme } from "@/hooks/useTheme";
-import { getEventTicketAccess } from "@/lib/events";
+import type { EventStatus } from "@/lib/events";
 import { getLiveRoomMessages, type LiveRoomMessage } from "@/lib/liveRooms";
 import { createRealtimeSocket, type LiveRealtimeMessage } from "@/lib/realtime";
 import { useAuthStore } from "@/stores/authStore";
@@ -21,7 +21,8 @@ type ChatTabProps = {
   eventId: string;
   eventName?: string;
   scheduledAt?: string | null;
-  isHostMode?: boolean;
+  endAt?: string | null;
+  eventStatus?: EventStatus;
 };
 
 type ChatMessage = {
@@ -67,6 +68,20 @@ const isEventStarted = (scheduledAt?: string | null): boolean => {
   return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
 };
 
+const isEventClosed = (eventStatus?: EventStatus, endAt?: string | null): boolean => {
+  if (eventStatus === "completed" || eventStatus === "cancelled") {
+    return true;
+  }
+
+  if (!endAt) {
+    return false;
+  }
+
+  const date = new Date(endAt);
+
+  return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
+};
+
 const toHistoryMessage = (message: LiveRoomMessage, currentUserId?: string): ChatMessage => ({
   id: message.id,
   senderId: message.senderId,
@@ -92,7 +107,8 @@ const ChatTab = ({
   eventId,
   eventName,
   scheduledAt,
-  isHostMode = false,
+  endAt,
+  eventStatus,
 }: ChatTabProps) => {
   const { colors, isDark } = useTheme();
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -105,43 +121,42 @@ const ChatTab = ({
   const messagesScrollRef = useRef<ScrollView>(null);
 
   const eventStarted = isEventStarted(scheduledAt);
-
-  const checkAccess = useCallback(async () => {
-    if (isHostMode) {
-      setHasAccess(true);
-      return;
-    }
-
-    try {
-      const { hasAccess: access } = await getEventTicketAccess(eventId);
-      setHasAccess(access);
-    } catch {
-      setHasAccess(false);
-    }
-  }, [eventId, isHostMode]);
-
-  const loadMessages = useCallback(async () => {
-    try {
-      const history = await getLiveRoomMessages(eventId, { limit: 50 });
-      setMessages(history.map((m) => toHistoryMessage(m, currentUser?.id)));
-    } catch {
-      // Fail silently — show empty chat
-    }
-  }, [currentUser?.id, eventId]);
+  const eventClosed = isEventClosed(eventStatus, endAt);
 
   useEffect(() => {
     let isActive = true;
 
     const initialize = async () => {
-      setIsLoading(true);
-
-      await checkAccess();
-
-      if (!isActive) {
+      if (!eventStarted || eventClosed) {
+        setIsLoading(false);
+        setHasAccess(null);
+        setMessages([]);
         return;
       }
 
-      setIsLoading(false);
+      setIsLoading(true);
+
+      try {
+        const history = await getLiveRoomMessages(eventId, { limit: 50 });
+
+        if (!isActive) {
+          return;
+        }
+
+        setMessages(history.map((m) => toHistoryMessage(m, currentUser?.id)));
+        setHasAccess(true);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setMessages([]);
+        setHasAccess(false);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
     };
 
     void initialize();
@@ -149,18 +164,14 @@ const ChatTab = ({
     return () => {
       isActive = false;
     };
-  }, [checkAccess]);
+  }, [currentUser?.id, eventClosed, eventId, eventStarted]);
 
   useEffect(() => {
-    if (!hasAccess || !eventStarted) {
+    if (!hasAccess || !eventStarted || eventClosed) {
       return;
     }
 
-    void loadMessages();
-  }, [hasAccess, eventStarted, loadMessages]);
-
-  useEffect(() => {
-    if (!accessToken || !hasAccess || !eventStarted) {
+    if (!accessToken) {
       return;
     }
 
@@ -186,6 +197,11 @@ const ChatTab = ({
           return [...prev, toRealtimeMessage(realtimeMessage, currentUser?.id)];
         });
       },
+      onError: (error) => {
+        if (error.code === "EVENT_CHAT_ACCESS_DENIED" || error.code === "AUTH_FAILED") {
+          setHasAccess(false);
+        }
+      },
     });
 
     realtime.joinLiveRoom(eventId);
@@ -199,7 +215,7 @@ const ChatTab = ({
         realtimeRef.current = null;
       }
     };
-  }, [accessToken, currentUser?.id, eventId, eventStarted, hasAccess]);
+  }, [accessToken, currentUser?.id, eventClosed, eventId, eventStarted, hasAccess]);
 
   const scrollToBottom = useCallback((animated = true) => {
     messagesScrollRef.current?.scrollToEnd({ animated });
@@ -209,6 +225,10 @@ const ChatTab = ({
     const text = inputText.trim();
 
     if (!text) {
+      return;
+    }
+
+    if (!hasAccess || !eventStarted || eventClosed) {
       return;
     }
 
@@ -324,7 +344,7 @@ const ChatTab = ({
     );
   }
 
-  if (!hasAccess) {
+  if (eventClosed) {
     return (
       <View style={styles.stateContainer}>
         <View
@@ -338,17 +358,16 @@ const ChatTab = ({
           ]}
         >
           <Ionicons
-            name="ticket-outline"
+            name="lock-closed-outline"
             size={28}
             color={colors.textSecondary}
           />
         </View>
         <Text style={[styles.stateTitle, { color: colors.text }]}>
-          Ticket Required
+          Chat Closed
         </Text>
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
-          Purchase a ticket for this event to join the group chat with other
-          attendees.
+          Event chat is available only while the event is active.
         </Text>
       </View>
     );
@@ -379,6 +398,36 @@ const ChatTab = ({
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
           The group chat will be available once the event starts
           {scheduledAt ? ` on ${formatScheduledTime(scheduledAt)}` : ""}.
+        </Text>
+      </View>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <View style={styles.stateContainer}>
+        <View
+          style={[
+            styles.stateIconCircle,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(0,0,0,0.04)",
+            },
+          ]}
+        >
+          <Ionicons
+            name="ticket-outline"
+            size={28}
+            color={colors.textSecondary}
+          />
+        </View>
+        <Text style={[styles.stateTitle, { color: colors.text }]}>
+          Check In Required
+        </Text>
+        <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+          Check in with your event ticket to join the group chat with other
+          attendees.
         </Text>
       </View>
     );

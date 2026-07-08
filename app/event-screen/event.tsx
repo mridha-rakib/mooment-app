@@ -1547,9 +1547,10 @@ const EventScreen = () => {
                 eventId={eventId}
                 eventStartsAt={event?.scheduledAt}
                 eventEndsAt={event?.endAt}
+                canManageWindows={event?.status === "live"}
               />
             ) : (
-              <AttendeeEventWindowsTab eventId={eventId} />
+              <AttendeeEventWindowsTab eventId={eventId} eventStatus={event?.status} />
             )
           )}
           {activeTab === "Chat" && eventId && (
@@ -1557,7 +1558,8 @@ const EventScreen = () => {
               eventId={eventId}
               eventName={event?.name ?? "Event"}
               scheduledAt={event?.scheduledAt ?? null}
-              isHostMode={isHostMode}
+              endAt={event?.endAt ?? null}
+              eventStatus={event?.status}
             />
           )}
           {/* ProductTab hidden — preserved for future restoration

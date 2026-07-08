@@ -486,6 +486,7 @@ const ticketWalletEventToEventResponse = (walletItem: TicketWalletItem): EventRe
           name: walletEvent.host.name,
           username: walletEvent.host.username,
           avatarKey: walletEvent.host.avatarKey ?? null,
+          isFollowing: walletEvent.host.isFollowing,
         }
       : null,
     status: walletEvent.status as EventStatus,

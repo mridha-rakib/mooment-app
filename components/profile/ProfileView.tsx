@@ -7,7 +7,9 @@ import type {
   RepostPayload,
 } from "@/lib/moments";
 import { createReport } from "@/lib/reports";
-import React, { useCallback, useRef, useState } from "react";
+import { getUserStories, type Story } from "@/lib/stories";
+import { createStoryViewerSession } from "@/lib/storyViewerSession";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   RefreshControl,
@@ -24,6 +26,7 @@ import CommentsModal from "../post/CommentsModal";
 import { PostData } from "../post/FeedPost";
 import ShareModal from "../post/ShareModal";
 import AddProductModal from "./AddProductModal";
+import ProfileAvatarModal, { type ProfileAvatarModalMode } from "./ProfileAvatarModal";
 import ProfileActions from "./ProfileActions";
 import ProfileBio from "./ProfileBio";
 import ProfileContent from "./ProfileContent";
@@ -32,6 +35,39 @@ import ProfileMenuDrawer from "./ProfileMenuDrawer";
 import ProfileTabs, { ProfileTabType } from "./ProfileTabs";
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+const PROFILE_STORY_CACHE_TTL_MS = 15_000;
+const PROFILE_STORY_CHECK_TIMEOUT_MS = 3_000;
+
+type ProfileStoryItem = {
+  id: string;
+  mediaType: Story["mediaType"];
+  mediaUri?: string | null;
+  contentType?: string | null;
+  durationSeconds: number;
+  caption?: string | null;
+  textContent?: string | null;
+  textBackground?: Story["textBackground"];
+  textOverlay?: Story["textOverlay"];
+  createdAt?: string;
+  expiresAt?: string;
+  viewsCount?: number;
+  reactionsCount?: number;
+  commentsCount?: number;
+  isReacted?: boolean;
+  isOwner?: boolean;
+  authorId?: string;
+  authorName?: string;
+  authorAvatar?: string | null;
+};
+
+const getActiveStories = (stories: Story[]) => {
+  const now = Date.now();
+
+  return stories.filter((story) => {
+    const expiresAt = new Date(story.expiresAt).getTime();
+    return !Number.isFinite(expiresAt) || expiresAt > now;
+  });
+};
 
 export type UserProfileData = {
   id: string;
@@ -80,6 +116,167 @@ export default function ProfileView({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTabType>("feed");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [avatarModalMode, setAvatarModalMode] = useState<ProfileAvatarModalMode>(null);
+  const profileStoriesRef = useRef<{
+    userId: string;
+    stories: Story[];
+    fetchedAt: number;
+  } | null>(null);
+  const profileStoriesRequestRef = useRef<{ userId: string; request: Promise<Story[]> } | null>(null);
+  const avatarTapInFlightRef = useRef(false);
+  const storyNavigationInFlightRef = useRef(false);
+  const viewedUserIdRef = useRef(user.id);
+
+  viewedUserIdRef.current = user.id;
+
+  const loadProfileStories = useCallback(() => {
+    const cached = profileStoriesRef.current;
+    if (
+      cached?.userId === user.id &&
+      Date.now() - cached.fetchedAt < PROFILE_STORY_CACHE_TTL_MS
+    ) {
+      return Promise.resolve(getActiveStories(cached.stories));
+    }
+
+    const pending = profileStoriesRequestRef.current;
+    if (pending?.userId === user.id) {
+      return pending.request;
+    }
+
+    const requestedUserId = user.id;
+    const request = getUserStories(requestedUserId)
+      .then(getActiveStories)
+      .catch(() => [] as Story[])
+      .then((stories) => {
+        if (viewedUserIdRef.current === requestedUserId) {
+          profileStoriesRef.current = {
+            userId: requestedUserId,
+            stories,
+            fetchedAt: Date.now(),
+          };
+        }
+        return stories;
+      })
+      .finally(() => {
+        if (profileStoriesRequestRef.current?.request === request) {
+          profileStoriesRequestRef.current = null;
+        }
+      });
+
+    profileStoriesRequestRef.current = { userId: requestedUserId, request };
+    return request;
+  }, [user.id]);
+
+  useEffect(() => {
+    setAvatarModalMode(null);
+    avatarTapInFlightRef.current = false;
+    storyNavigationInFlightRef.current = false;
+    void loadProfileStories();
+  }, [loadProfileStories]);
+
+  const handleAvatarPress = useCallback(async () => {
+    if (avatarTapInFlightRef.current || avatarModalMode) {
+      return;
+    }
+
+    avatarTapInFlightRef.current = true;
+    const requestedUserId = user.id;
+
+    try {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const stories = await Promise.race([
+        loadProfileStories(),
+        new Promise<Story[]>((resolve) => {
+          timeoutId = setTimeout(
+            () => resolve([]),
+            PROFILE_STORY_CHECK_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (viewedUserIdRef.current !== requestedUserId) {
+        return;
+      }
+      setAvatarModalMode(stories.length > 0 ? "actions" : "preview");
+    } finally {
+      avatarTapInFlightRef.current = false;
+    }
+  }, [avatarModalMode, loadProfileStories, user.id]);
+
+  const handleViewProfileStory = useCallback(() => {
+    if (storyNavigationInFlightRef.current) {
+      return;
+    }
+
+    const stories = getActiveStories(
+      profileStoriesRef.current?.userId === user.id
+        ? profileStoriesRef.current.stories
+        : [],
+    ).sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+
+    const storyItems = stories
+      .map<ProfileStoryItem>((story) => ({
+        id: story.id,
+        mediaType: story.mediaType,
+        mediaUri: story.mediaUrl,
+        contentType: story.contentType,
+        durationSeconds: story.durationSeconds || 15,
+        caption: story.caption,
+        textContent: story.textContent,
+        textBackground: story.textBackground,
+        textOverlay: story.textOverlay,
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewsCount: story.viewsCount,
+        reactionsCount: story.reactionsCount,
+        commentsCount: story.commentsCount,
+        isReacted: story.isReacted,
+        isOwner: story.isOwner,
+        authorId: story.author?.id ?? story.userId,
+        authorName: story.author?.name ?? user.name,
+        authorAvatar: story.author?.avatarUrl ?? user.avatar,
+      }))
+      .filter((story) => story.mediaType === "text" || Boolean(story.mediaUri));
+
+    if (storyItems.length === 0) {
+      setAvatarModalMode("preview");
+      return;
+    }
+
+    storyNavigationInFlightRef.current = true;
+    const latestStory = storyItems[storyItems.length - 1];
+    const title = latestStory.authorName ?? user.name ?? "Story";
+    const group = {
+      title,
+      authorId: latestStory.authorId ?? user.id,
+      authorAvatar: latestStory.authorAvatar ?? user.avatar,
+      stories: storyItems,
+    };
+    const storySessionId = createStoryViewerSession({
+      activeTab: "discover",
+      discoverGroups: [group],
+      friendGroups: [],
+    });
+
+    setAvatarModalMode(null);
+    router.push({
+      pathname: "/post-screen/view-story",
+      params: {
+        stories: JSON.stringify(storyItems),
+        title,
+        openedAt: String(Date.now()),
+        storySessionId,
+        groupIndex: "0",
+      },
+    });
+    setTimeout(() => {
+      storyNavigationInFlightRef.current = false;
+    }, 750);
+  }, [router, user.avatar, user.id, user.name]);
 
   const handleRefresh = useCallback(async () => {
     if (!onRefresh) return;
@@ -198,6 +395,7 @@ export default function ProfileView({
           accountType={user.accountType}
           isOwnProfile={isOwnProfile}
           onMenuPress={() => setMenuVisible(true)}
+          onAvatarPress={() => void handleAvatarPress()}
           onReport={!isOwnProfile ? handleReportPress : undefined}
           onSave={!isOwnProfile ? handleSavePress : undefined}
           onEventsPress={() =>
@@ -342,6 +540,15 @@ export default function ProfileView({
       <AddProductModal
         visible={addProductVisible}
         onClose={() => setAddProductVisible(false)}
+      />
+
+      <ProfileAvatarModal
+        mode={avatarModalMode}
+        avatar={user.avatar}
+        name={user.name}
+        onClose={() => setAvatarModalMode(null)}
+        onViewStory={handleViewProfileStory}
+        onViewProfilePicture={() => setAvatarModalMode("preview")}
       />
 
       <ReportModal

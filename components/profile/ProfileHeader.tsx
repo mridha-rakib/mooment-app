@@ -34,6 +34,7 @@ type ProfileHeaderProps = {
   onSave?: () => void;
   isSaved?: boolean;
   onEventsPress?: () => void;
+  onAvatarPress?: () => void;
 };
 
 export default function ProfileHeader({
@@ -48,6 +49,7 @@ export default function ProfileHeader({
   onSave,
   isSaved = false,
   onEventsPress,
+  onAvatarPress,
 }: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -103,30 +105,33 @@ export default function ProfileHeader({
       />
 
       <View style={styles.infoRow}>
-        <View
-          style={[
-            styles.avatarBorder,
-            {
-              borderColor:
-                accountType === "business"
-                  ? BUSINESS_RING_COLOR
-                  : colors.primary,
-            },
-          ]}
-          accessibilityLabel={
-            accountType === "business"
-              ? "Business account avatar"
-              : "Personal account avatar"
-          }
+        <TouchableOpacity
+          activeOpacity={0.82}
+          disabled={!onAvatarPress}
+          accessibilityRole={onAvatarPress ? "button" : undefined}
+          accessibilityLabel={`View ${name?.trim() || "user"} profile picture`}
+          onPress={onAvatarPress}
         >
-          <UserAvatar
-            uri={avatar}
-            name={name}
-            size={80}
-            style={styles.avatar}
-            iconSize={36}
-          />
-        </View>
+          <View
+            style={[
+              styles.avatarBorder,
+              {
+                borderColor:
+                  accountType === "business"
+                    ? BUSINESS_RING_COLOR
+                    : colors.primary,
+              },
+            ]}
+          >
+            <UserAvatar
+              uri={avatar}
+              name={name}
+              size={80}
+              style={styles.avatar}
+              iconSize={36}
+            />
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.statsContainer}>
           <TouchableOpacity

@@ -178,6 +178,7 @@ export type TicketWalletItem = {
       name: string;
       username?: string;
       avatarKey?: string | null;
+      isFollowing?: boolean;
     } | null;
   };
 };

@@ -33,6 +33,7 @@ type HostEventWindowsTabProps = {
   eventId: string;
   eventStartsAt?: string | null;
   eventEndsAt?: string | null;
+  canManageWindows?: boolean;
 };
 
 type PickerTarget = "startDate" | "startTime" | "endDate" | "endTime" | null;
@@ -136,7 +137,7 @@ const replaceTimePart = (current: Date, selected: Date) => {
   return next;
 };
 
-const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventWindowsTabProps) => {
+const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWindows = false }: HostEventWindowsTabProps) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const formScrollRef = useRef<ScrollView>(null);
@@ -172,6 +173,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventW
   }, [loadWindows]);
 
   const openCreateForm = () => {
+    if (!canManageWindows) return;
     setEditingWindow(null);
     setForm(createInitialForm(eventStartsAt, eventEndsAt));
     setFormError(null);
@@ -180,6 +182,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventW
   };
 
   const openEditForm = (window: EventWindow) => {
+    if (!canManageWindows) return;
     setEditingWindow(window);
     setForm(createInitialForm(eventStartsAt, eventEndsAt, window));
     setFormError(null);
@@ -239,6 +242,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventW
   };
 
   const saveWindow = async () => {
+    if (!canManageWindows) return;
     Keyboard.dismiss();
     const validationError = validateForm();
     if (validationError) {
@@ -279,6 +283,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventW
   };
 
   const confirmCancel = (window: EventWindow) => {
+    if (!canManageWindows) return;
     Alert.alert(
       "Cancel window?",
       "This window will stop accepting posts. This action cannot be undone.",
@@ -304,7 +309,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventW
   };
 
   const renderWindow = (window: EventWindow) => {
-    const canManage = window.computedStatus === "scheduled" || window.computedStatus === "open";
+    const canManage = canManageWindows && (window.computedStatus === "scheduled" || window.computedStatus === "open");
     const statusColor = STATUS_COLORS[window.computedStatus];
 
     return (
@@ -378,10 +383,12 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt }: HostEventW
         <View style={styles.headingText}>
           <Text style={[styles.heading, { color: colors.text }]}>Posting windows</Text>
         </View>
-        <TouchableOpacity style={[styles.createButton, { backgroundColor: colors.text }]} onPress={openCreateForm}>
-          <Feather name="plus" size={18} color={colors.background} />
-          <Text style={[styles.createButtonText, { color: colors.background }]}>Create</Text>
-        </TouchableOpacity>
+        {canManageWindows ? (
+          <TouchableOpacity style={[styles.createButton, { backgroundColor: colors.text }]} onPress={openCreateForm}>
+            <Feather name="plus" size={18} color={colors.background} />
+            <Text style={[styles.createButtonText, { color: colors.background }]}>Create</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {isLoading ? (
