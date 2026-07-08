@@ -11,6 +11,7 @@ import { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'reac
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
+import { navigateToProfile } from '@/lib/profileNavigation';
 import { blockUser, followUser, unfollowUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
@@ -669,6 +670,15 @@ export default function FeedPost({
     });
   };
 
+  const handleAuthorPress = () => {
+    navigateToProfile(router, currentUserId, {
+      userId: post.authorId,
+      name: post.authorName,
+      avatar: post.authorAvatar,
+      isFollowing,
+    });
+  };
+
   if (isHidden) {
     return null;
   }
@@ -714,15 +724,7 @@ export default function FeedPost({
           <TouchableOpacity
             style={styles.postAuthorInfo}
             activeOpacity={0.7}
-            onPress={() => router.push({
-              pathname: '/profile-screen/user-profile',
-              params: {
-                userId: post.authorId ?? post.id,
-                name: post.authorName,
-                isFollowing: String(isFollowing),
-                ...(post.authorAvatar ? { avatar: post.authorAvatar } : {}),
-              }
-            } as any)}
+            onPress={handleAuthorPress}
           >
             <UserAvatar
               uri={post.authorAvatar}

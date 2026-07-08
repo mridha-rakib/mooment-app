@@ -7,8 +7,14 @@ import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { getStorageFileUrl } from '@/lib/storage';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from 'react-native';
+
+const SAVED_POST_VIDEO_VIEWABILITY_THRESHOLD = 60;
+
+const hasVideoMedia = (post: PostData) => (
+  post.mediaItems?.some((item) => item.type === 'video' && Boolean(item.uri?.trim())) ?? false
+);
 
 export default function SavedPostsScreen() {
   const router = useRouter();
@@ -18,6 +24,26 @@ export default function SavedPostsScreen() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activePost, setActivePost] = useState<PostData | null>(null);
+  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: SAVED_POST_VIDEO_VIEWABILITY_THRESHOLD,
+    minimumViewTime: 120,
+  }).current;
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const nextActiveVideoPost = viewableItems
+      .filter((viewToken) => (
+        viewToken.isViewable &&
+        hasVideoMedia(viewToken.item as PostData)
+      ))
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))[0];
+
+    setActiveVideoPostId((current) => {
+      const nextId = (nextActiveVideoPost?.item as PostData | undefined)?.id ?? null;
+      return current === nextId ? current : nextId;
+    });
+  }).current;
 
   const loadSavedPosts = useCallback(async () => {
     setIsLoading(true);
@@ -38,6 +64,10 @@ export default function SavedPostsScreen() {
 
   useFocusEffect(useCallback(() => {
     void loadSavedPosts();
+
+    return () => {
+      setActiveVideoPostId(null);
+    };
   }, [loadSavedPosts]));
 
   const handleCommentPress = (post: PostData) => {
@@ -60,33 +90,47 @@ export default function SavedPostsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {isLoading ? (
-          <View style={styles.centerState}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : posts.length === 0 ? (
-          <View style={styles.centerState}>
-            <Feather name="bookmark" size={40} color={colors.textSecondary} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No saved posts yet</Text>
-          </View>
-        ) : (
-          posts.map(post => (
+      <FlatList
+        data={isLoading ? [] : posts}
+        keyExtractor={(post) => post.id}
+        extraData={activeVideoPostId}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        removeClippedSubviews
+        ListEmptyComponent={(
+          isLoading ? (
+            <View style={styles.centerState}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.centerState}>
+              <Feather name="bookmark" size={40} color={colors.textSecondary} />
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No saved posts yet</Text>
+            </View>
+          )
+        )}
+        renderItem={({ item: post }) => (
             <View key={post.id} style={styles.postWrapper}>
               <FeedPost
                 post={post}
                 onCommentPress={handleCommentPress}
                 onSharePress={handleSharePress}
+                isActiveVideo={activeVideoPostId === post.id}
                 onSaveChange={(postId, isSaved) => {
                   if (!isSaved) {
                     setPosts((current) => current.filter((item) => item.id !== postId));
+                    setActiveVideoPostId((current) => current === postId ? null : current);
                   }
                 }}
               />
             </View>
-          ))
         )}
-      </ScrollView>
+      />
 
       <CommentsModal
         visible={commentModalVisible}

@@ -1,13 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EventFeedCard from '@/components/home/EventFeedCard';
 import { useTheme } from '@/hooks/useTheme';
 import { getEventById, type EventResponse } from '@/lib/events';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { shareMoment, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
+import { navigateToProfile } from '@/lib/profileNavigation';
 import { getStorageFileUrl } from '@/lib/storage';
+import { useAuthStore } from '@/stores/authStore';
 import UserAvatar from '../ui/UserAvatar';
 import FeedPost from './FeedPost';
 import ShareModal from './ShareModal';
@@ -72,6 +74,7 @@ export default function RepostFeedCard({
 
   const header = (
     <RepostHeader
+      reposterId={share.sharedBy?.id}
       reposterName={reposterName}
       reposterAvatar={reposterAvatar}
       contextLabel={contextLabel}
@@ -128,6 +131,7 @@ export default function RepostFeedCard({
 }
 
 function RepostHeader({
+  reposterId,
   reposterName,
   reposterAvatar,
   contextLabel,
@@ -135,6 +139,7 @@ function RepostHeader({
   caption,
   taggedFriends,
 }: {
+  reposterId?: string | null;
   reposterName: string;
   reposterAvatar?: string | null;
   contextLabel: string;
@@ -144,29 +149,37 @@ function RepostHeader({
 }) {
   const { colors } = useTheme();
   const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const validTaggedFriends = taggedFriends.filter((friend) => getTaggedFriendName(friend));
+
+  const openReposterProfile = () => {
+    navigateToProfile(router, currentUserId, {
+      userId: reposterId,
+      name: reposterName,
+      avatar: reposterAvatar,
+    });
+  };
 
   const openTaggedProfile = (friend: MomentAuthor) => {
     if (!friend.id) return;
 
-    router.push({
-      pathname: '/profile-screen/user-profile',
-      params: {
-        userId: friend.id,
-        name: getTaggedFriendName(friend),
-        isFollowing: String(Boolean(friend.isFollowing)),
-        ...(friend.avatarUrl ? { avatar: friend.avatarUrl } : {}),
-      },
-    } as any);
+    navigateToProfile(router, currentUserId, {
+      userId: friend.id,
+      name: getTaggedFriendName(friend),
+      avatar: friend.avatarUrl,
+      isFollowing: Boolean(friend.isFollowing),
+    });
   };
 
   return (
     <View style={styles.repostHeader}>
-      <UserAvatar uri={reposterAvatar} name={reposterName} size={40} style={styles.reposterAvatar} />
+      <TouchableOpacity activeOpacity={0.7} onPress={openReposterProfile} disabled={!reposterId}>
+        <UserAvatar uri={reposterAvatar} name={reposterName} size={40} style={styles.reposterAvatar} />
+      </TouchableOpacity>
       <View style={styles.repostHeaderText}>
         <Text style={[styles.contextLabel, { color: colors.textSecondary }]}>{contextLabel}</Text>
         <Text style={[styles.reposterLine, { color: colors.text }]} numberOfLines={2}>
-          <Text style={styles.reposterName}>{reposterName}</Text>
+          <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
           {validTaggedFriends.length > 0 ? (
             <Text style={{ color: colors.textSecondary }}>
               {' is with '}

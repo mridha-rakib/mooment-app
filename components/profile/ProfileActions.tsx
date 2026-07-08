@@ -10,6 +10,7 @@ import { getAuthErrorMessage } from "@/lib/authErrors";
 import { checkDirectMessageAccess } from "@/lib/chat";
 import { followUser, unfollowUser } from "@/lib/users";
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import { useAuthStore } from "@/stores/authStore";
 
 type ProfileActionsProps = {
   userId?: string;
@@ -34,6 +35,7 @@ export default function ProfileActions({
 }: ProfileActionsProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const [isFollowing, setIsFollowing] = useState(Boolean(initialIsFollowing));
   const [hasLoadedFollowStatus, setHasLoadedFollowStatus] = useState(initialIsFollowing !== undefined);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
@@ -74,7 +76,7 @@ export default function ProfileActions({
     }
   };
 
-  if (isOwnProfile) return null;
+  if (isOwnProfile || (currentUserId && userId === currentUserId)) return null;
 
   const canOpenChat = isObjectId(userId);
 

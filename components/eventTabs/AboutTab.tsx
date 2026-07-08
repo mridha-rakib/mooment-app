@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Dimensions, Linking, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { navigateToProfile } from "@/lib/profileNavigation";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import { APP_MAP_STYLE_URL } from "@/lib/mapStyles";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -241,6 +242,7 @@ const AboutTab = ({
   onHostFollowChange,
 }: AboutTabProps) => {
   const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const { colors, isDark } = useTheme();
   const sharedLocation = useAuthStore((state) =>
     state.user?.currentLocationSharingEnabled ? state.user.currentLocation : null,
@@ -356,15 +358,12 @@ const AboutTab = ({
 
     const hostName = host.name?.trim() || host.username?.trim() || "Host";
 
-    router.push({
-      pathname: "/profile-screen/user-profile",
-      params: {
-        userId: host.id,
-        name: hostName,
-        isFollowing: String(isHostFollowing),
-        ...(hostAvatar ? { avatar: hostAvatar } : {}),
-      },
-    } as any);
+    navigateToProfile(router, currentUserId, {
+      userId: host.id,
+      name: hostName,
+      avatar: hostAvatar,
+      isFollowing: isHostFollowing,
+    });
   };
 
   const renderGallery = () => (
