@@ -9,6 +9,7 @@ import {
   type MomentInteractionSummary,
 } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
+import { navigateToProfile } from "@/lib/profileNavigation";
 import {
   createStoryComment,
   getStoryComments,
@@ -36,6 +37,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserAvatar from "../ui/UserAvatar";
+import { useAuthStore } from "@/stores/authStore";
 
 type CommentType = {
   id: string;
@@ -198,6 +200,7 @@ export default function CommentsModal({
   // consumes the first tap to dismiss the keyboard before onPress fires.
   const sendBtnPressedRef = useRef(false);
   const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const insets = useSafeAreaInsets();
   const canUseCommentsApi = Boolean(
     momentId && MONGO_OBJECT_ID_PATTERN.test(momentId),
@@ -391,14 +394,11 @@ export default function CommentsModal({
     onClose();
     // Use a small timeout to allow modal to close before navigating
     setTimeout(() => {
-      router.push({
-        pathname: "/profile-screen/user-profile",
-        params: {
-          userId: item.authorId ?? item.id,
-          name: item.authorName,
-          ...(item.authorAvatar ? { avatar: item.authorAvatar } : {}),
-        },
-      } as any);
+      navigateToProfile(router, currentUserId, {
+        userId: item.authorId,
+        name: item.authorName,
+        avatar: item.authorAvatar,
+      });
     }, 300);
   };
 

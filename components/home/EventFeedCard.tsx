@@ -9,6 +9,7 @@ import { getAuthErrorMessage } from "@/lib/authErrors";
 import { cancelEvent, type EventResponse } from "@/lib/events";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
+import { navigateToProfile } from "@/lib/profileNavigation";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import MoreMenuModal from "@/components/post/MoreMenuModal";
@@ -288,6 +289,15 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const goToEvent = () =>
     router.push({ pathname: "/event-screen/event", params: { eventId: event.id } });
 
+  const goToHostProfile = () => {
+    navigateToProfile(router, currentUserId, {
+      userId: hostId,
+      name: hostName,
+      avatar: hostAvatarUri,
+      isFollowing,
+    });
+  };
+
   const goToCategory = (category: string) =>
     router.push({ pathname: "/discover-screen/event-category", params: { category } });
 
@@ -326,7 +336,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
       ) : null}
       {/* ── Header ──────────────────────────────────────────────── */}
       <View style={styles.header}>
-        <View style={styles.hostRow}>
+        <TouchableOpacity style={styles.hostRow} activeOpacity={0.7} onPress={goToHostProfile}>
           <UserAvatar uri={hostAvatarUri} name={hostName} size={40} style={styles.avatar} />
           <View style={styles.hostMeta}>
             <Text style={styles.hostName} numberOfLines={1}>{hostName}</Text>
@@ -336,7 +346,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
               <Feather name={isPublic ? "globe" : "lock"} size={11} color="#777" />
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.headerActions}>
           {!isOwnEvent && (

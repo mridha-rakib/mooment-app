@@ -35,6 +35,7 @@ import {
 } from "@/lib/events";
 import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
+import { navigateToProfile } from "@/lib/profileNavigation";
 import { followUser, unfollowUser } from "@/lib/users";
 import { toggleMomentReaction, shareMoment, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import CommentsModal from "@/components/post/CommentsModal";
@@ -549,15 +550,12 @@ const EventScreen = () => {
 
     const hostId = event.host?.id ?? event.userId;
 
-    router.push({
-      pathname: "/profile-screen/user-profile",
-      params: {
-        userId: hostId,
-        name: hostName,
-        isFollowing: String(isFollowing),
-        ...(hostAvatarUri ? { avatar: hostAvatarUri } : {}),
-      },
-    } as any);
+    navigateToProfile(router, currentUser?.id, {
+      userId: hostId,
+      name: hostName,
+      avatar: hostAvatarUri,
+      isFollowing,
+    });
   };
 
   const ticketsLeft = getTicketsLeft(event?.tickets ?? []);

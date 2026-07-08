@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { PostData } from "@/components/post/FeedPost";
@@ -10,6 +10,8 @@ import { getProfileTimeline, type MomentInteractionSummary, type MomentTimelineI
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getUserById, getUserProfileStats } from "@/lib/users";
+import { isOwnProfileTarget } from "@/lib/profileNavigation";
+import { useAuthStore } from "@/stores/authStore";
 
 const DEFAULT_BIO = "Digital goodies designer everything is designed.";
 const FALLBACK_PROFILE_NAME = "Mooment User";
@@ -47,8 +49,11 @@ const formatNameFallbackHandle = (name?: string | null) => {
 
 export default function UserProfileScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const params = useLocalSearchParams<{ userId?: string; name?: string; avatar?: string; isFollowing?: string }>();
   const userId = params.userId;
+  const isOwnProfile = isOwnProfileTarget(currentUserId, userId);
   const routeIsFollowing = params.isFollowing === "true" ? true : params.isFollowing === "false" ? false : undefined;
   const [avatarUri, setAvatarUri] = useState<string | null>(params.avatar || null);
   const [posts, setPosts] = useState<PostData[]>([]);
@@ -65,7 +70,7 @@ export default function UserProfileScreen() {
   });
 
   const loadProfile = useCallback(async () => {
-    if (!userId) {
+    if (!userId || isOwnProfile) {
       return;
     }
 
@@ -119,7 +124,13 @@ export default function UserProfileScreen() {
       setProfileEvents(EMPTY_PROFILE_EVENTS);
       Alert.alert("Unable to load profile", getAuthErrorMessage(error, "Please try again."));
     }
-  }, [params.avatar, params.name, routeIsFollowing, userId]);
+  }, [isOwnProfile, params.avatar, params.name, routeIsFollowing, userId]);
+
+  useEffect(() => {
+    if (isOwnProfile) {
+      router.replace("/(tabs)/profile");
+    }
+  }, [isOwnProfile, router]);
 
   useEffect(() => {
     void loadProfile();
@@ -156,6 +167,10 @@ export default function UserProfileScreen() {
       },
     }));
   }, []);
+
+  if (isOwnProfile) {
+    return null;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
