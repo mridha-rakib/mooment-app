@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, type RefreshControlProps } from "react-native";
 
 import EventFeedCard from "@/components/home/EventFeedCard";
 import { useTheme } from "@/hooks/useTheme";
@@ -13,6 +13,10 @@ type ProfileEventsProps = {
   profileIsFollowing?: boolean;
   events: ProfileEventGroups;
   onEventsChange?: (events: ProfileEventGroups) => void;
+  listHeaderComponent?: React.ReactElement;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
+  onLoadMore?: (filter: "active" | "past") => void;
+  isLoadingMore?: boolean;
 };
 
 const dedupeEvents = (events: EventResponse[]): EventResponse[] => {
@@ -30,6 +34,10 @@ const dedupeEvents = (events: EventResponse[]): EventResponse[] => {
 export default function ProfileEvents({
   events,
   onEventsChange,
+  listHeaderComponent,
+  refreshControl,
+  onLoadMore,
+  isLoadingMore = false,
 }: ProfileEventsProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState<"active" | "past">("active");
@@ -45,8 +53,9 @@ export default function ProfileEvents({
     });
   };
 
-  return (
-    <View style={styles.container}>
+  const header = (
+    <>
+      {listHeaderComponent}
       <View style={styles.toggleWrapper}>
         <BlurView intensity={20} tint="dark" style={styles.toggleContainer}>
           <TouchableOpacity
@@ -71,25 +80,36 @@ export default function ProfileEvents({
           </TouchableOpacity>
         </BlurView>
       </View>
+    </>
+  );
 
-      <View style={styles.list}>
-        {visibleEvents.length > 0 ? (
-          visibleEvents.map((event) => (
-            <EventFeedCard
-              key={event.id}
-              event={event}
-              onEventCancelled={handleEventCancelled}
-            />
-          ))
-        ) : (
+  return (
+    <FlatList
+      data={visibleEvents}
+      keyExtractor={(event) => event.id}
+      ListHeaderComponent={header}
+      refreshControl={refreshControl}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.listContent}
+      onEndReachedThreshold={0.5}
+      onEndReached={() => onLoadMore?.(filter)}
+      renderItem={({ item }) => (
+        <EventFeedCard
+          event={item}
+          onEventCancelled={handleEventCancelled}
+        />
+      )}
+      ListEmptyComponent={(
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               {filter === "active" ? "No active events yet" : "No past events yet"}
             </Text>
           </View>
-        )}
-      </View>
-    </View>
+      )}
+      ListFooterComponent={isLoadingMore ? (
+        <ActivityIndicator color={colors.textSecondary} style={styles.footerLoader} />
+      ) : <View style={{ height: 100 }} />}
+    />
   );
 }
 
@@ -136,11 +156,17 @@ const styles = StyleSheet.create({
   list: {
     marginTop: 18,
   },
+  listContent: {
+    paddingTop: 15,
+  },
   emptyContainer: {
     padding: 50,
     alignItems: "center",
   },
   emptyText: {
     textAlign: "center",
+  },
+  footerLoader: {
+    paddingVertical: 18,
   },
 });

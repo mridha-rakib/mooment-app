@@ -8,11 +8,12 @@ import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const getHandle = (username?: string) => (username ? `@${username.replace(/^@/, "")}` : "@xenog");
+const PAGE_SIZE = 30;
 
 export default function FollowingScreen() {
   const { colors } = useTheme();
@@ -23,42 +24,43 @@ export default function FollowingScreen() {
   const [following, setFollowing] = useState<ProfileFollowUserResponse[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadFollowing = async () => {
+  const loadFollowing = useCallback(async (nextPage = 1) => {
       if (!userId) {
         setFollowing([]);
         setIsLoading(false);
         return;
       }
 
-      setIsLoading(true);
+      if (nextPage === 1) setIsLoading(true);
+      else setIsLoadingMore(true);
 
       try {
-        const users = await getUserFollowing(userId);
-
-        if (isMounted) {
-          setFollowing(users);
-        }
+        const result = await getUserFollowing(userId, undefined, PAGE_SIZE, nextPage);
+        setFollowing((current) => nextPage === 1 ? result.users : [...current, ...result.users]);
+        setPage(nextPage);
+        setHasMore(Boolean(result.pagination && result.pagination.page < result.pagination.totalPages));
       } catch {
-        if (isMounted) {
+        if (nextPage === 1) {
           setFollowing([]);
         }
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
+        setIsLoadingMore(false);
       }
-    };
+    }, [userId]);
 
-    void loadFollowing();
+  useEffect(() => {
+    void loadFollowing(1);
+  }, [loadFollowing]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [userId]);
+  const loadMore = useCallback(() => {
+    if (isLoading || isLoadingMore || !hasMore) return;
+    void loadFollowing(page + 1);
+  }, [hasMore, isLoading, isLoadingMore, loadFollowing, page]);
 
   const toggleFollow = async (targetUser: ProfileFollowUserResponse) => {
     if (pendingUserIds.includes(targetUser.id) || targetUser.id === authUser?.id) {
@@ -121,8 +123,15 @@ export default function FollowingScreen() {
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Not following anyone yet</Text>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
-          {following.map((user) => {
+        <FlatList
+          data={following}
+          keyExtractor={(user) => user.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContainer}
+          onEndReachedThreshold={0.4}
+          onEndReached={loadMore}
+          ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.textSecondary} style={styles.footerLoader} /> : null}
+          renderItem={({ item: user }) => {
             const avatarUri = user.avatarKey ? getStorageFileUrl(user.avatarKey) : user.avatarUrl;
             return (
             <View key={user.id} style={[styles.userItem, { borderBottomColor: colors.border }]}>
@@ -160,8 +169,8 @@ export default function FollowingScreen() {
               )}
             </View>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       )}
     </SafeAreaView>
   );
@@ -240,4 +249,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   followingBtnText: {},
+  footerLoader: {
+    paddingVertical: 18,
+  },
 });

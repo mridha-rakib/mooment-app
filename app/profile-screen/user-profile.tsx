@@ -5,7 +5,7 @@ import { PostData } from "@/components/post/FeedPost";
 import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
-import { getProfileEvents, getProfileEventsCount, type ProfileEventGroups } from "@/lib/events";
+import { getProfileEvents, type ProfileEventGroups } from "@/lib/events";
 import { getProfileTimeline, type MomentInteractionSummary, type MomentTimelineItem } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -26,6 +26,7 @@ const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
   active: [],
   past: [],
 };
+const PAGE_SIZE = 10;
 
 const formatHandle = (username?: string | null, email?: string | null) => {
   const normalizedUsername = username?.trim().replace(/^@/, "");
@@ -54,6 +55,12 @@ export default function UserProfileScreen() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [reposts, setReposts] = useState<MomentTimelineItem[]>([]);
   const [profileEvents, setProfileEvents] = useState<ProfileEventGroups>(EMPTY_PROFILE_EVENTS);
+  const [feedPage, setFeedPage] = useState(1);
+  const [hasMoreFeed, setHasMoreFeed] = useState(false);
+  const [isFeedLoadingMore, setIsFeedLoadingMore] = useState(false);
+  const [eventPages, setEventPages] = useState({ active: 1, past: 1 });
+  const [hasMoreEvents, setHasMoreEvents] = useState({ active: false, past: false });
+  const [isEventsLoadingMore, setIsEventsLoadingMore] = useState(false);
   const [profileUser, setProfileUser] = useState<UserProfileData>({
     id: userId || "unknown",
     name: params.name || FALLBACK_PROFILE_NAME,
@@ -64,17 +71,33 @@ export default function UserProfileScreen() {
     isFollowing: routeIsFollowing,
   });
 
+  const applyTimelineItems = useCallback((items: MomentTimelineItem[], fallbackAvatar: string | null, append = false) => {
+    const nextPosts = items.filter((item) => item.type === "post")
+      .map((item) => mapMomentToPost(item.moment, {
+        fallbackAvatar,
+        createdAt: item.createdAt,
+        headerLabel: item.type === "share" ? "Shared" : undefined,
+        storageUrlResolver: getStorageFileUrl,
+      }))
+      .filter((post): post is PostData => Boolean(post));
+    const nextReposts = items.filter((item) => item.type === "share");
+
+    setPosts((current) => append ? [...current, ...nextPosts] : nextPosts);
+    setReposts((current) => append ? [...current, ...nextReposts] : nextReposts);
+  }, []);
+
   const loadProfile = useCallback(async () => {
     if (!userId) {
       return;
     }
 
     try {
-      const [user, timeline, stats, events] = await Promise.all([
+      const [user, timeline, stats, activeEvents, pastEvents] = await Promise.all([
         getUserById(userId),
-        getProfileTimeline(userId),
+        getProfileTimeline(userId, { page: 1, limit: PAGE_SIZE }),
         getUserProfileStats(userId),
-        getProfileEvents(userId),
+        getProfileEvents(userId, { filter: "active", page: 1, limit: PAGE_SIZE }),
+        getProfileEvents(userId, { filter: "past", page: 1, limit: PAGE_SIZE }),
       ]);
       const resolvedUserId = user.id ?? user._id ?? userId;
       let nextAvatar = params.avatar || null;
@@ -95,31 +118,61 @@ export default function UserProfileScreen() {
         accountType: user.accountType,
         isFollowing: typeof user.isFollowing === "boolean" ? user.isFollowing : routeIsFollowing,
         stats: {
-          events: getProfileEventsCount(events),
+          events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
           reviews: stats.reviews,
           followers: stats.followers,
           following: stats.following,
         },
       });
-      setPosts(
-        timeline.items.filter((item) => item.type === "post")
-          .map((item) => mapMomentToPost(item.moment, {
-            fallbackAvatar: nextAvatar,
-            createdAt: item.createdAt,
-            headerLabel: item.type === "share" ? "Shared" : undefined,
-            storageUrlResolver: getStorageFileUrl,
-          }))
-          .filter((post): post is PostData => Boolean(post)),
-      );
-      setReposts(timeline.items.filter((item) => item.type === "share"));
-      setProfileEvents(events);
+      applyTimelineItems(timeline.items, nextAvatar);
+      setFeedPage(1);
+      setHasMoreFeed(Boolean(timeline.pagination && timeline.pagination.page < timeline.pagination.totalPages));
+      setProfileEvents({ active: activeEvents.active, past: pastEvents.past });
+      setEventPages({ active: 1, past: 1 });
+      setHasMoreEvents({
+        active: Boolean(activeEvents.pagination && activeEvents.pagination.page < activeEvents.pagination.totalPages),
+        past: Boolean(pastEvents.pagination && pastEvents.pagination.page < pastEvents.pagination.totalPages),
+      });
     } catch (error) {
       setPosts([]);
       setReposts([]);
       setProfileEvents(EMPTY_PROFILE_EVENTS);
       Alert.alert("Unable to load profile", getAuthErrorMessage(error, "Please try again."));
     }
-  }, [params.avatar, params.name, routeIsFollowing, userId]);
+  }, [applyTimelineItems, params.avatar, params.name, routeIsFollowing, userId]);
+
+  const loadMoreFeed = useCallback(() => {
+    if (!userId || isFeedLoadingMore || !hasMoreFeed) return;
+    const nextPage = feedPage + 1;
+    setIsFeedLoadingMore(true);
+    void getProfileTimeline(userId, { page: nextPage, limit: PAGE_SIZE })
+      .then((timeline) => {
+        applyTimelineItems(timeline.items, avatarUri, true);
+        setFeedPage(nextPage);
+        setHasMoreFeed(Boolean(timeline.pagination && timeline.pagination.page < timeline.pagination.totalPages));
+      })
+      .finally(() => setIsFeedLoadingMore(false));
+  }, [applyTimelineItems, avatarUri, feedPage, hasMoreFeed, isFeedLoadingMore, userId]);
+
+  const loadMoreEvents = useCallback((filter: "active" | "past") => {
+    if (!userId || isEventsLoadingMore || !hasMoreEvents[filter]) return;
+    const nextPage = eventPages[filter] + 1;
+    setIsEventsLoadingMore(true);
+    void getProfileEvents(userId, { filter, page: nextPage, limit: PAGE_SIZE })
+      .then((events) => {
+        const nextEvents = filter === "active" ? events.active : events.past;
+        setProfileEvents((current) => ({
+          ...current,
+          [filter]: [...current[filter], ...nextEvents],
+        }));
+        setEventPages((current) => ({ ...current, [filter]: nextPage }));
+        setHasMoreEvents((current) => ({
+          ...current,
+          [filter]: Boolean(events.pagination && events.pagination.page < events.pagination.totalPages),
+        }));
+      })
+      .finally(() => setIsEventsLoadingMore(false));
+  }, [eventPages, hasMoreEvents, isEventsLoadingMore, userId]);
 
   useEffect(() => {
     void loadProfile();
@@ -168,13 +221,17 @@ export default function UserProfileScreen() {
         onFollowChange={handleFollowChange}
         onRefresh={loadProfile}
         profileEvents={profileEvents}
+        onLoadMoreFeed={loadMoreFeed}
+        isFeedLoadingMore={isFeedLoadingMore}
+        onLoadMoreEvents={loadMoreEvents}
+        isEventsLoadingMore={isEventsLoadingMore}
         onProfileEventsChange={(events) => {
           setProfileEvents(events);
           setProfileUser((current) => ({
             ...current,
             stats: {
               ...current.stats,
-              events: getProfileEventsCount(events),
+              events: new Set([...events.active, ...events.past].map((event) => event.id)).size,
             },
           }));
         }}

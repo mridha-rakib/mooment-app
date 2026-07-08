@@ -206,6 +206,12 @@ export type RewardClaim = {
 export type ProfileEventGroups = {
   active: EventResponse[];
   past: EventResponse[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 };
 
 export type EventHostReviewResponse = {
@@ -532,13 +538,17 @@ export const getMyJoinedEvents = async (): Promise<EventResponse[]> => {
   }
 };
 
-export const getProfileEvents = async (userId: string): Promise<ProfileEventGroups> => {
-  const response = await api.get(`/events/profile/${encodeURIComponent(userId)}`);
+export const getProfileEvents = async (
+  userId: string,
+  options: { filter?: "active" | "past" | "all"; page?: number; limit?: number } = {},
+): Promise<ProfileEventGroups> => {
+  const response = await api.get(`/events/profile/${encodeURIComponent(userId)}`, { params: options });
   const events = response.data?.data?.events;
 
   return {
     active: Array.isArray(events?.active) ? (events.active as EventResponse[]) : [],
     past: Array.isArray(events?.past) ? (events.past as EventResponse[]) : [],
+    pagination: events?.pagination ?? response.data?.meta?.pagination,
   };
 };
 

@@ -68,6 +68,12 @@ export type ProfileTimeline = {
   stats: {
     posts: number;
   };
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 };
 
 export type MomentInteractionSummary = {
@@ -155,8 +161,11 @@ export const getHashtagMoments = async (hashtag: string, limit = 100): Promise<M
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 
-export const getProfileTimeline = async (userId: string): Promise<ProfileTimeline> => {
-  const response = await api.get(`/moments/profile/${encodeURIComponent(userId)}/timeline`);
+export const getProfileTimeline = async (
+  userId: string,
+  options: { page?: number; limit?: number } = {},
+): Promise<ProfileTimeline> => {
+  const response = await api.get(`/moments/profile/${encodeURIComponent(userId)}/timeline`, { params: options });
   const data = response.data?.data as ProfileTimeline | undefined;
 
   return {
@@ -164,6 +173,7 @@ export const getProfileTimeline = async (userId: string): Promise<ProfileTimelin
     stats: {
       posts: data?.stats?.posts ?? 0,
     },
+    pagination: data?.pagination ?? response.data?.meta?.pagination,
   };
 };
 

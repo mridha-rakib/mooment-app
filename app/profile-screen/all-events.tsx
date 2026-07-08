@@ -32,11 +32,6 @@ const TAB_LABELS: Record<TabKey, string> = {
   joined: "Joined",
 };
 
-const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
-  active: [],
-  past: [],
-};
-
 const dedupeEvents = (events: EventResponse[]): EventResponse[] => {
   const byId = new Map<string, EventResponse>();
 
@@ -175,7 +170,7 @@ export default function AllEventsScreen() {
   const userId = typeof params.userId === "string" ? params.userId : null;
 
   const [activeTab, setActiveTab] = useState<TabKey>("created");
-  const [createdProfileEvents, setCreatedProfileEvents] = useState<ProfileEventGroups>(EMPTY_PROFILE_EVENTS);
+  const [createdEvents, setCreatedEvents] = useState<EventResponse[]>([]);
   const [joinedEvents, setJoinedEvents] = useState<EventResponse[]>([]);
   const [createdError, setCreatedError] = useState<string | null>(null);
   const [joinedError, setJoinedError] = useState<string | null>(null);
@@ -185,18 +180,25 @@ export default function AllEventsScreen() {
     created: PAGE_SIZE,
     joined: PAGE_SIZE,
   });
+  const [createdPage, setCreatedPage] = useState(1);
+  const [hasMoreCreated, setHasMoreCreated] = useState(false);
+  const [isLoadingMoreCreated, setIsLoadingMoreCreated] = useState(false);
 
   const loadAllEvents = useCallback(async () => {
     try {
       const [createdResult, joinedResult] = await Promise.allSettled([
-        userId ? getProfileEvents(userId) : Promise.resolve(EMPTY_PROFILE_EVENTS),
+        userId
+          ? getProfileEvents(userId, { filter: "all", page: 1, limit: PAGE_SIZE })
+          : Promise.resolve({ active: [], past: [] } as ProfileEventGroups),
         getMyJoinedEvents(),
       ]);
 
       if (createdResult.status === "fulfilled") {
-        const nextCreated = createdResult.value;
-        setCreatedProfileEvents(nextCreated);
-        const createdCount = dedupeEvents([...nextCreated.active, ...nextCreated.past]).length;
+        const nextCreated = dedupeEvents([...createdResult.value.active, ...createdResult.value.past]);
+        setCreatedEvents(nextCreated);
+        setCreatedPage(1);
+        setHasMoreCreated(Boolean(createdResult.value.pagination && createdResult.value.pagination.page < createdResult.value.pagination.totalPages));
+        const createdCount = createdResult.value.pagination?.total ?? nextCreated.length;
         setVisibleCounts((current) => ({
           ...current,
           created: Math.min(current.created, Math.max(createdCount, PAGE_SIZE)),
@@ -227,10 +229,6 @@ export default function AllEventsScreen() {
     void loadAllEvents();
   }, [loadAllEvents]);
 
-  const createdEvents = useMemo(
-    () => dedupeEvents([...createdProfileEvents.active, ...createdProfileEvents.past]),
-    [createdProfileEvents],
-  );
   const activeEvents = activeTab === "created" ? createdEvents : joinedEvents;
   const activeError = activeTab === "created" ? createdError : joinedError;
   const visibleCount = visibleCounts[activeTab];
@@ -238,7 +236,7 @@ export default function AllEventsScreen() {
     () => activeEvents.slice(0, visibleCount),
     [activeEvents, visibleCount],
   );
-  const hasMoreEvents = visibleCount < activeEvents.length;
+  const hasMoreEvents = activeTab === "created" ? hasMoreCreated : visibleCount < activeEvents.length;
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -247,11 +245,25 @@ export default function AllEventsScreen() {
 
   const handleLoadMore = useCallback(() => {
     if (!hasMoreEvents) return;
+    if (activeTab === "created" && userId) {
+      if (isLoadingMoreCreated) return;
+      const nextPage = createdPage + 1;
+      setIsLoadingMoreCreated(true);
+      void getProfileEvents(userId, { filter: "all", page: nextPage, limit: PAGE_SIZE })
+        .then((result) => {
+          const nextEvents = dedupeEvents([...result.active, ...result.past]);
+          setCreatedEvents((current) => dedupeEvents([...current, ...nextEvents]));
+          setCreatedPage(nextPage);
+          setHasMoreCreated(Boolean(result.pagination && result.pagination.page < result.pagination.totalPages));
+        })
+        .finally(() => setIsLoadingMoreCreated(false));
+      return;
+    }
     setVisibleCounts((current) => ({
       ...current,
       [activeTab]: Math.min(current[activeTab] + PAGE_SIZE, activeEvents.length),
     }));
-  }, [activeEvents.length, activeTab, hasMoreEvents]);
+  }, [activeEvents.length, activeTab, createdPage, hasMoreEvents, isLoadingMoreCreated, userId]);
 
   const handleRetry = useCallback(() => {
     setIsLoading(true);

@@ -119,7 +119,7 @@ export default function EventMembersScreen() {
       }));
       const seen = new Set<string>();
       const merged: ProfileFollowUserResponse[] = [];
-      for (const u of [...followingData, ...followersData, ...friendProfileData]) {
+      for (const u of [...followingData.users, ...followersData.users, ...friendProfileData]) {
         if (!seen.has(u.id)) {
           seen.add(u.id);
           merged.push(u);

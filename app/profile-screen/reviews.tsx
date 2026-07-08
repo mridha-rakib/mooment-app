@@ -4,8 +4,8 @@ import { getUserReviews, type UserReviewResponse } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, FlatList, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type ReviewCardProps = {
@@ -13,6 +13,8 @@ type ReviewCardProps = {
   onOpenProfile: () => void;
   review: UserReviewResponse;
 };
+
+const PAGE_SIZE = 30;
 
 const formatReviewTime = (createdAt: string) => {
   const date = new Date(createdAt);
@@ -74,42 +76,43 @@ export default function ReviewsScreen() {
   const userId = params.userId ?? authUser?.id;
   const [reviews, setReviews] = useState<UserReviewResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadReviews = async () => {
+  const loadReviews = useCallback(async (nextPage = 1) => {
       if (!userId) {
         setReviews([]);
         setIsLoading(false);
         return;
       }
 
-      setIsLoading(true);
+      if (nextPage === 1) setIsLoading(true);
+      else setIsLoadingMore(true);
 
       try {
-        const nextReviews = await getUserReviews(userId);
-
-        if (isMounted) {
-          setReviews(nextReviews);
-        }
+        const result = await getUserReviews(userId, { page: nextPage, limit: PAGE_SIZE });
+        setReviews((current) => nextPage === 1 ? result.reviews : [...current, ...result.reviews]);
+        setPage(nextPage);
+        setHasMore(Boolean(result.pagination && result.pagination.page < result.pagination.totalPages));
       } catch {
-        if (isMounted) {
+        if (nextPage === 1) {
           setReviews([]);
         }
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
+        setIsLoadingMore(false);
       }
-    };
+    }, [userId]);
 
-    void loadReviews();
+  useEffect(() => {
+    void loadReviews(1);
+  }, [loadReviews]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [userId]);
+  const loadMore = useCallback(() => {
+    if (isLoading || isLoadingMore || !hasMore) return;
+    void loadReviews(page + 1);
+  }, [hasMore, isLoading, isLoadingMore, loadReviews, page]);
 
   const openProfile = (review: UserReviewResponse) => {
     if (!review.author) {
@@ -144,16 +147,22 @@ export default function ReviewsScreen() {
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No reviews yet</Text>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          {reviews.map((review) => (
+        <FlatList
+          data={reviews}
+          keyExtractor={(review) => review.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          onEndReachedThreshold={0.4}
+          onEndReached={loadMore}
+          ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.textSecondary} style={styles.footerLoader} /> : null}
+          renderItem={({ item: review }) => (
             <ReviewCard
               colors={colors}
-              key={review.id}
               onOpenProfile={() => openProfile(review)}
               review={review}
             />
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
     </SafeAreaView>
   );
@@ -239,5 +248,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     marginBottom: 12,
+  },
+  footerLoader: {
+    paddingVertical: 18,
   },
 });

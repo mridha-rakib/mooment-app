@@ -13,10 +13,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   RefreshControl,
-  ScrollView,
   StatusBar,
   StyleSheet,
-  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -96,6 +94,10 @@ type ProfileViewProps = {
   profileEvents: ProfileEventGroups;
   onProfileEventsChange?: (events: ProfileEventGroups) => void;
   profileFeedEvents?: EventResponse[];
+  onLoadMoreFeed?: () => void;
+  isFeedLoadingMore?: boolean;
+  onLoadMoreEvents?: (filter: "active" | "past") => void;
+  isEventsLoadingMore?: boolean;
 };
 
 export default function ProfileView({
@@ -111,6 +113,10 @@ export default function ProfileView({
   profileEvents,
   onProfileEventsChange,
   profileFeedEvents,
+  onLoadMoreFeed,
+  isFeedLoadingMore = false,
+  onLoadMoreEvents,
+  isEventsLoadingMore = false,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -372,103 +378,107 @@ export default function ProfileView({
     );
   }, []);
 
+  const listHeader = (
+    <>
+      <ProfileHeader
+        userId={user.id}
+        name={user.name}
+        avatar={user.avatar}
+        stats={user.stats}
+        accountType={user.accountType}
+        isOwnProfile={isOwnProfile}
+        onMenuPress={() => setMenuVisible(true)}
+        onAvatarPress={() => void handleAvatarPress()}
+        onReport={!isOwnProfile ? handleReportPress : undefined}
+        onSave={!isOwnProfile ? handleSavePress : undefined}
+        onEventsPress={() =>
+          router.push({
+            pathname: "/profile-screen/all-events" as never,
+            params: { userId: user.id },
+          })
+        }
+      />
+      <ProfileBio
+        name={user.name}
+        handle={user.handle}
+        bio={user.bio}
+        accountType={user.accountType}
+        isOwnProfile={isOwnProfile}
+        actions={
+          <ProfileActions
+            userId={user.id}
+            userName={user.name}
+            userAvatar={user.avatar}
+            isOwnProfile={isOwnProfile}
+            onlyButtons={true}
+            initialIsFollowing={user.isFollowing}
+            onFollowChange={onFollowChange}
+          />
+        }
+      />
+      {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
+
+      <ProfileTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        isOwnProfile={isOwnProfile}
+      />
+    </>
+  );
+
+  const refreshControl = onRefresh ? (
+    <RefreshControl
+      refreshing={isRefreshing}
+      onRefresh={handleRefresh}
+      tintColor={colors.primary}
+    />
+  ) : undefined;
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.primary}
-            />
-          ) : undefined
-        }
-      >
-        <ProfileHeader
-          userId={user.id}
-          name={user.name}
-          avatar={user.avatar}
-          stats={user.stats}
-          accountType={user.accountType}
-          isOwnProfile={isOwnProfile}
-          onMenuPress={() => setMenuVisible(true)}
-          onAvatarPress={() => void handleAvatarPress()}
-          onReport={!isOwnProfile ? handleReportPress : undefined}
-          onSave={!isOwnProfile ? handleSavePress : undefined}
-          onEventsPress={() =>
-            router.push({
-              pathname: "/profile-screen/all-events",
-              params: { userId: user.id },
-            })
-          }
-        />
-        <ProfileBio
-          name={user.name}
-          handle={user.handle}
-          bio={user.bio}
-          accountType={user.accountType}
-          isOwnProfile={isOwnProfile}
-          actions={
-            <ProfileActions
-              userId={user.id}
-              userName={user.name}
-              userAvatar={user.avatar}
-              isOwnProfile={isOwnProfile}
-              onlyButtons={true}
-              initialIsFollowing={user.isFollowing}
-              onFollowChange={onFollowChange}
-            />
-          }
-        />
-        {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
-
-        <ProfileTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          isOwnProfile={isOwnProfile}
-        />
-        <ProfileContent
-          activeTab={activeTab}
-          posts={posts}
-          reposts={reposts}
-          onCommentPress={(post) => {
-            setSelectedCommentPost(post);
-            setCommentsVisible(true);
-          }}
-          onSharePress={(post) => {
-            setSelectedSharePost(post);
-            setShareVisible(true);
-          }}
-          onDeletePost={onDeletePost}
-          onInteractionChange={(postId, summary) => {
-            onInteractionChange?.(postId, summary);
-            setSelectedCommentPost((currentPost) =>
-              currentPost?.id === postId
-                ? {
-                    ...currentPost,
-                    likesCount: summary.likesCount,
-                    commentsCount: summary.commentsCount,
-                    sharesCount: summary.sharesCount,
-                    isLiked: summary.isLiked,
-                  }
-                : currentPost,
-            );
-          }}
-          isOwnProfile={isOwnProfile}
-          profileUserId={user.id}
-          profileIsFollowing={user.isFollowing}
-          onFollowChange={onFollowChange}
-          onRepostSuccess={onRefresh}
-          profileEvents={profileEvents}
-          onProfileEventsChange={onProfileEventsChange}
-          profileFeedEvents={profileFeedEvents}
-        />
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
+      <ProfileContent
+        activeTab={activeTab}
+        posts={posts}
+        reposts={reposts}
+        onCommentPress={(post) => {
+          setSelectedCommentPost(post);
+          setCommentsVisible(true);
+        }}
+        onSharePress={(post) => {
+          setSelectedSharePost(post);
+          setShareVisible(true);
+        }}
+        onDeletePost={onDeletePost}
+        onInteractionChange={(postId, summary) => {
+          onInteractionChange?.(postId, summary);
+          setSelectedCommentPost((currentPost) =>
+            currentPost?.id === postId
+              ? {
+                  ...currentPost,
+                  likesCount: summary.likesCount,
+                  commentsCount: summary.commentsCount,
+                  sharesCount: summary.sharesCount,
+                  isLiked: summary.isLiked,
+                }
+              : currentPost,
+          );
+        }}
+        isOwnProfile={isOwnProfile}
+        profileUserId={user.id}
+        profileIsFollowing={user.isFollowing}
+        onFollowChange={onFollowChange}
+        onRepostSuccess={onRefresh}
+        profileEvents={profileEvents}
+        onProfileEventsChange={onProfileEventsChange}
+        profileFeedEvents={profileFeedEvents}
+        listHeaderComponent={listHeader}
+        refreshControl={refreshControl}
+        onLoadMoreFeed={onLoadMoreFeed}
+        isFeedLoadingMore={isFeedLoadingMore}
+        onLoadMoreEvents={onLoadMoreEvents}
+        isEventsLoadingMore={isEventsLoadingMore}
+      />
 
       <CommentsModal
         visible={commentsVisible}

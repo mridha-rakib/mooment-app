@@ -28,6 +28,13 @@ export type ProfileStatsResponse = {
   following: number;
 };
 
+export type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 export type ProfileFollowUserResponse = {
   id: string;
   name: string;
@@ -131,39 +138,55 @@ export const getUserFollowers = async (
   userId: string,
   search?: string,
   limit = 100,
-): Promise<ProfileFollowUserResponse[]> => {
+  page?: number,
+): Promise<{ users: ProfileFollowUserResponse[]; pagination?: PaginationMeta }> => {
   const response = await api.get(`/users/${encodeURIComponent(userId)}/followers`, {
     params: {
       search,
       limit,
+      page,
     },
   });
   const users = response.data?.data?.users;
 
-  return Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [];
+  return {
+    users: Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
 };
 
 export const getUserFollowing = async (
   userId: string,
   search?: string,
   limit = 100,
-): Promise<ProfileFollowUserResponse[]> => {
+  page?: number,
+): Promise<{ users: ProfileFollowUserResponse[]; pagination?: PaginationMeta }> => {
   const response = await api.get(`/users/${encodeURIComponent(userId)}/following`, {
     params: {
       search,
       limit,
+      page,
     },
   });
   const users = response.data?.data?.users;
 
-  return Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [];
+  return {
+    users: Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
 };
 
-export const getUserReviews = async (userId: string): Promise<UserReviewResponse[]> => {
-  const response = await api.get(`/users/${encodeURIComponent(userId)}/reviews`);
+export const getUserReviews = async (
+  userId: string,
+  options: { page?: number; limit?: number } = {},
+): Promise<{ reviews: UserReviewResponse[]; pagination?: PaginationMeta }> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}/reviews`, { params: options });
   const reviews = response.data?.data?.reviews;
 
-  return Array.isArray(reviews) ? (reviews as UserReviewResponse[]) : [];
+  return {
+    reviews: Array.isArray(reviews) ? (reviews as UserReviewResponse[]) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
 };
 
 export type BlockStatusResponse = {

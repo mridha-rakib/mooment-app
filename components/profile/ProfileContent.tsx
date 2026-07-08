@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View, Text } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, View, Text, type RefreshControlProps } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import type { MomentInteractionSummary, MomentTimelineItem } from "@/lib/moments";
 import type { EventResponse, ProfileEventGroups } from "@/lib/events";
@@ -25,6 +25,12 @@ type ProfileContentProps = {
   profileEvents: ProfileEventGroups;
   onProfileEventsChange?: (events: ProfileEventGroups) => void;
   profileFeedEvents?: EventResponse[];
+  listHeaderComponent?: React.ReactElement;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
+  onLoadMoreFeed?: () => void;
+  isFeedLoadingMore?: boolean;
+  onLoadMoreEvents?: (filter: "active" | "past") => void;
+  isEventsLoadingMore?: boolean;
 };
 
 export default function ProfileContent({ 
@@ -43,6 +49,12 @@ export default function ProfileContent({
   profileEvents,
   onProfileEventsChange,
   profileFeedEvents = [],
+  listHeaderComponent,
+  refreshControl,
+  onLoadMoreFeed,
+  isFeedLoadingMore = false,
+  onLoadMoreEvents,
+  isEventsLoadingMore = false,
 }: ProfileContentProps) {
   const { colors } = useTheme();
   const feedItems = [
@@ -59,11 +71,26 @@ export default function ProfileContent({
     item.type === 'repost' && item.share.originalItem?.type === 'event'
   ))?.id;
   
-  return (
-    <View style={styles.container}>
-      {activeTab === 'feed' && (
-        feedItems.length > 0 ? (
-          feedItems.map((item) => {
+  if (activeTab === 'feed') {
+    return (
+      <FlatList
+        data={feedItems}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        ListHeaderComponent={listHeaderComponent}
+        refreshControl={refreshControl}
+        onEndReachedThreshold={0.5}
+        onEndReached={onLoadMoreFeed}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={(
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No posts yet</Text>
+          </View>
+        )}
+        ListFooterComponent={isFeedLoadingMore ? (
+          <ActivityIndicator color={colors.textSecondary} style={styles.footerLoader} />
+        ) : <View style={{ height: 100 }} />}
+        renderItem={({ item }) => {
             if (item.type === 'repost') {
               return (
                 <RepostFeedCard
@@ -84,39 +111,31 @@ export default function ProfileContent({
               <FeedPost key={`post-${item.id}`} post={item.post} onCommentPress={onCommentPress} onSharePress={onSharePress}
                 onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile} />
             );
-          })
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No posts yet</Text>
-          </View>
-        )
-      )}
-      
-      {activeTab === 'events' && (
+          }}
+      />
+    );
+  }
+
+  return (
         <ProfileEvents 
           isOwnProfile={isOwnProfile}
           profileUserId={profileUserId}
           profileIsFollowing={profileIsFollowing}
           events={profileEvents}
           onEventsChange={onProfileEventsChange}
+          listHeaderComponent={listHeaderComponent}
+          refreshControl={refreshControl}
+          onLoadMore={onLoadMoreEvents}
+          isLoadingMore={isEventsLoadingMore}
         />
-      )}
-      
-      {/* Shop content hidden — preserved for future restoration
-      {activeTab === 'shop' && (
-        <ProfileShop 
-          onCommentPress={onCommentPress} 
-          onSharePress={onSharePress}
-          isOwnProfile={isOwnProfile}
-        />
-      )}
-      */}
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    paddingTop: 10,
+  },
+  listContent: {
     paddingTop: 10,
   },
   emptyContainer: {
@@ -125,5 +144,8 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-  }
+  },
+  footerLoader: {
+    paddingVertical: 18,
+  },
 });
