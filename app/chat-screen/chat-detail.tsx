@@ -1048,6 +1048,7 @@ export default function ChatDetailScreen() {
   const [isFriendOnline, setIsFriendOnline] = useState(params.isOnline === 'true');
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const [isBlocked, setIsBlocked] = useState(params.isBlocked === 'true');
+  const [directAccessError, setDirectAccessError] = useState<string | null>(null);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [moreMenuTop, setMoreMenuTop] = useState(0);
@@ -1086,6 +1087,10 @@ export default function ChatDetailScreen() {
   const avatar = params.avatar?.trim() || null;
   const friendId = params.id;
   const isGroup = params.isGroup === 'true';
+  const isDirectRecipientInvalid = !isGroup && !isObjectId(friendId);
+  const isSelfDirectConversation = !isGroup && Boolean(currentUser?.id && friendId === currentUser.id);
+  const isDirectChatUnavailable =
+    !isGroup && (isDirectRecipientInvalid || isSelfDirectConversation || isBlocked || Boolean(directAccessError));
 
   const updatePendingAttachment = (id: string, patch: Partial<PendingAttachment>) => {
     setPendingAttachments((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -1370,7 +1375,7 @@ export default function ChatDetailScreen() {
   };
 
   const sendOwnTypingState = (nextIsTyping: boolean) => {
-    if (!isObjectId(friendId) || isSendingTypingRef.current === nextIsTyping) {
+    if (!isObjectId(friendId) || isDirectChatUnavailable || isSendingTypingRef.current === nextIsTyping) {
       return;
     }
 
@@ -1396,7 +1401,7 @@ export default function ChatDetailScreen() {
   const handleInputTextChange = (value: string) => {
     setInputText(value);
 
-    if (!isObjectId(friendId) || isGroup) {
+    if (!isObjectId(friendId) || isGroup || isDirectChatUnavailable) {
       return;
     }
 
@@ -1443,13 +1448,31 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (!isObjectId(friendId)) {
+      if (!isGroup) {
+        const message = 'This conversation is unavailable.';
+        setDirectAccessError(message);
+        Alert.alert('Chat unavailable', message, [
+          { text: 'OK', onPress: () => safeBack(router, '/(tabs)/messages') },
+        ]);
+      }
       setMessages([]);
       setIsLoadingMessages(false);
       return;
     }
 
+    if (isSelfDirectConversation) {
+      setDirectAccessError('You cannot message yourself.');
+      setMessages([]);
+      setIsLoadingMessages(false);
+      Alert.alert('Chat unavailable', 'You cannot message yourself.', [
+        { text: 'OK', onPress: () => safeBack(router, '/(tabs)/messages') },
+      ]);
+      return;
+    }
+
     let isMounted = true;
     setIsLoadingMessages(true);
+    setDirectAccessError(null);
 
     const loadMessageHistory = async () => {
       try {
@@ -1464,11 +1487,19 @@ export default function ChatDetailScreen() {
 
           if (!isMounted) return;
 
+          setDirectAccessError(null);
           setMessages(history.map((message) => toApiTextMessage(message, currentUser?.id)));
         }
         setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }), 100);
-      } catch {
+      } catch (error) {
         if (isMounted) {
+          if (!isGroup) {
+            const message = getAuthErrorMessage(error, 'You cannot open this chat.');
+            setDirectAccessError(message);
+            Alert.alert('Chat unavailable', message, [
+              { text: 'OK', onPress: () => safeBack(router, '/(tabs)/messages') },
+            ]);
+          }
           setMessages([]);
         }
       } finally {
@@ -1483,7 +1514,7 @@ export default function ChatDetailScreen() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.id, friendId, isGroup]);
+  }, [currentUser?.id, friendId, isGroup, isSelfDirectConversation, router]);
 
   useEffect(() => {
     if (!accessToken || !isObjectId(friendId)) {
@@ -1694,6 +1725,17 @@ export default function ChatDetailScreen() {
   }, []);
 
   const sendMessage = () => {
+    if (isDirectChatUnavailable) {
+      Alert.alert(
+        'Chat unavailable',
+        directAccessError
+          ?? (isSelfDirectConversation
+            ? 'You cannot message yourself.'
+            : 'You cannot message this user.'),
+      );
+      return;
+    }
+
     const uploadedAttachments = pendingAttachments.filter((item) => item.status === 'uploaded' && item.attachment);
     const hasUploading = pendingAttachments.some((item) => item.status === 'uploading');
     const hasFailed = pendingAttachments.some((item) => item.status === 'failed');
@@ -2055,7 +2097,13 @@ export default function ChatDetailScreen() {
               { icon: 'map-pin', label: 'Location', color: '#16D869', onPress: handleShareLocation, loading: isLocationLoading },
               { icon: 'calendar', label: 'Event', color: '#D4B0EB', onPress: () => setIsEventPickerVisible(true), loading: false },
             ].map(a => (
-              <TouchableOpacity key={a.label} style={styles.attachItem} activeOpacity={0.8} onPress={a.onPress} disabled={a.loading}>
+              <TouchableOpacity
+                key={a.label}
+                style={styles.attachItem}
+                activeOpacity={0.8}
+                onPress={a.onPress}
+                disabled={a.loading || isDirectChatUnavailable}
+              >
                 <View style={[styles.attachIconWrap, { backgroundColor: a.color + '22' }]}>
                   {a.loading ? (
                     <Spinner size={22} color={a.color} />
@@ -2098,7 +2146,12 @@ export default function ChatDetailScreen() {
         {/* ── Input Bar ── */}
         <View style={styles.inputBar}>
           <View style={styles.inputWrap}>
-            <TouchableOpacity style={styles.emojiBtn} activeOpacity={0.8} onPress={toggleEmojiPicker}>
+            <TouchableOpacity
+              style={styles.emojiBtn}
+              activeOpacity={0.8}
+              onPress={toggleEmojiPicker}
+              disabled={isDirectChatUnavailable}
+            >
               <Feather name={showEmojiPicker ? 'x' : 'smile'} size={20} color={showEmojiPicker ? '#FFFFFF' : '#8E8E9B'} />
             </TouchableOpacity>
             <TextInput
@@ -2108,15 +2161,25 @@ export default function ChatDetailScreen() {
               value={inputText}
               onChangeText={handleInputTextChange}
               onFocus={() => setShowEmojiPicker(false)}
+              editable={!isDirectChatUnavailable}
               multiline
               maxLength={500}
             />
-            <TouchableOpacity style={styles.fileBtn} activeOpacity={0.8} onPress={() => { setShowEmojiPicker(false); setShowAttach((current) => !current); }}>
+            <TouchableOpacity
+              style={styles.fileBtn}
+              activeOpacity={0.8}
+              disabled={isDirectChatUnavailable}
+              onPress={() => { setShowEmojiPicker(false); setShowAttach((current) => !current); }}
+            >
               <HugeiconsIcon icon={AttachmentIcon} size={20} color="#8E8E9B" />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={[styles.sendBtn, isDirectChatUnavailable && { opacity: 0.45 }]}
+            onPress={sendMessage}
+            activeOpacity={0.8}
+          >
             <Feather name="send" size={18} color="#111111" style={{ marginLeft: -2, marginTop: 2 }} />
           </TouchableOpacity>
         </View>
