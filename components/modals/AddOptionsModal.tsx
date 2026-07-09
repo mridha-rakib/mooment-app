@@ -206,9 +206,12 @@ export default function AddOptionsModal({
         >
           <View
             {...dragResponder.panHandlers}
-            style={{
-              backgroundColor: colors.backgroundSecondary,
-            }}
+            style={[
+              styles.header,
+              {
+                backgroundColor: colors.backgroundSecondary,
+              },
+            ]}
           >
             <View style={[styles.handle, { backgroundColor: colors.text }]} />
             <Text style={[styles.sheetTitle, { color: colors.text }]}>
@@ -275,18 +278,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
   },
+  header: {
+    alignItems: "center",
+    borderRadius: 18,
+    marginBottom: 12,
+    paddingTop: 4,
+    paddingBottom: 14,
+  },
   handle: {
-    width: 60,
+    width: 64,
     height: 4,
     borderRadius: 2,
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   sheetTitle: {
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 0.2,
-    marginBottom: 24,
+    lineHeight: 20,
     textAlign: "center",
   },
   optionsList: {

@@ -1,4 +1,3 @@
-import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -24,7 +23,6 @@ export default function MapSelectionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const addPlan = usePlanStore((state) => state.addPlan);
-  const [showConfetti, setShowConfetti] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const planFriendIds = firstParam(params.planFriendIds)
@@ -52,7 +50,6 @@ export default function MapSelectionScreen() {
         name: String(firstParam(params.planName) ?? ''),
         time: String(firstParam(params.planTime) ?? ''),
       });
-      setShowConfetti(true);
       setTimeout(() => {
         router.replace({
           pathname: '/plan-screen/my-plan' as any,
@@ -76,13 +73,6 @@ export default function MapSelectionScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
-
-      {/* Confetti / Success Animation */}
-      <ConfettiOverlay
-        visible={showConfetti}
-        onFinish={() => setShowConfetti(false)}
-        source={{ uri: 'https://lottie.host/4db68bbd-31f6-4cd8-84eb-189571e2dccc/5u2xmKkpCI.lottie' }}
-      />
 
       {/* Background Map Image */}
       <Image

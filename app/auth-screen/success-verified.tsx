@@ -2,32 +2,19 @@ import { ChevronLeft } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import LottieView from 'lottie-react-native';
-import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from "@/hooks/useTheme";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function SuccessVerified() {
-  const [showConfetti, setShowConfetti] = useState(false);
   const { colors, isDark } = useTheme();
   const router = useRouter();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowConfetti(true);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <ConfettiOverlay 
-        visible={showConfetti} 
-        onFinish={() => setShowConfetti(false)} 
-      />
       
       <View style={styles.container}>
         <View style={styles.content}>

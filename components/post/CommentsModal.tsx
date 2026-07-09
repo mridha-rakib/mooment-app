@@ -24,6 +24,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
   Keyboard,
   Modal,
   PanResponder,
@@ -100,6 +101,23 @@ const INITIAL_COMMENTS: CommentType[] = [
 ];
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
+const getKeyboardBottomInset = (
+  coordinates: { height: number; screenY?: number },
+  containerHeight = Dimensions.get("screen").height,
+) => {
+  const keyboardHeight = Math.max(0, coordinates.height);
+  const keyboardTop =
+    typeof coordinates.screenY === "number" ? coordinates.screenY : null;
+
+  if (keyboardTop === null) {
+    return keyboardHeight;
+  }
+
+  const frameOverlap = Math.max(0, containerHeight - keyboardTop);
+
+  return frameOverlap;
+};
 
 const formatCommentTimeAgo = (createdAt: string) => {
   const elapsedSeconds = Math.max(
@@ -190,9 +208,16 @@ export default function CommentsModal({
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isKeyboardShown, setIsKeyboardShown] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const isInputFocusedRef = useRef(false);
   const wasKeyboardVisibleRef = useRef(false);
+  const suppressKeyboardHideCloseRef = useRef(false);
+  const keyboardCoordinatesRef = useRef<{
+    height: number;
+    screenY?: number;
+  } | null>(null);
+  const overlayHeightRef = useRef(Dimensions.get("screen").height);
   const translateY = useRef(new Animated.Value(0)).current;
   const dragOffsetRef = useRef(0);
   // Android: set to true when the send button receives a touch-start.
@@ -280,12 +305,40 @@ export default function CommentsModal({
     if (visible) {
       setReplyingTo(null);
       setCommentText("");
+      setIsKeyboardShown(false);
       translateY.setValue(0);
       void loadComments();
       return;
     }
+    setIsKeyboardShown(false);
     translateY.setValue(0);
   }, [loadComments, translateY, visible]);
+
+  const updateKeyboardHeight = useCallback(
+    (coordinates: { height: number; screenY?: number }) => {
+      keyboardCoordinatesRef.current = coordinates;
+      setKeyboardHeight(
+        getKeyboardBottomInset(coordinates, overlayHeightRef.current),
+      );
+    },
+    [],
+  );
+
+  const handleOverlayLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      overlayHeightRef.current = event.nativeEvent.layout.height;
+
+      if (keyboardCoordinatesRef.current) {
+        setKeyboardHeight(
+          getKeyboardBottomInset(
+            keyboardCoordinatesRef.current,
+            overlayHeightRef.current,
+          ),
+        );
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -293,21 +346,28 @@ export default function CommentsModal({
     }
 
     const showSubscription = Keyboard.addListener("keyboardDidShow", (e) => {
-      // Track keyboard height so we can manually pad content above the keyboard.
+      // Track the actual bottom inset covered by the keyboard so the composer
+      // stays above Android IME/navigation bar combinations inside Modal.
       // This replaces KeyboardAvoidingView, which has a known Android bug where
       // behavior="height" doesn't fully restore height after keyboard dismiss,
       // leaving a transparent gap that exposes the activity tab bar underneath.
-      setKeyboardHeight(e.endCoordinates.height);
+      setIsKeyboardShown(true);
+      updateKeyboardHeight(e.endCoordinates);
       if (Platform.OS === "android") {
         wasKeyboardVisibleRef.current = true;
       }
     });
     const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
+      keyboardCoordinatesRef.current = null;
+      setIsKeyboardShown(false);
       setKeyboardHeight(0);
       if (Platform.OS === "android") {
         const shouldClose =
-          isInputFocusedRef.current && wasKeyboardVisibleRef.current;
+          !suppressKeyboardHideCloseRef.current &&
+          isInputFocusedRef.current &&
+          wasKeyboardVisibleRef.current;
         wasKeyboardVisibleRef.current = false;
+        suppressKeyboardHideCloseRef.current = false;
 
         // Android sends Back to the IME before the Modal. Close the sheet when
         // that Back press dismisses the keyboard from the focused comment input.
@@ -321,12 +381,15 @@ export default function CommentsModal({
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
+      keyboardCoordinatesRef.current = null;
+      setIsKeyboardShown(false);
       setKeyboardHeight(0);
       isInputFocusedRef.current = false;
       wasKeyboardVisibleRef.current = false;
+      suppressKeyboardHideCloseRef.current = false;
       translateY.setValue(0);
     };
-  }, [onClose, translateY, visible]);
+  }, [onClose, translateY, updateKeyboardHeight, visible]);
 
   const toggleCommentLike = async (commentId: string) => {
     if (entityType === "story") return;
@@ -431,6 +494,12 @@ export default function CommentsModal({
       // updater below can close over the correct value.
       setCommentText("");
       setReplyingTo(null);
+      suppressKeyboardHideCloseRef.current = true;
+      isInputFocusedRef.current = false;
+      inputRef.current?.blur();
+      Keyboard.dismiss();
+      setIsKeyboardShown(false);
+      setKeyboardHeight(0);
       if ("summary" in result) onInteractionChange?.(result.summary);
       if ("interaction" in result)
         onStoryInteractionChange?.(result.interaction);
@@ -572,7 +641,7 @@ export default function CommentsModal({
           the well-known Android KAV bug where behavior="height" fails to
           restore its height after keyboard dismiss, leaving a transparent
           gap that exposes the activity tab bar underneath. */}
-      <View style={styles.modalOverlay}>
+      <View style={styles.modalOverlay} onLayout={handleOverlayLayout}>
         {/* Clickable background to dismiss */}
         <TouchableOpacity
           style={styles.backgroundDismiss}
@@ -687,7 +756,11 @@ export default function CommentsModal({
                     backgroundColor: colors.card,
                     borderTopColor: colors.border,
                     paddingBottom:
-                      Platform.OS === "android" ? insets.bottom + 12 : 12,
+                      isKeyboardShown
+                        ? 8
+                        : Platform.OS === "android"
+                          ? insets.bottom + 12
+                          : 12,
                   },
                 ]}
               >

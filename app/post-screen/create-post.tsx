@@ -39,7 +39,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 
-import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -1212,7 +1211,6 @@ export default function CreateMomentScreen() {
   }, [params.eventId, params.eventName]);
   const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
   const [audience, setAudience] = useState('Public');
-  const [showConfetti, setShowConfetti] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
@@ -1556,7 +1554,6 @@ export default function CreateMomentScreen() {
     const created = await publishMoment();
 
     if (created) {
-      setShowConfetti(true);
       setTimeout(() => {
         safeBack(router, '/(tabs)/home');
       }, 1500);
@@ -1573,12 +1570,6 @@ export default function CreateMomentScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={screenColors.background} />
-
-      {/* Confetti Animation */}
-      <ConfettiOverlay
-        visible={showConfetti}
-        onFinish={() => setShowConfetti(false)}
-      />
 
       {/* ── Header ── */}
       <View style={styles.header}>

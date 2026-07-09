@@ -1,9 +1,8 @@
-import ConfettiOverlay from "@/components/ui/ConfettiOverlay";
 import { useTheme } from "@/hooks/useTheme";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { safeBack } from "@/lib/navigation";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -65,13 +64,6 @@ const PaymentSuccessScreen = () => {
     totalQuantity?: string;
     ticketPasses?: string;
   }>();
-
-  const [showConfetti, setShowConfetti] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowConfetti(true), 400);
-    return () => clearTimeout(timer);
-  }, []);
 
   const orderId = getParam(params.orderId, "");
   const eventId = getParam(params.eventId, "");
@@ -179,10 +171,6 @@ const PaymentSuccessScreen = () => {
       ]}
     >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <ConfettiOverlay
-        visible={showConfetti}
-        onFinish={() => setShowConfetti(false)}
-      />
 
       <View style={styles.header}>
         <TouchableOpacity

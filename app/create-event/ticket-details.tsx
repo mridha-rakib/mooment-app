@@ -18,7 +18,6 @@ import { z } from 'zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { Spinner } from '@/components/ui/spinner';
 import { useTheme } from '@/hooks/useTheme';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
@@ -147,7 +146,6 @@ export default function TicketDetailsScreen() {
   const [salesEndTime, setSalesEndTime] = useState<Date | null>(validInitialSalesEndAt);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<TicketErrors>({});
   const pickerButtonColors = {
@@ -303,7 +301,6 @@ export default function TicketDetailsScreen() {
         salesEndAt: salesEndAt.toISOString(),
         type: result.data.type,
       });
-      setShowConfetti(true);
       setTimeout(() => {
         router.back();
       }, 2500);
@@ -349,12 +346,6 @@ export default function TicketDetailsScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-
-      {/* Success Animation */}
-      <ConfettiOverlay
-        visible={showConfetti}
-        onFinish={() => setShowConfetti(false)}
-      />
 
       {/* Header */}
       <View style={styles.header}>

@@ -1,34 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import ConfettiOverlay from '@/components/ui/ConfettiOverlay';
 import { useTheme } from "@/hooks/useTheme";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function Success() {
-  const [showConfetti, setShowConfetti] = useState(false);
   const { colors, isDark } = useTheme();
   const router = useRouter();
-
-  useEffect(() => {
-    // Show confetti after a short delay when the screen appears
-    const timer = setTimeout(() => {
-      setShowConfetti(true);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, []);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      {/* Confetti Animation */}
-      <ConfettiOverlay 
-        visible={showConfetti} 
-        onFinish={() => setShowConfetti(false)} 
-      />
       
       <View style={styles.container}>
         <View style={styles.content}>
