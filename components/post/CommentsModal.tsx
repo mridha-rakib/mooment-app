@@ -25,6 +25,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Easing,
   Keyboard,
   Modal,
   PanResponder,
@@ -219,7 +220,6 @@ export default function CommentsModal({
   } | null>(null);
   const overlayHeightRef = useRef(Dimensions.get("screen").height);
   const translateY = useRef(new Animated.Value(0)).current;
-  const dragOffsetRef = useRef(0);
   // Android: set to true when the send button receives a touch-start.
   // Checked in TextInput.onBlur so we can send even though Android's Dialog
   // consumes the first tap to dismiss the keyboard before onPress fires.
@@ -230,6 +230,33 @@ export default function CommentsModal({
   const canUseCommentsApi = Boolean(
     momentId && MONGO_OBJECT_ID_PATTERN.test(momentId),
   );
+  const sheetTranslateY = React.useMemo(
+    () =>
+      translateY.interpolate({
+        inputRange: [-72, 0],
+        outputRange: [-72, 0],
+        extrapolateLeft: "clamp",
+        extrapolateRight: "extend",
+      }),
+    [translateY],
+  );
+  const handlePanResponderMove = React.useMemo(
+    () =>
+      Animated.event([null, { dy: translateY }], {
+        useNativeDriver: false,
+      }),
+    [translateY],
+  );
+  const closeFromDrag = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue: overlayHeightRef.current,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      onClose();
+    });
+  }, [onClose, translateY]);
   const dragResponder = React.useMemo(
     () =>
       PanResponder.create({
@@ -237,20 +264,17 @@ export default function CommentsModal({
         onMoveShouldSetPanResponder: (_event, gesture) =>
           Math.abs(gesture.dy) > 4,
         onPanResponderGrant: () => {
-          dragOffsetRef.current = 0;
-          translateY.stopAnimation();
+          translateY.stopAnimation(() => {
+            translateY.setValue(0);
+          });
         },
-        onPanResponderMove: (_event, gesture) => {
-          const nextOffset = Math.max(-72, Math.min(240, gesture.dy));
-          dragOffsetRef.current = nextOffset;
-          translateY.setValue(nextOffset);
-        },
+        onPanResponderMove: handlePanResponderMove,
         onPanResponderRelease: (_event, gesture) => {
           const shouldClose =
-            gesture.dy > 120 || gesture.vy > 0.9 || dragOffsetRef.current > 120;
+            gesture.dy > 120 || gesture.vy > 0.9;
 
           if (shouldClose) {
-            onClose();
+            closeFromDrag();
             return;
           }
 
@@ -270,7 +294,7 @@ export default function CommentsModal({
           }).start();
         },
       }),
-    [onClose, translateY],
+    [closeFromDrag, handlePanResponderMove, translateY],
   );
 
   const loadComments = useCallback(async () => {
@@ -650,7 +674,7 @@ export default function CommentsModal({
         />
 
         <Animated.View
-          style={[styles.sheetWrapper, { transform: [{ translateY }] }]}
+          style={[styles.sheetWrapper, { transform: [{ translateY: sheetTranslateY }] }]}
         >
           {/* Comment Heading Outside Container */}
           <View style={styles.headerLabelContainer}>
