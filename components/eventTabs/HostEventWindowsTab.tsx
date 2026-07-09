@@ -25,6 +25,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -140,7 +141,9 @@ const replaceTimePart = (current: Date, selected: Date) => {
 const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWindows = false }: HostEventWindowsTabProps) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const formScrollRef = useRef<ScrollView>(null);
+  const windowHeightRef = useRef(windowHeight);
   const [windows, setWindows] = useState<EventWindow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -151,6 +154,11 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
   const [isSaving, setIsSaving] = useState(false);
   const [cancellingWindowId, setCancellingWindowId] = useState<string | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
+  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
+  const modalBottomPadding = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 12);
+  const formBodyBottomPadding = Platform.OS === "android" ? keyboardBottomInset : 0;
+  const ModalContainer = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+  const modalContainerProps = Platform.OS === "ios" ? { behavior: "padding" as const } : {};
 
   const eventStart = useMemo(() => parseDate(eventStartsAt), [eventStartsAt]);
   const eventEnd = useMemo(() => parseDate(eventEndsAt), [eventEndsAt]);
@@ -171,6 +179,36 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
   useEffect(() => {
     void loadWindows();
   }, [loadWindows]);
+
+  useEffect(() => {
+    windowHeightRef.current = windowHeight;
+  }, [windowHeight]);
+
+  const updateKeyboardBottomInset = useCallback((event: { endCoordinates?: { height?: number; screenY?: number } }) => {
+    const coordinates = event.endCoordinates;
+    const coveredByScreenY = typeof coordinates?.screenY === "number"
+      ? Math.max(0, windowHeightRef.current - coordinates.screenY)
+      : Math.max(0, coordinates?.height ?? 0);
+    const coveredByHeight = Math.max(0, coordinates?.height ?? 0);
+
+    setKeyboardBottomInset(Math.max(coveredByScreenY, coveredByHeight));
+  }, []);
+
+  useEffect(() => {
+    if (!isFormVisible || Platform.OS !== "android") {
+      setKeyboardBottomInset(0);
+      return;
+    }
+
+    const showSubscription = Keyboard.addListener("keyboardDidShow", updateKeyboardBottomInset);
+    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => setKeyboardBottomInset(0));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      setKeyboardBottomInset(0);
+    };
+  }, [isFormVisible, updateKeyboardBottomInset]);
 
   const openCreateForm = () => {
     if (!canManageWindows) return;
@@ -194,6 +232,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
     if (isSaving) return;
     Keyboard.dismiss();
     setPickerTarget(null);
+    setKeyboardBottomInset(0);
     setIsFormVisible(false);
   };
 
@@ -415,12 +454,11 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
         animationType="slide"
         presentationStyle="pageSheet"
         statusBarTranslucent
-        navigationBarTranslucent
         onRequestClose={closeForm}
       >
-        <KeyboardAvoidingView
+        <ModalContainer
           style={[styles.modal, { backgroundColor: colors.background }]}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          {...modalContainerProps}
         >
           <View
             style={[
@@ -438,148 +476,150 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
             <View style={styles.iconButton} />
           </View>
 
-          <ScrollView
-            ref={formScrollRef}
-            style={styles.formScroll}
-            contentContainerStyle={[
-              styles.formContent,
-              { paddingBottom: Math.max(insets.bottom, 16) + 32 },
-            ]}
-            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
-            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {isOpenEdit ? (
-              <View style={[styles.notice, { backgroundColor: isDark ? "#172033" : "#EFF6FF" }]}>
-                <Feather name="info" size={17} color="#3B82F6" />
-                <Text style={[styles.noticeText, { color: colors.text }]}>This window is open. Its start time and content types can no longer be changed.</Text>
+          <View style={[styles.formBody, { paddingBottom: formBodyBottomPadding }]}>
+            <ScrollView
+              ref={formScrollRef}
+              style={styles.formScroll}
+              contentContainerStyle={[
+                styles.formContent,
+                { paddingBottom: modalBottomPadding + 32 },
+              ]}
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
+              keyboardShouldPersistTaps="always"
+              showsVerticalScrollIndicator={false}
+            >
+              {isOpenEdit ? (
+                <View style={[styles.notice, { backgroundColor: isDark ? "#172033" : "#EFF6FF" }]}>
+                  <Feather name="info" size={17} color="#3B82F6" />
+                  <Text style={[styles.noticeText, { color: colors.text }]}>This window is open. Its start time and content types can no longer be changed.</Text>
+                </View>
+              ) : null}
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>TITLE (OPTIONAL)</Text>
+              <TextInput
+                value={form.title}
+                onChangeText={(title) => setForm((current) => ({ ...current, title }))}
+                placeholder="e.g. Opening night photos"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                maxLength={120}
+              />
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>START</Text>
+              <View style={styles.selectorRow}>
+                <TouchableOpacity disabled={isOpenEdit} style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border, opacity: isOpenEdit ? 0.55 : 1 }]} onPress={() => openPicker("startDate")}>
+                  <Feather name="calendar" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(form.startsAt)}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={isOpenEdit} style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border, opacity: isOpenEdit ? 0.55 : 1 }]} onPress={() => openPicker("startTime")}>
+                  <Feather name="clock" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(form.startsAt)}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END</Text>
+              <View style={styles.selectorRow}>
+                <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => openPicker("endDate")}>
+                  <Feather name="calendar" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(form.endsAt)}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => openPicker("endTime")}>
+                  <Feather name="clock" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(form.endsAt)}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>ALLOWED CONTENT</Text>
+              <View style={styles.contentSelector}>
+                {EVENT_WINDOW_CONTENT_TYPES.map((type) => {
+                  const selected = form.allowedContentTypes.includes(type);
+                  return (
+                    <TouchableOpacity
+                      key={type}
+                      disabled={isOpenEdit}
+                      style={[styles.contentOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}22` : colors.card, opacity: isOpenEdit ? 0.6 : 1 }]}
+                      onPress={() => toggleContentType(type)}
+                    >
+                      <Feather name={CONTENT_TYPE_ICONS[type]} size={18} color={selected ? colors.primary : colors.textSecondary} />
+                      <Text style={[styles.contentOptionText, { color: selected ? colors.text : colors.textSecondary }]}>{CONTENT_TYPE_LABELS[type]}</Text>
+                      <Feather name={selected ? "check-circle" : "circle"} size={17} color={selected ? colors.primary : colors.textSecondary} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>MAXIMUM POSTS</Text>
+              <TextInput
+                value={form.maxPosts}
+                onChangeText={(maxPosts) => setForm((current) => ({ ...current, maxPosts: maxPosts.replace(/[^0-9]/g, "") }))}
+                keyboardType="number-pad"
+                placeholder="25"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                maxLength={5}
+                onFocus={scrollFormToEnd}
+              />
+              {editingWindow ? <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>Currently accepted: {editingWindow.acceptedPostCount}</Text> : null}
+
+              {formError ? (
+                <View style={[styles.errorBox, { borderColor: colors.danger }]}>
+                  <Feather name="alert-circle" size={17} color={colors.danger} />
+                  <Text style={[styles.errorText, { color: colors.danger }]}>{formError}</Text>
+                </View>
+              ) : null}
+            </ScrollView>
+
+            {pickerTarget ? (
+              <View
+                style={[
+                  styles.pickerContainer,
+                  {
+                    borderTopColor: colors.border,
+                    backgroundColor: colors.background,
+                    paddingBottom: modalBottomPadding,
+                  },
+                ]}
+              >
+                {Platform.OS === "ios" ? <TouchableOpacity style={styles.pickerDone} onPress={() => setPickerTarget(null)}><Text style={[styles.saveText, { color: colors.primary }]}>Done</Text></TouchableOpacity> : null}
+                <DateTimePicker
+                  value={pickerValue}
+                  mode={pickerMode}
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  minimumDate={pickerMode === "date" ? eventStart : undefined}
+                  maximumDate={pickerMode === "date" ? eventEnd : undefined}
+                  onChange={handlePickerChange}
+                />
               </View>
             ) : null}
 
-            <Text style={[styles.label, { color: colors.textSecondary }]}>TITLE (OPTIONAL)</Text>
-            <TextInput
-              value={form.title}
-              onChangeText={(title) => setForm((current) => ({ ...current, title }))}
-              placeholder="e.g. Opening night photos"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              maxLength={120}
-            />
-
-            <Text style={[styles.label, { color: colors.textSecondary }]}>START</Text>
-            <View style={styles.selectorRow}>
-              <TouchableOpacity disabled={isOpenEdit} style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border, opacity: isOpenEdit ? 0.55 : 1 }]} onPress={() => openPicker("startDate")}>
-                <Feather name="calendar" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(form.startsAt)}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled={isOpenEdit} style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border, opacity: isOpenEdit ? 0.55 : 1 }]} onPress={() => openPicker("startTime")}>
-                <Feather name="clock" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(form.startsAt)}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.label, { color: colors.textSecondary }]}>END</Text>
-            <View style={styles.selectorRow}>
-              <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => openPicker("endDate")}>
-                <Feather name="calendar" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatDate(form.endsAt)}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => openPicker("endTime")}>
-                <Feather name="clock" size={17} color={colors.textSecondary} /><Text style={[styles.selectorText, { color: colors.text }]}>{formatTime(form.endsAt)}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.label, { color: colors.textSecondary }]}>ALLOWED CONTENT</Text>
-            <View style={styles.contentSelector}>
-              {EVENT_WINDOW_CONTENT_TYPES.map((type) => {
-                const selected = form.allowedContentTypes.includes(type);
-                return (
-                  <TouchableOpacity
-                    key={type}
-                    disabled={isOpenEdit}
-                    style={[styles.contentOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}22` : colors.card, opacity: isOpenEdit ? 0.6 : 1 }]}
-                    onPress={() => toggleContentType(type)}
-                  >
-                    <Feather name={CONTENT_TYPE_ICONS[type]} size={18} color={selected ? colors.primary : colors.textSecondary} />
-                    <Text style={[styles.contentOptionText, { color: selected ? colors.text : colors.textSecondary }]}>{CONTENT_TYPE_LABELS[type]}</Text>
-                    <Feather name={selected ? "check-circle" : "circle"} size={17} color={selected ? colors.primary : colors.textSecondary} />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={[styles.label, { color: colors.textSecondary }]}>MAXIMUM POSTS</Text>
-            <TextInput
-              value={form.maxPosts}
-              onChangeText={(maxPosts) => setForm((current) => ({ ...current, maxPosts: maxPosts.replace(/[^0-9]/g, "") }))}
-              keyboardType="number-pad"
-              placeholder="25"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              maxLength={5}
-              onFocus={scrollFormToEnd}
-            />
-            {editingWindow ? <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>Currently accepted: {editingWindow.acceptedPostCount}</Text> : null}
-
-            {formError ? (
-              <View style={[styles.errorBox, { borderColor: colors.danger }]}>
-                <Feather name="alert-circle" size={17} color={colors.danger} />
-                <Text style={[styles.errorText, { color: colors.danger }]}>{formError}</Text>
-              </View>
-            ) : null}
-          </ScrollView>
-
-          {pickerTarget ? (
             <View
               style={[
-                styles.pickerContainer,
+                styles.formActions,
                 {
                   borderTopColor: colors.border,
                   backgroundColor: colors.background,
-                  paddingBottom: insets.bottom,
+                  paddingBottom: modalBottomPadding,
                 },
               ]}
             >
-              {Platform.OS === "ios" ? <TouchableOpacity style={styles.pickerDone} onPress={() => setPickerTarget(null)}><Text style={[styles.saveText, { color: colors.primary }]}>Done</Text></TouchableOpacity> : null}
-              <DateTimePicker
-                value={pickerValue}
-                mode={pickerMode}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                minimumDate={pickerMode === "date" ? eventStart : undefined}
-                maximumDate={pickerMode === "date" ? eventEnd : undefined}
-                onChange={handlePickerChange}
-              />
+              <TouchableOpacity
+                style={[styles.formActionButton, { borderColor: colors.border }]}
+                onPress={closeForm}
+                disabled={isSaving}
+              >
+                <Text style={[styles.formCancelText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.formActionButton, { backgroundColor: colors.text }]}
+                onPress={() => void saveWindow()}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={[styles.formSaveText, { color: colors.background }]}>Save</Text>
+                )}
+              </TouchableOpacity>
             </View>
-          ) : null}
-
-          <View
-            style={[
-              styles.formActions,
-              {
-                borderTopColor: colors.border,
-                backgroundColor: colors.background,
-                paddingBottom: Math.max(insets.bottom, 12),
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={[styles.formActionButton, { borderColor: colors.border }]}
-              onPress={closeForm}
-              disabled={isSaving}
-            >
-              <Text style={[styles.formCancelText, { color: colors.text }]}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.formActionButton, { backgroundColor: colors.text }]}
-              onPress={() => void saveWindow()}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <Text style={[styles.formSaveText, { color: colors.background }]}>Save</Text>
-              )}
-            </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </ModalContainer>
       </Modal>
     </View>
   );
@@ -624,6 +664,7 @@ const styles = StyleSheet.create({
   modalHeader: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   modalTitle: { fontSize: 17, fontWeight: "700" },
   saveText: { fontSize: 15, fontWeight: "700", paddingHorizontal: 10 },
+  formBody: { flex: 1 },
   formScroll: { flex: 1 },
   formContent: { padding: 20, paddingBottom: 48 },
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 12, borderRadius: 8, marginBottom: 20 },

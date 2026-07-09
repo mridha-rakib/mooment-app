@@ -32,10 +32,16 @@ const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const formatKm = (km: number): string => {
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  if (km < 10) return `${km.toFixed(1)} km`;
-  return `${Math.round(km)} km`;
+const formatMilesFromKm = (km: number | null | undefined): string | null => {
+  if (typeof km !== "number" || !Number.isFinite(km)) {
+    return null;
+  }
+
+  const miles = km * 0.621371;
+
+  if (miles < 0.1) return "< 0.1 mi";
+  if (miles < 10) return `${miles.toFixed(1)} mi`;
+  return `${Math.round(miles)} mi`;
 };
 
 const estimateMinutes = (km: number): string =>
@@ -67,6 +73,7 @@ export default function ViewLocationScreen() {
 
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const distanceLabel = formatMilesFromKm(distanceKm);
   const [mapLoaded, setMapLoaded] = useState(false);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const initialFit = useRef(false);
@@ -232,8 +239,8 @@ export default function ViewLocationScreen() {
             <View style={[styles.legendDot, { backgroundColor: USER_COLOR }]} />
             <Text style={styles.legendLabel}>Your Location</Text>
           </View>
-          {distanceKm !== null && (
-            <Text style={styles.legendValue}>{formatKm(distanceKm)}</Text>
+          {distanceLabel && (
+            <Text style={styles.legendValue}>{distanceLabel}</Text>
           )}
         </View>
 

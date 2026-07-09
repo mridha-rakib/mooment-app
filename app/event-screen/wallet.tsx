@@ -97,6 +97,9 @@ const getLocationLabel = (item: TicketWalletItem) =>
 const getAddressLabel = (item: TicketWalletItem) =>
   item.event.location?.address || item.event.location?.searchLabel || "Address TBA";
 
+const getWalletEventId = (item: TicketWalletItem) =>
+  typeof item.event?.id === "string" ? item.event.id.trim() : "";
+
 const getPassesForTab = (item: TicketWalletItem, tab: WalletTab) => {
   const passes = item.ticketPasses ?? [];
 
@@ -445,7 +448,7 @@ const TicketWalletScreen = () => {
                               totalQuantity: String(item.totalQuantity ?? item.quantity),
                               ticketNo: item.ticketNo,
                               orderId: item.orderId,
-                              eventId: item.event.id,
+                              eventId: getWalletEventId(item),
                               ticketId: item.ticketId,
                               eventTitle: item.event.name ?? item.ticketName,
                               ticketName: item.ticketName,

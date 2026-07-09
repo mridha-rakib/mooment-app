@@ -122,6 +122,12 @@ const getParamValue = (value: string | string[] | undefined, fallback: string) =
   return source?.trim() || fallback;
 };
 
+const getValidEventIdParam = (value: string | string[] | undefined) => {
+  const eventId = getParamValue(value, "");
+
+  return eventId && eventId !== "undefined" && eventId !== "null" ? eventId : null;
+};
+
 const formatWalletAmount = (amount: string | string[] | undefined, currency: string | string[] | undefined) => {
   const amountSource = Array.isArray(amount) ? amount[0] : amount;
   const currencySource = Array.isArray(currency) ? currency[0] : currency;
@@ -185,7 +191,7 @@ const TicketDetailScreen = () => {
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
 
-  const eventId = typeof params.eventId === "string" ? params.eventId : null;
+  const eventId = getValidEventIdParam(params.eventId);
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : null;
   const isHostMode = params.mode === "host" || Boolean(event && currentUser?.id === event.userId);
 
@@ -287,6 +293,17 @@ const TicketDetailScreen = () => {
     router.push({
       pathname: "/create-event/ticket-details",
       params: { localId: draftTicket.localId },
+    });
+  };
+
+  const handleViewEventDetails = () => {
+    if (!eventId) {
+      return;
+    }
+
+    router.push({
+      pathname: "/event-screen/event",
+      params: { eventId },
     });
   };
 
@@ -603,6 +620,17 @@ const TicketDetailScreen = () => {
               </View>
             </View>
 
+            {!!eventId && (
+              <TouchableOpacity
+                style={styles.walletEventDetailsButton}
+                activeOpacity={0.85}
+                onPress={handleViewEventDetails}
+              >
+                <Text style={styles.walletEventDetailsButtonText}>View Event Details</Text>
+                <Feather name="arrow-right" size={14} color="#C9C1CF" />
+              </TouchableOpacity>
+            )}
+
             <View style={walletCanShare ? styles.walletDualActions : styles.walletSingleActions}>
               {walletCanShare && (
                 <TouchableOpacity
@@ -913,6 +941,17 @@ const TicketDetailScreen = () => {
               ))}
             </View>
           </View>
+
+          {!!eventId && (
+            <TouchableOpacity
+              style={[styles.eventDetailsButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              activeOpacity={0.85}
+              onPress={handleViewEventDetails}
+            >
+              <Text style={[styles.eventDetailsButtonText, { color: colors.text }]}>View Event Details</Text>
+              <Feather name="arrow-right" size={16} color={colors.text} />
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 
@@ -1134,6 +1173,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  eventDetailsButton: {
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    height: 52,
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  eventDetailsButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
   walletContainer: {
     backgroundColor: "#101014",
     flex: 1,
@@ -1317,6 +1370,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: 16,
+  },
+  walletEventDetailsButton: {
+    alignItems: "center",
+    backgroundColor: "#1B1821",
+    borderColor: "#36313D",
+    borderRadius: 7,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    height: 40,
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  walletEventDetailsButtonText: {
+    color: "#C9C1CF",
+    fontSize: 12,
+    fontWeight: "800",
   },
   walletShareButton: {
     alignItems: "center",

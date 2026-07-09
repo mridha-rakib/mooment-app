@@ -238,7 +238,7 @@ const getDistanceLabel = (
       return "nearby";
     }
 
-    return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()}mi`;
+    return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()} mi`;
   }
 
     return "nearby";

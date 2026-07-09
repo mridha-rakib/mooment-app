@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Modal,
+  PanResponder,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -8,6 +11,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -33,6 +37,71 @@ const REASONS = [
 export default function ReportModal({ visible, onClose, onReport }: ReportModalProps) {
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const translateY = useRef(new Animated.Value(0)).current;
+  const sheetBottomPadding = Math.max(24 + insets.bottom, Platform.OS === 'ios' ? 40 : 24);
+  const sheetTranslateY = useMemo(
+    () =>
+      translateY.interpolate({
+        inputRange: [-72, 0],
+        outputRange: [-72, 0],
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'extend',
+      }),
+    [translateY],
+  );
+
+  const closeFromDrag = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue: 320,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      translateY.setValue(0);
+      onClose();
+    });
+  }, [onClose, translateY]);
+
+  const dragResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 4,
+        onPanResponderGrant: () => {
+          translateY.stopAnimation(() => {
+            translateY.setValue(0);
+          });
+        },
+        onPanResponderMove: (_event, gesture) => {
+          translateY.setValue(Math.max(-72, gesture.dy));
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const shouldClose = gesture.dy > 120 || gesture.vy > 0.9;
+
+          if (shouldClose) {
+            closeFromDrag();
+            return;
+          }
+
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 70,
+            friction: 10,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 70,
+            friction: 10,
+          }).start();
+        },
+      }),
+    [closeFromDrag, translateY],
+  );
 
   const handleContinue = () => {
     if (selectedReason) {
@@ -55,8 +124,19 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
           onPress={onClose} 
         />
         
-        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
-          <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.background,
+              paddingBottom: sheetBottomPadding,
+              transform: [{ translateY: sheetTranslateY }],
+            },
+          ]}
+        >
+          <View {...dragResponder.panHandlers} style={styles.dragArea}>
+            <View style={[styles.handle, { backgroundColor: colors.text + '33' }]} />
+          </View>
           
           <Text style={[styles.title, { color: colors.text }]}>Why are you reporting this?</Text>
           
@@ -96,7 +176,7 @@ export default function ReportModal({ visible, onClose, onReport }: ReportModalP
               <Text style={[styles.continueBtnText, { color: buttonForeground(colors) }]}>Continue</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -115,7 +195,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingTop: 12,
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     maxHeight: '80%',
   },
   handle: {
@@ -123,7 +202,11 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 24,
+  },
+  dragArea: {
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 20,
   },
   title: {
     fontSize: 20,
@@ -132,6 +215,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   reasonsList: {
+    flexShrink: 1,
     marginBottom: 24,
   },
   reasonItem: {

@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -31,6 +32,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -172,9 +174,11 @@ function GalleryAudio({ uri, headers, durationSeconds }: { uri: string; headers?
 const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsTabProps) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const accessToken = useAuthStore((state) => state.accessToken);
   const formScrollRef = useRef<ScrollView>(null);
+  const windowHeightRef = useRef(windowHeight);
   const [windows, setWindows] = useState<EventWindow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -190,6 +194,18 @@ const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsT
   const [galleryCursors, setGalleryCursors] = useState<Record<string, string | null>>({});
   const [galleryLoadingId, setGalleryLoadingId] = useState<string | null>(null);
   const [galleryErrors, setGalleryErrors] = useState<Record<string, string>>({});
+  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
+  const androidNavigationInset = Platform.OS === "android"
+    ? Math.max(0, Dimensions.get("screen").height - windowHeight)
+    : 0;
+  const systemBottomInset = Math.max(
+    insets.bottom,
+    androidNavigationInset,
+    Platform.OS === "android" ? 16 : 12,
+  );
+  const formBodyBottomPadding = Platform.OS === "android" ? keyboardBottomInset : 0;
+  const ModalContainer = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+  const modalContainerProps = Platform.OS === "ios" ? { behavior: "padding" as const } : {};
   const mediaRequestHeaders = useMemo(
     () => accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     [accessToken],
@@ -213,6 +229,39 @@ const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsT
     const interval = setInterval(() => void loadWindows(false), 30000);
     return () => clearInterval(interval);
   }, [loadWindows]);
+
+  useEffect(() => {
+    windowHeightRef.current = windowHeight;
+  }, [windowHeight]);
+
+  const updateKeyboardBottomInset = useCallback((event: { endCoordinates?: { height?: number; screenY?: number } }) => {
+    const coordinates = event.endCoordinates;
+    const coveredBottom = typeof coordinates?.screenY === "number"
+      ? Math.max(0, windowHeightRef.current - coordinates.screenY)
+      : 0;
+    const metrics = Keyboard.metrics?.();
+    const metricsCoveredBottom = metrics && typeof metrics.screenY === "number"
+      ? Math.max(0, windowHeightRef.current - metrics.screenY)
+      : 0;
+
+    setKeyboardBottomInset(Math.max(coveredBottom, metricsCoveredBottom, coordinates?.height ?? 0, metrics?.height ?? 0));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedWindow || Platform.OS !== "android") {
+      setKeyboardBottomInset(0);
+      return;
+    }
+
+    const showSubscription = Keyboard.addListener("keyboardDidShow", updateKeyboardBottomInset);
+    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => setKeyboardBottomInset(0));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      setKeyboardBottomInset(0);
+    };
+  }, [selectedWindow, updateKeyboardBottomInset]);
 
   const closePostForm = () => {
     if (isSubmitting) return;
@@ -512,79 +561,87 @@ const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsT
         navigationBarTranslucent
         onRequestClose={closePostForm}
       >
-        <KeyboardAvoidingView style={[styles.modal, { backgroundColor: colors.background }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ModalContainer
+          style={[styles.modal, { backgroundColor: colors.background }]}
+          {...modalContainerProps}
+        >
           <View style={[styles.modalHeader, { borderBottomColor: colors.border, paddingTop: Math.max(insets.top, 8) }]}>
             <TouchableOpacity style={styles.headerIcon} onPress={closePostForm} disabled={isSubmitting} accessibilityLabel="Close post form"><Feather name="x" size={24} color={colors.text} /></TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Post to window</Text>
             <View style={styles.headerIcon} />
           </View>
-          <ScrollView
-            ref={formScrollRef}
-            style={styles.formScroll}
-            contentContainerStyle={[styles.formContent, { paddingBottom: Math.max(insets.bottom, 16) + 32 }]}
-            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={[styles.formWindowTitle, { color: colors.text }]}>{selectedWindow?.title?.trim() || "Event window"}</Text>
-            <Text style={[styles.formLabel, { color: colors.textSecondary }]}>POST TYPE</Text>
-            <View style={styles.typeSelector}>
-              {selectedWindow?.allowedContentTypes.map((type) => {
-                const selected = selectedType === type;
-                return (
-                  <TouchableOpacity key={type} style={[styles.typeOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}22` : colors.card }]} onPress={() => selectType(type)}>
-                    <Feather name={CONTENT_ICONS[type]} size={18} color={selected ? colors.primary : colors.textSecondary} />
-                    <Text style={[styles.typeOptionText, { color: selected ? colors.text : colors.textSecondary }]}>{CONTENT_LABELS[type]}</Text>
-                    <Feather name={selected ? "check-circle" : "circle"} size={17} color={selected ? colors.primary : colors.textSecondary} />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {selectedType !== "text" ? (
-              <>
-                <Text style={[styles.formLabel, { color: colors.textSecondary }]}>MEDIA</Text>
-                {selectedMedia ? (
-                  <View style={[styles.selectedMedia, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                    {selectedMedia.type === "image" ? <Image source={{ uri: selectedMedia.uri }} style={styles.selectedMediaPreview} contentFit="cover" /> : <Feather name={CONTENT_ICONS[selectedMedia.type]} size={28} color={colors.primary} />}
-                    <Text style={[styles.selectedMediaName, { color: colors.text }]} numberOfLines={2}>{selectedMedia.fileName}</Text>
-                    <TouchableOpacity style={styles.removeMedia} onPress={() => setSelectedMedia(null)} accessibilityLabel="Remove selected media"><Feather name="x" size={20} color={colors.textSecondary} /></TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={[styles.mediaPicker, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => void pickMedia()}>
-                    <Feather name="upload" size={21} color={colors.primary} />
-                    <Text style={[styles.mediaPickerText, { color: colors.text }]}>Choose {CONTENT_LABELS[selectedType].toLowerCase()}</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            ) : null}
-
-            <Text style={[styles.formLabel, { color: colors.textSecondary }]}>{selectedType === "text" ? "TEXT" : "CAPTION (OPTIONAL)"}</Text>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              multiline
-              maxLength={5000}
-              placeholder={selectedType === "text" ? "Share something from the event" : "Add a caption"}
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.textArea, { borderColor: colors.border, backgroundColor: colors.card, color: colors.text }]}
-              textAlignVertical="top"
-            />
-
-            {postError ? (
-              <View style={[styles.errorBox, { borderColor: colors.danger }]}>
-                <Feather name="alert-circle" size={17} color={colors.danger} />
-                <Text style={[styles.errorText, { color: colors.danger }]}>{postError}</Text>
+          <View style={[styles.formBody, { paddingBottom: formBodyBottomPadding }]}>
+            <ScrollView
+              ref={formScrollRef}
+              style={styles.formScroll}
+              contentContainerStyle={[styles.formContent, { paddingBottom: systemBottomInset + 32 }]}
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
+              keyboardShouldPersistTaps="always"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={[styles.formWindowTitle, { color: colors.text }]}>{selectedWindow?.title?.trim() || "Event window"}</Text>
+              <Text style={[styles.formLabel, { color: colors.textSecondary }]}>POST TYPE</Text>
+              <View style={styles.typeSelector}>
+                {selectedWindow?.allowedContentTypes.map((type) => {
+                  const selected = selectedType === type;
+                  return (
+                    <TouchableOpacity key={type} style={[styles.typeOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}22` : colors.card }]} onPress={() => selectType(type)}>
+                      <Feather name={CONTENT_ICONS[type]} size={18} color={selected ? colors.primary : colors.textSecondary} />
+                      <Text style={[styles.typeOptionText, { color: selected ? colors.text : colors.textSecondary }]}>{CONTENT_LABELS[type]}</Text>
+                      <Feather name={selected ? "check-circle" : "circle"} size={17} color={selected ? colors.primary : colors.textSecondary} />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            ) : null}
-          </ScrollView>
-          <View style={[styles.formActions, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <TouchableOpacity style={[styles.formActionButton, { borderColor: colors.border }]} onPress={closePostForm} disabled={isSubmitting}><Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.formActionButton, { backgroundColor: colors.text }]} onPress={() => void submitPost()} disabled={isSubmitting}>
-              {isSubmitting ? <View style={styles.submittingRow}><ActivityIndicator color={colors.background} /><Text style={[styles.submitText, { color: colors.background }]}>{uploadProgress > 0 && uploadProgress < 1 ? `${Math.round(uploadProgress * 100)}%` : "Posting"}</Text></View> : <Text style={[styles.submitText, { color: colors.background }]}>Post</Text>}
-            </TouchableOpacity>
+
+              <View>
+                {selectedType !== "text" ? (
+                  <>
+                    <Text style={[styles.formLabel, { color: colors.textSecondary }]}>MEDIA</Text>
+                    {selectedMedia ? (
+                      <View style={[styles.selectedMedia, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                        {selectedMedia.type === "image" ? <Image source={{ uri: selectedMedia.uri }} style={styles.selectedMediaPreview} contentFit="cover" /> : <Feather name={CONTENT_ICONS[selectedMedia.type]} size={28} color={colors.primary} />}
+                        <Text style={[styles.selectedMediaName, { color: colors.text }]} numberOfLines={2}>{selectedMedia.fileName}</Text>
+                        <TouchableOpacity style={styles.removeMedia} onPress={() => setSelectedMedia(null)} accessibilityLabel="Remove selected media"><Feather name="x" size={20} color={colors.textSecondary} /></TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={[styles.mediaPicker, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => void pickMedia()}>
+                        <Feather name="upload" size={21} color={colors.primary} />
+                        <Text style={[styles.mediaPickerText, { color: colors.text }]}>Choose {CONTENT_LABELS[selectedType].toLowerCase()}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : null}
+              </View>
+
+              <Text style={[styles.formLabel, { color: colors.textSecondary }]}>{selectedType === "text" ? "TEXT" : "CAPTION (OPTIONAL)"}</Text>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                multiline
+                maxLength={5000}
+                placeholder={selectedType === "text" ? "Share something from the event" : "Add a caption"}
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.textArea, { borderColor: colors.border, backgroundColor: colors.card, color: colors.text }]}
+                textAlignVertical="top"
+              />
+
+              {postError ? (
+                <View style={[styles.errorBox, { borderColor: colors.danger }]}>
+                  <Feather name="alert-circle" size={17} color={colors.danger} />
+                  <Text style={[styles.errorText, { color: colors.danger }]}>{postError}</Text>
+                </View>
+              ) : null}
+            </ScrollView>
+            <View style={[styles.formActions, { borderTopColor: colors.border, backgroundColor: colors.background, paddingBottom: systemBottomInset }]}>
+              <TouchableOpacity style={[styles.formActionButton, { borderColor: colors.border }]} onPress={closePostForm} disabled={isSubmitting}><Text style={[styles.cancelText, { color: colors.text }]}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.formActionButton, { backgroundColor: colors.text }]} onPress={() => void submitPost()} disabled={isSubmitting}>
+                {isSubmitting ? <View style={styles.submittingRow}><ActivityIndicator color={colors.background} /><Text style={[styles.submitText, { color: colors.background }]}>{uploadProgress > 0 && uploadProgress < 1 ? `${Math.round(uploadProgress * 100)}%` : "Posting"}</Text></View> : <Text style={[styles.submitText, { color: colors.background }]}>Post</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-        </KeyboardAvoidingView>
+        </ModalContainer>
       </Modal>
     </View>
   );
@@ -643,6 +700,7 @@ const styles = StyleSheet.create({
   modalHeader: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   headerIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   modalTitle: { fontSize: 17, fontWeight: "700" },
+  formBody: { flex: 1 },
   formScroll: { flex: 1 },
   formContent: { padding: 20 },
   formWindowTitle: { fontSize: 19, lineHeight: 24, fontWeight: "700", marginBottom: 4 },

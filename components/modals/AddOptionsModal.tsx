@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import React, { useRef } from "react";
 import {
   Animated,
+  Easing,
   Modal,
   PanResponder,
   StyleSheet,
@@ -60,6 +61,9 @@ const OPTIONS = [
   },
 ];
 
+const AnimatedTouchableOpacity =
+  Animated.createAnimatedComponent(TouchableOpacity);
+
 export default function AddOptionsModal({
   visible,
   onClose,
@@ -69,9 +73,18 @@ export default function AddOptionsModal({
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
-  const dragOffsetRef = useRef(0);
 
   const translateY = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = React.useMemo(
+    () =>
+      translateY.interpolate({
+        inputRange: [-72, 0],
+        outputRange: [-72, 0],
+        extrapolateLeft: "clamp",
+        extrapolateRight: "extend",
+      }),
+    [translateY],
+  );
 
   const completedProfileTypes = useAuthStore(
     (state) => state.completedProfileTypes,
@@ -86,6 +99,7 @@ export default function AddOptionsModal({
   }, [visible]);
 
   const handleModalShow = () => {
+    translateY.setValue(0);
     optionPressLockRef.current = false;
     setOptionsEnabled(true);
     onOpenComplete?.();
@@ -135,36 +149,43 @@ export default function AddOptionsModal({
         onMoveShouldSetPanResponder: (_event, gesture) =>
           Math.abs(gesture.dy) > 4,
         onPanResponderGrant: () => {
-          dragOffsetRef.current = 0;
-          translateY.stopAnimation();
+          translateY.stopAnimation(() => {
+            translateY.setValue(0);
+          });
         },
         onPanResponderMove: (_event, gesture) => {
-          const nextOffset = Math.max(-72, Math.min(240, gesture.dy));
-          dragOffsetRef.current = nextOffset;
-          translateY.setValue(nextOffset);
+          translateY.setValue(Math.max(-72, gesture.dy));
         },
         onPanResponderRelease: (_event, gesture) => {
           const shouldClose =
-            gesture.dy > 120 || gesture.vy > 0.9 || dragOffsetRef.current > 120;
+            gesture.dy > 120 || gesture.vy > 0.9;
 
           if (shouldClose) {
-            onClose();
+            Animated.timing(translateY, {
+              toValue: 360,
+              duration: 180,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }).start(() => {
+              translateY.setValue(0);
+              onClose();
+            });
             return;
           }
 
           Animated.spring(translateY, {
             toValue: 0,
             useNativeDriver: true,
-            tension: 70,
-            friction: 10,
+            tension: 80,
+            friction: 12,
           }).start();
         },
         onPanResponderTerminate: () => {
           Animated.spring(translateY, {
             toValue: 0,
             useNativeDriver: true,
-            tension: 70,
-            friction: 10,
+            tension: 80,
+            friction: 12,
           }).start();
         },
       }),
@@ -193,7 +214,7 @@ export default function AddOptionsModal({
           style={StyleSheet.absoluteFill}
         />
 
-        <TouchableOpacity
+        <AnimatedTouchableOpacity
           activeOpacity={1}
           style={[
             styles.sheet,
@@ -201,19 +222,15 @@ export default function AddOptionsModal({
               backgroundColor: colors.background,
               borderColor: colors.border,
               paddingBottom: Math.max(insets.bottom, 16) + 12,
+              transform: [{ translateY: sheetTranslateY }],
             },
           ]}
         >
           <View
             {...dragResponder.panHandlers}
-            style={[
-              styles.header,
-              {
-                backgroundColor: colors.backgroundSecondary,
-              },
-            ]}
+            style={styles.header}
           >
-            <View style={[styles.handle, { backgroundColor: colors.text }]} />
+            <View style={[styles.handle, { backgroundColor: colors.text + "CC" }]} />
             <Text style={[styles.sheetTitle, { color: colors.text }]}>
               Select to proceed
             </Text>
@@ -260,7 +277,7 @@ export default function AddOptionsModal({
               </TouchableOpacity>
             ))}
           </View>
-        </TouchableOpacity>
+        </AnimatedTouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
@@ -280,22 +297,20 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    borderRadius: 18,
-    marginBottom: 12,
     paddingTop: 4,
-    paddingBottom: 14,
+    paddingBottom: 18,
   },
   handle: {
     width: 64,
     height: 4,
     borderRadius: 2,
     alignSelf: "center",
-    marginBottom: 16,
+    marginBottom: 18,
   },
   sheetTitle: {
     fontSize: 16,
     fontWeight: "700",
-    letterSpacing: 0.2,
+    letterSpacing: 0,
     lineHeight: 20,
     textAlign: "center",
   },

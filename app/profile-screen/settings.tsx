@@ -1,10 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import BackButton from "@/components/ui/BackButton";
 import { Spinner } from "@/components/ui/spinner";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import { setTheme } from "@/redux/slice/preference";
@@ -12,8 +11,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { writeThemePreference } from "@/lib/themePreference";
 import { useAuthStore } from "@/stores/authStore";
 import { useLocationSharingStore } from "@/stores/locationSharingStore";
-
-import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 type SettingItemProps = {
   icon: string;
   label: string;
@@ -61,7 +58,6 @@ export default function SettingsScreen() {
   const user = useAuthStore((state) => state.user);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const deleteAccount = useAuthStore((state) => state.deleteAccount);
-  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
   const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
 
@@ -69,11 +65,6 @@ export default function SettingsScreen() {
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-
-  // Bottom sheet states
-  const [isAccountTypeModalVisible, setAccountTypeModalVisible] = useState(false);
-  const [selectedAccountType, setSelectedAccountType] = useState<'personal' | 'business'>(user?.accountType ?? 'personal');
-  const [isSwitchingAccountType, setIsSwitchingAccountType] = useState(false);
   const locationEnabled = Boolean(user?.currentLocationSharingEnabled);
   const notificationEnabled = user?.notificationsEnabled ?? true;
 
@@ -105,39 +96,6 @@ export default function SettingsScreen() {
 
     dispatch(setTheme(nextTheme));
     void writeThemePreference(nextTheme);
-  };
-
-  const handleOpenAccountTypeModal = () => {
-    setSelectedAccountType(user?.accountType ?? 'personal');
-    setAccountTypeModalVisible(true);
-  };
-
-  const handleAccountTypeDone = async () => {
-    if (selectedAccountType === user?.accountType) {
-      setAccountTypeModalVisible(false);
-      return;
-    }
-
-    if (completedProfileTypes.includes(selectedAccountType)) {
-      setIsSwitchingAccountType(true);
-      try {
-        await updateProfile({ accountType: selectedAccountType });
-      } catch (error) {
-        Alert.alert(
-          "Switch Account Type",
-          error instanceof Error ? error.message : "Unable to switch account type. Please try again.",
-        );
-      } finally {
-        setIsSwitchingAccountType(false);
-      }
-      setAccountTypeModalVisible(false);
-    } else {
-      setAccountTypeModalVisible(false);
-      router.push({
-        pathname: '/profile-screen/edit-profile',
-        params: { type: selectedAccountType, mode: 'switch' },
-      });
-    }
   };
 
   const handleNotificationChange = async (nextValue: boolean) => {
@@ -246,13 +204,6 @@ export default function SettingsScreen() {
             onValueChange={handleDarkModeChange}
             colors={colors}
           />
-          <SettingItem
-            icon="refresh-cw"
-            label="Switch Account Type"
-            type="dropdown"
-            onPress={handleOpenAccountTypeModal}
-            colors={colors}
-          />
         </View>
 
         {/* BUSINESS Section — only visible for business accounts */}
@@ -319,80 +270,6 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
       </ScrollView>
-
-      {/* Switch Account Type Modal */}
-      <Modal
-        visible={isAccountTypeModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setAccountTypeModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-          <View style={[styles.bottomSheet, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom + 16, 40) }]}>
-            <View style={[styles.bottomSheetHandle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Select Account Type</Text>
-            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>You can always change the account type</Text>
-
-            <TouchableOpacity 
-              style={[
-                styles.radioItem, 
-                { backgroundColor: colors.card, borderColor: colors.border },
-                selectedAccountType === 'personal' && { borderColor: colors.primary }
-              ]} 
-              onPress={() => setSelectedAccountType('personal')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.radioItemLeft}>
-                <Text style={[styles.radioLabel, { color: colors.text }]}>Personal Account</Text>
-                {selectedAccountType === 'personal' && <View style={[styles.statusDot, { backgroundColor: '#2DB46D' }]} />}
-              </View>
-              <View style={[styles.radioCircle, { borderColor: colors.textSecondary }, selectedAccountType === 'personal' && { borderColor: colors.primary }]}>
-                {selectedAccountType === 'personal' && <View style={[styles.radioInnerCircle, { backgroundColor: colors.primary }]} />}
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[
-                styles.radioItem, 
-                { backgroundColor: colors.card, borderColor: colors.border },
-                selectedAccountType === 'business' && { borderColor: colors.primary }
-              ]} 
-              onPress={() => setSelectedAccountType('business')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.radioItemLeft}>
-                <Text style={[styles.radioLabel, { color: colors.text }]}>Business Account</Text>
-                {selectedAccountType === 'business' && <View style={[styles.statusDot, { backgroundColor: '#2DB46D' }]} />}
-              </View>
-              <View style={[styles.radioCircle, { borderColor: colors.textSecondary }, selectedAccountType === 'business' && { borderColor: colors.primary }]}>
-                {selectedAccountType === 'business' && <View style={[styles.radioInnerCircle, { backgroundColor: colors.primary }]} />}
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.cancelModalBtn}
-                onPress={() => setAccountTypeModalVisible(false)}
-                disabled={isSwitchingAccountType}
-              >
-                <Text style={[styles.cancelModalText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.doneModalBtn, { backgroundColor: buttonBackground(colors) }, isSwitchingAccountType && { opacity: 0.7 }]}
-                onPress={handleAccountTypeDone}
-                disabled={isSwitchingAccountType}
-              >
-                {isSwitchingAccountType ? (
-                  <Spinner color={buttonForeground(colors)} />
-                ) : (
-                  <Text style={[styles.doneModalText, { color: buttonForeground(colors) }]}>Done</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
     </View>
   );
@@ -465,101 +342,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  /* Modal Styles */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  bottomSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  bottomSheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  modalSubtitle: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 25,
-  },
-  radioItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  radioItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  radioLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  radioInnerCircle: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 15,
-  },
-  cancelModalBtn: {
-    flex: 1,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  cancelModalText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  doneModalBtn: {
-    flex: 1,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
-    marginLeft: 10,
-  },
-  doneModalText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
 });
