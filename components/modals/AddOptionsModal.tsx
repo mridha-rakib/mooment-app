@@ -2,6 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { getMyProfileEvents } from "@/lib/events";
 import { useAuthStore } from "@/stores/authStore";
+import { useEventDraftStore } from "@/stores/eventDraftStore";
 import {
   ChevronRight,
   PencilEdit01Icon,
@@ -90,6 +91,7 @@ export default function AddOptionsModal({
     (state) => state.completedProfileTypes,
   );
   const updateProfile = useAuthStore((state) => state.updateProfile);
+  const startCreateSession = useEventDraftStore((state) => state.startCreateSession);
   const [optionsEnabled, setOptionsEnabled] = React.useState(false);
   const optionPressLockRef = React.useRef(true);
 
@@ -134,7 +136,10 @@ export default function AddOptionsModal({
         completedProfileTypes,
         updateProfile,
         router,
-        onReady: () => router.push(route as any),
+        onReady: () => {
+          startCreateSession();
+          router.push(route as any);
+        },
       });
       return;
     }

@@ -1,4 +1,6 @@
-const { existsSync, readFileSync } = require("fs");
+const { deserialize } = require("v8");
+const { existsSync, readFileSync, readdirSync, rmSync } = require("fs");
+const { tmpdir } = require("os");
 const { join } = require("path");
 const { spawnSync } = require("child_process");
 
@@ -123,11 +125,37 @@ function reverseDevelopmentPorts() {
   }
 }
 
+function clearCorruptMetroFileMapCache() {
+  let entries;
+
+  try {
+    entries = readdirSync(tmpdir()).filter((entry) => entry.startsWith("metro-file-map"));
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const fullPath = join(tmpdir(), entry);
+
+    try {
+      deserialize(readFileSync(fullPath));
+    } catch {
+      try {
+        rmSync(fullPath, { force: true });
+        console.log(`Removed corrupt Metro file-map cache: ${fullPath}`);
+      } catch {
+        // Metro can still fall back to a full crawl if Windows is holding the file.
+      }
+    }
+  }
+}
+
 const env = {
   ...process.env,
   REACT_NATIVE_PACKAGER_HOSTNAME: DEV_SERVER_HOST,
 };
 
+clearCorruptMetroFileMapCache();
 reverseDevelopmentPorts();
 
 const result = spawnSync(

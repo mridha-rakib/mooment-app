@@ -31,6 +31,8 @@ export type EventDraftTicket = EventTicketPayload & {
 type EventDraftState = {
   draftId: string | null;
   isEditingPublishedEvent: boolean;
+  publishedEventBaseline: string | null;
+  publishedEventBaselineEvent: EventResponse | null;
   name: string;
   description: string;
   bannerImageUri: string | null;
@@ -71,6 +73,7 @@ type EventDraftState = {
   discardDraft: () => Promise<void>;
   loadFromEvent: (event: EventResponse) => void;
   resetDraft: () => void;
+  startCreateSession: () => void;
 };
 
 const DEFAULT_TICKET_ID = "default-general-ticket";
@@ -90,6 +93,8 @@ const createInitialState = () => {
     scheduledAt: null,
     draftId: null,
     isEditingPublishedEvent: false,
+    publishedEventBaseline: null,
+    publishedEventBaselineEvent: null,
     name: "",
     description: "",
     bannerImageUri: null,
@@ -107,6 +112,9 @@ const createInitialState = () => {
 };
 
 const isRemoteUri = (uri: string) => /^https?:\/\//i.test(uri);
+
+const requiresBannerUpload = (uri: string | null, key: string | null) =>
+  Boolean(uri && !isRemoteUri(uri) && !key);
 
 const getImageContentType = (uri: string) => {
   const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
@@ -182,11 +190,86 @@ const mergeTicketsFromEvent = (
 const getEventSyncState = (event: EventResponse, currentTickets: EventDraftTicket[]) => ({
   draftId: event.id,
   isEditingPublishedEvent: event.status === "published",
+  publishedEventBaseline: getPublishedEventBaseline(event),
+  publishedEventBaselineEvent: event.status === "published" ? event : null,
   bannerImageKey: event.bannerImageKey ?? null,
   bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
   bannerImageDisplay: event.bannerImageDisplay ?? null,
   tickets: mergeTicketsFromEvent(event.tickets, currentTickets),
 });
+
+const normalizeForComparison = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeForComparison);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((normalized, key) => {
+        const nextValue = (value as Record<string, unknown>)[key];
+
+        if (nextValue !== undefined) {
+          normalized[key] = normalizeForComparison(nextValue);
+        }
+
+        return normalized;
+      }, {});
+  }
+
+  return value;
+};
+
+const stringifyComparablePayload = (payload: EventPayload) =>
+  JSON.stringify(normalizeForComparison(payload));
+
+const getComparablePayloadFromState = (state: EventDraftState): EventPayload | null => {
+  if (
+    requiresBannerUpload(state.bannerImageUri, state.bannerImageKey) ||
+    requiresBannerUpload(state.bannerOriginalImageUri, state.bannerOriginalImageKey)
+  ) {
+    return null;
+  }
+
+  return {
+    ageRestriction: state.ageRestriction,
+    bannerImageKey: state.bannerImageKey,
+    bannerOriginalImageKey: state.bannerOriginalImageKey ?? state.bannerImageKey,
+    bannerImageDisplay: state.bannerImageDisplay,
+    category: state.categories[0] ?? null,
+    categories: state.categories,
+    description: state.description.trim() || null,
+    location: state.location,
+    name: state.name.trim() || null,
+    privacy: state.privacy,
+    scheduledAt: state.scheduledAt,
+    endAt: state.endAt,
+    tickets: stripLocalTicketFields(state.tickets),
+  };
+};
+
+const getComparablePayloadFromEvent = (event: EventResponse): EventPayload => {
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+
+  return {
+    ageRestriction: event.ageRestriction ?? "all_ages",
+    bannerImageKey: event.bannerImageKey ?? null,
+    bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+    bannerImageDisplay: event.bannerImageDisplay ?? null,
+    category: categories[0] ?? null,
+    categories,
+    description: event.description?.trim() || null,
+    location: event.location ?? {},
+    name: event.name?.trim() || null,
+    privacy: event.privacy,
+    scheduledAt: event.scheduledAt ?? null,
+    endAt: event.endAt ?? null,
+    tickets: stripLocalTicketFields(mergeTicketsFromEvent(event.tickets, [])),
+  };
+};
+
+const getPublishedEventBaseline = (event: EventResponse) =>
+  event.status === "published" ? stringifyComparablePayload(getComparablePayloadFromEvent(event)) : null;
 
 const isDraftNotFoundError = (error: unknown) => {
   const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response;
@@ -363,8 +446,22 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     const operation = draftSaveQueue
       .catch(() => undefined)
       .then(async () => {
-        const payload = await buildEventPayload(get());
         const state = get();
+
+        if (state.isEditingPublishedEvent && state.draftId) {
+          const comparablePayload = getComparablePayloadFromState(state);
+
+          if (
+            comparablePayload &&
+            state.publishedEventBaseline &&
+            state.publishedEventBaselineEvent &&
+            stringifyComparablePayload(comparablePayload) === state.publishedEventBaseline
+          ) {
+            return state.publishedEventBaselineEvent;
+          }
+        }
+
+        const payload = await buildEventPayload(state);
         const event = state.isEditingPublishedEvent && state.draftId
           ? await updateEvent(state.draftId, payload)
           : await saveEventDraft(payload, state.draftId);
@@ -453,6 +550,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     set({
       draftId: event.id,
       isEditingPublishedEvent: event.status === "published",
+      publishedEventBaseline: getPublishedEventBaseline(event),
+      publishedEventBaselineEvent: event.status === "published" ? event : null,
       name: event.name ?? "",
       description: event.description ?? "",
       bannerImageUri,
@@ -484,6 +583,10 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   resetDraft: () => {
     draftLifecycleVersion += 1;
     set(createInitialState());
+  },
+
+  startCreateSession: () => {
+    get().resetDraft();
   },
 }));
 

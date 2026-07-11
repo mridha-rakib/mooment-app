@@ -86,6 +86,7 @@ export default function EventDraftsScreen() {
   const { colors, isDark } = useTheme();
   const loadFromEvent = useEventDraftStore((state) => state.loadFromEvent);
   const resetDraft = useEventDraftStore((state) => state.resetDraft);
+  const startCreateSession = useEventDraftStore((state) => state.startCreateSession);
   const lastPublishedDraftId = useEventDraftStore((state) => state.lastPublishedDraftId);
   const clearLastPublishedDraftId = useEventDraftStore((state) => state.clearLastPublishedDraftId);
   const user = useAuthStore((state) => state.user);
@@ -186,7 +187,10 @@ export default function EventDraftsScreen() {
                 completedProfileTypes,
                 updateProfile,
                 router,
-                onReady: () => router.push("/create-event"),
+                onReady: () => {
+                  startCreateSession();
+                  router.push("/create-event");
+                },
               })
             }
           >

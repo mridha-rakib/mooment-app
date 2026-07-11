@@ -6,6 +6,7 @@ import { getMyEvents, type EventResponse } from "@/lib/events";
 import { getMyEarningsSummary, type CreatorEarningsSummary } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
+import { useEventDraftStore } from "@/stores/eventDraftStore";
 import { Feather } from "@expo/vector-icons";
 import { Calendar01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
@@ -63,6 +64,7 @@ export default function CreatorDashboardScreen() {
   const user = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
+  const startCreateSession = useEventDraftStore((state) => state.startCreateSession);
 
   const [events, setEvents] = useState<EventResponse[]>([]);
   const [summary, setSummary] = useState<CreatorEarningsSummary | null>(null);
@@ -123,7 +125,10 @@ export default function CreatorDashboardScreen() {
                   completedProfileTypes,
                   updateProfile,
                   router,
-                  onReady: () => router.push("/create-event"),
+                  onReady: () => {
+                    startCreateSession();
+                    router.push("/create-event");
+                  },
                 })
               }
             >

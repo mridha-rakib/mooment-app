@@ -43,63 +43,17 @@ import { useAuthStore } from "@/stores/authStore";
 
 type CommentType = {
   id: string;
+  parentCommentId?: string | null;
   authorId?: string;
   authorName: string;
   authorAvatar?: string | null;
   text: string;
+  createdAt: string;
   timeAgo: string;
   likesCount: number;
   isLiked?: boolean;
-  viewMoreReplies?: number;
   replies?: CommentType[];
-  isViewMore?: boolean;
 };
-
-const INITIAL_COMMENTS: CommentType[] = [
-  {
-    id: "1",
-    authorName: "Del Ray",
-    authorAvatar: null,
-    text: "What an amazing DJ party! The atmosphere was electric and everyone had a blast.",
-    timeAgo: "5h",
-    likesCount: 0,
-  },
-  {
-    id: "2",
-    authorName: "Somia Kasem",
-    authorAvatar: null,
-    text: "This party was so much fun! The DJ played fantastic tracks that kept everyone dancing.",
-    timeAgo: "5h",
-    likesCount: 5000,
-    viewMoreReplies: 4,
-  },
-  {
-    id: "3",
-    authorName: "Somia Kasem",
-    authorAvatar: null,
-    text: "I had a great time at the DJ event! The music was on point and the vibe was incredible.",
-    timeAgo: "5h",
-    likesCount: 5000,
-    replies: [
-      {
-        id: "3-1",
-        authorName: "Kasem Khondokar",
-        authorAvatar: null,
-        text: "What a fantastic night at the DJ party! The energy was high and the crowd was loving it.",
-        timeAgo: "5h",
-        likesCount: 5000,
-      },
-      {
-        id: "3-2",
-        authorName: "Yasin Kasem",
-        authorAvatar: null,
-        text: "Everyone is loving the concert! The atmosphere is electric, and the performers are amazing.",
-        timeAgo: "5h",
-        likesCount: 5000,
-      },
-    ],
-  },
-];
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
@@ -149,6 +103,7 @@ const formatCommentTimeAgo = (createdAt: string) => {
 
 const momentCommentToComment = (comment: MomentComment): CommentType => ({
   id: comment.id,
+  parentCommentId: comment.parentCommentId ?? null,
   authorId: comment.author?.id,
   authorName: comment.author?.name ?? "Mooment User",
   authorAvatar:
@@ -158,6 +113,7 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
     comment.author?.avatarUrl ??
     null,
   text: comment.text,
+  createdAt: comment.createdAt,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
   likesCount: comment.likesCount,
   isLiked: comment.isLiked,
@@ -166,6 +122,7 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
 
 const storyCommentToComment = (comment: StoryComment): CommentType => ({
   id: comment.id,
+  parentCommentId: comment.parentCommentId ?? null,
   authorId: comment.author?.id,
   authorName: comment.author?.name ?? "Mooment User",
   authorAvatar:
@@ -174,11 +131,67 @@ const storyCommentToComment = (comment: StoryComment): CommentType => ({
       ? getStorageFileUrl(comment.author.avatarKey)
       : null),
   text: comment.text,
+  createdAt: comment.createdAt,
   timeAgo: formatCommentTimeAgo(comment.createdAt),
   likesCount: comment.likesCount,
   isLiked: comment.isLiked,
   replies: comment.replies.map(storyCommentToComment),
 });
+
+const sortCommentsByCreatedAt = (comments: CommentType[]) =>
+  [...comments].sort(
+    (first, second) =>
+      new Date(first.createdAt).getTime() - new Date(second.createdAt).getTime(),
+  );
+
+const flattenReplies = (replies: CommentType[]): CommentType[] =>
+  sortCommentsByCreatedAt(
+    replies.flatMap((reply) => [
+      { ...reply, replies: [] },
+      ...flattenReplies(reply.replies ?? []),
+    ]),
+  );
+
+const normalizeCommentThreads = (comments: CommentType[]): CommentType[] =>
+  sortCommentsByCreatedAt(comments).map((comment) => ({
+    ...comment,
+    parentCommentId: null,
+    replies: flattenReplies(comment.replies ?? []),
+  }));
+
+const hasCommentId = (comments: CommentType[], commentId: string): boolean =>
+  comments.some(
+    (comment) =>
+      comment.id === commentId ||
+      Boolean(comment.replies?.length && hasCommentId(comment.replies, commentId)),
+  );
+
+const appendCommentToRootThread = (
+  comments: CommentType[],
+  rootParentId: string,
+  reply: CommentType,
+): CommentType[] =>
+  comments.map((comment) => {
+    if (comment.id !== rootParentId) {
+      return comment;
+    }
+
+    if (hasCommentId(comment.replies ?? [], reply.id)) {
+      return comment;
+    }
+
+    return {
+      ...comment,
+      replies: sortCommentsByCreatedAt([
+        ...(comment.replies ?? []),
+        {
+          ...reply,
+          parentCommentId: rootParentId,
+          replies: [],
+        },
+      ]),
+    };
+  });
 
 export default function CommentsModal({
   visible,
@@ -200,9 +213,13 @@ export default function CommentsModal({
   onStoryInteractionChange?: (interaction: StoryInteraction) => void;
 }) {
   const { colors, isDark } = useTheme();
-  const [comments, setComments] = useState<CommentType[]>(INITIAL_COMMENTS);
+  const [comments, setComments] = useState<CommentType[]>([]);
+  const [expandedReplyThreadIds, setExpandedReplyThreadIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [replyingTo, setReplyingTo] = useState<{
     id: string;
+    rootParentId: string;
     name: string;
   } | null>(null);
   const [commentText, setCommentText] = useState("");
@@ -299,7 +316,8 @@ export default function CommentsModal({
 
   const loadComments = useCallback(async () => {
     if (!momentId || !MONGO_OBJECT_ID_PATTERN.test(momentId)) {
-      setComments(INITIAL_COMMENTS);
+      setComments([]);
+      setExpandedReplyThreadIds(new Set());
       return;
     }
 
@@ -308,11 +326,15 @@ export default function CommentsModal({
     try {
       if (entityType === "story") {
         setComments(
-          (await getStoryComments(momentId)).map(storyCommentToComment),
+          normalizeCommentThreads(
+            (await getStoryComments(momentId)).map(storyCommentToComment),
+          ),
         );
       } else {
         setComments(
-          (await getMomentComments(momentId)).map(momentCommentToComment),
+          normalizeCommentThreads(
+            (await getMomentComments(momentId)).map(momentCommentToComment),
+          ),
         );
       }
     } catch (error) {
@@ -329,6 +351,8 @@ export default function CommentsModal({
     if (visible) {
       setReplyingTo(null);
       setCommentText("");
+      setComments([]);
+      setExpandedReplyThreadIds(new Set());
       setIsKeyboardShown(false);
       translateY.setValue(0);
       void loadComments();
@@ -472,9 +496,26 @@ export default function CommentsModal({
     }
   };
 
-  const handleReplyPress = (id: string, name: string) => {
-    setReplyingTo({ id, name });
+  const handleReplyPress = (
+    item: CommentType,
+    rootParentId: string,
+  ) => {
+    setReplyingTo({ id: item.id, rootParentId, name: item.authorName });
     inputRef.current?.focus();
+  };
+
+  const toggleReplyThread = (commentId: string) => {
+    setExpandedReplyThreadIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(commentId)) {
+        next.delete(commentId);
+      } else {
+        next.add(commentId);
+      }
+
+      return next;
+    });
   };
 
   const handleProfilePress = (item: CommentType) => {
@@ -501,7 +542,7 @@ export default function CommentsModal({
     try {
       const payload = {
         text: trimmedText,
-        parentCommentId: replyingTo?.id ?? null,
+        parentCommentId: replyingTo?.rootParentId ?? null,
       };
       const result =
         entityType === "story"
@@ -512,7 +553,7 @@ export default function CommentsModal({
         entityType === "story"
           ? storyCommentToComment(result.comment as StoryComment)
           : momentCommentToComment(result.comment as MomentComment);
-      const parentId = replyingTo?.id ?? null;
+      const parentId = replyingTo?.rootParentId ?? null;
 
       // Capture parentId before clearing replyingTo so the setComments
       // updater below can close over the correct value.
@@ -533,15 +574,24 @@ export default function CommentsModal({
       // replaces the ScrollView content twice while the keyboard is visible,
       // causing the KeyboardAvoidingView to re-measure its offset each time
       // and producing the visible shake/jump on send.
+      if (parentId) {
+        setExpandedReplyThreadIds((current) => {
+          const next = new Set(current);
+          next.add(parentId);
+          return next;
+        });
+      }
+
       setComments((prev) => {
         if (!parentId) {
+          if (hasCommentId(prev, newComment.id)) {
+            return prev;
+          }
+
           return [...prev, newComment];
         }
-        return prev.map((c) =>
-          c.id === parentId
-            ? { ...c, replies: [...(c.replies ?? []), newComment] }
-            : c,
-        );
+
+        return appendCommentToRootThread(prev, parentId, newComment);
       });
     } catch (error) {
       Alert.alert(
@@ -555,9 +605,15 @@ export default function CommentsModal({
 
   const renderComment = (
     item: CommentType,
-    isChild = false,
-    isLast = false,
+    options: {
+      isChild?: boolean;
+      isLast?: boolean;
+      rootParentId: string;
+    },
   ) => {
+    const isChild = options.isChild ?? false;
+    const isLast = options.isLast ?? false;
+    const avatarSize = isChild ? 30 : 36;
     const formattedLikes =
       item.likesCount >= 1000
         ? `${(item.likesCount / 1000).toFixed(0)}K`
@@ -576,11 +632,13 @@ export default function CommentsModal({
               { borderColor: colors.border },
               isLast ? styles.replyLineVerticalLast : undefined,
             ]}
+            pointerEvents="none"
           />
         )}
         {isChild && (
           <View
             style={[styles.replyLineHorizontal, { borderColor: colors.border }]}
+            pointerEvents="none"
           />
         )}
 
@@ -591,9 +649,12 @@ export default function CommentsModal({
           <UserAvatar
             uri={item.authorAvatar}
             name={item.authorName}
-            size={36}
-            style={styles.commentAvatar}
-            iconSize={14}
+            size={avatarSize}
+            style={[
+              styles.commentAvatar,
+              isChild && styles.replyAvatar,
+            ]}
+            iconSize={isChild ? 12 : 14}
           />
         </TouchableOpacity>
 
@@ -633,7 +694,7 @@ export default function CommentsModal({
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleReplyPress(item.id, item.authorName)}
+              onPress={() => handleReplyPress(item, options.rootParentId)}
             >
               <Text
                 style={[
@@ -647,6 +708,35 @@ export default function CommentsModal({
           </View>
         </View>
       </View>
+    );
+  };
+
+  const renderReplyToggle = (comment: CommentType) => {
+    const replyCount = comment.replies?.length ?? 0;
+
+    if (replyCount === 0) {
+      return null;
+    }
+
+    const isExpanded = expandedReplyThreadIds.has(comment.id);
+    const label = isExpanded
+      ? "Hide replies"
+      : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`;
+
+    return (
+      <TouchableOpacity
+        style={styles.viewMoreRow}
+        activeOpacity={0.75}
+        onPress={() => toggleReplyThread(comment.id)}
+      >
+        <View
+          style={[styles.viewMoreLine, { borderColor: colors.border }]}
+          pointerEvents="none"
+        />
+        <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
     );
   };
 
@@ -735,40 +825,28 @@ export default function CommentsModal({
                     No comments yet
                   </Text>
                 ) : (
-                  comments.map((comment) => (
-                    <View key={comment.id}>
-                      {renderComment(comment)}
-                      {comment.viewMoreReplies ? (
-                        <View style={styles.viewMoreRow}>
-                          <View
-                            style={[
-                              styles.viewMoreLine,
-                              { borderColor: colors.border },
-                            ]}
-                          />
-                          <Text
-                            style={[
-                              styles.viewMoreText,
-                              { color: colors.textSecondary },
-                            ]}
-                          >
-                            View {comment.viewMoreReplies} replies
-                          </Text>
-                        </View>
-                      ) : null}
-                      {comment.replies && comment.replies.length > 0 ? (
-                        <View style={styles.repliesContainer}>
-                          {comment.replies.map((reply, index, arr) =>
-                            renderComment(
-                              reply,
-                              true,
-                              index === arr.length - 1,
-                            ),
-                          )}
-                        </View>
-                      ) : null}
-                    </View>
-                  ))
+                  comments.map((comment) => {
+                    const replies = comment.replies ?? [];
+                    const isExpanded = expandedReplyThreadIds.has(comment.id);
+
+                    return (
+                      <View key={comment.id} style={styles.threadBlock}>
+                        {renderComment(comment, { rootParentId: comment.id })}
+                        {renderReplyToggle(comment)}
+                        {isExpanded && replies.length > 0 ? (
+                          <View style={styles.repliesContainer}>
+                            {replies.map((reply, index, arr) =>
+                              renderComment(reply, {
+                                isChild: true,
+                                isLast: index === arr.length - 1,
+                                rootParentId: comment.id,
+                              }),
+                            )}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })
                 )}
                 <View style={{ height: 20 }} />
               </ScrollView>
@@ -932,49 +1010,49 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(58, 58, 58, 0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.48)",
   },
   backgroundDismiss: {
     ...StyleSheet.absoluteFillObject,
   },
   headerLabelContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingHorizontal: 22,
+    marginBottom: 10,
   },
   headerLabel: {
     fontSize: 16,
-    fontWeight: "normal",
+    lineHeight: 22,
+    fontWeight: "500",
   },
   sheetWrapper: {
     width: "100%",
   },
   modalContainer: {
     height: "90%",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     paddingBottom: Platform.OS === "ios" ? 24 : 0,
     overflow: "hidden",
   },
   grabberContainer: {
-    // backgroundColor: "red",
     alignItems: "center",
-    gap: 8,
-    paddingTop: 10,
-    paddingBottom: 20,
+    gap: 12,
+    paddingTop: 12,
+    paddingBottom: 18,
   },
   grabber: {
-    width: 40,
+    width: 44,
     height: 4,
     borderRadius: 2,
     overflow: "hidden",
   },
   statsHeader: {
     width: "100%",
-    // backgroundColor: "red",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    alignItems: "center",
+    paddingHorizontal: 22,
+    marginBottom: 8,
   },
   statsLeft: {
     flexDirection: "row",
@@ -982,14 +1060,18 @@ const styles = StyleSheet.create({
   },
   statsText: {
     fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
     marginLeft: 6,
   },
   statsShares: {
     fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
   },
   scrollList: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
   },
   loadingContainer: {
     paddingVertical: 30,
@@ -998,99 +1080,108 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: "center",
     fontSize: 13,
+    lineHeight: 18,
     paddingVertical: 30,
+  },
+  threadBlock: {
+    paddingBottom: 4,
   },
   commentRow: {
     flexDirection: "row",
-    marginBottom: 20,
+    alignItems: "flex-start",
+    marginBottom: 14,
   },
   childCommentRow: {
-    marginLeft: 18,
     position: "relative",
+    marginBottom: 14,
   },
   commentAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     marginRight: 12,
     zIndex: 2,
   },
-  commentAvatarFallback: {
-    backgroundColor: "#2B2B36",
-    alignItems: "center",
-    justifyContent: "center",
+  replyAvatar: {
+    marginRight: 10,
   },
   commentContent: {
     flex: 1,
+    paddingTop: 1,
   },
   commentName: {
-    fontSize: 13,
-    fontWeight: "bold",
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "700",
     marginBottom: 4,
   },
   commentText: {
     fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 8,
+    lineHeight: 19,
+    marginBottom: 9,
   },
   commentActions: {
     flexDirection: "row",
-    gap: 16,
+    alignItems: "center",
+    gap: 18,
   },
   actionMutedText: {
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: "600",
   },
   actionPurpleText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
   },
   viewMoreRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginLeft: 18,
-    marginBottom: 20,
+    alignSelf: "flex-start",
+    marginLeft: 48,
+    marginTop: -2,
+    marginBottom: 14,
+    paddingVertical: 2,
+    paddingRight: 12,
   },
   viewMoreLine: {
-    width: 24,
-    height: 16,
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    borderBottomLeftRadius: 8,
+    width: 28,
+    borderTopWidth: 1,
     marginRight: 8,
-    marginTop: -16,
   },
   viewMoreText: {
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: "600",
   },
   repliesContainer: {
     position: "relative",
+    marginLeft: 54,
+    paddingTop: 2,
   },
   replyLineVertical: {
     position: "absolute",
-    left: -18,
-    top: -30, // Connect from previous comment
-    bottom: -20, // Continue to next comment
+    left: -23,
+    top: -16,
+    bottom: -16,
     borderLeftWidth: 1,
     zIndex: 1,
   },
   replyLineVerticalLast: {
     bottom: undefined,
-    height: 48, // 30 (from top) + 18 (to center of avatar)
+    height: 31,
     borderBottomLeftRadius: 8,
   },
   replyLineHorizontal: {
     position: "absolute",
-    left: -18,
-    top: 18, // Center of the 36x36 avatar
-    width: 18,
+    left: -23,
+    top: 15,
+    width: 21,
     borderTopWidth: 1,
     zIndex: 1,
   },
   inputSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
   },
   replyContextBar: {
@@ -1099,27 +1190,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 10,
   },
   replyContextText: {
     fontSize: 12,
+    lineHeight: 16,
   },
   inputWrapper: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 18,
     marginRight: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
   },
   input: {
-    height: 40,
+    height: 44,
     fontSize: 14,
+    lineHeight: 18,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },

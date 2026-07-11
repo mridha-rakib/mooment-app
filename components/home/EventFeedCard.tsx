@@ -122,10 +122,11 @@ type Props = {
   taggedFriendNames?: string[];
   onRepostSuccess?: () => void;
   onEventCancelled?: (eventId: string) => void;
+  onSaveChange?: (interactionMomentId: string, isSaved: boolean) => void;
   embedded?: boolean;
 };
 
-export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, embedded = false }: Props) {
+export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, embedded = false }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [bannerFailed, setBannerFailed] = useState(false);
 
@@ -371,6 +372,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     try {
       const result = await toggleMomentSave(event.interactionMomentId);
       if (mountedRef.current) setIsSaved(result.isSaved);
+      onSaveChange?.(event.interactionMomentId, result.isSaved);
     } catch {
       if (mountedRef.current) setIsSaved(prev);
     } finally {

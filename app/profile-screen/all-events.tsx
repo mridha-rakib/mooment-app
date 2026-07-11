@@ -8,6 +8,7 @@ import {
   type EventResponse,
   type ProfileEventGroups,
 } from "@/lib/events";
+import { useEventDraftStore } from "@/stores/eventDraftStore";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -168,6 +169,7 @@ export default function AllEventsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ userId?: string }>();
   const userId = typeof params.userId === "string" ? params.userId : null;
+  const startCreateSession = useEventDraftStore((state) => state.startCreateSession);
 
   const [activeTab, setActiveTab] = useState<TabKey>("created");
   const [createdEvents, setCreatedEvents] = useState<EventResponse[]>([]);
@@ -371,9 +373,15 @@ export default function AllEventsScreen() {
           ListEmptyComponent={
             <EmptyState
               activeTab={activeTab}
-              onPrimaryPress={() =>
-                router.push(activeTab === "created" ? "/create-event" : "/(tabs)/explore")
-              }
+              onPrimaryPress={() => {
+                if (activeTab === "created") {
+                  startCreateSession();
+                  router.push("/create-event");
+                  return;
+                }
+
+                router.push("/(tabs)/explore");
+              }}
               colors={colors}
               isDark={isDark}
             />

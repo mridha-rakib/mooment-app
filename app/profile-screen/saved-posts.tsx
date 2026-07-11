@@ -1,8 +1,11 @@
 import CommentsModal from "@/components/post/CommentsModal";
+import EventFeedCard from "@/components/home/EventFeedCard";
 import FeedPost, { PostData } from '@/components/post/FeedPost';
 import ShareModal from "@/components/post/ShareModal";
 import { useTheme } from '@/hooks/useTheme';
+import { getEventById, type EventResponse } from "@/lib/events";
 import { getSavedMoments } from '@/lib/moments';
+import type { Moment } from "@/lib/moments";
 import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { getStorageFileUrl } from '@/lib/storage';
 import { Feather } from '@expo/vector-icons';
@@ -16,15 +19,52 @@ const hasVideoMedia = (post: PostData) => (
   post.mediaItems?.some((item) => item.type === 'video' && Boolean(item.uri?.trim())) ?? false
 );
 
+type SavedPostItem = {
+  type: "post";
+  id: string;
+  post: PostData;
+};
+
+type SavedEventItem = {
+  type: "event";
+  id: string;
+  eventId: string;
+  interactionMoment: Moment;
+  event?: EventResponse;
+  isLoading: boolean;
+  isUnavailable: boolean;
+};
+
+type SavedListItem = SavedPostItem | SavedEventItem;
+
+const hasText = (value?: string | null) => Boolean(value?.trim());
+
+const isSavedEventMoment = (moment: Moment) => (
+  moment.mode === "event" &&
+  hasText(moment.eventId) &&
+  hasText(moment.eventTitle)
+);
+
+const withSavedInteractionState = (event: EventResponse, interactionMoment: Moment): EventResponse => ({
+  ...event,
+  interactionMomentId: interactionMoment.id,
+  likesCount: interactionMoment.likesCount,
+  commentsCount: interactionMoment.commentsCount,
+  sharesCount: interactionMoment.sharesCount,
+  isLiked: interactionMoment.isLiked,
+  isSaved: interactionMoment.isSaved,
+});
+
 export default function SavedPostsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [commentModalVisible, setCommentModalVisible] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
-  const [posts, setPosts] = useState<PostData[]>([]);
+  const [items, setItems] = useState<SavedListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activePost, setActivePost] = useState<PostData | null>(null);
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+  const loadRequestIdRef = useRef(0);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: SAVED_POST_VIDEO_VIEWABILITY_THRESHOLD,
@@ -35,30 +75,94 @@ export default function SavedPostsScreen() {
     const nextActiveVideoPost = viewableItems
       .filter((viewToken) => (
         viewToken.isViewable &&
-        hasVideoMedia(viewToken.item as PostData)
+        (viewToken.item as SavedListItem).type === "post" &&
+        hasVideoMedia((viewToken.item as SavedPostItem).post)
       ))
       .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))[0];
 
     setActiveVideoPostId((current) => {
-      const nextId = (nextActiveVideoPost?.item as PostData | undefined)?.id ?? null;
+      const nextItem = nextActiveVideoPost?.item as SavedPostItem | undefined;
+      const nextId = nextItem?.post.id ?? null;
       return current === nextId ? current : nextId;
     });
   }).current;
 
   const loadSavedPosts = useCallback(async () => {
+    const requestId = ++loadRequestIdRef.current;
     setIsLoading(true);
 
     try {
       const moments = await getSavedMoments();
-      const mapped = moments
-        .map((moment) => mapMomentToPost(moment, { storageUrlResolver: getStorageFileUrl }))
-        .filter((post): post is PostData => post !== null);
+      const nextItems = moments.flatMap((moment): SavedListItem[] => {
+        if (isSavedEventMoment(moment) && moment.eventId) {
+          return [{
+            type: "event",
+            id: moment.id,
+            eventId: moment.eventId,
+            interactionMoment: moment,
+            isLoading: true,
+            isUnavailable: false,
+          }];
+        }
 
-      setPosts(mapped);
+        const post = mapMomentToPost(moment, { storageUrlResolver: getStorageFileUrl });
+
+        return post ? [{ type: "post", id: post.id, post }] : [];
+      });
+
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
+
+      setItems(nextItems);
+      setIsLoading(false);
+
+      const eventIds = [...new Set(
+        nextItems
+          .filter((item): item is SavedEventItem => item.type === "event")
+          .map((item) => item.eventId),
+      )];
+
+      if (eventIds.length === 0) {
+        return;
+      }
+
+      const eventEntries = await Promise.all(
+        eventIds.map(async (eventId) => {
+          try {
+            return [eventId, await getEventById(eventId)] as const;
+          } catch {
+            return [eventId, null] as const;
+          }
+        }),
+      );
+
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
+
+      const eventById = new Map(eventEntries);
+
+      setItems((current) => current.map((item) => {
+        if (item.type !== "event") {
+          return item;
+        }
+
+        const event = eventById.get(item.eventId);
+
+        return {
+          ...item,
+          event: event ? withSavedInteractionState(event, item.interactionMoment) : undefined,
+          isLoading: false,
+          isUnavailable: !event,
+        };
+      }));
     } catch {
       // Keep the last successfully loaded list if a refresh fails.
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -91,8 +195,8 @@ export default function SavedPostsScreen() {
       </View>
 
       <FlatList
-        data={isLoading ? [] : posts}
-        keyExtractor={(post) => post.id}
+        data={isLoading ? [] : items}
+        keyExtractor={(item) => item.id}
         extraData={activeVideoPostId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -114,7 +218,36 @@ export default function SavedPostsScreen() {
             </View>
           )
         )}
-        renderItem={({ item: post }) => (
+        renderItem={({ item }) => {
+          if (item.type === "event") {
+            return (
+              <View key={item.id} style={styles.postWrapper}>
+                {item.isLoading ? (
+                  <ActivityIndicator style={styles.eventLoading} color={colors.primary} />
+                ) : item.event && !item.isUnavailable ? (
+                  <EventFeedCard
+                    event={item.event}
+                    onSaveChange={(interactionMomentId, isSaved) => {
+                      if (!isSaved) {
+                        setItems((current) => current.filter((savedItem) => savedItem.id !== interactionMomentId));
+                      }
+                    }}
+                  />
+                ) : (
+                  <View style={[styles.unavailable, { borderColor: colors.border }]}>
+                    <Feather name="alert-circle" size={22} color={colors.textSecondary} />
+                    <Text style={[styles.unavailableText, { color: colors.textSecondary }]}>
+                      The original item is no longer available.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          }
+
+          const post = item.post;
+
+          return (
             <View key={post.id} style={styles.postWrapper}>
               <FeedPost
                 post={post}
@@ -123,13 +256,14 @@ export default function SavedPostsScreen() {
                 isActiveVideo={activeVideoPostId === post.id}
                 onSaveChange={(postId, isSaved) => {
                   if (!isSaved) {
-                    setPosts((current) => current.filter((item) => item.id !== postId));
+                    setItems((current) => current.filter((savedItem) => savedItem.id !== postId));
                     setActiveVideoPostId((current) => current === postId ? null : current);
                   }
                 }}
               />
             </View>
-        )}
+          );
+        }}
       />
 
       <CommentsModal
@@ -176,6 +310,23 @@ const styles = StyleSheet.create({
   },
   postWrapper: {
     marginBottom: 0,
+  },
+  eventLoading: {
+    marginVertical: 36,
+  },
+  unavailable: {
+    minHeight: 112,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: 16,
+  },
+  unavailableText: {
+    fontSize: 13,
   },
   centerState: {
     alignItems: 'center',
