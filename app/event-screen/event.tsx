@@ -37,11 +37,14 @@ import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } 
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
 import { followUser, unfollowUser } from "@/lib/users";
-import { toggleMomentReaction, shareMoment, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
+import { toggleMomentReaction, toggleMomentSave, shareMoment, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
+import ReportModal from "@/components/modals/ReportModal";
+import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
+import { createReport } from "@/lib/reports";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import { Feather } from "@expo/vector-icons";
@@ -56,7 +59,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -301,6 +304,8 @@ const getPrivacyLabel = (privacy?: EventResponse["privacy"]) => {
 const isSameId = (left?: string | null, right?: string | null) =>
   Boolean(left && right && left.toLowerCase() === right.toLowerCase());
 
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
 const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
   if (router.canGoBack()) {
     router.back();
@@ -355,6 +360,13 @@ const EventScreen = () => {
   const [isLikePending, setIsLikePending] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportReasonVisible, setReportReasonVisible] = useState(false);
+  const [reportDetailsVisible, setReportDetailsVisible] = useState(false);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
+  const isReportSubmittingRef = useRef(false);
+  const [localIsSaved, setLocalIsSaved] = useState(false);
+  const [isSavePending, setIsSavePending] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [reviewLiked, setReviewLiked] = useState<boolean | null>(null);
@@ -596,16 +608,20 @@ const EventScreen = () => {
         commentsCount?: number | null;
         sharesCount?: number | null;
         isLiked?: boolean;
+        isSaved?: boolean;
         interactionMomentId?: string | null;
+        canReport?: boolean;
       })
     | null;
   const interactionMomentId = eventStats?.interactionMomentId ?? null;
+  const canReportEvent = Boolean(eventStats?.canReport);
 
   useEffect(() => {
     setLocalLikesCount(eventStats?.likesCount ?? 0);
     setLocalCommentsCount(eventStats?.commentsCount ?? 0);
     setLocalSharesCount(eventStats?.sharesCount ?? 0);
     setLocalIsLiked(Boolean(eventStats?.isLiked));
+    setLocalIsSaved(Boolean(eventStats?.isSaved));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event]);
 
@@ -665,6 +681,87 @@ const EventScreen = () => {
     } catch (error) {
       Alert.alert("Unable to repost", getAuthErrorMessage(error, "Please try again."));
       throw error;
+    }
+  };
+
+  const handleReportPress = () => {
+    setMenuVisible(false);
+
+    if (!event || !canReportEvent) {
+      return;
+    }
+
+    if (!MONGO_OBJECT_ID_PATTERN.test(event.id) || !MONGO_OBJECT_ID_PATTERN.test(event.userId)) {
+      Alert.alert("Unable to report event", "This event cannot be reported right now.");
+      return;
+    }
+
+    setReportReasonVisible(true);
+  };
+
+  const handleReportReason = (reason: string) => {
+    setReportReason(reason);
+    setReportReasonVisible(false);
+    setTimeout(() => setReportDetailsVisible(true), 300);
+  };
+
+  const handleReportDetailsClose = () => {
+    if (isReportSubmitting) return;
+    setReportDetailsVisible(false);
+    setReportReason(null);
+  };
+
+  const handleSubmitEventReport = async (details: string) => {
+    if (isReportSubmittingRef.current || !reportReason || !event) {
+      return;
+    }
+
+    isReportSubmittingRef.current = true;
+    setIsReportSubmitting(true);
+
+    try {
+      await createReport({
+        reportedUserId: event.userId,
+        targetType: "event",
+        targetId: event.id,
+        reason: reportReason,
+        details: details.trim() || null,
+      });
+      setReportDetailsVisible(false);
+      setReportReason(null);
+      Alert.alert(
+        "Report submitted",
+        "Thanks for letting us know. Our team will review this event.",
+      );
+    } catch (error) {
+      Alert.alert("Unable to submit report", getAuthErrorMessage(error, "Please try again."));
+      throw error;
+    } finally {
+      isReportSubmittingRef.current = false;
+      setIsReportSubmitting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setMenuVisible(false);
+
+    if (!interactionMomentId || isSavePending) {
+      return;
+    }
+
+    const wasSaved = localIsSaved;
+    setLocalIsSaved(!wasSaved);
+    setIsSavePending(true);
+
+    try {
+      const summary = await toggleMomentSave(interactionMomentId);
+      setLocalIsSaved(summary.isSaved);
+      setEvent((currentEvent) => currentEvent ? { ...currentEvent, isSaved: summary.isSaved } : currentEvent);
+    } catch (error) {
+      setLocalIsSaved(wasSaved);
+      Alert.alert("Unable to save event", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsSavePending(false);
     }
   };
 
@@ -1741,30 +1838,31 @@ const EventScreen = () => {
               </>
             ) : (
               <>
+                {canReportEvent && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={handleReportPress}
+                      activeOpacity={0.7}
+                    >
+                      <HugeiconsIcon icon={Flag01Icon} size={20} color="#FFF" />
+                      <Text style={[styles.menuItemText, { color: "#FFF" }]}>Report</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.menuSeparator} />
+                  </>
+                )}
+
                 <TouchableOpacity
                   style={styles.menuItem}
-                  onPress={() => {
-                    setMenuVisible(false);
-                    console.log("Reported");
-                  }}
+                  onPress={handleSave}
                   activeOpacity={0.7}
+                  disabled={isSavePending}
                 >
-                  <HugeiconsIcon icon={Flag01Icon} size={20} color="#FFF" />
-                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>Report</Text>
-                </TouchableOpacity>
-
-                <View style={styles.menuSeparator} />
-
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    setMenuVisible(false);
-                    console.log("Saved");
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <HugeiconsIcon icon={Bookmark01Icon} size={20} color="#FFF" />
-                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>Save</Text>
+                  <HugeiconsIcon icon={Bookmark01Icon} size={20} color={localIsSaved ? colors.primary : "#FFF"} />
+                  <Text style={[styles.menuItemText, { color: localIsSaved ? colors.primary : "#FFF" }]}>
+                    {localIsSaved ? "Saved" : "Save"}
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1996,6 +2094,19 @@ const EventScreen = () => {
         likesCount={localLikesCount}
         sharesCount={localSharesCount}
         onInteractionChange={handleInteractionChange}
+      />
+
+      <ReportModal
+        visible={reportReasonVisible}
+        onClose={() => setReportReasonVisible(false)}
+        onReport={handleReportReason}
+      />
+
+      <ReportDetailsModal
+        visible={reportDetailsVisible}
+        onClose={handleReportDetailsClose}
+        onDone={handleSubmitEventReport}
+        isSubmitting={isReportSubmitting}
       />
 
       <ShareModal

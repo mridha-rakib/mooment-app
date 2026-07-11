@@ -12,19 +12,23 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
+  Easing,
   FlatList,
   Modal,
+  PanResponder,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -178,6 +182,9 @@ const TicketDetailScreen = () => {
   }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
+  const shareModalOverlayHeightRef = useRef(Dimensions.get("screen").height);
+  const shareModalTranslateY = useRef(new Animated.Value(0)).current;
   const currentUser = useAuthStore((state) => state.user);
   const loadEventForEdit = useEventDraftStore((state) => state.loadFromEvent);
   const isWalletTicket = params.source === "wallet" || (!params.eventId && !params.ticketId);
@@ -425,6 +432,86 @@ const TicketDetailScreen = () => {
   const hasAnySharedPass = walletTicketPasses.some((pass) => Boolean(pass.currentShare));
   const hasAnyUsedPass = walletTicketPasses.some((pass) => pass.status === "used");
   const walletStatusLabel = hasAnyUsedPass && walletActiveVisiblePassCount === 0 ? "Used" : hasAnySharedPass && !walletCanShowQr ? "Shared" : "Active";
+  const filteredFriends = useMemo(
+    () => friends.filter((friend) => friend.id !== selectedShare?.friend?.id),
+    [friends, selectedShare?.friend?.id],
+  );
+  const shareSheetMaxHeight = Math.max(320, Math.round(windowHeight * 0.78));
+  const shareSheetBottomPadding = Math.max(insets.bottom, 12) + 16;
+  const shareSheetTranslateY = useMemo(
+    () =>
+      shareModalTranslateY.interpolate({
+        inputRange: [-72, 0],
+        outputRange: [-72, 0],
+        extrapolateLeft: "clamp",
+        extrapolateRight: "extend",
+      }),
+    [shareModalTranslateY],
+  );
+  const closeShareModal = useCallback(() => {
+    setIsShareModalVisible(false);
+  }, []);
+  const closeShareModalFromDrag = useCallback(() => {
+    Animated.timing(shareModalTranslateY, {
+      toValue: shareModalOverlayHeightRef.current,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      closeShareModal();
+    });
+  }, [closeShareModal, shareModalTranslateY]);
+  const shareModalPanResponderMove = useMemo(
+    () =>
+      Animated.event([null, { dy: shareModalTranslateY }], {
+        useNativeDriver: false,
+      }),
+    [shareModalTranslateY],
+  );
+  const shareModalDragResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          Math.abs(gesture.dy) > 4,
+        onPanResponderGrant: () => {
+          shareModalTranslateY.stopAnimation(() => {
+            shareModalTranslateY.setValue(0);
+          });
+        },
+        onPanResponderMove: shareModalPanResponderMove,
+        onPanResponderRelease: (_event, gesture) => {
+          const shouldClose = gesture.dy > 120 || gesture.vy > 0.9;
+
+          if (shouldClose) {
+            closeShareModalFromDrag();
+            return;
+          }
+
+          Animated.spring(shareModalTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 70,
+            friction: 10,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(shareModalTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 70,
+            friction: 10,
+          }).start();
+        },
+      }),
+    [closeShareModalFromDrag, shareModalPanResponderMove, shareModalTranslateY],
+  );
+  const handleShareModalOverlayLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      shareModalOverlayHeightRef.current = event.nativeEvent.layout.height;
+    },
+    [],
+  );
   const walletDetails = [
     { label: "Ticket No", value: walletVisibleTicketPasses[0]?.ticketNo ?? walletTicketNo },
     { label: "Host", value: walletHostName },
@@ -466,6 +553,7 @@ const TicketDetailScreen = () => {
       setSelectedSharePassIndex(firstUnsharedIndex);
     }
 
+    shareModalTranslateY.setValue(0);
     setIsShareModalVisible(true);
     setFriendSearch("");
     await loadFriends("");
@@ -697,12 +785,27 @@ const TicketDetailScreen = () => {
           visible={isShareModalVisible}
           transparent
           animationType="slide"
-          onRequestClose={() => setIsShareModalVisible(false)}
+          onRequestClose={closeShareModal}
+          statusBarTranslucent
         >
-          <View style={styles.shareModalOverlay}>
-            <View style={styles.shareModalSheet}>
+          <View style={styles.shareModalOverlay} onLayout={handleShareModalOverlayLayout}>
+            <TouchableOpacity
+              style={styles.shareModalBackgroundDismiss}
+              onPress={closeShareModal}
+              activeOpacity={1}
+            />
+            <Animated.View
+              style={[
+                styles.shareModalSheet,
+                {
+                  maxHeight: shareSheetMaxHeight,
+                  paddingBottom: shareSheetBottomPadding,
+                  transform: [{ translateY: shareSheetTranslateY }],
+                },
+              ]}
+            >
               <View style={styles.shareModalHeader}>
-                <View>
+                <View {...shareModalDragResponder.panHandlers}>
                   <Text style={styles.shareModalTitle}>Share QR</Text>
                   <Text style={styles.shareModalSubtitle}>
                   {walletTicketName} • Ticket {selectedSharePass?.ticketIndex ?? 1} of {walletTicketPasses.length}
@@ -710,7 +813,7 @@ const TicketDetailScreen = () => {
               </View>
                 <TouchableOpacity
                   style={styles.shareModalClose}
-                  onPress={() => setIsShareModalVisible(false)}
+                  onPress={closeShareModal}
                   activeOpacity={0.85}
                 >
                   <Feather name="x" size={18} color="#FFFFFF" />
@@ -798,38 +901,44 @@ const TicketDetailScreen = () => {
                   <ActivityIndicator color="#C2B9CB" />
                 </View>
               ) : (
-                <FlatList
-                  data={friends.filter((friend) => friend.id !== selectedShare?.friend?.id)}
-                  keyExtractor={(item) => item.id}
-                  style={styles.friendList}
-                  contentContainerStyle={friends.length === 0 ? styles.friendState : undefined}
-                  keyboardShouldPersistTaps="handled"
-                  ListEmptyComponent={<Text style={styles.friendEmptyText}>No mutual friends found.</Text>}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.friendRow}
-                      onPress={() => void handleShareWithFriend(item)}
-                      disabled={isShareSubmitting || Boolean(selectedShare) || selectedSharePass?.status === "used"}
-                      activeOpacity={0.85}
-                    >
-                      <UserAvatar uri={resolveAvatarUri(item.avatarKey, item.avatarUrl)} name={item.name} size={42} style={styles.friendAvatar} />
-                      <View style={styles.friendCopy}>
-                        <Text style={styles.friendName}>{item.name}</Text>
-                        {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
-                      </View>
-                      <Text
-                        style={[
-                          styles.friendAction,
-                          (selectedShare || selectedSharePass?.status === "used") && styles.friendActionDisabled,
-                        ]}
+                <View style={styles.friendListContainer}>
+                  <FlatList
+                    data={filteredFriends}
+                    keyExtractor={(item) => item.id}
+                    style={styles.friendList}
+                    contentContainerStyle={[
+                      filteredFriends.length === 0 ? styles.friendState : undefined,
+                      { paddingBottom: Math.max(insets.bottom, 12) },
+                    ]}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={<Text style={styles.friendEmptyText}>No mutual friends found.</Text>}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.friendRow}
+                        onPress={() => void handleShareWithFriend(item)}
+                        disabled={isShareSubmitting || Boolean(selectedShare) || selectedSharePass?.status === "used"}
+                        activeOpacity={0.85}
                       >
-                        {selectedShare ? "Cancel first" : selectedSharePass?.status === "used" ? "Used" : "Share"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                />
+                        <UserAvatar uri={resolveAvatarUri(item.avatarKey, item.avatarUrl)} name={item.name} size={42} style={styles.friendAvatar} />
+                        <View style={styles.friendCopy}>
+                          <Text style={styles.friendName}>{item.name}</Text>
+                          {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
+                        </View>
+                        <Text
+                          style={[
+                            styles.friendAction,
+                            (selectedShare || selectedSharePass?.status === "used") && styles.friendActionDisabled,
+                          ]}
+                        >
+                          {selectedShare ? "Cancel first" : selectedSharePass?.status === "used" ? "Used" : "Share"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
               )}
-            </View>
+            </Animated.View>
           </View>
         </Modal>
       </View>
@@ -1445,15 +1554,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
   },
+  shareModalBackgroundDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
   shareModalSheet: {
     backgroundColor: "#121116",
     borderColor: "#2A2730",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
+    flexShrink: 1,
     maxHeight: "78%",
     padding: 16,
     paddingBottom: 28,
+    width: "100%",
   },
   shareModalHeader: {
     alignItems: "center",
@@ -1587,8 +1701,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 10,
   },
-  friendList: {
+  friendListContainer: {
+    flexShrink: 1,
     marginTop: 10,
+  },
+  friendList: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   friendState: {
     alignItems: "center",

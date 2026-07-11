@@ -53,6 +53,68 @@ const getLocation = (event: EventResponse): string =>
   || event.location?.address?.trim()
   || "";
 
+type EventBadgeStatus = "live" | "upcoming" | "ended";
+type EventLifecycleStatus = Pick<EventResponse, "status" | "scheduledAt" | "endAt">;
+
+const EVENT_STATUS_LABELS: Record<EventBadgeStatus, string> = {
+  live: "Live Now",
+  upcoming: "Upcoming",
+  ended: "Ended",
+};
+
+const parseEventTime = (value?: string | Date | null): number | null => {
+  if (!value) return null;
+  const time = new Date(value as string).getTime();
+  return Number.isNaN(time) ? null : time;
+};
+
+const getEventBadgeStatus = (event: EventLifecycleStatus, nowMs: number): EventBadgeStatus => {
+  const endMs = parseEventTime(event.endAt);
+
+  if (event.status === "completed" || event.status === "cancelled") {
+    return "ended";
+  }
+
+  if (endMs !== null && endMs <= nowMs) {
+    return "ended";
+  }
+
+  if (event.status === "live") {
+    return "live";
+  }
+
+  const startMs = parseEventTime(event.scheduledAt);
+
+  if (startMs !== null && startMs <= nowMs) {
+    return "live";
+  }
+
+  return "upcoming";
+};
+
+const getNextEventBadgeBoundary = (event: EventLifecycleStatus, nowMs: number): number | null => {
+  if (event.status === "completed" || event.status === "cancelled") {
+    return null;
+  }
+
+  const startMs = parseEventTime(event.scheduledAt);
+  const endMs = parseEventTime(event.endAt);
+  const boundaries = [startMs, endMs].filter(
+    (time): time is number => time !== null && time > nowMs,
+  );
+
+  return boundaries.length > 0 ? Math.min(...boundaries) : null;
+};
+
+const normalizeId = (value?: string | null) => value?.trim().toLowerCase() || null;
+
+const isSameId = (left?: string | null, right?: string | null) => {
+  const normalizedLeft = normalizeId(left);
+  const normalizedRight = normalizeId(right);
+
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+};
+
 type Props = {
   event: EventResponse;
   headerLabel?: string;
@@ -110,7 +172,24 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const timestamp = timeAgo(event.publishedAt ?? event.createdAt);
   const isPublic = event.privacy === "public";
   const isOwnEvent = Boolean(currentUserId && currentUserId === event.userId);
+  const eventId = event.id?.trim() || null;
+  const canViewEventStats = Boolean(
+    eventId && currentUserId && (isSameId(currentUserId, event.userId) || isSameId(currentUserId, event.host?.id)),
+  );
   const hostId = event.host?.id ?? event.userId;
+  const eventStatus = event.status;
+  const eventScheduledAt = event.scheduledAt;
+  const eventEndAt = event.endAt;
+  const [statusNowMs, setStatusNowMs] = useState(() => Date.now());
+  const eventBadgeStatus = useMemo(
+    () => getEventBadgeStatus({
+      status: eventStatus,
+      scheduledAt: eventScheduledAt,
+      endAt: eventEndAt,
+    }, statusNowMs),
+    [eventEndAt, eventScheduledAt, eventStatus, statusNowMs],
+  );
+  const eventBadgeLabel = EVENT_STATUS_LABELS[eventBadgeStatus];
 
   const [isFollowing, setIsFollowing] = useState(Boolean(event.host?.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
@@ -147,6 +226,44 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     setCommentsCount(event.commentsCount ?? 0);
     setSharesCount(event.sharesCount ?? 0);
   }, [event.commentsCount, event.isLiked, event.isSaved, event.likesCount, event.sharesCount]);
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let isCancelled = false;
+
+    const scheduleNextBoundary = () => {
+      const nowMs = Date.now();
+      const nextBoundary = getNextEventBadgeBoundary({
+        status: eventStatus,
+        scheduledAt: eventScheduledAt,
+        endAt: eventEndAt,
+      }, nowMs);
+
+      if (nextBoundary === null) {
+        return;
+      }
+
+      const delayMs = Math.min(Math.max(nextBoundary - nowMs + 250, 0), 2_147_483_647);
+      timeoutId = setTimeout(() => {
+        if (isCancelled) {
+          return;
+        }
+
+        setStatusNowMs(Date.now());
+        scheduleNextBoundary();
+      }, delayMs);
+    };
+
+    setStatusNowMs(Date.now());
+    scheduleNextBoundary();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [eventEndAt, eventScheduledAt, eventStatus]);
 
   const applyInteractionSummary = (summary: MomentInteractionSummary) => {
     setIsLiked(summary.isLiked);
@@ -289,6 +406,20 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const goToEvent = () =>
     router.push({ pathname: "/event-screen/event", params: { eventId: event.id } });
 
+  const goToEventStats = () => {
+    if (!eventId || !canViewEventStats) {
+      return;
+    }
+
+    router.push({
+      pathname: "/profile-screen/event-dashboard",
+      params: {
+        eventId,
+        eventName: event.name ?? "Event",
+      },
+    });
+  };
+
   const goToHostProfile = () => {
     navigateToProfile(router, currentUserId, {
       userId: hostId,
@@ -402,6 +533,35 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         {/* dark tint over image */}
         <View style={styles.imageTint} />
 
+        <View
+          style={[
+            styles.statusBadge,
+            eventBadgeStatus === "live" && styles.liveStatusBadge,
+            eventBadgeStatus === "upcoming" && styles.upcomingStatusBadge,
+            eventBadgeStatus === "ended" && styles.endedStatusBadge,
+          ]}
+          pointerEvents="none"
+        >
+          <View
+            style={[
+              styles.statusDot,
+              eventBadgeStatus === "live" && styles.liveStatusDot,
+              eventBadgeStatus === "upcoming" && styles.upcomingStatusDot,
+              eventBadgeStatus === "ended" && styles.endedStatusDot,
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              eventBadgeStatus === "live" && styles.liveStatusText,
+              eventBadgeStatus === "upcoming" && styles.upcomingStatusText,
+              eventBadgeStatus === "ended" && styles.endedStatusText,
+            ]}
+          >
+            {eventBadgeLabel}
+          </Text>
+        </View>
+
         {/* info section pinned to image bottom */}
         <View style={[styles.infoOverlay, overlayLayout.overlay]}>
           {/* left: accent bar + gradient panel */}
@@ -479,6 +639,18 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
           commentDisabled={!event.interactionMomentId}
           shareDisabled={!event.interactionMomentId}
         />
+        {canViewEventStats && (
+          <>
+            <View style={styles.actionBarSpacer} />
+            <TouchableOpacity
+              style={styles.viewStatBtn}
+              activeOpacity={0.8}
+              onPress={goToEventStats}
+            >
+              <Text style={styles.viewStatText}>View Stat</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <CommentsModal
@@ -671,6 +843,56 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(28, 11, 11, 0.55)",
   },
+  statusBadge: {
+    position: "absolute",
+    right: 12,
+    top: 12,
+    zIndex: 3,
+    minHeight: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  liveStatusBadge: {
+    backgroundColor: "rgba(8, 45, 22, 0.82)",
+  },
+  upcomingStatusBadge: {
+    backgroundColor: "rgba(28, 46, 78, 0.82)",
+  },
+  endedStatusBadge: {
+    backgroundColor: "rgba(46, 46, 50, 0.82)",
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  liveStatusDot: {
+    backgroundColor: "#18D66B",
+  },
+  upcomingStatusDot: {
+    backgroundColor: "#8AB4F8",
+  },
+  endedStatusDot: {
+    backgroundColor: "#B8B8C2",
+  },
+  statusText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  liveStatusText: {
+    color: "#18D66B",
+  },
+  upcomingStatusText: {
+    color: "#8AB4F8",
+  },
+  endedStatusText: {
+    color: "#B8B8C2",
+  },
   infoOverlay: {
     position: "absolute",
     left: 0,
@@ -790,5 +1012,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 12,
+  },
+  actionBarSpacer: {
+    flex: 1,
+  },
+  viewStatBtn: {
+    alignItems: "center",
+    backgroundColor: "#1F1F22",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  viewStatText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: -0.08,
   },
 });

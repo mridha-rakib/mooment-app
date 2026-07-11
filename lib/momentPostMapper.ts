@@ -70,6 +70,8 @@ const isVisualMediaItem = (mediaItem: MomentMediaItem) => (
   mediaItem.type === "image" || mediaItem.type === "video"
 );
 
+const hasText = (value?: string | null) => Boolean(value?.trim());
+
 const resolveMediaUri = (
   mediaItem: MomentMediaItem,
   storageUrlResolver?: (storageKey: string, contentType?: string | null) => string,
@@ -101,6 +103,10 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   const audioMedia = momentMediaItems.find(isAudioMediaItem);
   const audioUri = audioMedia ? resolveMediaUri(audioMedia, options.storageUrlResolver) : undefined;
   const taggedPeople = moment.taggedPeople ?? [];
+  const isEventInteractionMoment =
+    moment.mode === "event" &&
+    hasText(moment.eventId) &&
+    hasText(moment.eventTitle);
   const authorContextNodes = [
     ...(taggedPeople.length > 0
       ? [
@@ -148,7 +154,7 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     };
   }
 
-  if (!moment.caption && visualMedia.length === 0) {
+  if (!moment.caption && visualMedia.length === 0 && !isEventInteractionMoment) {
     return null;
   }
 

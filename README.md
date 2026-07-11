@@ -10,18 +10,26 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Start the Android development build over USB
 
    ```bash
-   npx expo start
+   npm run android
    ```
 
-In the output, you'll find options to open the app in a
+This starts Metro for `http://127.0.0.1:8081`, installs or updates the Android
+development build, configures:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+```bash
+adb reverse tcp:8081 tcp:8081
+adb reverse tcp:4000 tcp:4000
+```
+
+and opens the development client with the explicit ADB-reversed Metro URL. Use
+`npm run reload:android` for later reloads while Metro is already running.
+
+The default `npm start` also uses the ADB-reversed host. Use `npm run start:lan` only
+when the Android device can directly reach this machine's LAN IP, or
+`npm run start:tunnel` when USB/local network routing is not reliable.
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 

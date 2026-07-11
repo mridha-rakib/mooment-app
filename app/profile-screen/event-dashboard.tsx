@@ -83,6 +83,17 @@ export default function EventDashboardScreen() {
 
   const eventName = event?.name ?? params.eventName ?? "Event";
   const bannerUri = event ? getBannerUri(event) : null;
+  const goToTicketStats = useCallback(() => {
+    if (!eventId) return;
+
+    router.push({
+      pathname: "/profile-screen/ticket-stat",
+      params: {
+        eventId,
+        eventName,
+      },
+    });
+  }, [eventId, eventName, router]);
 
   const ticketRows: TicketRowData[] = (event?.tickets ?? []).map((ticket) => {
     const stat = ticketStats[ticket.id ?? ""] ?? { sold: 0, available: 0, capacity: ticket.capacity };
@@ -219,7 +230,7 @@ export default function EventDashboardScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Ticket Sales</Text>
             <TouchableOpacity
               style={styles.seeAllBtn}
-              onPress={() => router.push("/profile-screen/ticket-stat")}
+              onPress={goToTicketStats}
             >
               <Text style={[styles.seeAllText, { color: colors.text }]}>See Stat</Text>
               <HugeiconsIcon icon={ArrowRight02Icon} size={14} color={colors.text} />

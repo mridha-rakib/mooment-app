@@ -10,6 +10,9 @@ const ADB_TIMEOUT_MS = 15000;
 const METRO_PORT = 8081;
 const METRO_START_TIMEOUT_MS = 180000;
 const API_PORT = 4000;
+const DEV_SERVER_HOST = "127.0.0.1";
+
+env.REACT_NATIVE_PACKAGER_HOSTNAME = DEV_SERVER_HOST;
 
 function firstExisting(paths) {
   return paths.find((path) => path && existsSync(path));
@@ -326,7 +329,7 @@ async function startMetro() {
 
   const metro = spawn(
     process.execPath,
-    [expoCli, "start", "--dev-client", "--port", String(METRO_PORT), "--max-workers", "1"],
+    [expoCli, "start", "--dev-client", "--host", "lan", "--port", String(METRO_PORT), "--max-workers", "1"],
     {
       cwd: process.cwd(),
       env,
@@ -361,7 +364,7 @@ async function startMetro() {
 }
 
 function openDevClient(adbPath, devices, packageName, devClientScheme) {
-  const devServerUrl = `http://localhost:${METRO_PORT}`;
+  const devServerUrl = `http://${DEV_SERVER_HOST}:${METRO_PORT}`;
   const devClientUrl = `${devClientScheme}://expo-development-client/?url=${encodeURIComponent(devServerUrl)}`;
 
   for (const serial of devices) {

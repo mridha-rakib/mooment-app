@@ -288,6 +288,36 @@ export const getEventTicketStats = async (eventId: string): Promise<Record<strin
   return stats ?? {};
 };
 
+export type EventTicketStatItemStatus =
+  | "checked_in"
+  | "requires_payment"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "canceled"
+  | "refunded";
+
+export type EventTicketStatItem = {
+  id: string;
+  attendee?: {
+    id: string;
+    name: string;
+    username?: string;
+    avatarKey?: string | null;
+  } | null;
+  ticketName: string;
+  amount: number;
+  currency: string;
+  status: EventTicketStatItemStatus;
+};
+
+export const getEventTicketStatItems = async (eventId: string): Promise<EventTicketStatItem[]> => {
+  const response = await api.get(`/payments/event-ticket-stat-items/${encodeURIComponent(eventId)}`);
+  const tickets = response.data?.data?.tickets as EventTicketStatItem[] | undefined;
+
+  return Array.isArray(tickets) ? tickets : [];
+};
+
 export const getMyTicketPurchaseCounts = async (eventId: string): Promise<Record<string, number>> => {
   const response = await api.get(`/payments/ticket-purchase-counts/${encodeURIComponent(eventId)}`);
   const counts = response.data?.data?.counts as Record<string, number> | undefined;

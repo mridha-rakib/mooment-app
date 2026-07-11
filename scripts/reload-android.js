@@ -2,6 +2,10 @@ const { existsSync, readFileSync } = require("fs");
 const { join } = require("path");
 const { spawnSync } = require("child_process");
 
+const METRO_PORT = 8081;
+const API_PORT = 4000;
+const DEV_SERVER_HOST = "127.0.0.1";
+
 function firstExisting(paths) {
   return paths.find((candidate) => candidate && existsSync(candidate));
 }
@@ -43,31 +47,124 @@ function runAdb(adbPath, args, options = {}) {
   });
 }
 
-function getAndroidPackageName() {
-  let packageName;
-
+function getExpoConfig() {
   try {
-    const appConfig = JSON.parse(readFileSync(join(process.cwd(), "app.json"), "utf8"));
-    packageName = appConfig?.expo?.android?.package;
+    return JSON.parse(readFileSync(join(process.cwd(), "app.json"), "utf8"));
   } catch {
     // This project uses app.config.js.
   }
 
-  if (!packageName) {
+  try {
     const appConfigFactory = require(join(process.cwd(), "app.config.js"));
-    const appConfig =
-      typeof appConfigFactory === "function"
-        ? appConfigFactory({ config: {} })
-        : appConfigFactory;
-
-    packageName = appConfig?.expo?.android?.package;
+    return typeof appConfigFactory === "function"
+      ? appConfigFactory({ config: {} })
+      : appConfigFactory;
+  } catch {
+    return undefined;
   }
+}
+
+function getAndroidPackageName(appConfig) {
+  const packageName = appConfig?.expo?.android?.package;
 
   if (!packageName) {
     throw new Error("Missing expo.android.package in app config.");
   }
 
   return packageName;
+}
+
+function getDevClientScheme(appConfig) {
+  try {
+    return require("expo-dev-client/getDefaultScheme")(appConfig.expo);
+  } catch {
+    const slug = appConfig?.expo?.slug;
+
+    if (!slug) {
+      return undefined;
+    }
+
+    const scheme = slug.replace(/[^A-Za-z0-9+\-.]/g, "").toLowerCase();
+    return scheme ? `exp+${scheme}` : undefined;
+  }
+}
+
+function getAndroidConfig() {
+  const appConfig = getExpoConfig();
+  const packageName = getAndroidPackageName(appConfig);
+  const devClientScheme = getDevClientScheme(appConfig);
+
+  if (!devClientScheme) {
+    throw new Error("Could not determine the Expo development-client URL scheme.");
+  }
+
+  return {
+    packageName,
+    devClientScheme,
+  };
+}
+
+function reverseDevelopmentPorts(adbPath, serial) {
+  runAdb(adbPath, ["-s", serial, "reverse", `tcp:${METRO_PORT}`, `tcp:${METRO_PORT}`]);
+  runAdb(adbPath, ["-s", serial, "reverse", `tcp:${API_PORT}`, `tcp:${API_PORT}`]);
+}
+
+function openDevelopmentClient(adbPath, serial, packageName, devClientScheme) {
+  const devServerUrl = `http://${DEV_SERVER_HOST}:${METRO_PORT}`;
+  const devClientUrl = `${devClientScheme}://expo-development-client/?url=${encodeURIComponent(devServerUrl)}`;
+
+  return runAdb(adbPath, [
+    "-s",
+    serial,
+    "shell",
+    "am",
+    "start",
+    "-a",
+    "android.intent.action.VIEW",
+    "-d",
+    devClientUrl,
+    "-p",
+    packageName,
+  ]);
+}
+
+function startLauncher(adbPath, serial, packageName) {
+  return runAdb(adbPath, [
+    "-s",
+    serial,
+    "shell",
+    "monkey",
+    "-p",
+    packageName,
+    "-c",
+    "android.intent.category.LAUNCHER",
+    "1",
+  ]);
+}
+
+function sendReloadBroadcast(adbPath, serial, packageName) {
+  const reloadAction = `${packageName}.RELOAD_APP_ACTION`;
+
+  return runAdb(adbPath, [
+    "-s",
+    serial,
+    "shell",
+    "am",
+    "broadcast",
+    "-a",
+    reloadAction,
+    "-p",
+    packageName,
+  ]);
+}
+
+function readAndroidConfig() {
+  try {
+    return getAndroidConfig();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }
 
 const adbPath = resolveAdbPath();
@@ -96,43 +193,28 @@ if (devices.length === 0) {
   process.exit(1);
 }
 
-const packageName = getAndroidPackageName();
-const reloadAction = `${packageName}.RELOAD_APP_ACTION`;
+const { packageName, devClientScheme } = readAndroidConfig();
 let failed = false;
 
 for (const serial of devices) {
   runAdb(adbPath, ["-s", serial, "shell", "am", "force-stop", packageName]);
-  runAdb(adbPath, ["-s", serial, "reverse", "tcp:8081", "tcp:8081"]);
-  runAdb(adbPath, ["-s", serial, "reverse", "tcp:4000", "tcp:4000"]);
+  reverseDevelopmentPorts(adbPath, serial);
 
-  const result = runAdb(adbPath, [
-    "-s",
-    serial,
-    "shell",
-    "monkey",
-    "-p",
-    packageName,
-    "-c",
-    "android.intent.category.LAUNCHER",
-    "1",
-  ]);
+  const result = openDevelopmentClient(adbPath, serial, packageName, devClientScheme);
 
   if (result.status === 0) {
+    console.log(`Opened http://${DEV_SERVER_HOST}:${METRO_PORT} in ${packageName} on ${serial}.`);
+    continue;
+  }
+
+  const launcherResult = startLauncher(adbPath, serial, packageName);
+
+  if (launcherResult.status === 0) {
     console.log(`App restarted on ${serial}.`);
     continue;
   }
 
-  const fallbackResult = runAdb(adbPath, [
-    "-s",
-    serial,
-    "shell",
-    "am",
-    "broadcast",
-    "-a",
-    reloadAction,
-    "-p",
-    packageName,
-  ]);
+  const fallbackResult = sendReloadBroadcast(adbPath, serial, packageName);
 
   if (fallbackResult.status === 0) {
     console.log(`Reload signal sent to ${serial}.`);
@@ -141,7 +223,7 @@ for (const serial of devices) {
 
   failed = true;
   console.error(`Failed to restart ${serial}.`);
-  console.error(fallbackResult.stderr || fallbackResult.stdout || result.stderr || result.stdout);
+  console.error(fallbackResult.stderr || fallbackResult.stdout || launcherResult.stderr || launcherResult.stdout || result.stderr || result.stdout);
 }
 
 process.exit(failed ? 1 : 0);

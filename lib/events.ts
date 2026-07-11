@@ -126,6 +126,7 @@ export type EventResponse = {
   sharesCount?: number;
   isLiked?: boolean;
   isSaved?: boolean;
+  canReport?: boolean;
   status: EventStatus;
   name?: string | null;
   description?: string | null;
