@@ -1,5 +1,5 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView,
   useVideoPlayer } from 'expo-video';
 import { Image as ExpoImage } from 'expo-image';
@@ -246,6 +246,7 @@ const formatAudioSeconds = (seconds?: number) => {
 
 function AudioFeedPlayer({ details }: { details: AudioDetails }) {
   const { colors, isDark } = useTheme();
+  const playbackPromiseRef = useRef<Promise<void> | null>(null);
   const [hasRequestedPlayback, setHasRequestedPlayback] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const audioSource = useMemo(() => {
@@ -284,6 +285,14 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
     setLoadFailed(false);
   }, [details.uri]);
 
+  useEffect(() => () => {
+    try {
+      player.pause();
+    } catch {
+      // Ignore cleanup failures during native player teardown.
+    }
+  }, [player]);
+
   useEffect(() => {
     if (!hasRequestedPlayback || status.isLoaded || status.playing || !details.uri) {
       return;
@@ -302,8 +311,11 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
     if (!details.uri) {
       return;
     }
+    if (playbackPromiseRef.current) {
+      return;
+    }
 
-    try {
+    const playbackPromise = (async () => {
       if (status.playing) {
         player.pause();
         return;
@@ -316,11 +328,29 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
         await player.seekTo(0);
       }
 
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      });
+      player.muted = false;
+      if (player.volume <= 0) {
+        player.volume = 1;
+      }
       player.play();
+    })();
+
+    playbackPromiseRef.current = playbackPromise;
+
+    try {
+      await playbackPromise;
     } catch (error) {
       setHasRequestedPlayback(false);
       setLoadFailed(true);
       Alert.alert('Unable to play audio', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      playbackPromiseRef.current = null;
     }
   };
 

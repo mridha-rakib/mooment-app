@@ -26,32 +26,69 @@ import { Modal,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  mergeVisibleEventFilters,
+  parseLocalDateKey,
+  toLocalDateKey,
+  type EventLocationFilter,
+  type EventPriceFilter,
+  type EventTimePeriod,
+  type SharedEventFilters,
+} from '@/lib/eventFilters';
+import type { EventAgeRestriction } from '@/lib/events';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
-export type NearbyEventsFilter = {
-  latitude: number;
-  longitude: number;
-  radiusMiles: number;
-  label: string;
-  source: 'current' | 'selected';
-};
-
-export type HomeFeedFilters = {
-  hashtags: string[];
-  nearby: NearbyEventsFilter | null;
-};
+export type NearbyEventsFilter = EventLocationFilter;
+export type HomeFeedFilters = SharedEventFilters;
 
 export type FilterModalProps = {
   visible: boolean;
   onClose: () => void;
-  activeHashtags?: string[];
-  activeNearbyFilter?: NearbyEventsFilter | null;
+  activeFilters: SharedEventFilters;
   onApply: (filters: HomeFeedFilters) => void;
 };
 
 const AGE_OPTIONS = ['All Ages', '18+', '21+'];
 const PRICE_OPTIONS = ['Free', '< $10', '< $50', '< $100', '$100+'];
 const TIME_OPTIONS = ['Morning', 'Noon', 'Evening', 'Late Night', 'Any'];
+const AGE_OPTION_TO_VALUE: Record<string, EventAgeRestriction> = {
+  'All Ages': 'all_ages',
+  '18+': '18_plus',
+  '21+': '21_plus',
+};
+const AGE_VALUE_TO_OPTION: Record<EventAgeRestriction, string> = {
+  all_ages: 'All Ages',
+  '18_plus': '18+',
+  '21_plus': '21+',
+};
+const PRICE_OPTION_TO_VALUE: Record<string, EventPriceFilter> = {
+  Free: 'free',
+  '< $10': 'lt_10',
+  '< $50': 'lt_50',
+  '< $100': 'lt_100',
+  '$100+': 'gte_100',
+};
+const PRICE_VALUE_TO_OPTION: Record<EventPriceFilter, string> = {
+  free: 'Free',
+  lt_10: '< $10',
+  lt_50: '< $50',
+  lt_100: '< $100',
+  gte_100: '$100+',
+};
+const TIME_OPTION_TO_VALUE: Record<string, EventTimePeriod> = {
+  Morning: 'morning',
+  Noon: 'noon',
+  Evening: 'evening',
+  'Late Night': 'late_night',
+  Any: 'any',
+};
+const TIME_VALUE_TO_OPTION: Record<EventTimePeriod, string> = {
+  morning: 'Morning',
+  noon: 'Noon',
+  evening: 'Evening',
+  late_night: 'Late Night',
+  any: 'Any',
+};
 const DEFAULT_LOCATION = {
   label: 'Los Angeles, CA',
   latitude: 34.052235,
@@ -64,8 +101,7 @@ const isFiniteCoordinate = (value: unknown): value is number =>
 export default function FilterModal({
   visible,
   onClose,
-  activeHashtags = [],
-  activeNearbyFilter = null,
+  activeFilters,
   onApply,
 }: FilterModalProps) {
   const { colors, isDark } = useTheme();
@@ -96,24 +132,30 @@ export default function FilterModal({
   const locationResolvedRef = useRef(false);
   const isFetchingRef = useRef(false);
   const updateRadiusRef = useRef<(x: number) => void>(null!);
-  const activeNearbyFilterRef = useRef(activeNearbyFilter);
-  activeNearbyFilterRef.current = activeNearbyFilter;
+  const activeNearbyFilterRef = useRef(activeFilters.nearby);
+  activeNearbyFilterRef.current = activeFilters.nearby;
+  const resetDraftRef = useRef(false);
   const fetchLocationRef = useRef<(silent: boolean) => Promise<void>>(null!);
 
   useEffect(() => {
     if (!visible) return;
 
-    setHashtags(activeHashtags.map((tag) => `#${tag}`).join(' '));
-    if (activeNearbyFilter) {
-      setRadius(activeNearbyFilter.radiusMiles);
-      setUseCurrentLocation(activeNearbyFilter.source === 'current');
-      setSelectedLocation(activeNearbyFilter.label || DEFAULT_LOCATION.label);
+    resetDraftRef.current = false;
+    setActiveAge(activeFilters.ageRestriction ? AGE_VALUE_TO_OPTION[activeFilters.ageRestriction] : 'All Ages');
+    setActivePrice(activeFilters.priceFilter ? PRICE_VALUE_TO_OPTION[activeFilters.priceFilter] : 'Free');
+    setActiveTime(activeFilters.timePeriod ? TIME_VALUE_TO_OPTION[activeFilters.timePeriod] : 'Morning');
+    setSelectedDate(parseLocalDateKey(activeFilters.selectedDate));
+    setHashtags(activeFilters.hashtags.map((tag) => `#${tag}`).join(' '));
+    if (activeFilters.nearby) {
+      setRadius(activeFilters.nearby.radiusMiles);
+      setUseCurrentLocation(activeFilters.nearby.source === 'current');
+      setSelectedLocation(activeFilters.nearby.label || DEFAULT_LOCATION.label);
       setSelectedLocationCoords({
-        latitude: activeNearbyFilter.latitude,
-        longitude: activeNearbyFilter.longitude,
+        latitude: activeFilters.nearby.latitude,
+        longitude: activeFilters.nearby.longitude,
       });
       // Treat an existing 'current' filter as already resolved
-      locationResolvedRef.current = activeNearbyFilter.source === 'current';
+      locationResolvedRef.current = activeFilters.nearby.source === 'current';
     } else {
       setRadius(75);
       setUseCurrentLocation(true);
@@ -124,7 +166,7 @@ export default function FilterModal({
       });
       locationResolvedRef.current = false;
     }
-  }, [activeHashtags, activeNearbyFilter, visible]);
+  }, [activeFilters, visible]);
 
   // On modal open (no active filter): silently resolve current location display
   useEffect(() => {
@@ -219,6 +261,7 @@ export default function FilterModal({
   };
 
   const handleReset = () => {
+    resetDraftRef.current = true;
     setActiveAge('All Ages');
     setActivePrice('Free');
     setActiveTime('Morning');
@@ -231,7 +274,6 @@ export default function FilterModal({
       longitude: DEFAULT_LOCATION.longitude,
     });
     setRadius(75);
-    onApply({ hashtags: [], nearby: null });
   };
 
   const handleApply = async () => {
@@ -250,7 +292,18 @@ export default function FilterModal({
             source: 'selected' as const,
           };
 
-      onApply({ hashtags: parsedHashtags, nearby });
+      onApply(mergeVisibleEventFilters(
+        activeFilters,
+        {
+          ageRestriction: AGE_OPTION_TO_VALUE[activeAge],
+          priceFilter: PRICE_OPTION_TO_VALUE[activePrice],
+          selectedDate: selectedDate ? toLocalDateKey(selectedDate) : null,
+          timePeriod: TIME_OPTION_TO_VALUE[activeTime],
+          hashtags: parsedHashtags,
+          nearby,
+        },
+        { clearCategory: resetDraftRef.current },
+      ));
       onClose();
     } catch (error) {
       Alert.alert(
@@ -312,7 +365,7 @@ export default function FilterModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false}>
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.container}>

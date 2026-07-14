@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Components
 import HomeHeader from "@/components/home/HomeHeader";
-import type { HomeFeedFilters, NearbyEventsFilter } from "@/components/home/FilterModal";
+import type { HomeFeedFilters } from "@/components/home/FilterModal";
 import MapContainer from "@/components/home/MapContainer";
 import EventFeedCard from "@/components/home/EventFeedCard";
 import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
@@ -28,11 +28,19 @@ import type { Story } from "@/lib/stories";
 import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
+import {
+  buildEventFilterRequestParams,
+  createEmptyEventFilters,
+  mergeCategoryIntoEventFilters,
+  normalizeEventCategoryFilter,
+  setCategoryInEventFilters,
+  type SharedEventFilters,
+} from "@/lib/eventFilters";
+import type { EventCategory } from "@/constants/eventCategories";
 import { useAuthStore } from "@/stores/authStore";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const SUGGESTED_USERS_INSERT_AFTER = 4;
-const MILES_TO_KM = 1.609344;
 const REFRESH_TIMEOUT_MS = 10000;
 const FEED_VIDEO_VIEWABILITY_THRESHOLD = 60;
 
@@ -203,8 +211,7 @@ export default function HomeFeed() {
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
   const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
   const [feedReposts, setFeedReposts] = useState<MomentTimelineItem[]>([]);
-  const [activeHashtags, setActiveHashtags] = useState<string[]>([]);
-  const [nearbyEventFilter, setNearbyEventFilter] = useState<NearbyEventsFilter | null>(null);
+  const [appliedEventFilters, setAppliedEventFilters] = useState<SharedEventFilters>(() => createEmptyEventFilters());
   const [isFeedLoading, setIsFeedLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
@@ -213,7 +220,7 @@ export default function HomeFeed() {
   const feedRequestIdRef = useRef(0);
   const feedScrollRef = useRef<FlatList>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams<{ showSuccess?: string; view?: string; category?: string | string[] }>();
 
   const setActiveFeedVideoItemIdIfChanged = useCallback((itemId: string | null) => {
     if (activeFeedVideoItemIdRef.current === itemId) {
@@ -250,7 +257,18 @@ export default function HomeFeed() {
       setSelectedType('Map');
       router.setParams({ view: undefined });
     }
-  }, [params.showSuccess, params.view]);
+
+    const category = normalizeEventCategoryFilter(
+      Array.isArray(params.category) ? params.category[0] : params.category,
+    );
+
+    if (category) {
+      setAppliedEventFilters((currentFilters) => mergeCategoryIntoEventFilters(currentFilters, category));
+      router.setParams({ category: undefined });
+    } else if (params.category !== undefined) {
+      router.setParams({ category: undefined });
+    }
+  }, [params.category, params.showSuccess, params.view]);
 
   const loadStories = useCallback(async () => {
     try {
@@ -275,15 +293,8 @@ export default function HomeFeed() {
     setIsFeedLoading(true);
     try {
       const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
-        getFeedMoments({ hashtags: activeHashtags }),
-        getFeedEvents(nearbyEventFilter
-          ? {
-              latitude: nearbyEventFilter.latitude,
-              longitude: nearbyEventFilter.longitude,
-              radiusKm: nearbyEventFilter.radiusMiles * MILES_TO_KM,
-              limit: 100,
-            }
-          : {}),
+        getFeedMoments({ hashtags: appliedEventFilters.hashtags }),
+        getFeedEvents(buildEventFilterRequestParams(appliedEventFilters, { limit: 100 })),
         getFeedReposts(),
       ]);
 
@@ -302,7 +313,7 @@ export default function HomeFeed() {
       }
 
       setFeedEvents(
-        (nearbyEventFilter || activeHashtags.length === 0) && eventsResult.status === "fulfilled"
+        eventsResult.status === "fulfilled"
           ? eventsResult.value
           : [],
       );
@@ -312,11 +323,14 @@ export default function HomeFeed() {
         setIsFeedLoading(false);
       }
     }
-  }, [activeHashtags, nearbyEventFilter]);
+  }, [appliedEventFilters]);
 
   const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
-    setActiveHashtags(filters.hashtags);
-    setNearbyEventFilter(filters.nearby);
+    setAppliedEventFilters(filters);
+  }, []);
+
+  const handleMapCategoryChange = useCallback((category: EventCategory | null) => {
+    setAppliedEventFilters((currentFilters) => setCategoryInEventFilters(currentFilters, category));
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -499,8 +513,7 @@ export default function HomeFeed() {
         <HomeHeader
           selectedType={selectedType}
           setSelectedType={setSelectedType}
-          activeHashtags={activeHashtags}
-          activeNearbyFilter={nearbyEventFilter}
+          activeFilters={appliedEventFilters}
           onFilterChange={handleFilterChange}
           overlay={selectedType === 'Map'}
         />
@@ -528,7 +541,7 @@ export default function HomeFeed() {
             ListHeaderComponent={(
               <>
                 <StoryCarousel stories={stories} friendStories={friendStories} />
-                {nearbyEventFilter ? (
+                {appliedEventFilters.nearby ? (
                   <View style={styles.nearbyEventsSection}>
                     <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
                     {!isFeedLoading && feedEvents.length === 0 ? (
@@ -575,7 +588,11 @@ export default function HomeFeed() {
             }}
           />
         ) : (
-          <MapContainer onBack={() => setSelectedType('Feed')} />
+          <MapContainer
+            onBack={() => setSelectedType('Feed')}
+            eventFilters={appliedEventFilters}
+            onCategoryChange={handleMapCategoryChange}
+          />
         )}
       </View>
 

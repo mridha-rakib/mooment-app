@@ -17,6 +17,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onSelect: (event: SelectedEvent) => void;
+  selectedEventId?: string | null;
 };
 
 const STATUS_CONFIG: Record<PostTagEventStatus, { label: string; color: string; bg: string; dot: boolean }> = {
@@ -54,10 +55,9 @@ function formatEventMeta(event: PostTagEvent): string {
   return parts.join(' • ');
 }
 
-export default function EventPickerModal({ visible, onClose, onSelect }: Props) {
+export default function EventPickerModal({ visible, onClose, onSelect, selectedEventId }: Props) {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [events, setEvents] = useState<PostTagEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const bottomInset = Platform.OS === 'android'
@@ -92,7 +92,6 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
   );
 
   const handleSelect = (event: PostTagEvent) => {
-    setSelectedId(event.id);
     onSelect({ id: event.id, title: event.name });
     onClose();
   };
@@ -135,7 +134,7 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
               contentContainerStyle={styles.eventListContent}
               renderItem={({ item }) => {
                 const cfg = STATUS_CONFIG[item.postTagStatus];
-                const isSelected = selectedId === item.id;
+                const isSelected = selectedEventId === item.id;
                 return (
                   <TouchableOpacity
                     style={[styles.eventRow, isSelected && styles.eventRowSelected]}
@@ -146,6 +145,11 @@ export default function EventPickerModal({ visible, onClose, onSelect }: Props) 
                       source={{ uri: item.bannerImageUrl ?? FALLBACK_IMAGE }}
                       style={styles.eventImage}
                     />
+                    {isSelected ? (
+                      <View style={styles.selectedCheck}>
+                        <Feather name="check" size={12} color="#111111" />
+                      </View>
+                    ) : null}
                     <View style={styles.eventInfo}>
                       <Text style={styles.eventTitle} numberOfLines={1}>{item.name}</Text>
                       <Text style={styles.eventMeta} numberOfLines={1}>{formatEventMeta(item)}</Text>
@@ -226,14 +230,32 @@ const styles = StyleSheet.create({
   eventRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 12, paddingHorizontal: 2,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 10,
+    position: 'relative',
   },
   eventRowSelected: {
-    backgroundColor: 'rgba(212,176,235,0.06)',
-    borderRadius: 10,
+    backgroundColor: 'rgba(212,176,235,0.10)',
+    borderColor: 'rgba(212,176,235,0.48)',
   },
   eventImage: {
     width: 52, height: 52, borderRadius: 10, marginRight: 12,
     borderWidth: 1.5, borderColor: '#8E54E9',
+  },
+  selectedCheck: {
+    position: 'absolute',
+    left: 40,
+    top: 43,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#16D869',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#1E1E1E',
+    zIndex: 2,
   },
   eventInfo: { flex: 1 },
   eventTitle: {

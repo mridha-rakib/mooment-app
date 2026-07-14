@@ -34,12 +34,13 @@ import {
   View,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Camera } from 'expo-camera';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import EventPickerModal from '@/components/post/EventPickerModal';
 import { deleteConversation, getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
 import { safeBack } from '@/lib/navigation';
@@ -56,6 +57,16 @@ import { getStoryDetails } from '@/lib/stories';
 import { createStoryViewerSession } from '@/lib/storyViewerSession';
 
 const { width } = Dimensions.get('window');
+
+const validateReadableAudioFile = async (uri: string) => {
+  const fileInfo = await FileSystem.getInfoAsync(uri);
+
+  if (!fileInfo.exists || typeof fileInfo.size !== 'number' || fileInfo.size <= 0) {
+    throw new Error('The audio file was empty.');
+  }
+
+  return fileInfo.size;
+};
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Reaction = { emoji: string; count: number };
@@ -490,6 +501,7 @@ function VideoBubble({ msg }: { msg: Message }) {
 
 function AudioBubble({ msg }: { msg: Message }) {
   const [loadFailed, setLoadFailed] = useState(false);
+  const playbackPromiseRef = useRef<Promise<void> | null>(null);
   const audioSource = useMemo(() => (msg.mediaUri ? { uri: msg.mediaUri } : null), [msg.mediaUri]);
   const player = useAudioPlayer(audioSource, { downloadFirst: false, updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
@@ -498,10 +510,19 @@ function AudioBubble({ msg }: { msg: Message }) {
   const progress = duration > 0 ? currentTime / duration : 0;
   const activeBars = Math.round(progress * WAVEFORM_HEIGHTS.length);
 
+  useEffect(() => () => {
+    try {
+      player.pause();
+    } catch {
+      // Ignore cleanup failures during native player teardown.
+    }
+  }, [player]);
+
   const handleTogglePlayback = async () => {
     if (!msg.mediaUri) return;
+    if (playbackPromiseRef.current) return;
 
-    try {
+    const playbackPromise = (async () => {
       if (status.playing) {
         player.pause();
         return;
@@ -511,10 +532,28 @@ function AudioBubble({ msg }: { msg: Message }) {
       if (duration > 0 && currentTime >= duration - 0.25) {
         await player.seekTo(0);
       }
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      });
+      player.muted = false;
+      if (player.volume <= 0) {
+        player.volume = 1;
+      }
       player.play();
+    })();
+
+    playbackPromiseRef.current = playbackPromise;
+
+    try {
+      await playbackPromise;
     } catch (error) {
       setLoadFailed(true);
       Alert.alert('Unable to play audio', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      playbackPromiseRef.current = null;
     }
   };
 
@@ -897,41 +936,103 @@ function AudioPickerSheet({
   onPickAudio: () => void;
   onRecorded: (uri: string, durationSeconds?: number | null) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const recorderRef = useRef<any>(null);
   const audioModuleRef = useRef<any>(null);
+  const mountedRef = useRef(true);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
+  const stopPromiseRef = useRef<Promise<{ uri: string | null; duration: number } | null> | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [durationMillis, setDurationMillis] = useState(0);
+  const bottomInset = Platform.OS === 'android'
+    ? Math.max(insets.bottom, 22)
+    : Math.max(insets.bottom, 32);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      recordingStartedAtRef.current = null;
+      void recorder?.stop?.().catch(() => undefined);
+      void audioModuleRef.current?.setAudioModeAsync?.({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      }).catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isRecording) return;
     const interval = setInterval(() => {
       const status = recorderRef.current?.getStatus?.();
-      setDurationMillis(status?.durationMillis ?? 0);
+      const nextDuration = status?.durationMillis
+        ?? (recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : 0);
+      setDurationMillis((current) => (
+        Math.floor(current / 1000) === Math.floor(nextDuration / 1000)
+          ? current
+          : nextDuration
+      ));
     }, 250);
 
     return () => clearInterval(interval);
   }, [isRecording]);
 
   const stopRecorder = async () => {
+    if (stopPromiseRef.current) return stopPromiseRef.current;
+
     const recorder = recorderRef.current;
     if (!recorder) return null;
 
-    await recorder.stop();
-    await audioModuleRef.current?.setAudioModeAsync?.({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
-    const status = recorder.getStatus?.();
-    const uri = recorder.uri ?? status?.url ?? null;
-    const duration = status?.durationMillis ?? durationMillis;
-    recorderRef.current = null;
-    setIsRecording(false);
-    return { uri, duration };
+    if (mountedRef.current) setIsStopping(true);
+
+    const stopPromise = (async () => {
+      const fallbackStatus = recorder.getStatus?.();
+      const fallbackUri = recorder.uri ?? fallbackStatus?.url ?? null;
+      const fallbackDuration = fallbackStatus?.durationMillis
+        ?? (recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : durationMillis);
+      const stopResult = await recorder.stop();
+      const finalStatus = stopResult && typeof stopResult === 'object' ? stopResult : undefined;
+      const uri = finalStatus?.url ?? fallbackUri;
+      const duration = finalStatus?.durationMillis ?? fallbackDuration;
+
+      await audioModuleRef.current?.setAudioModeAsync?.({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      }).catch(() => undefined);
+
+      recorderRef.current = null;
+      recordingStartedAtRef.current = null;
+
+      if (mountedRef.current) {
+        setIsRecording(false);
+        setIsStopping(false);
+      }
+
+      return { uri, duration };
+    })().finally(() => {
+      stopPromiseRef.current = null;
+      if (mountedRef.current) setIsStopping(false);
+    });
+
+    stopPromiseRef.current = stopPromise;
+    return stopPromise;
   };
 
   const startRecording = async () => {
-    if (isPreparing || isRecording) return;
+    if (startPromiseRef.current || stopPromiseRef.current || isPreparing || isRecording) return;
     setIsPreparing(true);
 
-    try {
+    const startPromise = (async () => {
       const audio = await import('expo-audio') as any;
       const permission = await audio.requestRecordingPermissionsAsync();
       audioModuleRef.current = audio;
@@ -941,10 +1042,21 @@ function AudioPickerSheet({
         return;
       }
 
-      await audio.setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audio.setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      });
       const NativeRecorder = audio.AudioModule?.AudioRecorder;
 
       if (!NativeRecorder) {
+        await audio.setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldRouteThroughEarpiece: false,
+          interruptionMode: 'doNotMix',
+        }).catch(() => undefined);
         Alert.alert('Recording unavailable', 'Audio recording is not available in this build. You can choose an audio file instead.');
         return;
       }
@@ -953,17 +1065,34 @@ function AudioPickerSheet({
       await recorder.prepareToRecordAsync();
       recorder.record();
       recorderRef.current = recorder;
-      setDurationMillis(0);
-      setIsRecording(true);
+      recordingStartedAtRef.current = Date.now();
+
+      if (mountedRef.current) {
+        setDurationMillis(0);
+        setIsRecording(true);
+      }
+    })();
+
+    startPromiseRef.current = startPromise;
+
+    try {
+      await startPromise;
     } catch (error) {
+      await audioModuleRef.current?.setAudioModeAsync?.({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      }).catch(() => undefined);
       Alert.alert('Recording failed', getAuthErrorMessage(error, 'Please try recording again.'));
     } finally {
-      setIsPreparing(false);
+      startPromiseRef.current = null;
+      if (mountedRef.current) setIsPreparing(false);
     }
   };
 
   const stopRecording = async () => {
-    if (!isRecording) return;
+    if (!isRecording || isStopping) return;
 
     try {
       const recording = await stopRecorder();
@@ -971,6 +1100,14 @@ function AudioPickerSheet({
         Alert.alert('Recording failed', 'No recorded audio file was created.');
         return;
       }
+
+      if (!recording.duration || recording.duration <= 0) {
+        Alert.alert('Recording failed', 'The recorded audio was too short. Please try recording again.');
+        return;
+      }
+
+      await validateReadableAudioFile(recording.uri);
+
       onRecorded(recording.uri, recording.duration ? recording.duration / 1000 : null);
       onClose();
     } catch (error) {
@@ -979,7 +1116,7 @@ function AudioPickerSheet({
   };
 
   const closeSheet = async () => {
-    if (isRecording) {
+    if (isRecording || stopPromiseRef.current) {
       await stopRecorder().catch(() => undefined);
     }
     onClose();
@@ -988,15 +1125,15 @@ function AudioPickerSheet({
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
       <View style={styles.audioSheetOverlay}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeSheet} />
-        <View style={styles.audioSheet}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeSheet} disabled={isStopping} />
+        <View style={[styles.audioSheet, { paddingBottom: bottomInset }]}>
           <View style={styles.audioSheetHandle} />
           <View style={styles.audioSheetHeader}>
             <View>
               <Text style={styles.audioSheetTitle}>Audio</Text>
               <Text style={styles.audioSheetSubtitle}>Record or choose audio</Text>
             </View>
-            <TouchableOpacity onPress={closeSheet} style={styles.audioSheetClose} activeOpacity={0.8}>
+            <TouchableOpacity onPress={closeSheet} style={styles.audioSheetClose} activeOpacity={0.8} disabled={isStopping}>
               <Feather name="x" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -1011,10 +1148,10 @@ function AudioPickerSheet({
               style={[styles.recordButton, isRecording && styles.stopButton]}
               onPress={isRecording ? stopRecording : startRecording}
               activeOpacity={0.85}
-              disabled={isPreparing}
+              disabled={isPreparing || isStopping}
             >
               <Feather name={isRecording ? 'square' : 'mic'} size={16} color="#111111" />
-              <Text style={styles.recordButtonText}>{isRecording ? 'Stop' : isPreparing ? 'Wait' : 'Record'}</Text>
+              <Text style={styles.recordButtonText}>{isRecording ? (isStopping ? 'Wait' : 'Stop') : isPreparing ? 'Wait' : 'Record'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1022,7 +1159,7 @@ function AudioPickerSheet({
             style={[styles.pickAudioButton, isRecording && { opacity: 0.45 }]}
             onPress={onPickAudio}
             activeOpacity={0.85}
-            disabled={isRecording}
+            disabled={isRecording || isStopping}
           >
             <Feather name="folder" size={18} color="#FFFFFF" />
             <Text style={styles.pickAudioButtonText}>Choose audio file</Text>
@@ -1067,6 +1204,7 @@ export default function ChatDetailScreen() {
   const friendTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSendingTypingRef = useRef(false);
   const isLocationLoadingRef = useRef(false);
+  const isAudioPickerOpeningRef = useRef(false);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
@@ -1266,24 +1404,35 @@ export default function ChatDetailScreen() {
   };
 
   const handlePickAudioFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['audio/*'],
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
+    if (isAudioPickerOpeningRef.current) return;
 
-    if (result.canceled || !result.assets?.[0]) return;
+    isAudioPickerOpeningRef.current = true;
 
-    const asset = result.assets[0];
-    setIsAudioPickerVisible(false);
-    setShowAttach(false);
-    void enqueueFileAttachment({
-      type: 'audio',
-      uri: asset.uri,
-      mimeType: asset.mimeType,
-      fileName: asset.name,
-      size: asset.size,
-    });
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      await validateReadableAudioFile(asset.uri);
+      setIsAudioPickerVisible(false);
+      setShowAttach(false);
+      void enqueueFileAttachment({
+        type: 'audio',
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        fileName: asset.name,
+        size: asset.size,
+      });
+    } catch (error) {
+      Alert.alert('Unable to choose audio', getAuthErrorMessage(error, 'Please choose another audio file.'));
+    } finally {
+      isAudioPickerOpeningRef.current = false;
+    }
   };
 
   const handleShareLocation = async () => {
@@ -2566,7 +2715,7 @@ const styles = StyleSheet.create({
 
   /* Audio Sheet */
   audioSheetOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.62)' },
-  audioSheet: { backgroundColor: '#0e0d12', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 32 : 22 },
+  audioSheet: { backgroundColor: '#0e0d12', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingTop: 12 },
   audioSheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.22)', alignSelf: 'center', marginBottom: 16 },
   audioSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   audioSheetTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },

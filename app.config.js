@@ -87,6 +87,7 @@ module.exports = ({ config }) => {
           },
         ],
         "./plugins/withAndroidGradleMemorySettings",
+        "./plugins/withAndroidAdbReverse",
         "./plugins/withUsesCleartextTraffic",
         "expo-secure-store",
       ],

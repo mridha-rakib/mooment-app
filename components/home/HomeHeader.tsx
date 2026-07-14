@@ -4,15 +4,15 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FilterModal, { type HomeFeedFilters, type NearbyEventsFilter } from './FilterModal';
+import FilterModal, { type HomeFeedFilters } from './FilterModal';
+import type { SharedEventFilters } from '@/lib/eventFilters';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '../ui/CinematicButton';
 
 interface HomeHeaderProps {
   selectedType: string;
   setSelectedType: (type: string) => void;
-  activeHashtags: string[];
-  activeNearbyFilter?: NearbyEventsFilter | null;
+  activeFilters: SharedEventFilters;
   onFilterChange: (filters: HomeFeedFilters) => void;
   overlay?: boolean;
 }
@@ -20,8 +20,7 @@ interface HomeHeaderProps {
 export default function HomeHeader({
   selectedType,
   setSelectedType,
-  activeHashtags,
-  activeNearbyFilter,
+  activeFilters,
   onFilterChange,
   overlay = false,
 }: HomeHeaderProps) {
@@ -112,8 +111,7 @@ export default function HomeHeader({
       <FilterModal
         visible={filterVisible}
         onClose={() => setFilterVisible(false)}
-        activeHashtags={activeHashtags}
-        activeNearbyFilter={activeNearbyFilter}
+        activeFilters={activeFilters}
         onApply={onFilterChange}
       />
     </View>

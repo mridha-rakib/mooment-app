@@ -1,5 +1,5 @@
 import { getCategoryColor } from "@/constants/categoryColors";
-import { EVENT_CATEGORIES } from "@/constants/eventCategories";
+import { EVENT_CATEGORIES, type EventCategory } from "@/constants/eventCategories";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
@@ -60,6 +60,7 @@ export type MapMarkerData = {
   label: string;
   glowColor: string;
   category?: string | null;
+  categories?: string[];
   scheduledAt?: string | null;
   hostName?: string | null;
   distance?: string | null;
@@ -79,6 +80,8 @@ type MapScreenProps = {
   onBack?: () => void;
   logoText?: string;
   onUserLocationChange?: (coordinate: [number, number]) => void;
+  selectedCategory?: EventCategory | null;
+  onCategoryChange?: (category: EventCategory | null) => void;
 };
 
 const MapMarker = ({
@@ -241,6 +244,8 @@ const MapMarker = ({
 export default function MapScreen({
   markers = [],
   onUserLocationChange,
+  selectedCategory,
+  onCategoryChange,
 }: MapScreenProps) {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
@@ -258,7 +263,7 @@ export default function MapScreen({
   const [selectedMarker, setSelectedMarker] = useState<MapMarkerData | null>(
     null,
   );
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const activeCategory = selectedCategory ?? "All";
   const cameraRef = React.useRef<Mapbox.Camera>(null);
   const currentZoomRef = React.useRef(DEFAULT_ZOOM_LEVEL);
   const hasInitialUserLocationCenteredRef = React.useRef(false);
@@ -356,13 +361,15 @@ export default function MapScreen({
     centerOnUserLocation(userLocation, 650);
   }, [centerOnUserLocation, userLocation]);
 
-  const categories = ["All", ...EVENT_CATEGORIES];
+  const categories: ("All" | EventCategory)[] = ["All", ...EVENT_CATEGORIES];
   const visibleMarkers = React.useMemo(
     () =>
-      selectedCategory === "All"
+      activeCategory === "All"
         ? markers
-        : markers.filter((marker) => marker.category === selectedCategory),
-    [markers, selectedCategory],
+        : markers.filter((marker) => (
+            marker.categories?.includes(activeCategory) ?? marker.category === activeCategory
+          )),
+    [activeCategory, markers],
   );
 
   const handleMarkerPress = (marker: MapMarkerData) => {
@@ -379,7 +386,7 @@ export default function MapScreen({
     setModalVisible(false);
     router.push({
       pathname: "/event-screen/event",
-      params: { eventId: selectedMarker.id },
+      params: { eventId: selectedMarker.id, source: "map" },
     });
   };
 
@@ -472,12 +479,12 @@ export default function MapScreen({
           contentContainerStyle={styles.categoriesScroll}
         >
           {categories.map((cat) => {
-            const isActive = selectedCategory === cat;
+            const isActive = activeCategory === cat;
             const catColor = cat === "All" ? "#8E54E9" : getCategoryColor(cat);
             return (
               <TouchableOpacity
                 key={cat}
-                onPress={() => setSelectedCategory(cat)}
+                onPress={() => onCategoryChange?.(cat === "All" ? null : cat)}
                 style={[
                   styles.categoryBtn,
                   isActive

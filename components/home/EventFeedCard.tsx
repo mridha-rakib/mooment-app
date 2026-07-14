@@ -406,7 +406,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   };
 
   const goToEvent = () =>
-    router.push({ pathname: "/event-screen/event", params: { eventId: event.id } });
+    router.push({ pathname: "/event-screen/event", params: { eventId: event.id, source: "feed" } });
 
   const goToEventStats = () => {
     if (!eventId || !canViewEventStats) {

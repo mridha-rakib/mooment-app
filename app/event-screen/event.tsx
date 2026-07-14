@@ -47,6 +47,8 @@ import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { createReport } from "@/lib/reports";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
+import type { EventCategory } from "@/constants/eventCategories";
+import { getEventDetailsCategoryDestination } from "@/lib/eventCategoryNavigation";
 import { Feather } from "@expo/vector-icons";
 import {
     Bookmark01Icon,
@@ -317,7 +319,7 @@ const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
 
 const EventScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<{ eventId?: string; id?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ eventId?: string; id?: string; mode?: string; source?: string }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const currentUser = useAuthStore((state) => state.user);
@@ -365,6 +367,7 @@ const EventScreen = () => {
   const [reportDetailsVisible, setReportDetailsVisible] = useState(false);
   const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const isReportSubmittingRef = useRef(false);
+  const pendingCategoryNavigationRef = useRef<EventCategory | null>(null);
   const [localIsSaved, setLocalIsSaved] = useState(false);
   const [isSavePending, setIsSavePending] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
@@ -569,6 +572,27 @@ const EventScreen = () => {
       isFollowing,
     });
   };
+
+  const handleHeroCategoryPress = useCallback((category: string) => {
+    const destination = getEventDetailsCategoryDestination(params.source, category);
+
+    if (!destination) {
+      return;
+    }
+
+    if (pendingCategoryNavigationRef.current === destination.params.category) {
+      return;
+    }
+
+    pendingCategoryNavigationRef.current = destination.params.category;
+
+    if (destination.pathname === "/(tabs)/home") {
+      router.replace(destination as never);
+      return;
+    }
+
+    router.push(destination as never);
+  }, [params.source, router]);
 
   const ticketsLeft = getTicketsLeft(event?.tickets ?? []);
   const priceLabel = formatPrice(event?.tickets ?? []);
@@ -1457,9 +1481,14 @@ const EventScreen = () => {
             <View style={styles.metaTopRow}>
               <View style={styles.tagsRow}>
                 {getHeroCategoryTags(event).map((tag) => (
-                  <View key={tag} style={styles.tag}>
+                  <TouchableOpacity
+                    key={tag}
+                    style={styles.tag}
+                    activeOpacity={1}
+                    onPress={() => handleHeroCategoryPress(tag)}
+                  >
                     <Text style={styles.tagText}>{tag}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
               {isHostMode && event?.privacy === "private" && !isEventCompleted && !isEventCancelled && (

@@ -1,8 +1,10 @@
 import React from "react";
 import MapScreen, { MapMarkerData } from "@/components/ui/MapScreen";
 import { getMapEvents, type EventResponse } from "@/lib/events";
+import { buildEventFilterRequestParams, createEmptyEventFilters, type SharedEventFilters } from "@/lib/eventFilters";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getCategoryColor } from "@/constants/categoryColors";
+import type { EventCategory } from "@/constants/eventCategories";
 
 const EVENT_MAP_RADIUS_KM = 50;
 const EVENT_MAP_LIMIT = 100;
@@ -13,6 +15,8 @@ const FALLBACK_EVENT_IMAGE =
 type MapContainerProps = {
   onBack?: () => void;
   logoText?: string;
+  eventFilters?: SharedEventFilters;
+  onCategoryChange?: (category: EventCategory | null) => void;
 };
 
 const isFiniteCoordinate = (value: unknown): value is number =>
@@ -181,6 +185,7 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
     label: event.name || "Event",
     glowColor: getCategoryColor(event.category ?? null),
     category: event.category ?? null,
+    categories: event.categories?.length ? event.categories : event.category ? [event.category] : [],
     scheduledAt: event.scheduledAt ?? null,
     hostName: getHostName(event),
     distance: formatDistance(userLocation, [longitude, latitude]),
@@ -196,9 +201,15 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
   };
 };
 
-export default function MapContainer({ onBack, logoText = "Mooment" }: MapContainerProps) {
+export default function MapContainer({
+  onBack,
+  logoText = "Mooment",
+  eventFilters = createEmptyEventFilters(),
+  onCategoryChange,
+}: MapContainerProps) {
   const [markers, setMarkers] = React.useState<MapMarkerData[]>([]);
   const [userLocation, setUserLocation] = React.useState<[number, number] | null>(null);
+  const mapRequestIdRef = React.useRef(0);
 
   // Keep a ref so the async fetch always reads the latest location without
   // being listed as an effect dependency (which would re-trigger fetches on
@@ -212,30 +223,41 @@ export default function MapContainer({ onBack, logoText = "Mooment" }: MapContai
   // re-fires when the user has moved far enough to warrant a new query.
   const queryLongitude = userLocation ? Number(userLocation[0].toFixed(3)) : undefined;
   const queryLatitude = userLocation ? Number(userLocation[1].toFixed(3)) : undefined;
+  const mapRequestParams = React.useMemo(() => {
+    const params = buildEventFilterRequestParams(eventFilters, {
+      includeLocation: Boolean(eventFilters.nearby),
+      limit: EVENT_MAP_LIMIT,
+    });
+
+    if (!eventFilters.nearby && queryLatitude !== undefined && queryLongitude !== undefined) {
+      params.latitude = queryLatitude;
+      params.longitude = queryLongitude;
+      params.radiusKm = EVENT_MAP_RADIUS_KM;
+    }
+
+    return params;
+  }, [eventFilters, queryLatitude, queryLongitude]);
+  const mapRequestKey = React.useMemo(() => JSON.stringify(mapRequestParams), [mapRequestParams]);
 
   React.useEffect(() => {
     let isMounted = true;
+    const requestId = ++mapRequestIdRef.current;
 
     const loadMapEvents = async () => {
       try {
-        const events = await getMapEvents({
-          ...(queryLatitude !== undefined && queryLongitude !== undefined
-            ? {
-                latitude: queryLatitude,
-                longitude: queryLongitude,
-                radiusKm: EVENT_MAP_RADIUS_KM,
-              }
-            : {}),
-          limit: EVENT_MAP_LIMIT,
-        });
+        const events = await getMapEvents(mapRequestParams);
 
-        if (!isMounted) {
+        if (!isMounted || requestId !== mapRequestIdRef.current) {
           return;
         }
 
+        const distanceReference = eventFilters.nearby
+          ? [eventFilters.nearby.longitude, eventFilters.nearby.latitude] as [number, number]
+          : userLocationRef.current;
+
         setMarkers(
           events
-            .map((event) => toMapMarker(event, userLocationRef.current))
+            .map((event) => toMapMarker(event, distanceReference))
             .filter((marker): marker is MapMarkerData => Boolean(marker)),
         );
       } catch {
@@ -248,10 +270,7 @@ export default function MapContainer({ onBack, logoText = "Mooment" }: MapContai
     return () => {
       isMounted = false;
     };
-  // Intentionally omitting userLocation — it is read through userLocationRef
-  // so the fetch only re-runs when the rounded query coordinates change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryLatitude, queryLongitude]);
+  }, [eventFilters.nearby, mapRequestKey, mapRequestParams]);
 
   const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
     setUserLocation(coordinate);
@@ -263,6 +282,8 @@ export default function MapContainer({ onBack, logoText = "Mooment" }: MapContai
       logoText={logoText}
       onBack={onBack}
       onUserLocationChange={handleUserLocationChange}
+      selectedCategory={eventFilters.category ?? null}
+      onCategoryChange={onCategoryChange}
     />
   );
 }

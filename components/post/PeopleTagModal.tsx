@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { getFriendUsers } from '@/lib/users';
-import React, { useState } from 'react';
+import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
+import React, { useRef, useState } from 'react';
 import {
-  FlatList, Modal, Platform, StyleSheet,
+  Animated, FlatList, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import UserAvatar from '../ui/UserAvatar';
@@ -25,6 +26,16 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
   const [search, setSearch] = useState('');
   const [localSelected, setLocalSelected] = useState<string[]>(selected);
   const [friends, setFriends] = useState<Friend[]>([]);
+  const listOffsetYRef = useRef(0);
+  const {
+    sheetTranslateY,
+    dragPanHandlers,
+    contentPanHandlers,
+  } = useBottomSheetDragDismiss({
+    visible,
+    onClose,
+    canStartContentDrag: () => listOffsetYRef.current <= 0,
+  });
 
   // Sync if parent resets
   React.useEffect(() => {
@@ -81,17 +92,19 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
 
 
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={onClose}>
       <View style={styles.overlay}>
         {/* Tap outside to close */}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
-        <View style={styles.sheet}>
-          {/* Handle */}
-          <View style={styles.handle} />
+        <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+          <View {...dragPanHandlers}>
+            {/* Handle */}
+            <View style={styles.handle} />
 
-          {/* Title */}
-          <Text style={styles.title}>Friend List</Text>
+            {/* Title */}
+            <Text style={styles.title}>Friend List</Text>
+          </View>
 
           {/* Search bar */}
           <View style={styles.searchRow}>
@@ -111,42 +124,48 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
           </View>
 
           {/* People list */}
-          <FlatList
-            data={filtered}
-            keyExtractor={item => item.id}
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 340 }}
-            renderItem={({ item }) => {
-              const isAdded = localSelected.includes(item.name);
-              return (
-                <View style={styles.personRow}>
-                  {/* Avatar */}
-                  <UserAvatar uri={item.avatar} name={item.name} size={52} style={styles.avatar} />
+          <View {...contentPanHandlers}>
+            <FlatList
+              data={filtered}
+              keyExtractor={item => item.id}
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 340 }}
+              scrollEventThrottle={16}
+              onScroll={(event) => {
+                listOffsetYRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              renderItem={({ item }) => {
+                const isAdded = localSelected.includes(item.name);
+                return (
+                  <View style={styles.personRow}>
+                    {/* Avatar */}
+                    <UserAvatar uri={item.avatar} name={item.name} size={52} style={styles.avatar} />
 
-                  {/* Info */}
-                  <View style={styles.personInfo}>
-                    <Text style={styles.personName}>{item.name}</Text>
-                    <Text style={styles.personHandle}>{item.handle}</Text>
+                    {/* Info */}
+                    <View style={styles.personInfo}>
+                      <Text style={styles.personName}>{item.name}</Text>
+                      <Text style={styles.personHandle}>{item.handle}</Text>
+                    </View>
+
+                    {/* Add / Added button */}
+                    <TouchableOpacity
+                      style={[styles.addBtn, isAdded && styles.addBtnActive]}
+                      onPress={() => toggle(item.name)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.addBtnText, isAdded && styles.addBtnTextActive]}>
+                        {isAdded ? 'Added' : 'Add'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-
-                  {/* Add / Added button */}
-                  <TouchableOpacity
-                    style={[styles.addBtn, isAdded && styles.addBtnActive]}
-                    onPress={() => toggle(item.name)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.addBtnText, isAdded && styles.addBtnTextActive]}>
-                      {isAdded ? 'Added' : 'Add'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            }}
-          />
+                );
+              }}
+            />
+          </View>
 
 
           <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

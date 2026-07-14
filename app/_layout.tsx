@@ -9,6 +9,7 @@ import {
   OleoScript_400Regular,
   useFonts,
 } from "@expo-google-fonts/oleo-script";
+import * as NavigationBar from "expo-navigation-bar";
 import {
   Stack,
   useRootNavigationState,
@@ -322,6 +323,15 @@ export default function RootLayout() {
     return () => {
       timers.forEach(clearTimeout);
     };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    NavigationBar.setStyle("dark");
+    void NavigationBar.setVisibilityAsync("visible");
   }, []);
 
   return (

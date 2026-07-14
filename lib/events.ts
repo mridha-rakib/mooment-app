@@ -168,10 +168,17 @@ export const ticketAlreadyHasReward = (
 ));
 
 export type EventMapQuery = {
+  category?: EventCategory;
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
   limit?: number;
+  ageRestriction?: EventAgeRestriction;
+  priceFilter?: "free" | "lt_10" | "lt_50" | "lt_100" | "gte_100";
+  date?: string;
+  timePeriod?: "morning" | "noon" | "evening" | "late_night" | "any";
+  timezoneOffsetMinutes?: number;
+  hashtags?: string;
 };
 
 export type EventFeedQuery = {
@@ -180,6 +187,12 @@ export type EventFeedQuery = {
   longitude?: number;
   radiusKm?: number;
   limit?: number;
+  ageRestriction?: EventAgeRestriction;
+  priceFilter?: "free" | "lt_10" | "lt_50" | "lt_100" | "gte_100";
+  date?: string;
+  timePeriod?: "morning" | "noon" | "evening" | "late_night" | "any";
+  timezoneOffsetMinutes?: number;
+  hashtags?: string;
 };
 
 export type NowEventStatus = "live_now" | "starting_soon" | "last_call";
