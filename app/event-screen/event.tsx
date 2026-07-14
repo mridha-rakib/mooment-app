@@ -48,7 +48,11 @@ import { createReport } from "@/lib/reports";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import type { EventCategory } from "@/constants/eventCategories";
-import { getEventDetailsCategoryDestination } from "@/lib/eventCategoryNavigation";
+import {
+    getEventCategoryFeedDestination,
+    getEventCategoryMapDestination,
+} from "@/lib/eventCategoryNavigation";
+import { normalizeEventCategoryFilter } from "@/lib/eventFilters";
 import { Feather } from "@expo/vector-icons";
 import {
     Bookmark01Icon,
@@ -367,7 +371,8 @@ const EventScreen = () => {
   const [reportDetailsVisible, setReportDetailsVisible] = useState(false);
   const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const isReportSubmittingRef = useRef(false);
-  const pendingCategoryNavigationRef = useRef<EventCategory | null>(null);
+  const [pendingCategoryDestination, setPendingCategoryDestination] = useState<EventCategory | null>(null);
+  const [isCategoryDestinationNavigating, setIsCategoryDestinationNavigating] = useState(false);
   const [localIsSaved, setLocalIsSaved] = useState(false);
   const [isSavePending, setIsSavePending] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
@@ -573,26 +578,67 @@ const EventScreen = () => {
     });
   };
 
+  const closeCategoryDestinationModal = useCallback(() => {
+    if (isCategoryDestinationNavigating) {
+      return;
+    }
+
+    setPendingCategoryDestination(null);
+  }, [isCategoryDestinationNavigating]);
+
   const handleHeroCategoryPress = useCallback((category: string) => {
-    const destination = getEventDetailsCategoryDestination(params.source, category);
+    const normalizedCategory = normalizeEventCategoryFilter(category);
+
+    if (!normalizedCategory || pendingCategoryDestination || isCategoryDestinationNavigating) {
+      return;
+    }
+
+    setPendingCategoryDestination(normalizedCategory);
+  }, [isCategoryDestinationNavigating, pendingCategoryDestination]);
+
+  const handleViewCategoryInFeed = useCallback(() => {
+    if (isCategoryDestinationNavigating) {
+      return;
+    }
+
+    const destination = getEventCategoryFeedDestination(pendingCategoryDestination);
 
     if (!destination) {
+      setPendingCategoryDestination(null);
       return;
     }
 
-    if (pendingCategoryNavigationRef.current === destination.params.category) {
+    setIsCategoryDestinationNavigating(true);
+    setPendingCategoryDestination(null);
+
+    try {
+      router.push(destination as never);
+    } finally {
+      setIsCategoryDestinationNavigating(false);
+    }
+  }, [isCategoryDestinationNavigating, pendingCategoryDestination, router]);
+
+  const handleViewCategoryOnMap = useCallback(() => {
+    if (isCategoryDestinationNavigating) {
       return;
     }
 
-    pendingCategoryNavigationRef.current = destination.params.category;
+    const destination = getEventCategoryMapDestination(pendingCategoryDestination);
 
-    if (destination.pathname === "/(tabs)/home") {
+    if (!destination) {
+      setPendingCategoryDestination(null);
+      return;
+    }
+
+    setIsCategoryDestinationNavigating(true);
+    setPendingCategoryDestination(null);
+
+    try {
       router.replace(destination as never);
-      return;
+    } finally {
+      setIsCategoryDestinationNavigating(false);
     }
-
-    router.push(destination as never);
-  }, [params.source, router]);
+  }, [isCategoryDestinationNavigating, pendingCategoryDestination, router]);
 
   const ticketsLeft = getTicketsLeft(event?.tickets ?? []);
   const priceLabel = formatPrice(event?.tickets ?? []);
@@ -2006,6 +2052,86 @@ const EventScreen = () => {
       </Modal>
 
       <Modal
+        visible={pendingCategoryDestination !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCategoryDestinationModal}
+      >
+        <View style={styles.categoryDestinationOverlay}>
+          <TouchableOpacity
+            style={styles.categoryDestinationBackdrop}
+            activeOpacity={1}
+            disabled={isCategoryDestinationNavigating}
+            onPress={closeCategoryDestinationModal}
+            accessibilityRole="button"
+            accessibilityLabel="Close category destination options"
+          />
+          <View style={[styles.categoryDestinationSheet, { backgroundColor: isDark ? "#1E1E1E" : colors.card }]}>
+            <View style={styles.rewardDetailHandle} />
+            <View style={styles.categoryDestinationHeader}>
+              <View style={styles.categoryDestinationTitleBlock}>
+                <Text style={[styles.categoryDestinationTitle, { color: colors.text }]}>View Category</Text>
+                {pendingCategoryDestination ? (
+                  <Text style={[styles.categoryDestinationSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {pendingCategoryDestination}
+                  </Text>
+                ) : null}
+              </View>
+              <TouchableOpacity
+                style={styles.rewardDetailCloseBtn}
+                activeOpacity={0.7}
+                disabled={isCategoryDestinationNavigating}
+                onPress={closeCategoryDestinationModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close category destination options"
+              >
+                <Feather name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.categoryDestinationAction, { borderColor: colors.border }]}
+              activeOpacity={0.85}
+              disabled={isCategoryDestinationNavigating}
+              onPress={handleViewCategoryInFeed}
+              accessibilityRole="button"
+              accessibilityLabel="View category in Feed"
+            >
+              <Feather name="list" size={18} color={colors.text} />
+              <Text style={[styles.categoryDestinationActionText, { color: colors.text }]}>View in Feed</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.categoryDestinationAction,
+                styles.categoryDestinationPrimaryAction,
+                { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              activeOpacity={0.85}
+              disabled={isCategoryDestinationNavigating}
+              onPress={handleViewCategoryOnMap}
+              accessibilityRole="button"
+              accessibilityLabel="View category on Map"
+            >
+              <Feather name="map" size={18} color="#111111" />
+              <Text style={styles.categoryDestinationPrimaryActionText}>View on Map</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.categoryDestinationCancelAction}
+              activeOpacity={0.85}
+              disabled={isCategoryDestinationNavigating}
+              onPress={closeCategoryDestinationModal}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel category destination selection"
+            >
+              <Text style={[styles.categoryDestinationCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={reviewModalVisible}
         transparent
         animationType="slide"
@@ -2602,6 +2728,72 @@ const styles = StyleSheet.create({
   rewardDetailDesc: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  categoryDestinationOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  categoryDestinationBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  categoryDestinationSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  categoryDestinationHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  categoryDestinationTitleBlock: {
+    flex: 1,
+    marginRight: 14,
+  },
+  categoryDestinationTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  categoryDestinationSubtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginTop: 4,
+  },
+  categoryDestinationAction: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    height: 52,
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  categoryDestinationActionText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  categoryDestinationPrimaryAction: {
+    marginTop: 10,
+  },
+  categoryDestinationPrimaryActionText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  categoryDestinationCancelAction: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  categoryDestinationCancelText: {
+    fontSize: 15,
+    fontWeight: "700",
   },
   reviewModalOverlay: {
     flex: 1,

@@ -10,6 +10,7 @@ import { AddTeamIcon,
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { BlurView } from 'expo-blur';
 import { CameraView,
+  type CameraType,
   useCameraPermissions,
   useMicrophonePermissions } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
@@ -59,7 +60,8 @@ import { getAuthErrorMessage } from '@/lib/authErrors';
 import { safeBack } from '@/lib/navigation';
 import { createMoment, setPendingNewMoment } from '@/lib/moments';
 import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
-import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
+import { startPendingVideoMomentUpload } from '@/lib/pendingMomentUploads';
+import { canUseNativeVideoUpload, getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
 
@@ -68,6 +70,7 @@ const { width } = Dimensions.get('window');
 
 const FALLBACK_AUTHOR_NAME = 'Mooment User';
 const MAX_MEDIA_ITEMS = 10;
+const MAX_VIDEO_RECORDING_DURATION_SECONDS = 10 * 60;
 const CREATE_MOMENT_COLORS = {
   background: '#0E0D12',
   text: '#FFFFFF',
@@ -220,17 +223,35 @@ const getMediaExtension = (contentType: string) => {
   return "jpg";
 };
 
-function VideoPreview({ uri, style }: { uri: string; style: object }) {
+function VideoPreview({ uri, style, paused }: { uri: string; style: object; paused?: boolean }) {
   const player = useVideoPlayer(uri, (videoPlayer) => {
-    videoPlayer.loop = true;
-    videoPlayer.muted = true;
+    videoPlayer.loop = false;
+    videoPlayer.muted = false;
   });
+
+  useEffect(() => {
+    if (paused) {
+      player.pause();
+    }
+  }, [paused, player]);
+
+  useEffect(() => {
+    void setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
+
+    return () => {
+      try {
+        player.pause();
+      } catch {
+        // Ignore cleanup failures during native player teardown.
+      }
+    };
+  }, [player]);
 
   return (
     <VideoView
       player={player}
       style={style}
-      nativeControls={false}
+      nativeControls
       contentFit="cover"
     />
   );
@@ -332,16 +353,20 @@ function VideoPickerSheet({
   onRecordVideo: () => void;
   onPickVideo: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const { sheetTranslateY, dragPanHandlers } = useBottomSheetDragDismiss({
     visible,
     onClose,
   });
+  const bottomInset = Platform.OS === 'android'
+    ? Math.max(insets.bottom, 22) + AUDIO_SHEET_ANDROID_BOTTOM_GAP
+    : Math.max(insets.bottom, 32);
 
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={onClose}>
       <View style={videoPickerStyles.overlay}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <Animated.View style={[videoPickerStyles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+        <Animated.View style={[videoPickerStyles.sheet, { paddingBottom: bottomInset, transform: [{ translateY: sheetTranslateY }] }]}>
           <View {...dragPanHandlers}>
             <View style={videoPickerStyles.handle} />
             <View style={videoPickerStyles.header}>
@@ -389,14 +414,114 @@ function VideoCameraSheet({
   onRecorded: (uri: string, contentType: string, name: string, durationSeconds?: number | null) => void;
 }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const cameraRef = useRef<CameraView>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<CameraType>('back');
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
+  const [isFrontCameraUnavailable, setIsFrontCameraUnavailable] = useState(false);
+  const [cameraSessionId, setCameraSessionId] = useState(0);
+  const [isCameraModalShown, setIsCameraModalShown] = useState(false);
+  const [isCameraMounted, setIsCameraMounted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
+  const activeCameraSessionRef = useRef(0);
+  const frontCameraMountFailuresRef = useRef(0);
+  const pendingCameraFacingRef = useRef<CameraType | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const hasPermissions = Boolean(cameraPermission?.granted && microphonePermission?.granted);
+  const isCameraBusy = isPreparing || isRecording || Boolean(recordingPromiseRef.current);
+
+  const clearRecordingTimer = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    recordingStartedAtRef.current = null;
+    setRecordingElapsedMs(0);
+  }, []);
+
+  const startRecordingTimer = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+
+    const startedAt = Date.now();
+    recordingStartedAtRef.current = startedAt;
+    setRecordingElapsedMs(0);
+
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingElapsedMs(Date.now() - startedAt);
+    }, 250);
+  }, []);
+
+  const startCameraSession = useCallback((nextFacing: CameraType, switching: boolean) => {
+    const nextSessionId = activeCameraSessionRef.current + 1;
+    activeCameraSessionRef.current = nextSessionId;
+    cameraRef.current = null;
+    setIsCameraReady(false);
+    setIsSwitchingCamera(switching);
+    setCameraFacing(nextFacing);
+    setCameraSessionId(nextSessionId);
+    setIsCameraMounted(true);
+  }, []);
+
+  const queueCameraSession = useCallback((nextFacing: CameraType) => {
+    activeCameraSessionRef.current += 1;
+    cameraRef.current = null;
+    pendingCameraFacingRef.current = nextFacing;
+    setIsCameraReady(false);
+    setIsSwitchingCamera(true);
+    setIsCameraMounted(false);
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      frontCameraMountFailuresRef.current = 0;
+      setIsFrontCameraUnavailable(false);
+      return;
+    }
+
+    activeCameraSessionRef.current += 1;
+    cameraRef.current = null;
+    pendingCameraFacingRef.current = null;
+    setCameraSessionId(0);
+    setIsCameraModalShown(false);
+    setIsCameraMounted(false);
+    setIsCameraReady(false);
+    setIsSwitchingCamera(false);
+    clearRecordingTimer();
+  }, [clearRecordingTimer, visible]);
+
+  useEffect(() => () => {
+    clearRecordingTimer();
+  }, [clearRecordingTimer]);
+
+  useEffect(() => {
+    if (!visible || !isCameraModalShown || !hasPermissions || cameraSessionId !== 0) {
+      return;
+    }
+
+    startCameraSession('back', false);
+  }, [cameraSessionId, hasPermissions, isCameraModalShown, startCameraSession, visible]);
+
+  useEffect(() => {
+    const pendingFacing = pendingCameraFacingRef.current;
+
+    if (!pendingFacing || isCameraMounted || !visible || !isCameraModalShown || !hasPermissions) {
+      return;
+    }
+
+    pendingCameraFacingRef.current = null;
+    startCameraSession(pendingFacing, true);
+  }, [hasPermissions, isCameraModalShown, isCameraMounted, startCameraSession, visible]);
 
   const requestPermissions = async () => {
     const cameraStatus = cameraPermission?.granted ? cameraPermission : await requestCameraPermission();
@@ -417,6 +542,11 @@ function VideoCameraSheet({
       return;
     }
 
+    if (!isCameraReady) {
+      Alert.alert('Camera', 'Camera is not ready yet.');
+      return;
+    }
+
     setIsPreparing(true);
 
     try {
@@ -427,17 +557,21 @@ function VideoCameraSheet({
         return;
       }
 
-      setIsRecording(true);
       const recordingPromise = camera.recordAsync({
-        maxDuration: 120,
+        maxDuration: MAX_VIDEO_RECORDING_DURATION_SECONDS,
         maxFileSize: 250 * 1024 * 1024,
       });
       recordingPromiseRef.current = recordingPromise;
+      setIsRecording(true);
+      startRecordingTimer();
 
       recordingPromise
         .then((video) => {
           if (video?.uri) {
-            onRecorded(video.uri, 'video/mp4', `Video ${Date.now()}.mp4`);
+            const durationSeconds = recordingStartedAtRef.current
+              ? Math.max(0, (Date.now() - recordingStartedAtRef.current) / 1000)
+              : null;
+            onRecorded(video.uri, 'video/mp4', `Video ${Date.now()}.mp4`, durationSeconds);
             onClose();
           }
         })
@@ -446,14 +580,25 @@ function VideoCameraSheet({
         })
         .finally(() => {
           recordingPromiseRef.current = null;
+          clearRecordingTimer();
           setIsRecording(false);
         });
     } catch (error) {
+      clearRecordingTimer();
       setIsRecording(false);
       Alert.alert('Video recording failed', getAuthErrorMessage(error, 'Please try recording again.'));
     } finally {
       setIsPreparing(false);
     }
+  };
+
+  const switchCameraFacing = () => {
+    if (!isCameraReady || isCameraBusy || isSwitchingCamera || (cameraFacing === 'back' && isFrontCameraUnavailable)) {
+      return;
+    }
+
+    const nextFacing = cameraFacing === 'back' ? 'front' : 'back';
+    queueCameraSession(nextFacing);
   };
 
   const stopRecording = async () => {
@@ -476,6 +621,7 @@ function VideoCameraSheet({
         await recordingPromiseRef.current;
       } catch {
         recordingPromiseRef.current = null;
+        clearRecordingTimer();
         setIsRecording(false);
       }
       return;
@@ -484,26 +630,90 @@ function VideoCameraSheet({
     onClose();
   };
 
+  const handleCameraReady = (sessionId: number) => {
+    if (sessionId !== activeCameraSessionRef.current) {
+      return;
+    }
+
+    setIsCameraReady(true);
+    setIsSwitchingCamera(false);
+  };
+
+  const handleCameraMountError = (sessionId: number) => {
+    if (sessionId !== activeCameraSessionRef.current) {
+      return;
+    }
+
+    setIsCameraReady(false);
+
+    if (cameraFacing === 'front') {
+      if (frontCameraMountFailuresRef.current === 0) {
+        frontCameraMountFailuresRef.current = 1;
+        queueCameraSession('front');
+        return;
+      }
+
+      setIsFrontCameraUnavailable(true);
+      queueCameraSession('back');
+      return;
+    }
+
+    setIsSwitchingCamera(false);
+  };
+
   if (!cameraPermission || !microphonePermission) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onShow={() => setIsCameraModalShown(true)}
+      onDismiss={() => setIsCameraModalShown(false)}
+    >
       <View style={camStyles.root}>
         <StatusBar barStyle="light-content" />
-        {hasPermissions ? (
-          <CameraView
-            ref={cameraRef}
-            style={camStyles.camera}
-            facing="back"
-            mode="video"
-            mute={false}
-            videoQuality="720p"
-          >
-            <SafeAreaView style={camStyles.header}>
+        {visible && isCameraModalShown && hasPermissions ? (
+          <>
+            {isCameraMounted && cameraSessionId > 0 && (
+              <CameraView
+                key={`video-camera-${cameraSessionId}-${cameraFacing}`}
+                ref={(node) => {
+                  if (activeCameraSessionRef.current === cameraSessionId) {
+                    cameraRef.current = node;
+                  }
+                }}
+                style={camStyles.camera}
+                facing={cameraFacing}
+                mode="video"
+                mute={false}
+                videoQuality="720p"
+                active={visible && isCameraModalShown}
+                onCameraReady={() => handleCameraReady(cameraSessionId)}
+                onMountError={() => handleCameraMountError(cameraSessionId)}
+              />
+            )}
+            <SafeAreaView style={camStyles.videoHeader}>
               <TouchableOpacity onPress={closeCamera} style={camStyles.closeBtn} activeOpacity={0.8}>
                 <Feather name="x" size={22} color="#FFFFFF" />
               </TouchableOpacity>
             </SafeAreaView>
+            {!isFrontCameraUnavailable && (
+              <TouchableOpacity
+                style={[camStyles.switchBtn, { top: Math.max(insets.top, 0) + 10 }]}
+                activeOpacity={0.8}
+                onPress={switchCameraFacing}
+                disabled={!isCameraReady || isCameraBusy || isSwitchingCamera}
+                accessibilityLabel="Switch camera"
+              >
+                <Feather name="refresh-cw" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            {isRecording ? (
+              <View style={[camStyles.recordingTimer, { top: Math.max(insets.top, 0) + 12 }]}>
+                <Text style={camStyles.recordingTimerText}>{formatRecordingElapsed(recordingElapsedMs)}</Text>
+              </View>
+            ) : null}
             <View style={camStyles.captureRow}>
               <TouchableOpacity
                 style={[
@@ -513,13 +723,13 @@ function VideoCameraSheet({
                 ]}
                 activeOpacity={0.9}
                 onPress={isRecording ? stopRecording : startRecording}
-                disabled={isPreparing}
+                disabled={isPreparing || isSwitchingCamera || !isCameraReady}
               >
                 <View style={[camStyles.captureInner, isRecording && camStyles.videoStopInner]} />
               </TouchableOpacity>
             </View>
-          </CameraView>
-        ) : (
+          </>
+        ) : !hasPermissions ? (
           <View style={[camStyles.permissionView, { backgroundColor: colors.background }]}>
             <Feather name="video-off" size={48} color={colors.textSecondary} />
             <Text style={[camStyles.permissionText, { color: colors.textSecondary }]}>Camera and microphone access needed</Text>
@@ -530,6 +740,8 @@ function VideoCameraSheet({
               <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        ) : (
+          <View style={camStyles.camera} />
         )}
       </View>
     </Modal>
@@ -700,7 +912,11 @@ const camStyles = StyleSheet.create({
   root: { flex: 1 },
   camera: { flex: 1 },
   header: { paddingHorizontal: 16, paddingTop: 10 },
+  videoHeader: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, paddingTop: 10 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  switchBtn: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  recordingTimer: { position: 'absolute', alignSelf: 'center', minWidth: 66, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.52)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  recordingTimerText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
   captureRow: { position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center' },
   captureOuter: { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
   captureOuterDisabled: { opacity: 0.45 },
@@ -724,7 +940,6 @@ const videoPickerStyles = StyleSheet.create({
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 22,
     paddingTop: 12,
   },
   handle: {
@@ -801,6 +1016,19 @@ const formatAudioDuration = (milliseconds: number) => {
   const seconds = totalSeconds % 60;
 
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const formatRecordingElapsed = (milliseconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
 const formatAudioSeconds = (seconds?: number | null) => {
@@ -1524,6 +1752,7 @@ export default function CreateMomentScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const isAudioPickerOpeningRef = useRef(false);
+  const isVideoPickerOpeningRef = useRef(false);
 
   // Modal states
   const [showCamera, setShowCamera] = useState(false);
@@ -1706,6 +1935,7 @@ export default function CreateMomentScreen() {
     source: MomentMediaSource = 'upload',
     contentType?: string | null,
     name?: string | null,
+    durationSeconds?: number | null,
   ) => {
     stopAudioPreview();
     setSelectedImages([]);
@@ -1714,7 +1944,7 @@ export default function CreateMomentScreen() {
     setSelectedMediaSource(source);
     setSelectedMediaContentType(getMediaContentType(uri, 'video', contentType));
     setSelectedMediaName(name ?? 'Video');
-    setSelectedMediaDurationSeconds(null);
+    setSelectedMediaDurationSeconds(durationSeconds ?? null);
   };
 
   const handleAudioSelect = (
@@ -1829,8 +2059,18 @@ export default function CreateMomentScreen() {
   };
 
   const handlePickVideo = async () => {
+    if (isVideoPickerOpeningRef.current) {
+      return;
+    }
+
+    isVideoPickerOpeningRef.current = true;
+
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!screenMountedRef.current) {
+        return;
+      }
 
       if (!permission.granted) {
         Alert.alert('Videos access needed', 'Please allow photo library access to upload a video.');
@@ -1842,15 +2082,31 @@ export default function CreateMomentScreen() {
         allowsMultipleSelection: false,
       });
 
+      if (!screenMountedRef.current) {
+        return;
+      }
+
       if (result.canceled || !result.assets[0]) {
         return;
       }
 
       const video = result.assets[0];
-      handleVideoSelect(video.uri, 'gallery', video.mimeType, video.fileName);
+      handleVideoSelect(
+        video.uri,
+        'gallery',
+        video.mimeType,
+        video.fileName,
+        typeof video.duration === 'number' && Number.isFinite(video.duration)
+          ? video.duration / 1000
+          : null,
+      );
       setShowVideoPicker(false);
     } catch (error) {
-      Alert.alert('Unable to choose video', getAuthErrorMessage(error, 'Please choose another video file.'));
+      if (screenMountedRef.current) {
+        Alert.alert('Unable to choose video', getAuthErrorMessage(error, 'Please choose another video file.'));
+      }
+    } finally {
+      isVideoPickerOpeningRef.current = false;
     }
   };
 
@@ -1868,7 +2124,7 @@ export default function CreateMomentScreen() {
     durationSeconds?: number | null;
   }): Promise<MomentMediaItem> => {
     const mediaSource = source ?? (isRemoteUri(uri) ? 'external' : 'upload');
-    const mediaDurationSeconds = type === 'audio' && durationSeconds != null && Number.isFinite(durationSeconds)
+    const mediaDurationSeconds = (type === 'audio' || type === 'video') && durationSeconds != null && Number.isFinite(durationSeconds)
       ? Math.max(0, durationSeconds)
       : null;
 
@@ -1934,41 +2190,69 @@ export default function CreateMomentScreen() {
     }, Platform.OS === 'android' ? 300 : 120);
   };
 
-  const publishMoment = async (eventTitleOverride?: string, eventCodeOverride?: string) => {
+  const publishMoment = async (eventTitleOverride?: string, eventCodeOverride?: string): Promise<'created' | 'pending' | false> => {
     if (isSubmittingRef.current) {
       return false;
     }
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
 
     const trimmedCaption = caption.trim();
 
     if (!trimmedCaption && selectedImages.length === 0 && !selectedImage) {
       Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
       return false;
     }
 
     const eventTitle = (eventTitleOverride ?? selectedEvent).trim() || null;
     const eventCode = eventCodeOverride?.trim() || selectedEventCode?.trim() || null;
-
-    isSubmittingRef.current = true;
-    setIsSubmitting(true);
+    const momentPayload = {
+      mode: selectedEventId ? 'event' as const : 'feed' as const,
+      caption: trimmedCaption || null,
+      audience: normalizeAudience(audience),
+      taggedPeople: [...taggedPeople],
+      eventTitle,
+      eventCode,
+      eventId: selectedEventId,
+    };
+    let shouldReleaseSubmitLock = true;
 
     try {
       stopAudioPreview();
+      const selectedVideoContentType = selectedImage && selectedMediaType === 'video'
+        ? getMediaContentType(selectedImage, 'video', selectedMediaContentType)
+        : null;
+
+      if (
+        selectedImage &&
+        selectedMediaType === 'video' &&
+        selectedVideoContentType &&
+        canUseNativeVideoUpload(selectedImage, selectedVideoContentType)
+      ) {
+        await startPendingVideoMomentUpload({
+          uri: selectedImage,
+          source: selectedMediaSource ?? 'upload',
+          contentType: selectedVideoContentType,
+          durationSeconds: selectedMediaDurationSeconds,
+          payload: momentPayload,
+        });
+
+        shouldReleaseSubmitLock = false;
+        return 'pending';
+      }
+
       const mediaItems = await buildMediaItems();
 
       const newMoment = await createMoment({
-        mode: selectedEventId ? 'event' : 'feed',
-        caption: trimmedCaption || null,
-        audience: normalizeAudience(audience),
-        taggedPeople,
-        eventTitle,
-        eventCode,
-        eventId: selectedEventId,
+        ...momentPayload,
         mediaItems,
       });
 
       setPendingNewMoment(newMoment);
-      return true;
+      return 'created';
     } catch (error) {
       Alert.alert(
         'Unable to create moment',
@@ -1976,15 +2260,19 @@ export default function CreateMomentScreen() {
       );
       return false;
     } finally {
-      isSubmittingRef.current = false;
-      setIsSubmitting(false);
+      if (shouldReleaseSubmitLock && screenMountedRef.current) {
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+      }
     }
   };
 
   const handleDone = async () => {
-    const created = await publishMoment();
+    const result = await publishMoment();
 
-    if (created) {
+    if (result === 'pending') {
+      safeBack(router, '/(tabs)/home');
+    } else if (result === 'created') {
       setTimeout(() => {
         safeBack(router, '/(tabs)/home');
       }, 1500);
@@ -2095,7 +2383,7 @@ export default function CreateMomentScreen() {
 
           {selectedImage && selectedMediaType === 'video' ? (
             <View style={styles.imageWrapper}>
-              <VideoPreview uri={selectedImage} style={styles.momentImage} />
+              <VideoPreview uri={selectedImage} style={styles.momentImage} paused={isSubmitting} />
               <View style={styles.videoPreviewBadge}>
                 <Feather name="video" size={13} color="#FFFFFF" />
                 <Text style={styles.videoPreviewBadgeText} numberOfLines={1}>{selectedMediaName ?? 'Video'}</Text>
@@ -2220,7 +2508,7 @@ export default function CreateMomentScreen() {
       <VideoCameraSheet
         visible={showVideoCamera}
         onClose={() => setShowVideoCamera(false)}
-        onRecorded={(uri, contentType, name) => handleVideoSelect(uri, 'camera', contentType, name)}
+        onRecorded={(uri, contentType, name, durationSeconds) => handleVideoSelect(uri, 'camera', contentType, name, durationSeconds)}
       />
       <AudioPickerSheet
         visible={showAudioPicker}

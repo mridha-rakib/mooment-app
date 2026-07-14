@@ -16,25 +16,32 @@ export type EventCategoryDestination =
 export const normalizeEventDetailsSource = (value: unknown): EventDetailsSource =>
   value === "map" ? "map" : "feed";
 
-export const getEventDetailsCategoryDestination = (
-  source: unknown,
+export const getEventCategoryFeedDestination = (
   category: unknown,
-): EventCategoryDestination | null => {
+): Extract<EventCategoryDestination, { pathname: "/discover-screen/event-category" }> | null => {
   const normalizedCategory = normalizeEventCategoryFilter(category);
 
   if (!normalizedCategory) {
     return null;
   }
 
-  if (normalizeEventDetailsSource(source) === "map") {
-    return {
-      pathname: "/(tabs)/home",
-      params: { view: "map", category: normalizedCategory },
-    };
-  }
-
   return {
     pathname: "/discover-screen/event-category",
     params: { category: normalizedCategory },
+  };
+};
+
+export const getEventCategoryMapDestination = (
+  category: unknown,
+): Extract<EventCategoryDestination, { pathname: "/(tabs)/home" }> | null => {
+  const normalizedCategory = normalizeEventCategoryFilter(category);
+
+  if (!normalizedCategory) {
+    return null;
+  }
+
+  return {
+    pathname: "/(tabs)/home",
+    params: { view: "map", category: normalizedCategory },
   };
 };

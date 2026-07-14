@@ -1,10 +1,21 @@
 import { api } from "@/lib/api";
+import * as FileSystem from "expo-file-system/legacy";
 
 type UploadFilePayload = {
   uri: string;
   key: string;
   contentType: string;
   onProgress?: (progress: number) => void;
+};
+
+type StartStorageUploadPayload = UploadFilePayload & {
+  expiresIn?: number;
+};
+
+type StartedStorageUpload = {
+  key: string;
+  completion: Promise<string>;
+  cancel: () => Promise<void>;
 };
 
 const createStorageTiming = (key: string) => {
@@ -140,6 +151,104 @@ const uploadBlobWithProgress = (
     request.send(blob);
   });
 
+const isLocalFileUri = (uri: string) => uri.toLowerCase().startsWith("file://");
+
+const createNativeFileUpload = (
+  url: string,
+  uri: string,
+  contentType: string,
+  timeoutMs: number,
+  onProgress?: (progress: number) => void,
+): { completion: Promise<void>; cancel: () => Promise<void> } => {
+  let task: FileSystem.UploadTask | null = null;
+  let latestProgress = -1;
+  let latestProgressAt = 0;
+  const completion = new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    const complete = () => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      resolve();
+    };
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      reject(error);
+    };
+
+    task = FileSystem.createUploadTask(
+      url,
+      uri,
+      {
+        httpMethod: "PUT",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
+        headers: {
+          "Content-Type": contentType,
+        },
+      },
+      (event) => {
+        if (event.totalBytesExpectedToSend > 0) {
+          const progress = Math.min(1, Math.max(0, event.totalBytesSent / event.totalBytesExpectedToSend));
+          const progressPercent = Math.floor(progress * 100);
+          const now = Date.now();
+
+          if (progressPercent >= latestProgress + 5 || progress >= 1 || now - latestProgressAt >= 500) {
+            latestProgress = progressPercent;
+            latestProgressAt = now;
+            onProgress?.(progress);
+          }
+        }
+      },
+    );
+
+    timeout = setTimeout(() => {
+      void task?.cancelAsync().catch(() => undefined);
+      fail(new Error("File upload timed out."));
+    }, timeoutMs);
+
+    task.uploadAsync()
+      .then((result) => {
+        if (!result) {
+          fail(new Error("File upload was aborted."));
+          return;
+        }
+
+        if (result.status >= 200 && result.status < 300) {
+          onProgress?.(1);
+          complete();
+          return;
+        }
+
+        fail(new Error("Unable to upload file."));
+      })
+      .catch((error) => {
+        fail(error instanceof Error ? error : new Error("Unable to upload file."));
+      });
+  });
+  const cancel = async () => {
+    await task?.cancelAsync();
+  };
+
+  return { completion, cancel };
+};
+
+const uploadLocalFileWithNativeTask = async (
+  url: string,
+  uri: string,
+  contentType: string,
+  timeoutMs: number,
+  onProgress?: (progress: number) => void,
+) => {
+  const upload = createNativeFileUpload(url, uri, contentType, timeoutMs, onProgress);
+  await upload.completion;
+};
+
 const AUDIO_3GPP_CONTENT_TYPES = new Set(["audio/3gpp", "audio/3gp"]);
 
 const getStreamFilename = (key: string, contentType?: string | null) => {
@@ -189,30 +298,115 @@ const shouldUseApiUploadProxy = (uploadUrl: string) => {
   }
 };
 
-export const uploadFileToStorage = async ({ uri, key, contentType, onProgress }: UploadFilePayload) => {
-  const mark = createStorageTiming(key);
-  mark("upload-url request start", { contentType });
+const getStorageUploadUrlFromApi = async (key: string, contentType: string, expiresIn: number) => {
   const response = await api.post("/storage/upload-url", {
     key,
     contentType,
-    expiresIn: contentType.toLowerCase().startsWith("video/") ? 60 * 30 : 60 * 5,
+    expiresIn,
   });
-  mark("upload-url request complete");
   const uploadUrl = response.data?.data?.url as string | undefined;
 
   if (!uploadUrl) {
     throw new Error("The upload URL response was incomplete.");
   }
 
-  mark("blob read start");
-  const blob = await getBlobFromUri(uri);
-  mark("blob read complete", { bytes: blob.size });
+  return uploadUrl;
+};
 
+export const canUseNativeVideoUpload = (uri: string, contentType: string) => (
+  contentType.toLowerCase().startsWith("video/") && isLocalFileUri(uri)
+);
+
+export const startStorageFileUpload = async ({
+  uri,
+  key,
+  contentType,
+  onProgress,
+  expiresIn,
+}: StartStorageUploadPayload): Promise<StartedStorageUpload> => {
+  const isVideo = contentType.toLowerCase().startsWith("video/");
+  const directTimeoutMs = isVideo ? 30 * 60 * 1000 : 90 * 1000;
+  const fallbackTimeoutMs = isVideo ? 30 * 60 * 1000 : 60 * 1000;
+  const uploadUrl = await getStorageUploadUrlFromApi(key, contentType, expiresIn ?? (isVideo ? 60 * 30 : 60 * 5));
+
+  if (!canUseNativeVideoUpload(uri, contentType)) {
+    throw new Error("Native video upload requires a local file URI.");
+  }
+
+  const fallbackUrl = getStorageUploadUrl(key, contentType);
+  const firstUrl = shouldUseApiUploadProxy(uploadUrl) ? fallbackUrl : uploadUrl;
+  const firstContentType = firstUrl === fallbackUrl ? "application/octet-stream" : contentType;
+  let activeUpload = createNativeFileUpload(firstUrl, uri, firstContentType, firstUrl === fallbackUrl ? fallbackTimeoutMs : directTimeoutMs, onProgress);
+
+  const completion = activeUpload.completion
+    .catch(async (error) => {
+      if (firstUrl === fallbackUrl) {
+        throw error;
+      }
+
+      activeUpload = createNativeFileUpload(fallbackUrl, uri, "application/octet-stream", fallbackTimeoutMs, onProgress);
+      await activeUpload.completion;
+    })
+    .then(() => key);
+
+  return {
+    key,
+    completion,
+    cancel: async () => {
+      await activeUpload.cancel();
+    },
+  };
+};
+
+export const uploadFileToStorage = async ({ uri, key, contentType, onProgress }: UploadFilePayload) => {
+  const mark = createStorageTiming(key);
   const isVideo = contentType.toLowerCase().startsWith("video/");
   const isStoryMedia = key.startsWith("stories/");
   const directTimeoutMs = isVideo ? 30 * 60 * 1000 : isStoryMedia ? 20 * 1000 : 90 * 1000;
   const fallbackTimeoutMs = isVideo ? 30 * 60 * 1000 : 60 * 1000;
   const directResponseTimeoutAfterUploadMs = isVideo ? 30 * 1000 : isStoryMedia ? 5 * 1000 : 10 * 1000;
+  const useNativeFileUpload = isVideo && isLocalFileUri(uri);
+
+  mark("upload-url request start", { contentType });
+  const uploadUrl = await getStorageUploadUrlFromApi(
+    key,
+    contentType,
+    contentType.toLowerCase().startsWith("video/") ? 60 * 30 : 60 * 5,
+  );
+  mark("upload-url request complete");
+
+  let blob: Blob | null = null;
+
+  const uploadCurrentMedia = async (
+    url: string,
+    uploadContentType: string,
+    timeoutMs: number,
+    responseTimeoutAfterUploadMs = 0,
+  ) => {
+    if (useNativeFileUpload) {
+      await uploadLocalFileWithNativeTask(url, uri, uploadContentType, timeoutMs, onProgress);
+      return;
+    }
+
+    if (!blob) {
+      mark("blob read start");
+      blob = await getBlobFromUri(uri);
+      mark("blob read complete", { bytes: blob.size });
+    }
+
+    if (onProgress) {
+      await uploadBlobWithProgress(
+        url,
+        blob,
+        uploadContentType,
+        timeoutMs,
+        onProgress,
+        responseTimeoutAfterUploadMs,
+      );
+    } else {
+      await uploadBlobWithFetch(url, blob, uploadContentType, timeoutMs);
+    }
+  };
 
   try {
     if (shouldUseApiUploadProxy(uploadUrl)) {
@@ -220,27 +414,12 @@ export const uploadFileToStorage = async ({ uri, key, contentType, onProgress }:
     }
 
     mark("direct upload start");
-    if (onProgress) {
-      await uploadBlobWithProgress(
-        uploadUrl,
-        blob,
-        contentType,
-        directTimeoutMs,
-        onProgress,
-        directResponseTimeoutAfterUploadMs,
-      );
-    } else {
-      await uploadBlobWithFetch(uploadUrl, blob, contentType, directTimeoutMs);
-    }
+    await uploadCurrentMedia(uploadUrl, contentType, directTimeoutMs, directResponseTimeoutAfterUploadMs);
     mark("direct upload complete");
   } catch {
     const fallbackUrl = getStorageUploadUrl(key, contentType);
     mark("fallback upload start");
-    if (onProgress) {
-      await uploadBlobWithProgress(fallbackUrl, blob, "application/octet-stream", fallbackTimeoutMs, onProgress);
-    } else {
-      await uploadBlobWithFetch(fallbackUrl, blob, "application/octet-stream", fallbackTimeoutMs);
-    }
+    await uploadCurrentMedia(fallbackUrl, "application/octet-stream", fallbackTimeoutMs);
     mark("fallback upload complete");
   }
 

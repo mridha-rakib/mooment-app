@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
+import { Alert, Animated, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -23,6 +23,11 @@ import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
+import {
+  acknowledgePendingVideoMomentUpload,
+  usePendingVideoMomentUploads,
+  type PendingVideoMomentUpload,
+} from "@/lib/pendingMomentUploads";
 import { getDiscoverStories, getFeedStories, getFriendStories } from "@/lib/stories";
 import type { Story } from "@/lib/stories";
 import { getSeenStoryIds } from "@/lib/storySeen";
@@ -106,6 +111,7 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
 };
 
 type FeedItem =
+  | { type: 'pending_video_upload'; id: string; data: PendingVideoMomentUpload }
   | { type: 'post'; id: string; data: PostData }
   | { type: 'event'; id: string; data: EventResponse }
   | { type: 'repost'; id: string; data: MomentTimelineItem }
@@ -116,6 +122,7 @@ const buildFeedItems = (
   events: EventResponse[],
   reposts: MomentTimelineItem[],
   suggestedUsers: SuggestedUser[],
+  pendingVideoUploads: PendingVideoMomentUpload[],
 ): FeedItem[] => {
   type ContentItem =
     | { type: 'post'; id: string; data: PostData; sortTime: number }
@@ -143,7 +150,13 @@ const buildFeedItems = (
     })),
   ].sort((a, b) => b.sortTime - a.sortTime);
 
-  const items: FeedItem[] = [];
+  const items: FeedItem[] = pendingVideoUploads
+    .filter((upload) => upload.status !== 'succeeded')
+    .map((upload) => ({
+      type: 'pending_video_upload' as const,
+      id: upload.id,
+      data: upload,
+    }));
   let contentCount = 0;
 
   for (const item of contentItems) {
@@ -197,6 +210,99 @@ const hasVideoFeedItem = (item?: FeedItem) => {
   return false;
 };
 
+function FeedSkeletonBlock({ pulse, style }: { pulse: Animated.Value; style: object }) {
+  return <Animated.View style={[styles.feedSkeletonBlock, style, { opacity: pulse }]} />;
+}
+
+function FeedSkeletonCard({ pulse }: { pulse: Animated.Value }) {
+  return (
+    <View style={styles.feedSkeletonCard}>
+      <View style={styles.feedSkeletonHeader}>
+        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAvatar} />
+        <View style={styles.feedSkeletonAuthor}>
+          <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAuthorLine} />
+          <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonTimeLine} />
+        </View>
+        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonMenu} />
+      </View>
+      <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonMedia} />
+      <View style={styles.feedSkeletonActions}>
+        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAction} />
+      </View>
+    </View>
+  );
+}
+
+function FeedSkeletonList() {
+  const pulse = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <View
+      style={styles.feedSkeletonList}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {[0, 1, 2].map((item) => (
+        <FeedSkeletonCard key={item} pulse={pulse} />
+      ))}
+    </View>
+  );
+}
+
+function PendingVideoPostSkeleton() {
+  const pulse = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <FeedSkeletonCard pulse={pulse} />
+    </View>
+  );
+}
+
 export default function HomeFeed() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -217,6 +323,7 @@ export default function HomeFeed() {
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFeedVideoItemId, setActiveFeedVideoItemId] = useState<string | null>(null);
+  const pendingVideoUploads = usePendingVideoMomentUploads();
   const feedRequestIdRef = useRef(0);
   const feedScrollRef = useRef<FlatList>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
@@ -383,6 +490,12 @@ export default function HomeFeed() {
   }, [selectedType, setActiveFeedVideoItemIdIfChanged]);
 
   useEffect(() => {
+    if (selectedType !== 'Feed' && pendingVideoUploads.some((upload) => upload.status !== 'succeeded')) {
+      setSelectedType('Feed');
+    }
+  }, [pendingVideoUploads, selectedType]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const loadSuggestedUsers = async () => {
@@ -502,10 +615,31 @@ export default function HomeFeed() {
     );
   }, []);
 
+  useEffect(() => {
+    const succeededUploads = pendingVideoUploads.filter((upload) => upload.status === 'succeeded' && upload.moment);
+
+    if (succeededUploads.length === 0) {
+      return;
+    }
+
+    succeededUploads.forEach((upload) => {
+      const post = upload.moment
+        ? mapMomentToPost(upload.moment, { storageUrlResolver: getStorageFileUrl })
+        : null;
+
+      if (post) {
+        setFeedMomentPosts((currentPosts) => [post, ...currentPosts.filter((currentPost) => currentPost.id !== post.id)]);
+      }
+
+      acknowledgePendingVideoMomentUpload(upload.id);
+    });
+  }, [pendingVideoUploads]);
+
   const feedItems = useMemo(
-    () => buildFeedItems(feedMomentPosts, feedEvents, feedReposts, suggestedUsers),
-    [feedEvents, feedMomentPosts, feedReposts, suggestedUsers],
+    () => buildFeedItems(feedMomentPosts, feedEvents, feedReposts, suggestedUsers, pendingVideoUploads),
+    [feedEvents, feedMomentPosts, feedReposts, suggestedUsers, pendingVideoUploads],
   );
+  const shouldShowFeedSkeleton = selectedType === 'Feed' && isFeedLoading && feedItems.length === 0 && !isRefreshing;
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -553,7 +687,8 @@ export default function HomeFeed() {
                 ) : null}
               </>
             )}
-            ListFooterComponent={<View style={{ height: 100 }} />}
+            ListEmptyComponent={shouldShowFeedSkeleton ? <FeedSkeletonList /> : null}
+            ListFooterComponent={shouldShowFeedSkeleton ? null : <View style={{ height: 100 }} />}
             renderItem={({ item }) => {
               if (item.type === 'post') {
                 return (
@@ -568,6 +703,9 @@ export default function HomeFeed() {
                     isActiveVideo={activeFeedVideoItemId === item.id}
                   />
                 );
+              }
+              if (item.type === 'pending_video_upload') {
+                return <PendingVideoPostSkeleton />;
               }
               if (item.type === 'event') {
                 return <EventFeedCard event={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
@@ -676,6 +814,69 @@ const styles = StyleSheet.create({
   nearbyEventsEmptyText: {
     fontSize: 13,
     marginTop: 8,
+  },
+  feedSkeletonList: {
+    paddingBottom: 100,
+  },
+  feedSkeletonCard: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(17, 17, 17, 0.85)",
+  },
+  feedSkeletonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  feedSkeletonBlock: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+  },
+  feedSkeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  feedSkeletonAuthor: {
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 40,
+  },
+  feedSkeletonAuthorLine: {
+    width: "54%",
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  feedSkeletonTimeLine: {
+    width: "32%",
+    height: 10,
+    borderRadius: 5,
+  },
+  feedSkeletonMenu: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  feedSkeletonMedia: {
+    width: "100%",
+    aspectRatio: 1,
+  },
+  feedSkeletonActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    gap: 18,
+  },
+  feedSkeletonAction: {
+    width: 42,
+    height: 14,
+    borderRadius: 7,
   },
   modalOverlay: {
     flex: 1,

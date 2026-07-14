@@ -12,7 +12,8 @@ import {
   type SharedEventFilters,
 } from "../lib/eventFilters";
 import {
-  getEventDetailsCategoryDestination,
+  getEventCategoryFeedDestination,
+  getEventCategoryMapDestination,
   normalizeEventDetailsSource,
 } from "../lib/eventCategoryNavigation";
 
@@ -129,28 +130,28 @@ test("map selector category updates replace or clear only category", () => {
   assert.deepEqual(cleared.hashtags, ["music"]);
 });
 
-test("event details category navigation is source-aware with feed fallback", () => {
+test("event details source normalization remains safe but no longer chooses category destination", () => {
   assert.equal(normalizeEventDetailsSource("feed"), "feed");
   assert.equal(normalizeEventDetailsSource("map"), "map");
   assert.equal(normalizeEventDetailsSource(undefined), "feed");
   assert.equal(normalizeEventDetailsSource("other"), "feed");
 
-  const feedDestination = getEventDetailsCategoryDestination("feed", "Food Trucks");
+  const feedDestination = getEventCategoryFeedDestination("Food Trucks");
   assert.deepEqual(feedDestination, {
     pathname: "/discover-screen/event-category",
     params: { category: "Food Trucks" },
   });
 
-  const fallbackDestination = getEventDetailsCategoryDestination(undefined, "Food Trucks");
-  assert.deepEqual(fallbackDestination, feedDestination);
-
-  const mapDestination = getEventDetailsCategoryDestination("map", "Food Trucks");
+  const mapDestination = getEventCategoryMapDestination("Food Trucks");
   assert.deepEqual(mapDestination, {
     pathname: "/(tabs)/home",
     params: { view: "map", category: "Food Trucks" },
   });
 
-  assert.equal(getEventDetailsCategoryDestination("map", "Food"), null);
+  assert.equal(getEventCategoryFeedDestination("Food"), null);
+  assert.equal(getEventCategoryMapDestination("Food"), null);
+  assert.deepEqual(getEventCategoryFeedDestination(" Food Trucks "), feedDestination);
+  assert.deepEqual(getEventCategoryMapDestination(" Food Trucks "), mapDestination);
 });
 
 test("visible filter apply preserves hidden category unless reset apply clears it", () => {
