@@ -690,14 +690,16 @@ const AccessTab = ({
 
   const renderCreatorTickets = () => (
     <View style={styles.creatorTicketsContainer}>
-      <TouchableOpacity
-        style={styles.createTicketButton}
-        onPress={onCreateTicket}
-        activeOpacity={0.85}
-      >
-        <Feather name="plus" size={20} color="#111111" />
-        <Text style={styles.createTicketText}>Create ticket</Text>
-      </TouchableOpacity>
+      {onCreateTicket ? (
+        <TouchableOpacity
+          style={styles.createTicketButton}
+          onPress={onCreateTicket}
+          activeOpacity={0.85}
+        >
+          <Feather name="plus" size={20} color="#111111" />
+          <Text style={styles.createTicketText}>Create ticket</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.creatorTicketList}>
         {tickets.length > 0 ? (
@@ -729,14 +731,15 @@ const AccessTab = ({
                     </Text>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.creatorIconButton}
-                    onPress={() => onEditTicket?.(ticket)}
-                    activeOpacity={0.75}
-                    disabled={!onEditTicket}
-                  >
-                    <Feather name="edit-2" size={20} color="#B3B3B3" />
-                  </TouchableOpacity>
+                  {onEditTicket ? (
+                    <TouchableOpacity
+                      style={styles.creatorIconButton}
+                      onPress={() => onEditTicket(ticket)}
+                      activeOpacity={0.75}
+                    >
+                      <Feather name="edit-2" size={20} color="#B3B3B3" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
 
                 <View style={styles.creatorTicketStatsRow}>
@@ -763,18 +766,20 @@ const AccessTab = ({
                     {!isFreeTicket && <Text style={styles.creatorTicketPriceCaption}>per ticket</Text>}
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.creatorIconButton}
-                    onPress={() => onDeleteTicket?.(ticket)}
-                    activeOpacity={0.75}
-                    disabled={!onDeleteTicket || isDeleting}
-                  >
-                    {isDeleting ? (
-                      <ActivityIndicator size="small" color="#B3B3B3" />
-                    ) : (
-                      <Feather name="trash-2" size={20} color="#B3B3B3" />
-                    )}
-                  </TouchableOpacity>
+                  {onDeleteTicket ? (
+                    <TouchableOpacity
+                      style={styles.creatorIconButton}
+                      onPress={() => onDeleteTicket(ticket)}
+                      activeOpacity={0.75}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? (
+                        <ActivityIndicator size="small" color="#B3B3B3" />
+                      ) : (
+                        <Feather name="trash-2" size={20} color="#B3B3B3" />
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </TouchableOpacity>
             );
@@ -875,10 +880,12 @@ const AccessTab = ({
 
   const renderCreatorRewards = () => (
     <View style={styles.creatorRewardsContainer}>
-      <TouchableOpacity style={styles.createTicketButton} activeOpacity={0.85} onPress={onCreateReward}>
-        <Feather name="plus" size={20} color="#111111" />
-        <Text style={styles.createTicketText}>Create Rewards</Text>
-      </TouchableOpacity>
+      {onCreateReward ? (
+        <TouchableOpacity style={styles.createTicketButton} activeOpacity={0.85} onPress={onCreateReward}>
+          <Feather name="plus" size={20} color="#111111" />
+          <Text style={styles.createTicketText}>Create Rewards</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.creatorRewardList}>
         {rewards.length > 0 ? (
@@ -939,28 +946,33 @@ const AccessTab = ({
                 </View>
               </View>
 
-              <View style={styles.creatorRewardActions}>
-                <TouchableOpacity
-                  style={styles.creatorRewardIconButton}
-                  activeOpacity={0.75}
-                  disabled={!onDeleteReward || isDeleting}
-                  onPress={() => onDeleteReward?.(item)}
-                >
-                  {isDeleting ? (
-                    <ActivityIndicator size="small" color="#B3B3B3" />
-                  ) : (
-                    <Feather name="trash-2" size={20} color="#B3B3B3" />
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.creatorRewardIconButton}
-                  activeOpacity={0.75}
-                  disabled={!onEditReward}
-                  onPress={() => onEditReward?.(item)}
-                >
-                  <Feather name="edit-2" size={20} color="#B3B3B3" />
-                </TouchableOpacity>
-              </View>
+              {(onDeleteReward || onEditReward) ? (
+                <View style={styles.creatorRewardActions}>
+                  {onDeleteReward ? (
+                    <TouchableOpacity
+                      style={styles.creatorRewardIconButton}
+                      activeOpacity={0.75}
+                      disabled={isDeleting}
+                      onPress={() => onDeleteReward(item)}
+                    >
+                      {isDeleting ? (
+                        <ActivityIndicator size="small" color="#B3B3B3" />
+                      ) : (
+                        <Feather name="trash-2" size={20} color="#B3B3B3" />
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
+                  {onEditReward ? (
+                    <TouchableOpacity
+                      style={styles.creatorRewardIconButton}
+                      activeOpacity={0.75}
+                      onPress={() => onEditReward(item)}
+                    >
+                      <Feather name="edit-2" size={20} color="#B3B3B3" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
             </TouchableOpacity>
           );
         })

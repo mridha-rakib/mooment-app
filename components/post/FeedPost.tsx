@@ -29,6 +29,12 @@ const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 export type PostContextNode = {
   text: string;
   type: 'bold' | 'muted';
+  taggedUser?: {
+    id?: string | null;
+    name?: string | null;
+    avatar?: string | null;
+    isFollowing?: boolean;
+  };
 };
 
 export type AudioDetails = {
@@ -709,6 +715,15 @@ export default function FeedPost({
     });
   };
 
+  const handleTaggedUserPress = (taggedUser: NonNullable<PostContextNode['taggedUser']>) => {
+    navigateToProfile(router, currentUserId, {
+      userId: taggedUser.id,
+      name: taggedUser.name,
+      avatar: taggedUser.avatar,
+      isFollowing: taggedUser.isFollowing,
+    });
+  };
+
   if (isHidden) {
     return null;
   }
@@ -751,23 +766,26 @@ export default function FeedPost({
       >
         {/* Post Header */}
         <View style={[styles.postHeader, isNormalPost && styles.normalPostHeader]}>
-          <TouchableOpacity
-            style={styles.postAuthorInfo}
-            activeOpacity={0.7}
-            onPress={handleAuthorPress}
-          >
-            <UserAvatar
-              uri={post.authorAvatar}
-              name={post.authorName}
-              size={isNormalPost ? 40 : 36}
-              style={[styles.postAvatar, isNormalPost && styles.normalPostAvatar]}
-              iconSize={isNormalPost ? 18 : 16}
-            />
+          <View style={styles.postAuthorInfo}>
+            <TouchableOpacity activeOpacity={0.7} onPress={handleAuthorPress}>
+              <UserAvatar
+                uri={post.authorAvatar}
+                name={post.authorName}
+                size={isNormalPost ? 40 : 36}
+                style={[styles.postAvatar, isNormalPost && styles.normalPostAvatar]}
+                iconSize={isNormalPost ? 18 : 16}
+              />
+            </TouchableOpacity>
             <View style={[styles.authorTextContainer, isNormalPost && styles.normalAuthorTextContainer]}>
               <Text style={[styles.authorLine, isNormalPost && styles.normalAuthorLine]} numberOfLines={2}>
-                <Text style={[styles.postAuthor, { color: colors.text }]}>{post.authorName}</Text>
+                <Text style={[styles.postAuthor, { color: colors.text }]} onPress={handleAuthorPress} suppressHighlighting>{post.authorName}</Text>
                 {post.authorContextNodes?.map((node, i) => (
-                  <Text key={i} style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}>
+                  <Text
+                    key={i}
+                    style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}
+                    onPress={node.taggedUser?.id ? () => handleTaggedUserPress(node.taggedUser!) : undefined}
+                    suppressHighlighting={Boolean(node.taggedUser?.id)}
+                  >
                     {node.text}
                   </Text>
                 ))}
@@ -783,7 +801,7 @@ export default function FeedPost({
                 )}
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
           <View style={[styles.postHeaderActions, isNormalPost && styles.normalPostHeaderActions]}>
             {!isPostByCurrentUser && (
               isFollowing ? (

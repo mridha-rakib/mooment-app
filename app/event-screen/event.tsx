@@ -22,11 +22,13 @@ import {
     getJoinRequests,
     getMyEventRewardClaims,
     startEvent,
+    publishEvent as publishSavedEventDraft,
     submitJoinRequest,
     submitEventHostReview,
     ticketAlreadyHasReward,
     updateEvent,
     type EventResponse,
+    type PublishedEventPayload,
     type EventRewardPayload,
     type EventRewardType,
     type EventTicketPayload,
@@ -229,6 +231,54 @@ const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => 
   })}`;
 };
 
+const buildPublishPayloadFromEvent = (event: EventResponse): PublishedEventPayload => {
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+
+  if (!event.name?.trim()) {
+    throw new Error("Event name is required before publishing.");
+  }
+
+  if (!event.ageRestriction) {
+    throw new Error("Age restriction is required before publishing.");
+  }
+
+  if (categories.length === 0) {
+    throw new Error("Select at least 1 category before publishing.");
+  }
+
+  if (!event.scheduledAt || !event.endAt) {
+    throw new Error("Select the event start and end dates and times before publishing.");
+  }
+
+  if (!event.location || !(event.location.venue || event.location.address || event.location.searchLabel)) {
+    throw new Error("Location is required before publishing.");
+  }
+
+  return {
+    ageRestriction: event.ageRestriction,
+    bannerImageKey: event.bannerImageKey ?? null,
+    bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+    bannerImageDisplay: event.bannerImageDisplay ?? null,
+    category: categories[0],
+    categories,
+    description: event.description ?? null,
+    endAt: event.endAt,
+    location: event.location,
+    name: event.name.trim(),
+    privacy: event.privacy,
+    scheduledAt: event.scheduledAt,
+    tickets: event.tickets.map(({ id, name, description, salesEndAt, type, price, capacity }) => ({
+      id,
+      name,
+      description: description ?? null,
+      salesEndAt: salesEndAt ?? null,
+      type,
+      price,
+      capacity,
+    })),
+  };
+};
+
 const getDistanceLabel = (
   event: EventResponse | null,
   userLocation: [number, number] | null,
@@ -335,6 +385,7 @@ const EventScreen = () => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [privacyDropdownVisible, setPrivacyDropdownVisible] = useState(false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+  const [isPublishingDraft, setIsPublishingDraft] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
@@ -397,6 +448,11 @@ const EventScreen = () => {
     event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)),
   );
   const isHostMode = params.mode === "host" || isEventOwner;
+  const isDraftPreview = Boolean(event && event.status === "draft" && isEventOwner);
+  const visibleTabs = useMemo(
+    () => isDraftPreview ? ["About", "Access"] : ["About", "Access", "Mooments", "Chat"],
+    [isDraftPreview],
+  );
 
   const userLocation = useMemo(
     () =>
@@ -420,11 +476,14 @@ const EventScreen = () => {
       setIsLoading(true);
 
       try {
-        const [loadedEvent, loadedClaims, loadedCounts] = await Promise.all([
-          getEventById(eventId),
-          getMyEventRewardClaims(eventId).catch(() => []),
-          getMyTicketPurchaseCounts(eventId).catch(() => ({})),
-        ]);
+        const loadedEvent = await getEventById(eventId);
+        const isLoadedDraft = loadedEvent.status === "draft";
+        const [loadedClaims, loadedCounts] = isLoadedDraft
+          ? [[], {}]
+          : await Promise.all([
+              getMyEventRewardClaims(eventId).catch(() => []),
+              getMyTicketPurchaseCounts(eventId).catch(() => ({})),
+            ]);
 
         if (!isActive) {
           return;
@@ -440,7 +499,7 @@ const EventScreen = () => {
           currentUser?.id &&
           (loadedEvent.userId === currentUser.id || loadedEvent.host?.id === currentUser.id);
 
-        if (loadedEvent.privacy === "locked" && isEventOwner) {
+        if (loadedEvent.privacy === "locked" && isEventOwner && !isLoadedDraft) {
           getJoinRequests(eventId).then(setJoinRequests).catch(() => {});
         }
       } catch {
@@ -476,11 +535,14 @@ const EventScreen = () => {
 
       const refreshEvent = async () => {
         try {
-          const [loadedEvent, loadedClaims, loadedCounts] = await Promise.all([
-            getEventById(eventId),
-            getMyEventRewardClaims(eventId).catch(() => []),
-            getMyTicketPurchaseCounts(eventId).catch(() => ({})),
-          ]);
+          const loadedEvent = await getEventById(eventId);
+          const isLoadedDraft = loadedEvent.status === "draft";
+          const [loadedClaims, loadedCounts] = isLoadedDraft
+            ? [[], {}]
+            : await Promise.all([
+                getMyEventRewardClaims(eventId).catch(() => []),
+                getMyTicketPurchaseCounts(eventId).catch(() => ({})),
+              ]);
 
           if (!isActive) {
             return;
@@ -504,7 +566,7 @@ const EventScreen = () => {
   );
 
   useEffect(() => {
-    if (!isHostMode || !eventId) return;
+    if (!isHostMode || !eventId || isDraftPreview) return;
     let cancelled = false;
 
     getEventTicketStats(eventId)
@@ -516,7 +578,13 @@ const EventScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [isHostMode, eventId]);
+  }, [isDraftPreview, isHostMode, eventId]);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab("About");
+    }
+  }, [activeTab, visibleTabs]);
 
   const updateHostFollowState = (nextIsFollowing: boolean) => {
     setIsFollowing(nextIsFollowing);
@@ -587,6 +655,10 @@ const EventScreen = () => {
   }, [isCategoryDestinationNavigating]);
 
   const handleHeroCategoryPress = useCallback((category: string) => {
+    if (isDraftPreview) {
+      return;
+    }
+
     const normalizedCategory = normalizeEventCategoryFilter(category);
 
     if (!normalizedCategory || pendingCategoryDestination || isCategoryDestinationNavigating) {
@@ -594,7 +666,7 @@ const EventScreen = () => {
     }
 
     setPendingCategoryDestination(normalizedCategory);
-  }, [isCategoryDestinationNavigating, pendingCategoryDestination]);
+  }, [isCategoryDestinationNavigating, isDraftPreview, pendingCategoryDestination]);
 
   const handleViewCategoryInFeed = useCallback(() => {
     if (isCategoryDestinationNavigating) {
@@ -713,7 +785,7 @@ const EventScreen = () => {
   }, [event?.tickets, selectedTicketKey]);
 
   const handleLike = async () => {
-    if (!interactionMomentId || isLikePending) return;
+    if (isDraftPreview || !interactionMomentId || isLikePending) return;
 
     const prevIsLiked = localIsLiked;
     const prevCount = localLikesCount;
@@ -739,11 +811,15 @@ const EventScreen = () => {
   };
 
   const handleShare = () => {
+    if (isDraftPreview) {
+      return;
+    }
+
     setShowShare(true);
   };
 
   const handleRepost = async (payload: RepostPayload) => {
-    if (!interactionMomentId) return;
+    if (isDraftPreview || !interactionMomentId) return;
     try {
       const share = await shareMoment(interactionMomentId, payload);
       setLocalSharesCount(share.moment.sharesCount);
@@ -757,7 +833,7 @@ const EventScreen = () => {
   const handleReportPress = () => {
     setMenuVisible(false);
 
-    if (!event || !canReportEvent) {
+    if (!event || isDraftPreview || !canReportEvent) {
       return;
     }
 
@@ -815,7 +891,7 @@ const EventScreen = () => {
   const handleSave = async () => {
     setMenuVisible(false);
 
-    if (!interactionMomentId || isSavePending) {
+    if (isDraftPreview || !interactionMomentId || isSavePending) {
       return;
     }
 
@@ -858,10 +934,29 @@ const EventScreen = () => {
     });
   };
 
+  const handlePublishDraft = async () => {
+    if (!event || !isDraftPreview || isPublishingDraft) {
+      return;
+    }
+
+    setIsPublishingDraft(true);
+
+    try {
+      const payload = buildPublishPayloadFromEvent(event);
+      const updated = await publishSavedEventDraft(payload, event.id);
+      mergeUpdatedEvent(updated);
+      setActiveTab("About");
+    } catch (error) {
+      Alert.alert("Unable to publish event", getAuthErrorMessage(error, "Please check the event details and try again."));
+    } finally {
+      setIsPublishingDraft(false);
+    }
+  };
+
   const handleDelete = () => {
     setMenuVisible(false);
 
-    if (!event || !isHostMode || isDeletingEvent) {
+    if (!event || isDraftPreview || !isHostMode || isDeletingEvent) {
       return;
     }
 
@@ -899,7 +994,7 @@ const EventScreen = () => {
   };
 
   const handleCancelEvent = () => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -933,7 +1028,7 @@ const EventScreen = () => {
   };
 
   const handleStartEvent = () => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -970,7 +1065,7 @@ const EventScreen = () => {
   };
 
   const handleEndEvent = () => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -1016,7 +1111,7 @@ const EventScreen = () => {
   };
 
   const handleCreateTicket = () => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -1029,7 +1124,7 @@ const EventScreen = () => {
   };
 
   const handleEditTicket = (ticket: EventTicketPayload) => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -1206,7 +1301,7 @@ const EventScreen = () => {
   };
 
   const handleDeleteTicket = (ticket: EventTicketPayload) => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -1239,7 +1334,7 @@ const EventScreen = () => {
   };
 
   const openRewardForm = (rewardType: EventRewardType, reward?: EventRewardPayload) => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -1254,7 +1349,7 @@ const EventScreen = () => {
   };
 
   const handleCreateReward = () => {
-    if (!event || !isHostMode) {
+    if (!event || isDraftPreview || !isHostMode) {
       return;
     }
 
@@ -1331,7 +1426,7 @@ const EventScreen = () => {
   };
 
   const handleClaimReward = async (reward: EventRewardPayload) => {
-    if (!event || isHostMode) {
+    if (!event || isDraftPreview || isHostMode) {
       return;
     }
 
@@ -1372,7 +1467,7 @@ const EventScreen = () => {
   };
 
   const handleAddMembers = () => {
-    if (!event || isEventCompleted || isEventCancelled) return;
+    if (!event || isDraftPreview || isEventCompleted || isEventCancelled) return;
     router.push({
       pathname: "/event-screen/members",
       params: { eventId: event.id },
@@ -1380,7 +1475,7 @@ const EventScreen = () => {
   };
 
   const handleSubmitJoinRequest = async () => {
-    if (!event || submittingJoinRequest) {
+    if (!event || isDraftPreview || submittingJoinRequest) {
       return;
     }
 
@@ -1397,7 +1492,7 @@ const EventScreen = () => {
   };
 
   const handleAcceptJoinRequest = async (userId: string) => {
-    if (!event || acceptingJoinRequestId) {
+    if (!event || isDraftPreview || acceptingJoinRequestId) {
       return;
     }
 
@@ -1416,7 +1511,7 @@ const EventScreen = () => {
   };
 
   const handleDeclineJoinRequest = async (userId: string) => {
-    if (!event || decliningJoinRequestId) {
+    if (!event || isDraftPreview || decliningJoinRequestId) {
       return;
     }
 
@@ -1437,7 +1532,7 @@ const EventScreen = () => {
   const handlePrivacyChange = async (newPrivacy: "public" | "locked") => {
     setPrivacyDropdownVisible(false);
 
-    if (!event || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
+    if (!event || isDraftPreview || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
       return;
     }
 
@@ -1460,7 +1555,7 @@ const EventScreen = () => {
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={colors.text} onPress={() => goBackOrHome(router)} />
-      {isHostMode && event?.privacy !== "private" && !isEventCompleted && !isEventCancelled && (
+      {isHostMode && !isDraftPreview && event?.privacy !== "private" && !isEventCompleted && !isEventCancelled && (
         <TouchableOpacity
           style={styles.privacyPill}
           activeOpacity={0.8}
@@ -1537,7 +1632,7 @@ const EventScreen = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-              {isHostMode && event?.privacy === "private" && !isEventCompleted && !isEventCancelled && (
+                  {isHostMode && !isDraftPreview && event?.privacy === "private" && !isEventCompleted && !isEventCancelled && (
                 <TouchableOpacity
                   style={styles.addMembersBtn}
                   activeOpacity={0.85}
@@ -1604,16 +1699,18 @@ const EventScreen = () => {
               </Text>
             </View>
 
-            <PostInteractionBar
-              likesCount={localLikesCount}
-              commentsCount={localCommentsCount}
-              sharesCount={localSharesCount}
-              isLiked={localIsLiked}
-              onLikePress={handleLike}
-              onCommentPress={() => setShowComments(true)}
-              onSharePress={handleShare}
-              likeDisabled={isLikePending}
-            />
+            {!isDraftPreview && (
+              <PostInteractionBar
+                likesCount={localLikesCount}
+                commentsCount={localCommentsCount}
+                sharesCount={localSharesCount}
+                isLiked={localIsLiked}
+                onLikePress={handleLike}
+                onCommentPress={() => setShowComments(true)}
+                onSharePress={handleShare}
+                likeDisabled={isLikePending}
+              />
+            )}
           </View>
         </View>
 
@@ -1636,7 +1733,7 @@ const EventScreen = () => {
         </View>
 
         <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-          {["About", "Access", "Mooments", "Chat"].map((tab) => (
+          {visibleTabs.map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
@@ -1700,18 +1797,18 @@ const EventScreen = () => {
               onSubmitJoinRequest={handleSubmitJoinRequest}
               onAcceptJoinRequest={handleAcceptJoinRequest}
               onDeclineJoinRequest={handleDeclineJoinRequest}
-              onCreateTicket={isEventCompleted || isEventCancelled ? undefined : handleCreateTicket}
-              onViewTicket={handleViewTicket}
-              onEditTicket={isEventCompleted || isEventCancelled ? undefined : handleEditTicket}
-              onDeleteTicket={handleDeleteTicket}
-              onCreateReward={handleCreateReward}
+              onCreateTicket={isDraftPreview || isEventCompleted || isEventCancelled ? undefined : handleCreateTicket}
+              onViewTicket={isDraftPreview ? undefined : handleViewTicket}
+              onEditTicket={isDraftPreview || isEventCompleted || isEventCancelled ? undefined : handleEditTicket}
+              onDeleteTicket={isDraftPreview ? undefined : handleDeleteTicket}
+              onCreateReward={isDraftPreview ? undefined : handleCreateReward}
               onViewReward={handleViewReward}
-              onEditReward={handleEditReward}
-              onDeleteReward={handleDeleteReward}
-              onClaimReward={handleClaimReward}
+              onEditReward={isDraftPreview ? undefined : handleEditReward}
+              onDeleteReward={isDraftPreview ? undefined : handleDeleteReward}
+              onClaimReward={isDraftPreview ? undefined : handleClaimReward}
             />
           )}
-          {activeTab === "Mooments" && eventId && (
+          {!isDraftPreview && activeTab === "Mooments" && eventId && (
             isEventOwner ? (
               <HostEventWindowsTab
                 eventId={eventId}
@@ -1723,7 +1820,7 @@ const EventScreen = () => {
               <AttendeeEventWindowsTab eventId={eventId} eventStatus={event?.status} />
             )
           )}
-          {activeTab === "Chat" && eventId && (
+          {!isDraftPreview && activeTab === "Chat" && eventId && (
             <ChatTab
               eventId={eventId}
               eventName={event?.name ?? "Event"}
@@ -1756,7 +1853,34 @@ const EventScreen = () => {
           },
         ]}
       >
-        {isHostMode ? (
+        {isDraftPreview ? (
+          <View style={styles.hostFooterBtns}>
+            <TouchableOpacity
+              style={styles.cancelEventBtn}
+              activeOpacity={0.8}
+              onPress={handleEdit}
+              disabled={isPublishingDraft}
+            >
+              <Feather name="edit-3" size={18} color="#D44343" />
+              <Text style={styles.cancelEventBtnText}>Edit Event</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.startEventBtn, { opacity: isPublishingDraft ? 0.7 : 1 }]}
+              activeOpacity={0.85}
+              onPress={handlePublishDraft}
+              disabled={isPublishingDraft}
+            >
+              {isPublishingDraft ? (
+                <ActivityIndicator size="small" color="#111111" />
+              ) : (
+                <Feather name="send" size={18} color="#111111" />
+              )}
+              <Text style={[styles.buyBtnText, { color: "#111111" }]}>
+                {isPublishingDraft ? "Publishing..." : "Publish Event"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : isHostMode ? (
           !isEventCompleted && !isEventCancelled ? (
             <View style={styles.hostFooterBtns}>
               <TouchableOpacity
@@ -1892,24 +2016,28 @@ const EventScreen = () => {
                   <>
                     <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
                       <Feather name="edit-3" size={20} color="#FFF" />
-                      <Text style={[styles.menuItemText, { color: "#FFF" }]}>Edit</Text>
+                      <Text style={[styles.menuItemText, { color: "#FFF" }]}>
+                        {isDraftPreview ? "Edit Event" : "Edit"}
+                      </Text>
                     </TouchableOpacity>
 
-                    <View style={styles.menuSeparator} />
+                    {!isDraftPreview && <View style={styles.menuSeparator} />}
                   </>
                 )}
 
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={handleDelete}
-                  activeOpacity={0.7}
-                  disabled={isDeletingEvent}
-                >
-                  <HugeiconsIcon icon={Delete02Icon} size={20} color="#FFF" />
-                  <Text style={[styles.menuItemText, { color: "#FFF" }]}>
-                    {isDeletingEvent ? "Deleting..." : "Delete"}
-                  </Text>
-                </TouchableOpacity>
+                {!isDraftPreview && (
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={handleDelete}
+                    activeOpacity={0.7}
+                    disabled={isDeletingEvent}
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} size={20} color="#FFF" />
+                    <Text style={[styles.menuItemText, { color: "#FFF" }]}>
+                      {isDeletingEvent ? "Deleting..." : "Delete"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>

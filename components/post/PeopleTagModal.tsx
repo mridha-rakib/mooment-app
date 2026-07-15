@@ -6,27 +6,37 @@ import {
   Animated, FlatList, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import UserAvatar from '../ui/UserAvatar';
 
-type Friend = {
+export type TaggedFriend = {
   id: string;
   name: string;
+  username?: string;
   handle: string;
   avatar?: string | null;
 };
 
+type Friend = TaggedFriend;
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSelect: (names: string[]) => void;
-  selected: string[];
+  onSelect: (friends: TaggedFriend[]) => void;
+  selected: TaggedFriend[];
 };
 
+const ANDROID_NAV_FALLBACK = 48;
+
 export default function PeopleTagModal({ visible, onClose, onSelect, selected }: Props) {
+  const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
-  const [localSelected, setLocalSelected] = useState<string[]>(selected);
+  const [localSelected, setLocalSelected] = useState<TaggedFriend[]>(selected);
   const [friends, setFriends] = useState<Friend[]>([]);
   const listOffsetYRef = useRef(0);
+  const bottomInset = Platform.OS === 'android'
+    ? Math.max(insets.bottom, ANDROID_NAV_FALLBACK)
+    : insets.bottom;
   const {
     sheetTranslateY,
     dragPanHandlers,
@@ -60,6 +70,7 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
         setFriends(users.map((user) => ({
           id: user.id,
           name: user.name,
+          username: user.username,
           handle: user.username ? `@${user.username}` : '@xenog',
           avatar: user.avatarUrl ?? null,
         })));
@@ -82,10 +93,10 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
   );
 
   // Fire immediately so author row updates in real-time
-  const toggle = (name: string) => {
-    const next = localSelected.includes(name)
-      ? localSelected.filter(n => n !== name)
-      : [...localSelected, name];
+  const toggle = (friend: Friend) => {
+    const next = localSelected.some((selectedFriend) => selectedFriend.id === friend.id)
+      ? localSelected.filter((selectedFriend) => selectedFriend.id !== friend.id)
+      : [...localSelected, friend];
     setLocalSelected(next);
     onSelect(next); // ← instant update to parent
   };
@@ -97,7 +108,7 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
         {/* Tap outside to close */}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
-        <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+        <Animated.View style={[styles.sheet, { paddingBottom: bottomInset + 16, transform: [{ translateY: sheetTranslateY }] }]}>
           <View {...dragPanHandlers}>
             {/* Handle */}
             <View style={styles.handle} />
@@ -135,7 +146,7 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
                 listOffsetYRef.current = event.nativeEvent.contentOffset.y;
               }}
               renderItem={({ item }) => {
-                const isAdded = localSelected.includes(item.name);
+                const isAdded = localSelected.some((selectedFriend) => selectedFriend.id === item.id);
                 return (
                   <View style={styles.personRow}>
                     {/* Avatar */}
@@ -150,7 +161,7 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
                     {/* Add / Added button */}
                     <TouchableOpacity
                       style={[styles.addBtn, isAdded && styles.addBtnActive]}
-                      onPress={() => toggle(item.name)}
+                      onPress={() => toggle(item)}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.addBtnText, isAdded && styles.addBtnTextActive]}>
@@ -162,9 +173,6 @@ export default function PeopleTagModal({ visible, onClose, onSelect, selected }:
               }}
             />
           </View>
-
-
-          <View style={{ height: Platform.OS === 'ios' ? 28 : 16 }} />
         </Animated.View>
       </View>
     </Modal>

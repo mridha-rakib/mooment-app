@@ -5,6 +5,7 @@ import { buildEventFilterRequestParams, createEmptyEventFilters, type SharedEven
 import { getStorageFileUrl } from "@/lib/storage";
 import { getCategoryColor } from "@/constants/categoryColors";
 import type { EventCategory } from "@/constants/eventCategories";
+import { isValidLocationCoordinate } from "@/lib/locationSharing";
 
 const EVENT_MAP_RADIUS_KM = 50;
 const EVENT_MAP_LIMIT = 100;
@@ -21,6 +22,12 @@ type MapContainerProps = {
 
 const isFiniteCoordinate = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+const isValidMapboxCoordinate = (coordinate: [number, number]) =>
+  isValidLocationCoordinate({
+    longitude: coordinate[0],
+    latitude: coordinate[1],
+  });
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
 
@@ -221,8 +228,9 @@ export default function MapContainer({
 
   // Round to 3 decimal places (~111 m precision) so the effect only
   // re-fires when the user has moved far enough to warrant a new query.
-  const queryLongitude = userLocation ? Number(userLocation[0].toFixed(3)) : undefined;
-  const queryLatitude = userLocation ? Number(userLocation[1].toFixed(3)) : undefined;
+  const validUserLocation = userLocation && isValidMapboxCoordinate(userLocation) ? userLocation : null;
+  const queryLongitude = validUserLocation ? Number(validUserLocation[0].toFixed(3)) : undefined;
+  const queryLatitude = validUserLocation ? Number(validUserLocation[1].toFixed(3)) : undefined;
   const mapRequestParams = React.useMemo(() => {
     const params = buildEventFilterRequestParams(eventFilters, {
       includeLocation: Boolean(eventFilters.nearby),
@@ -273,7 +281,9 @@ export default function MapContainer({
   }, [eventFilters.nearby, mapRequestKey, mapRequestParams]);
 
   const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
-    setUserLocation(coordinate);
+    if (isValidMapboxCoordinate(coordinate)) {
+      setUserLocation(coordinate);
+    }
   }, []);
 
   return (

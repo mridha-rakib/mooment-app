@@ -1,5 +1,5 @@
 import type { PostData } from "@/components/post/FeedPost";
-import type { Moment, MomentMediaItem } from "@/lib/moments";
+import type { Moment, MomentAuthor, MomentMediaItem } from "@/lib/moments";
 
 const DEFAULT_AUTHOR_NAME = "Mooment User";
 
@@ -72,6 +72,20 @@ const isVisualMediaItem = (mediaItem: MomentMediaItem) => (
 
 const hasText = (value?: string | null) => Boolean(value?.trim());
 
+const getAuthorDisplayName = (author: MomentAuthor) =>
+  author.name?.trim() || author.username?.trim() || "Mooment user";
+
+const resolveAuthorAvatar = (
+  author?: MomentAuthor | null,
+  storageUrlResolver?: (storageKey: string, contentType?: string | null) => string,
+) => {
+  if (author?.avatarKey && storageUrlResolver) {
+    return storageUrlResolver(author.avatarKey);
+  }
+
+  return author?.avatarUrl ?? null;
+};
+
 const resolveMediaUri = (
   mediaItem: MomentMediaItem,
   storageUrlResolver?: (storageKey: string, contentType?: string | null) => string,
@@ -89,9 +103,7 @@ const resolveMediaUri = (
 
 export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions): PostData | null => {
   const authorName = moment.author?.name ?? DEFAULT_AUTHOR_NAME;
-  const authorAvatar = (moment.author?.avatarKey && options.storageUrlResolver)
-    ? options.storageUrlResolver(moment.author.avatarKey)
-    : (moment.author?.avatarUrl ?? options.fallbackAvatar ?? null);
+  const authorAvatar = resolveAuthorAvatar(moment.author, options.storageUrlResolver) ?? options.fallbackAvatar ?? null;
   const momentMediaItems = moment.mediaItems ?? [];
   const visualMedia = momentMediaItems
     .filter(isVisualMediaItem)
@@ -103,17 +115,36 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   const audioMedia = momentMediaItems.find(isAudioMediaItem);
   const audioUri = audioMedia ? resolveMediaUri(audioMedia, options.storageUrlResolver) : undefined;
   const taggedPeople = moment.taggedPeople ?? [];
+  const taggedFriends = (moment.taggedFriends ?? []).filter((friend) => friend.id && getAuthorDisplayName(friend));
+  const taggedContextNodes = taggedFriends.length > 0
+    ? [
+        { text: " with ", type: "muted" as const },
+        ...taggedFriends.flatMap((friend, index) => [
+          ...(index > 0 ? [{ text: ", ", type: "muted" as const }] : []),
+          {
+            text: getAuthorDisplayName(friend),
+            type: "bold" as const,
+            taggedUser: {
+              id: friend.id,
+              name: getAuthorDisplayName(friend),
+              avatar: resolveAuthorAvatar(friend, options.storageUrlResolver),
+              isFollowing: friend.isFollowing,
+            },
+          },
+        ]),
+      ]
+    : (taggedPeople.length > 0
+        ? [
+            { text: " with ", type: "muted" as const },
+            { text: taggedPeople.join(", "), type: "bold" as const },
+          ]
+        : []);
   const isEventInteractionMoment =
     moment.mode === "event" &&
     hasText(moment.eventId) &&
     hasText(moment.eventTitle);
   const authorContextNodes = [
-    ...(taggedPeople.length > 0
-      ? [
-          { text: " with ", type: "muted" as const },
-          { text: taggedPeople.join(", "), type: "bold" as const },
-        ]
-      : []),
+    ...taggedContextNodes,
     ...(moment.eventTitle
       ? [
           { text: " at ", type: "muted" as const },

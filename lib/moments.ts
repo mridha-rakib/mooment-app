@@ -32,6 +32,7 @@ export type Moment = {
   hashtags: string[];
   audience: MomentAudience;
   taggedPeople: string[];
+  taggedFriends?: MomentAuthor[];
   eventTitle?: string | null;
   eventCode?: string | null;
   eventId?: string | null;
@@ -110,6 +111,7 @@ export type CreateMomentPayload = {
   caption?: string | null;
   audience: MomentAudience;
   taggedPeople?: string[];
+  taggedFriendIds?: string[];
   eventTitle?: string | null;
   eventCode?: string | null;
   eventId?: string | null;

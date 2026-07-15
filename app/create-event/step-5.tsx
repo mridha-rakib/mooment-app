@@ -24,6 +24,9 @@ export default function CreateEventStep5() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const draftPrivacy = useEventDraftStore((state) => state.privacy);
+  const categories = useEventDraftStore((state) => state.categories);
+  const scheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const endAt = useEventDraftStore((state) => state.endAt);
   const setDraftPrivacy = useEventDraftStore((state) => state.setPrivacy);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const publishEvent = useEventDraftStore((state) => state.publish);
@@ -33,7 +36,7 @@ export default function CreateEventStep5() {
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
   const [privacy, setPrivacy] = useState<EventPrivacy>(draftPrivacy);
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
 
@@ -58,23 +61,37 @@ export default function CreateEventStep5() {
     }
   };
 
-  const handlePublish = async () => {
-    if (isPublishing) {
+  const handlePrimaryAction = async () => {
+    if (isPreviewing) {
       return;
     }
 
     setDraftPrivacy(privacy);
-    setIsPublishing(true);
+    setIsPreviewing(true);
 
     try {
-      const event = await publishEvent();
+      if (!isEditingPublished) {
+        if (categories.length === 0) {
+          throw new Error("Select at least 1 category before saving the event.");
+        }
+
+        if (categories.length > 3) {
+          throw new Error("You can select up to 3 categories.");
+        }
+
+        if (!scheduledAt || !endAt) {
+          throw new Error("Select the event start and end dates and times before publishing.");
+        }
+      }
+
+      const event = isEditingPublished ? await publishEvent() : await saveDraft();
       resetDraft();
       router.replace({
         pathname: '/event-screen/event',
-        params: { eventId: event.id, mode: 'host' },
+        params: { eventId: event.id, mode: isEditingPublished ? 'host' : 'preview' },
       });
     } catch (error) {
-      setIsPublishing(false);
+      setIsPreviewing(false);
 
       const httpStatus = (error as { response?: { status?: number } })?.response?.status;
 
@@ -84,7 +101,7 @@ export default function CreateEventStep5() {
           completedProfileTypes,
           updateProfile,
           router,
-          onReady: handlePublish,
+          onReady: handlePrimaryAction,
         });
         return;
       }
@@ -95,7 +112,7 @@ export default function CreateEventStep5() {
       }
 
       Alert.alert(
-        isEditingPublished ? 'Unable to update event' : 'Unable to publish event',
+        isEditingPublished ? 'Unable to update event' : 'Unable to preview event',
         getAuthErrorMessage(error, 'Please check the event details and try again.'),
       );
     }
@@ -200,14 +217,14 @@ export default function CreateEventStep5() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.publishButton, { backgroundColor: buttonBackground(colors) }]}
-          onPress={handlePublish}
-          disabled={isPublishing}
+          onPress={handlePrimaryAction}
+          disabled={isPreviewing}
           activeOpacity={0.85}
         >
           <Text style={[styles.publishButtonText, { color: buttonForeground(colors) }]}>
-            {isPublishing
-              ? (isEditingPublished ? 'Saving...' : 'Publishing...')
-              : (isEditingPublished ? 'Save Changes' : 'Publish Event')}
+            {isPreviewing
+              ? 'Saving...'
+              : (isEditingPublished ? 'Save Changes' : 'Preview')}
           </Text>
         </TouchableOpacity>
       </View>

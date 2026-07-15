@@ -84,7 +84,6 @@ export default function EventDraftsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const loadFromEvent = useEventDraftStore((state) => state.loadFromEvent);
   const resetDraft = useEventDraftStore((state) => state.resetDraft);
   const startCreateSession = useEventDraftStore((state) => state.startCreateSession);
   const lastPublishedDraftId = useEventDraftStore((state) => state.lastPublishedDraftId);
@@ -127,8 +126,10 @@ export default function EventDraftsScreen() {
       router,
       onReady: () => {
         resetDraft();
-        loadFromEvent(event);
-        router.push("/create-event");
+        router.push({
+          pathname: "/event-screen/event",
+          params: { eventId: event.id, mode: "preview" },
+        });
       },
     });
   };
@@ -203,7 +204,7 @@ export default function EventDraftsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-            Tap to resume · Long press to discard
+            Tap to preview · Long press to discard
           </Text>
           {drafts.map((event) => (
             <DraftCard

@@ -1,6 +1,6 @@
 import AudiencePickerModal from '@/components/post/AudiencePickerModal';
 import EventPickerModal from '@/components/post/EventPickerModal';
-import PeopleTagModal from '@/components/post/PeopleTagModal';
+import PeopleTagModal, { type TaggedFriend } from '@/components/post/PeopleTagModal';
 import {
   Feather } from '@expo/vector-icons';
 import { AddTeamIcon,
@@ -1747,7 +1747,7 @@ export default function CreateMomentScreen() {
       setSelectedEvent(params.eventName);
     }
   }, [params.eventId, params.eventName]);
-  const [taggedPeople, setTaggedPeople] = useState<string[]>([]);
+  const [taggedFriends, setTaggedFriends] = useState<TaggedFriend[]>([]);
   const [audience, setAudience] = useState('Public');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -2213,7 +2213,8 @@ export default function CreateMomentScreen() {
       mode: selectedEventId ? 'event' as const : 'feed' as const,
       caption: trimmedCaption || null,
       audience: normalizeAudience(audience),
-      taggedPeople: [...taggedPeople],
+      taggedPeople: taggedFriends.map((friend) => friend.name),
+      taggedFriendIds: [...new Set(taggedFriends.map((friend) => friend.id))],
       eventTitle,
       eventCode,
       eventId: selectedEventId,
@@ -2279,7 +2280,7 @@ export default function CreateMomentScreen() {
     }
   };
 
-  const taggedLabel = taggedPeople.join(', ');
+  const taggedLabel = taggedFriends.map((friend) => friend.name).join(', ');
   const clearSelectedEvent = () => {
     setSelectedEvent('');
     setSelectedEventId(null);
@@ -2293,7 +2294,7 @@ export default function CreateMomentScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <CreateMomentCloseButton onPress={() => safeBack(router, '/(tabs)/home')} />
-        <Text style={styles.headerTitle}>Create Mooment</Text>
+        <Text style={styles.headerTitle}>Create Post</Text>
         <TouchableOpacity style={[styles.doneBtn, isSubmitting && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isSubmitting}>
           <Text style={styles.doneBtnText}>Done</Text>
         </TouchableOpacity>
@@ -2321,7 +2322,7 @@ export default function CreateMomentScreen() {
               <Text style={styles.authorNameFull} numberOfLines={2}>
                 <Text style={styles.authorBold}>{authorName}</Text>
                 {/* Tagged people visible in both modes */}
-                {taggedPeople.length > 0 && (
+                {taggedFriends.length > 0 && (
                   <>
                     <Text style={styles.authorMuted}> with </Text>
                     <Text style={styles.authorBold}>{taggedLabel}</Text>
@@ -2439,10 +2440,10 @@ export default function CreateMomentScreen() {
         <View style={styles.toolbar}>
           {/* People */}
           <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowPeopleModal(true)} activeOpacity={0.8}>
-            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, taggedPeople.length > 0 && styles.toolbarIconBoxActive]}>
-              <HugeiconsIcon icon={AddTeamIcon} size={24} color={taggedPeople.length > 0 ? screenColors.primary : screenColors.bodyText} />
+            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, taggedFriends.length > 0 && styles.toolbarIconBoxActive]}>
+              <HugeiconsIcon icon={AddTeamIcon} size={24} color={taggedFriends.length > 0 ? screenColors.primary : screenColors.bodyText} />
             </BlurView>
-            <Text style={[styles.toolbarLabel, taggedPeople.length > 0 && styles.toolbarLabelActive]}>Friend</Text>
+            <Text style={[styles.toolbarLabel, taggedFriends.length > 0 && styles.toolbarLabelActive]}>Friend</Text>
           </TouchableOpacity>
 
           {/* Image / Gallery */}
@@ -2537,8 +2538,8 @@ export default function CreateMomentScreen() {
       <PeopleTagModal
         visible={showPeopleModal}
         onClose={() => setShowPeopleModal(false)}
-        onSelect={people => setTaggedPeople(people)}
-        selected={taggedPeople}
+        onSelect={setTaggedFriends}
+        selected={taggedFriends}
       />
       <AudiencePickerModal
         visible={showAudienceModal}

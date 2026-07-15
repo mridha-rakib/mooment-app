@@ -3,6 +3,13 @@ import { EVENT_CATEGORIES, type EventCategory } from "@/constants/eventCategorie
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
+import {
+  getBestCurrentDeviceLocation,
+  isValidLocationCoordinate,
+  toMapboxCoordinate,
+  type CurrentLocationPayload,
+  type DeviceLocationSuccessResult,
+} from "@/lib/locationSharing";
 import { useAuthStore } from "@/stores/authStore";
 import { usePlanStore } from "@/stores/planStore";
 import {
@@ -19,7 +26,7 @@ import type { MapState } from "@rnmapbox/maps";
 import Mapbox from "@rnmapbox/maps";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Image,
@@ -51,6 +58,13 @@ const MAP_SCALE_BAR_OFFSET = {
 };
 
 type MapViewMode = "traffic" | "satellite";
+type UserLocationSource = "fresh" | "lastKnown" | "stored";
+type PendingCameraMove = {
+  coordinate: [number, number];
+  animationDuration: number;
+  source: UserLocationSource;
+  mode: "initial" | "manual";
+};
 
 export type MapMarkerData = {
   id: string;
@@ -241,6 +255,23 @@ const MapMarker = ({
   );
 };
 
+const toLocationPayload = (
+  longitude: unknown,
+  latitude: unknown,
+  timestamp: number | null = Date.now(),
+): CurrentLocationPayload | null => {
+  const location = {
+    latitude,
+    longitude,
+    timestamp,
+  } as CurrentLocationPayload;
+
+  return isValidLocationCoordinate(location) ? location : null;
+};
+
+const isValidMapboxCoordinate = (coordinate: [number, number] | null | undefined) =>
+  Boolean(coordinate && toLocationPayload(coordinate[0], coordinate[1], Date.now()));
+
 export default function MapScreen({
   markers = [],
   onUserLocationChange,
@@ -259,6 +290,10 @@ export default function MapScreen({
   );
   const sharedLongitude = sharedLocation?.longitude;
   const sharedLatitude = sharedLocation?.latitude;
+  const storedLocation = React.useMemo(
+    () => toLocationPayload(sharedLongitude, sharedLatitude, null),
+    [sharedLatitude, sharedLongitude],
+  );
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<MapMarkerData | null>(
     null,
@@ -267,11 +302,23 @@ export default function MapScreen({
   const cameraRef = React.useRef<Mapbox.Camera>(null);
   const currentZoomRef = React.useRef(DEFAULT_ZOOM_LEVEL);
   const hasInitialUserLocationCenteredRef = React.useRef(false);
+  const initialCenteredSourceRef = React.useRef<UserLocationSource | null>(null);
   const userHasExploredMapRef = React.useRef(false);
+  const isMountedRef = React.useRef(false);
+  const isStyleLoadedRef = React.useRef(false);
+  const locationRequestIdRef = React.useRef(0);
+  const manualRecenterRequestIdRef = React.useRef(0);
+  const isLocationRequestInFlightRef = React.useRef(false);
+  const isManualRecenterInFlightRef = React.useRef(false);
+  const userLocationRef = React.useRef<[number, number] | null>(null);
+  const userLocationSourceRef = React.useRef<UserLocationSource | null>(null);
+  const pendingCameraMoveRef = React.useRef<PendingCameraMove | null>(null);
   const [mapMode, setMapMode] = useState<MapViewMode>("traffic");
   const [userLocation, setUserLocation] = useState<[number, number] | null>(
     null,
   );
+  const [userLocationSource, setUserLocationSource] = useState<UserLocationSource | null>(null);
+  const [canUseStoredFallback, setCanUseStoredFallback] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const isSatellite = mapMode === "satellite";
   const currentMapStyle = isSatellite
@@ -282,6 +329,7 @@ export default function MapScreen({
   // held back until Mapbox has fully applied the new style.
   React.useEffect(() => {
     setIsStyleLoaded(false);
+    isStyleLoadedRef.current = false;
   }, [currentMapStyle]);
   const mapModeLabel = {
     traffic: "Traffic View",
@@ -299,13 +347,47 @@ export default function MapScreen({
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
   const defaultCameraCenter: [number, number] =
     userLocation ??
-    (markers && markers.length > 0
-      ? [markers[0].longitude, markers[0].latitude]
+    (canUseStoredFallback && storedLocation
+      ? toMapboxCoordinate(storedLocation)
       : DEFAULT_MAP_CENTER);
 
+  React.useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      locationRequestIdRef.current += 1;
+      manualRecenterRequestIdRef.current += 1;
+      isLocationRequestInFlightRef.current = false;
+      isManualRecenterInFlightRef.current = false;
+      pendingCameraMoveRef.current = null;
+    };
+  }, []);
+
   const applyUserLocation = React.useCallback(
-    (coordinate: [number, number]) => {
+    (location: CurrentLocationPayload, source: UserLocationSource) => {
+      if (!isValidLocationCoordinate(location)) {
+        return null;
+      }
+
+      if (
+        source === "stored" &&
+        userLocationSourceRef.current &&
+        userLocationSourceRef.current !== "stored"
+      ) {
+        return null;
+      }
+
+      if (source === "lastKnown" && userLocationSourceRef.current === "fresh") {
+        return null;
+      }
+
+      const coordinate = toMapboxCoordinate(location);
+
+      userLocationRef.current = coordinate;
+      userLocationSourceRef.current = source;
       setUserLocation(coordinate);
+      setUserLocationSource(source);
 
       const reportKey = `${coordinate[0].toFixed(4)},${coordinate[1].toFixed(4)}`;
 
@@ -313,18 +395,17 @@ export default function MapScreen({
         lastReportedLocationRef.current = reportKey;
         onUserLocationChange?.(coordinate);
       }
+
+      return coordinate;
     },
     [onUserLocationChange],
   );
 
   React.useEffect(() => {
-    if (
-      typeof sharedLongitude === "number" &&
-      typeof sharedLatitude === "number"
-    ) {
-      applyUserLocation([sharedLongitude, sharedLatitude]);
+    if (canUseStoredFallback && storedLocation && !userLocationRef.current) {
+      applyUserLocation(storedLocation, "stored");
     }
-  }, [applyUserLocation, sharedLatitude, sharedLongitude]);
+  }, [applyUserLocation, canUseStoredFallback, storedLocation]);
 
   React.useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
@@ -334,32 +415,247 @@ export default function MapScreen({
     restorePlans();
   }, [restorePlans]);
 
-  const centerOnUserLocation = React.useCallback(
-    (coordinate: [number, number], animationDuration: number) => {
-      currentZoomRef.current = USER_LOCATION_ZOOM_LEVEL;
-      cameraRef.current?.setCamera({
-        centerCoordinate: coordinate,
-        heading: 0,
-        pitch: 0,
-        zoomLevel: USER_LOCATION_ZOOM_LEVEL,
+  const executeCameraMove = React.useCallback((move: PendingCameraMove) => {
+    if (
+      !isMountedRef.current ||
+      !isStyleLoadedRef.current ||
+      !cameraRef.current ||
+      !isValidMapboxCoordinate(move.coordinate)
+    ) {
+      if (
+        pendingCameraMoveRef.current?.mode === "manual" &&
+        move.mode === "initial"
+      ) {
+        return false;
+      }
+
+      pendingCameraMoveRef.current = move;
+      return false;
+    }
+
+    pendingCameraMoveRef.current = null;
+    currentZoomRef.current = USER_LOCATION_ZOOM_LEVEL;
+    cameraRef.current.setCamera({
+      centerCoordinate: move.coordinate,
+      heading: 0,
+      pitch: 0,
+      zoomLevel: USER_LOCATION_ZOOM_LEVEL,
+      animationDuration: move.animationDuration,
+    });
+
+    if (move.mode === "initial") {
+      hasInitialUserLocationCenteredRef.current = true;
+      initialCenteredSourceRef.current = move.source;
+    }
+
+    return true;
+  }, []);
+
+  const flushPendingCameraMove = React.useCallback(() => {
+    const pendingMove = pendingCameraMoveRef.current;
+
+    if (pendingMove) {
+      executeCameraMove(pendingMove);
+    }
+  }, [executeCameraMove]);
+
+  const handleDeviceLocationResult = React.useCallback(
+    (
+      result: DeviceLocationSuccessResult,
+      options: { center?: boolean; animationDuration?: number } = {},
+    ) => {
+      const coordinate = applyUserLocation(result.location, result.status);
+
+      if (coordinate && options.center) {
+        userHasExploredMapRef.current = false;
+        executeCameraMove({
+          coordinate,
+          animationDuration: options.animationDuration ?? 650,
+          source: result.status,
+          mode: "initial",
+        });
+      }
+    },
+    [applyUserLocation, executeCameraMove],
+  );
+
+  const requestCurrentDeviceLocation = React.useCallback(
+    async (options: { center?: boolean; animationDuration?: number; force?: boolean } = {}) => {
+      if (isLocationRequestInFlightRef.current && !options.force) {
+        return;
+      }
+
+      const requestId = ++locationRequestIdRef.current;
+      isLocationRequestInFlightRef.current = true;
+      setCanUseStoredFallback(false);
+
+      const isCurrentRequest = () =>
+        isMountedRef.current && requestId === locationRequestIdRef.current;
+
+      try {
+        const result = await getBestCurrentDeviceLocation({
+          requestPermission: true,
+          onTemporaryLocation: (temporaryResult) => {
+            if (!isCurrentRequest()) {
+              return;
+            }
+
+            handleDeviceLocationResult(temporaryResult, options);
+          },
+        });
+
+        if (!isCurrentRequest()) {
+          return;
+        }
+
+        if (result.status === "fresh" || result.status === "lastKnown") {
+          handleDeviceLocationResult(result, options);
+          return;
+        }
+
+        setCanUseStoredFallback(true);
+      } finally {
+        if (isCurrentRequest()) {
+          isLocationRequestInFlightRef.current = false;
+        }
+      }
+    },
+    [handleDeviceLocationResult],
+  );
+
+  const centerOnManualCoordinate = React.useCallback(
+    (
+      coordinate: [number, number],
+      source: UserLocationSource,
+      animationDuration = 1000,
+    ) => {
+      userHasExploredMapRef.current = false;
+      return executeCameraMove({
+        coordinate,
         animationDuration,
+        source,
+        mode: "manual",
       });
     },
-    [],
+    [executeCameraMove],
+  );
+
+  const handleManualDeviceLocationResult = React.useCallback(
+    (
+      result: DeviceLocationSuccessResult,
+      requestId: number,
+      animationDuration: number,
+    ) => {
+      if (
+        !isMountedRef.current ||
+        requestId !== manualRecenterRequestIdRef.current
+      ) {
+        return;
+      }
+
+      const coordinate = applyUserLocation(result.location, result.status);
+
+      if (coordinate) {
+        centerOnManualCoordinate(coordinate, result.status, animationDuration);
+      }
+    },
+    [applyUserLocation, centerOnManualCoordinate],
+  );
+
+  const requestManualRecenter = React.useCallback(
+    async (animationDuration = 1000) => {
+      const existingCoordinate = userLocationRef.current;
+      const existingSource = userLocationSourceRef.current;
+
+      if (
+        existingCoordinate &&
+        existingSource &&
+        existingSource !== "stored" &&
+        isValidMapboxCoordinate(existingCoordinate)
+      ) {
+        centerOnManualCoordinate(existingCoordinate, existingSource, animationDuration);
+      }
+
+      if (isManualRecenterInFlightRef.current) {
+        return;
+      }
+
+      const requestId = ++manualRecenterRequestIdRef.current;
+      isManualRecenterInFlightRef.current = true;
+      setCanUseStoredFallback(false);
+
+      const isCurrentRequest = () =>
+        isMountedRef.current && requestId === manualRecenterRequestIdRef.current;
+
+      try {
+        const result = await getBestCurrentDeviceLocation({
+          requestPermission: true,
+          onTemporaryLocation: (temporaryResult) => {
+            handleManualDeviceLocationResult(
+              temporaryResult,
+              requestId,
+              animationDuration,
+            );
+          },
+        });
+
+        if (!isCurrentRequest()) {
+          return;
+        }
+
+        if (result.status === "fresh" || result.status === "lastKnown") {
+          handleManualDeviceLocationResult(result, requestId, animationDuration);
+        }
+      } finally {
+        if (isCurrentRequest()) {
+          isManualRecenterInFlightRef.current = false;
+        }
+      }
+    },
+    [centerOnManualCoordinate, handleManualDeviceLocationResult],
   );
 
   React.useEffect(() => {
+    const canFreshLocationCorrectTemporaryCenter =
+      userLocationSource === "fresh" &&
+      initialCenteredSourceRef.current !== "fresh";
+
     if (
       !userLocation ||
-      hasInitialUserLocationCenteredRef.current ||
-      userHasExploredMapRef.current
+      !userLocationSource ||
+      (hasInitialUserLocationCenteredRef.current && !canFreshLocationCorrectTemporaryCenter) ||
+      userHasExploredMapRef.current ||
+      (userLocationSource === "stored" && !canUseStoredFallback)
     ) {
       return;
     }
 
-    hasInitialUserLocationCenteredRef.current = true;
-    centerOnUserLocation(userLocation, 650);
-  }, [centerOnUserLocation, userLocation]);
+    executeCameraMove({
+      coordinate: userLocation,
+      animationDuration: 650,
+      source: userLocationSource,
+      mode: "initial",
+    });
+  }, [canUseStoredFallback, executeCameraMove, userLocation, userLocationSource]);
+
+  React.useEffect(() => {
+    isStyleLoadedRef.current = isStyleLoaded;
+
+    if (isStyleLoaded) {
+      flushPendingCameraMove();
+    }
+  }, [flushPendingCameraMove, isStyleLoaded]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void requestCurrentDeviceLocation();
+
+      return () => {
+        locationRequestIdRef.current += 1;
+        isLocationRequestInFlightRef.current = false;
+      };
+    }, [requestCurrentDeviceLocation]),
+  );
 
   const categories: ("All" | EventCategory)[] = ["All", ...EVENT_CATEGORIES];
   const visibleMarkers = React.useMemo(
@@ -465,9 +761,7 @@ export default function MapScreen({
   };
 
   const handleMyLocation = () => {
-    if (userLocation) {
-      centerOnUserLocation(userLocation, 1000);
-    }
+    void requestManualRecenter(1000);
   };
 
   return (
@@ -529,7 +823,11 @@ export default function MapScreen({
           pitchEnabled={true}
           rotateEnabled={true}
           onCameraChanged={handleCameraChanged}
-          onDidFinishLoadingStyle={() => setIsStyleLoaded(true)}
+          onDidFinishLoadingStyle={() => {
+            isStyleLoadedRef.current = true;
+            setIsStyleLoaded(true);
+            flushPendingCameraMove();
+          }}
         >
           <Mapbox.Camera
             ref={cameraRef}
@@ -558,10 +856,15 @@ export default function MapScreen({
             renderMode={Mapbox.UserLocationRenderMode.Native}
             onUpdate={(location) => {
               if (location.coords) {
-                applyUserLocation([
+                const deviceLocation = toLocationPayload(
                   location.coords.longitude,
                   location.coords.latitude,
-                ]);
+                  location.timestamp ?? Date.now(),
+                );
+
+                if (deviceLocation) {
+                  applyUserLocation(deviceLocation, "fresh");
+                }
               }
             }}
           />
@@ -569,12 +872,12 @@ export default function MapScreen({
 
         <View pointerEvents="none" style={[styles.mapShade, mapShadeStyle]} />
 
-        <View style={[styles.mapControlsLeft, { bottom: tabBarHeight + 20 }]}>
+        <View pointerEvents="box-none" style={[styles.mapControlsLeft, { bottom: tabBarHeight + 20 }]}>
           <CinematicButton icon={Add01Icon} onPress={handleZoomIn} />
           <CinematicButton icon={Remove01Icon} onPress={handleZoomOut} />
         </View>
 
-        <View style={[styles.mapControlsRight, { bottom: tabBarHeight + 20 }]}>
+        <View pointerEvents="box-none" style={[styles.mapControlsRight, { bottom: tabBarHeight + 20 }]}>
           <TouchableOpacity
             activeOpacity={0.86}
             onPress={toggleMapStyle}
@@ -803,6 +1106,8 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 20,
     gap: 12,
+    zIndex: 20,
+    elevation: 20,
   },
   mapControlsRight: {
     position: "absolute",
@@ -810,6 +1115,8 @@ const styles = StyleSheet.create({
     right: 20,
     gap: 12,
     alignItems: "flex-end",
+    zIndex: 20,
+    elevation: 20,
   },
   viewModeButton: {
     height: 42,
