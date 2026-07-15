@@ -27,7 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
 import { useAuthStore } from '@/stores/authStore';
 import {
-  mergeVisibleEventFilters,
+  confirmVisibleEventFilters,
   parseLocalDateKey,
   toLocalDateKey,
   type EventLocationFilter,
@@ -292,7 +292,7 @@ export default function FilterModal({
             source: 'selected' as const,
           };
 
-      onApply(mergeVisibleEventFilters(
+      onApply(confirmVisibleEventFilters(
         activeFilters,
         {
           ageRestriction: AGE_OPTION_TO_VALUE[activeAge],
@@ -302,7 +302,7 @@ export default function FilterModal({
           hashtags: parsedHashtags,
           nearby,
         },
-        { clearCategory: resetDraftRef.current },
+        { clearCategory: resetDraftRef.current, resetAll: resetDraftRef.current },
       ));
       onClose();
     } catch (error) {

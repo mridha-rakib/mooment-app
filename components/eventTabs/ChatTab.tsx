@@ -23,6 +23,11 @@ type ChatTabProps = {
   scheduledAt?: string | null;
   endAt?: string | null;
   eventStatus?: EventStatus;
+  isDraftPreviewDisabled?: boolean;
+};
+
+export type ChatTabRefreshHandle = {
+  refresh: () => Promise<void>;
 };
 
 type ChatMessage = {
@@ -103,13 +108,14 @@ const toRealtimeMessage = (message: LiveRealtimeMessage, currentUserId?: string)
   fromMe: message.senderId === currentUserId,
 });
 
-const ChatTab = ({
+const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
   eventId,
   eventName,
   scheduledAt,
   endAt,
   eventStatus,
-}: ChatTabProps) => {
+  isDraftPreviewDisabled = false,
+}, ref) => {
   const { colors, isDark } = useTheme();
   const accessToken = useAuthStore((state) => state.accessToken);
   const currentUser = useAuthStore((state) => state.user);
@@ -123,50 +129,79 @@ const ChatTab = ({
   const eventStarted = isEventStarted(scheduledAt);
   const eventClosed = isEventClosed(eventStatus, endAt);
 
-  useEffect(() => {
-    let isActive = true;
-
-    const initialize = async () => {
-      if (!eventStarted || eventClosed) {
+  const loadMessages = useCallback(async ({
+    isActive = () => true,
+    showLoader = true,
+  }: {
+    isActive?: () => boolean;
+    showLoader?: boolean;
+  } = {}) => {
+    if (isDraftPreviewDisabled) {
+      if (isActive()) {
         setIsLoading(false);
         setHasAccess(null);
         setMessages([]);
+      }
+      return;
+    }
+
+    if (!eventStarted || eventClosed) {
+      if (isActive()) {
+        setIsLoading(false);
+        setHasAccess(null);
+        setMessages([]);
+      }
+      return;
+    }
+
+    if (showLoader) {
+      setIsLoading(true);
+    }
+
+    try {
+      const history = await getLiveRoomMessages(eventId, { limit: 50 });
+
+      if (!isActive()) {
         return;
       }
 
-      setIsLoading(true);
+      setMessages(history.map((m) => toHistoryMessage(m, currentUser?.id)));
+      setHasAccess(true);
+    } catch {
+      if (!isActive()) {
+        return;
+      }
 
-      try {
-        const history = await getLiveRoomMessages(eventId, { limit: 50 });
-
-        if (!isActive) {
-          return;
-        }
-
-        setMessages(history.map((m) => toHistoryMessage(m, currentUser?.id)));
-        setHasAccess(true);
-      } catch {
-        if (!isActive) {
-          return;
-        }
-
+      if (showLoader) {
         setMessages([]);
         setHasAccess(false);
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
       }
-    };
+    } finally {
+      if (isActive() && showLoader) {
+        setIsLoading(false);
+      }
+    }
+  }, [currentUser?.id, eventClosed, eventId, eventStarted, isDraftPreviewDisabled]);
 
-    void initialize();
+  React.useImperativeHandle(ref, () => ({
+    refresh: () => loadMessages({ showLoader: false }),
+  }), [loadMessages]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    void loadMessages({ isActive: () => isActive });
 
     return () => {
       isActive = false;
     };
-  }, [currentUser?.id, eventClosed, eventId, eventStarted]);
+  }, [loadMessages]);
 
   useEffect(() => {
+    if (isDraftPreviewDisabled) {
+      return;
+    }
+
     if (!hasAccess || !eventStarted || eventClosed) {
       return;
     }
@@ -215,7 +250,7 @@ const ChatTab = ({
         realtimeRef.current = null;
       }
     };
-  }, [accessToken, currentUser?.id, eventClosed, eventId, eventStarted, hasAccess]);
+  }, [accessToken, currentUser?.id, eventClosed, eventId, eventStarted, hasAccess, isDraftPreviewDisabled]);
 
   const scrollToBottom = useCallback((animated = true) => {
     messagesScrollRef.current?.scrollToEnd({ animated });
@@ -228,7 +263,7 @@ const ChatTab = ({
       return;
     }
 
-    if (!hasAccess || !eventStarted || eventClosed) {
+    if (isDraftPreviewDisabled || !hasAccess || !eventStarted || eventClosed) {
       return;
     }
 
@@ -335,6 +370,35 @@ const ChatTab = ({
     },
     [messages, isDark, colors.textSecondary],
   );
+
+  if (isDraftPreviewDisabled) {
+    return (
+      <View style={styles.stateContainer}>
+        <View
+          style={[
+            styles.stateIconCircle,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(0,0,0,0.04)",
+            },
+          ]}
+        >
+          <Ionicons
+            name="chatbubbles-outline"
+            size={28}
+            color={colors.textSecondary}
+          />
+        </View>
+        <Text style={[styles.stateTitle, { color: colors.text }]}>
+          Chat Available After Publication
+        </Text>
+        <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+          Event chat will become available after this event is published.
+        </Text>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -572,7 +636,9 @@ const ChatTab = ({
       </View>
     </View>
   );
-};
+});
+
+ChatTab.displayName = "ChatTab";
 
 export default ChatTab;
 

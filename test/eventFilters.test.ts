@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildEventFilterRequestParams,
+  confirmVisibleEventFilters,
   createEmptyEventFilters,
   hasActiveEventFilters,
   mergeCategoryIntoEventFilters,
@@ -23,6 +24,28 @@ test("empty shared event filters do not emit event-only request params", () => {
   assert.equal(hasActiveEventFilters(filters), false);
   assert.equal(filters.category, null);
   assert.deepEqual(buildEventFilterRequestParams(filters), {});
+});
+
+test("real applied event filters drive clear button visibility", () => {
+  const empty = createEmptyEventFilters();
+
+  assert.equal(hasActiveEventFilters(empty), false);
+  assert.equal(hasActiveEventFilters({ ...empty, ageRestriction: "all_ages" }), true);
+  assert.equal(hasActiveEventFilters({ ...empty, priceFilter: "free" }), true);
+  assert.equal(hasActiveEventFilters({ ...empty, selectedDate: "2026-07-14" }), true);
+  assert.equal(hasActiveEventFilters({ ...empty, timePeriod: "morning" }), true);
+  assert.equal(hasActiveEventFilters({ ...empty, hashtags: ["music"] }), true);
+  assert.equal(hasActiveEventFilters({ ...empty, category: "Music" }), true);
+  assert.equal(hasActiveEventFilters({
+    ...empty,
+    nearby: {
+      latitude: 40,
+      longitude: -73,
+      radiusMiles: 25,
+      label: "New York",
+      source: "selected",
+    },
+  }), true);
 });
 
 test("shared event filters build one request contract for feed and map", () => {
@@ -174,6 +197,88 @@ test("visible filter apply preserves hidden category unless reset apply clears i
   const resetApplied = mergeVisibleEventFilters(current, visibleDraft, { clearCategory: true });
   assert.equal(resetApplied.category, null);
   assert.equal(resetApplied.priceFilter, "free");
+});
+
+test("reset confirmation clears every applied event filter and restores unfiltered params", () => {
+  const current: SharedEventFilters = {
+    ageRestriction: "21_plus",
+    category: "Music",
+    priceFilter: "lt_50",
+    selectedDate: "2026-07-14",
+    timePeriod: "late_night",
+    hashtags: ["music", "summer"],
+    nearby: {
+      latitude: 23.7806,
+      longitude: 90.4074,
+      radiusMiles: 20,
+      label: "Dhaka",
+      source: "selected",
+    },
+  };
+  const resetDraftDefaults: SharedEventFilters = {
+    ageRestriction: "all_ages",
+    priceFilter: "free",
+    selectedDate: null,
+    timePeriod: "morning",
+    hashtags: [],
+    nearby: {
+      latitude: 34.052235,
+      longitude: -118.243683,
+      radiusMiles: 75,
+      label: "Los Angeles, CA",
+      source: "selected",
+    },
+  };
+
+  const cleared = confirmVisibleEventFilters(current, resetDraftDefaults, { resetAll: true });
+
+  assert.deepEqual(cleared, createEmptyEventFilters());
+  assert.equal(hasActiveEventFilters(cleared), false);
+  assert.deepEqual(buildEventFilterRequestParams(cleared), {});
+});
+
+test("repeated apply and clear cycles do not retain stale event query params", () => {
+  const empty = createEmptyEventFilters();
+  const filtered = confirmVisibleEventFilters(empty, {
+    ...empty,
+    ageRestriction: "18_plus",
+    priceFilter: "lt_10",
+    selectedDate: "2026-07-14",
+    timePeriod: "evening",
+    hashtags: ["music"],
+    nearby: {
+      latitude: 40,
+      longitude: -73,
+      radiusMiles: 50,
+      label: "New York",
+      source: "selected",
+    },
+  });
+  const firstClear = confirmVisibleEventFilters(filtered, filtered, { resetAll: true });
+  const filteredAgain = confirmVisibleEventFilters(firstClear, {
+    ...firstClear,
+    priceFilter: "free",
+    hashtags: ["summer"],
+  });
+  const secondClear = confirmVisibleEventFilters(filteredAgain, filteredAgain, { resetAll: true });
+
+  assert.deepEqual(buildEventFilterRequestParams(filtered), {
+    ageRestriction: "18_plus",
+    priceFilter: "lt_10",
+    date: "2026-07-14",
+    timePeriod: "evening",
+    timezoneOffsetMinutes: parseLocalDateKey("2026-07-14")?.getTimezoneOffset(),
+    hashtags: "music",
+    latitude: 40,
+    longitude: -73,
+    radiusKm: 80.4672,
+  });
+  assert.deepEqual(buildEventFilterRequestParams(firstClear), {});
+  assert.deepEqual(buildEventFilterRequestParams(filteredAgain), {
+    priceFilter: "free",
+    hashtags: "summer",
+  });
+  assert.deepEqual(buildEventFilterRequestParams(secondClear), {});
 });
 
 test("map can omit explicit filter location without dropping other filters", () => {

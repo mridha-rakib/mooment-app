@@ -97,6 +97,16 @@ export const mergeVisibleEventFilters = (
     : normalizeEventCategoryFilter(visibleFilters.category) ?? normalizeEventCategoryFilter(currentFilters.category),
 });
 
+export const confirmVisibleEventFilters = (
+  currentFilters: SharedEventFilters,
+  visibleFilters: SharedEventFilters,
+  options: { clearCategory?: boolean; resetAll?: boolean } = {},
+): SharedEventFilters => (
+  options.resetAll
+    ? createEmptyEventFilters()
+    : mergeVisibleEventFilters(currentFilters, visibleFilters, options)
+);
+
 export const toLocalDateKey = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

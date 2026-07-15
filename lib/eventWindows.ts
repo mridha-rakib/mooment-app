@@ -11,6 +11,7 @@ export type EventWindow = {
   eventId: string;
   hostUserId: string;
   title?: string | null;
+  details?: string | null;
   startsAt: string;
   endsAt: string;
   allowedContentTypes: EventWindowContentType[];
@@ -62,6 +63,7 @@ export type CreateEventWindowPostPayload = {
 
 export type EventWindowPayload = {
   title?: string | null;
+  details?: string | null;
   startsAt: string;
   endsAt: string;
   allowedContentTypes: EventWindowContentType[];

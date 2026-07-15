@@ -34,8 +34,15 @@ import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
 import {
+  getVisibleFeedEvents,
+  isLatestEventRequest,
+  shouldShowEventFilterEmptyState,
+  shouldShowEventFilterSection,
+} from "@/lib/eventFeedLoading";
+import {
   buildEventFilterRequestParams,
   createEmptyEventFilters,
+  hasActiveEventFilters,
   mergeCategoryIntoEventFilters,
   normalizeEventCategoryFilter,
   setCategoryInEventFilters,
@@ -272,6 +279,43 @@ function FeedSkeletonList() {
   );
 }
 
+function EventFeedSkeletonList() {
+  const pulse = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <View
+      style={styles.eventSkeletonList}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {[0, 1].map((item) => (
+        <FeedSkeletonCard key={item} pulse={pulse} />
+      ))}
+    </View>
+  );
+}
+
 function PendingVideoPostSkeleton() {
   const pulse = useRef(new Animated.Value(0.55)).current;
 
@@ -319,6 +363,7 @@ export default function HomeFeed() {
   const [feedReposts, setFeedReposts] = useState<MomentTimelineItem[]>([]);
   const [appliedEventFilters, setAppliedEventFilters] = useState<SharedEventFilters>(() => createEmptyEventFilters());
   const [isFeedLoading, setIsFeedLoading] = useState(false);
+  const [isEventFilterLoading, setIsEventFilterLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -327,7 +372,20 @@ export default function HomeFeed() {
   const feedRequestIdRef = useRef(0);
   const feedScrollRef = useRef<FlatList>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
+  const appliedEventFiltersRef = useRef(appliedEventFilters);
+  const didMountEventFilterEffectRef = useRef(false);
   const params = useLocalSearchParams<{ showSuccess?: string; view?: string; category?: string | string[] }>();
+
+  useEffect(() => {
+    appliedEventFiltersRef.current = appliedEventFilters;
+  }, [appliedEventFilters]);
+
+  const beginEventFilterTransition = useCallback(() => {
+    feedRequestIdRef.current += 1;
+    setIsFeedLoading(false);
+    setIsEventFilterLoading(true);
+    setFeedEvents([]);
+  }, []);
 
   const setActiveFeedVideoItemIdIfChanged = useCallback((itemId: string | null) => {
     if (activeFeedVideoItemIdRef.current === itemId) {
@@ -370,12 +428,17 @@ export default function HomeFeed() {
     );
 
     if (category) {
-      setAppliedEventFilters((currentFilters) => mergeCategoryIntoEventFilters(currentFilters, category));
+      const nextFilters = mergeCategoryIntoEventFilters(appliedEventFiltersRef.current, category);
+
+      if (nextFilters !== appliedEventFiltersRef.current) {
+        beginEventFilterTransition();
+        setAppliedEventFilters(nextFilters);
+      }
       router.setParams({ category: undefined });
     } else if (params.category !== undefined) {
       router.setParams({ category: undefined });
     }
-  }, [params.category, params.showSuccess, params.view]);
+  }, [beginEventFilterTransition, params.category, params.showSuccess, params.view]);
 
   const loadStories = useCallback(async () => {
     try {
@@ -395,17 +458,36 @@ export default function HomeFeed() {
     }
   }, [userId]);
 
+  const loadFeedEvents = useCallback(async () => {
+    const requestId = ++feedRequestIdRef.current;
+    setIsEventFilterLoading(true);
+    try {
+      const events = await getFeedEvents(buildEventFilterRequestParams(appliedEventFiltersRef.current, { limit: 100 }));
+
+      if (!isLatestEventRequest(requestId, feedRequestIdRef.current)) return;
+
+      setFeedEvents(events);
+    } catch {
+      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+        setFeedEvents([]);
+      }
+    } finally {
+      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+        setIsEventFilterLoading(false);
+      }
+    }
+  }, []);
+
   const loadFeed = useCallback(async () => {
     const requestId = ++feedRequestIdRef.current;
     setIsFeedLoading(true);
     try {
+      const eventFilters = appliedEventFiltersRef.current;
       const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
-        getFeedMoments({ hashtags: appliedEventFilters.hashtags }),
-        getFeedEvents(buildEventFilterRequestParams(appliedEventFilters, { limit: 100 })),
+        getFeedMoments({ hashtags: eventFilters.hashtags }),
+        getFeedEvents(buildEventFilterRequestParams(eventFilters, { limit: 100 })),
         getFeedReposts(),
       ]);
-
-      if (requestId !== feedRequestIdRef.current) return;
 
       if (momentsResult.status === "fulfilled") {
         setFeedMomentPosts(
@@ -419,26 +501,50 @@ export default function HomeFeed() {
         setFeedMomentPosts([]);
       }
 
-      setFeedEvents(
-        eventsResult.status === "fulfilled"
-          ? eventsResult.value
-          : [],
-      );
+      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+        setFeedEvents(
+          eventsResult.status === "fulfilled"
+            ? eventsResult.value
+            : [],
+        );
+      }
       setFeedReposts(repostsResult.status === 'fulfilled' ? repostsResult.value : []);
     } finally {
-      if (requestId === feedRequestIdRef.current) {
-        setIsFeedLoading(false);
+      setIsFeedLoading(false);
+
+      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+        setIsEventFilterLoading(false);
       }
     }
-  }, [appliedEventFilters]);
+  }, []);
+
+  useEffect(() => {
+    if (!didMountEventFilterEffectRef.current) {
+      didMountEventFilterEffectRef.current = true;
+      return;
+    }
+
+    void loadFeedEvents();
+  }, [appliedEventFilters, loadFeedEvents]);
 
   const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
+    beginEventFilterTransition();
     setAppliedEventFilters(filters);
-  }, []);
+  }, [beginEventFilterTransition]);
+
+  const handleClearEventFilters = useCallback(() => {
+    beginEventFilterTransition();
+    setAppliedEventFilters(createEmptyEventFilters());
+  }, [beginEventFilterTransition]);
 
   const handleMapCategoryChange = useCallback((category: EventCategory | null) => {
-    setAppliedEventFilters((currentFilters) => setCategoryInEventFilters(currentFilters, category));
-  }, []);
+    const nextFilters = setCategoryInEventFilters(appliedEventFiltersRef.current, category);
+
+    if (nextFilters !== appliedEventFiltersRef.current) {
+      beginEventFilterTransition();
+      setAppliedEventFilters(nextFilters);
+    }
+  }, [beginEventFilterTransition]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -636,9 +742,26 @@ export default function HomeFeed() {
   }, [pendingVideoUploads]);
 
   const feedItems = useMemo(
-    () => buildFeedItems(feedMomentPosts, feedEvents, feedReposts, suggestedUsers, pendingVideoUploads),
-    [feedEvents, feedMomentPosts, feedReposts, suggestedUsers, pendingVideoUploads],
+    () => buildFeedItems(
+      feedMomentPosts,
+      getVisibleFeedEvents(feedEvents, isEventFilterLoading),
+      feedReposts,
+      suggestedUsers,
+      pendingVideoUploads,
+    ),
+    [feedEvents, feedMomentPosts, feedReposts, isEventFilterLoading, suggestedUsers, pendingVideoUploads],
   );
+  const hasAppliedEventFilters = useMemo(
+    () => hasActiveEventFilters(appliedEventFilters),
+    [appliedEventFilters],
+  );
+  const showEventFilterSection = shouldShowEventFilterSection(hasAppliedEventFilters, isEventFilterLoading);
+  const showEventFilterEmptyState = shouldShowEventFilterEmptyState({
+    hasAppliedEventFilters,
+    isEventLoading: isEventFilterLoading,
+    isFeedLoading,
+    eventCount: feedEvents.length,
+  });
   const shouldShowFeedSkeleton = selectedType === 'Feed' && isFeedLoading && feedItems.length === 0 && !isRefreshing;
 
   return (
@@ -675,10 +798,26 @@ export default function HomeFeed() {
             ListHeaderComponent={(
               <>
                 <StoryCarousel stories={stories} friendStories={friendStories} />
-                {appliedEventFilters.nearby ? (
+                {showEventFilterSection ? (
                   <View style={styles.nearbyEventsSection}>
-                    <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
-                    {!isFeedLoading && feedEvents.length === 0 ? (
+                    <View style={styles.nearbyEventsHeaderRow}>
+                      <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
+                      {hasAppliedEventFilters ? (
+                        <TouchableOpacity
+                          style={[styles.clearEventFiltersButton, { borderColor: colors.border }]}
+                          activeOpacity={0.75}
+                          onPress={handleClearEventFilters}
+                          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Clear filters"
+                        >
+                          <Text style={[styles.clearEventFiltersText, { color: colors.textSecondary }]}>Clear filters</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {isEventFilterLoading ? (
+                      <EventFeedSkeletonList />
+                    ) : showEventFilterEmptyState ? (
                       <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
                         No nearby active or upcoming events found.
                       </Text>
@@ -805,11 +944,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginHorizontal: 16,
   },
+  nearbyEventsHeaderRow: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   nearbyEventsTitle: {
+    flex: 1,
     fontSize: 16,
     fontWeight: "400",
     letterSpacing: -0.08,
     lineHeight: 16,
+  },
+  clearEventFiltersButton: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearEventFiltersText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   nearbyEventsEmptyText: {
     fontSize: 13,
@@ -817,6 +976,9 @@ const styles = StyleSheet.create({
   },
   feedSkeletonList: {
     paddingBottom: 100,
+  },
+  eventSkeletonList: {
+    paddingTop: 8,
   },
   feedSkeletonCard: {
     marginHorizontal: 16,

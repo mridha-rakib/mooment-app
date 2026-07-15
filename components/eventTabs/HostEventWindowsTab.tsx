@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -37,10 +38,15 @@ type HostEventWindowsTabProps = {
   canManageWindows?: boolean;
 };
 
+export type EventWindowsTabRefreshHandle = {
+  refresh: () => Promise<void>;
+};
+
 type PickerTarget = "startDate" | "startTime" | "endDate" | "endTime" | null;
 
 type WindowFormState = {
   title: string;
+  details: string;
   startsAt: Date;
   endsAt: Date;
   allowedContentTypes: EventWindowContentType[];
@@ -84,6 +90,7 @@ const createInitialForm = (
   if (window) {
     return {
       title: window.title ?? "",
+      details: window.details ?? "",
       startsAt: parseDate(window.startsAt),
       endsAt: parseDate(window.endsAt),
       allowedContentTypes: [...window.allowedContentTypes],
@@ -98,6 +105,7 @@ const createInitialForm = (
 
   return {
     title: "",
+    details: "",
     startsAt: start,
     endsAt: end,
     allowedContentTypes: ["image"],
@@ -138,7 +146,12 @@ const replaceTimePart = (current: Date, selected: Date) => {
   return next;
 };
 
-const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWindows = false }: HostEventWindowsTabProps) => {
+const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostEventWindowsTabProps>(({
+  eventId,
+  eventStartsAt,
+  eventEndsAt,
+  canManageWindows = false,
+}, ref) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -155,7 +168,10 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
   const [cancellingWindowId, setCancellingWindowId] = useState<string | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
   const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
-  const modalBottomPadding = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 12);
+  const androidNavigationInset = Platform.OS === "android"
+    ? Math.max(0, Dimensions.get("screen").height - windowHeight)
+    : 0;
+  const modalBottomPadding = Math.max(insets.bottom, androidNavigationInset, Platform.OS === "android" ? 16 : 12);
   const formBodyBottomPadding = Platform.OS === "android" ? keyboardBottomInset : 0;
   const ModalContainer = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const modalContainerProps = Platform.OS === "ios" ? { behavior: "padding" as const } : {};
@@ -164,17 +180,21 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
   const eventEnd = useMemo(() => parseDate(eventEndsAt), [eventEndsAt]);
   const isOpenEdit = editingWindow?.computedStatus === "open";
 
-  const loadWindows = useCallback(async () => {
-    setIsLoading(true);
+  const loadWindows = useCallback(async (showLoader = true) => {
+    if (showLoader) setIsLoading(true);
     setLoadError(null);
     try {
       setWindows(await getEventWindows(eventId));
     } catch (error) {
       setLoadError(getAuthErrorMessage(error, "Unable to load event windows."));
     } finally {
-      setIsLoading(false);
+      if (showLoader) setIsLoading(false);
     }
   }, [eventId]);
+
+  React.useImperativeHandle(ref, () => ({
+    refresh: () => loadWindows(false),
+  }), [loadWindows]);
 
   useEffect(() => {
     void loadWindows();
@@ -292,6 +312,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
 
     const payload: EventWindowPayload = {
       title: form.title.trim() || null,
+      details: form.details.trim() || null,
       startsAt: form.startsAt.toISOString(),
       endsAt: form.endsAt.toISOString(),
       allowedContentTypes: form.allowedContentTypes,
@@ -303,7 +324,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
     try {
       const saved = editingWindow
         ? await updateEventWindow(eventId, editingWindow.id, isOpenEdit
-          ? { title: payload.title, endsAt: payload.endsAt, maxPosts: payload.maxPosts }
+          ? { title: payload.title, details: payload.details, endsAt: payload.endsAt, maxPosts: payload.maxPosts }
           : payload)
         : await createEventWindow(eventId, payload);
       setWindows((current) => {
@@ -445,7 +466,7 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
       ) : windows.length === 0 ? (
         <View style={[styles.emptyState, { borderColor: colors.border }]}>
           <Feather name="clock" size={30} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting windows yet</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting windows have been created for this event.</Text>
         </View>
       ) : windows.map(renderWindow)}
 
@@ -504,6 +525,18 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
                 placeholderTextColor={colors.textSecondary}
                 style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
                 maxLength={120}
+              />
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>DETAILS (OPTIONAL)</Text>
+              <TextInput
+                value={form.details}
+                onChangeText={(details) => setForm((current) => ({ ...current, details }))}
+                placeholder="Add window details"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, styles.detailsInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                maxLength={500}
+                multiline
+                textAlignVertical="top"
               />
 
               <Text style={[styles.label, { color: colors.textSecondary }]}>START</Text>
@@ -623,7 +656,9 @@ const HostEventWindowsTab = ({ eventId, eventStartsAt, eventEndsAt, canManageWin
       </Modal>
     </View>
   );
-};
+});
+
+HostEventWindowsTab.displayName = "HostEventWindowsTab";
 
 export default HostEventWindowsTab;
 
@@ -671,6 +706,7 @@ const styles = StyleSheet.create({
   noticeText: { flex: 1, fontSize: 13, lineHeight: 19 },
   label: { fontSize: 11, fontWeight: "700", marginBottom: 8, marginTop: 18 },
   input: { minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingHorizontal: 14, fontSize: 15 },
+  detailsInput: { minHeight: 92, paddingTop: 12, paddingBottom: 12, lineHeight: 20 },
   selectorRow: { flexDirection: "row", gap: 10 },
   selector: { flex: 1, minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
   selectorText: { flexShrink: 1, fontSize: 13, fontWeight: "600" },

@@ -42,6 +42,10 @@ type AttendeeEventWindowsTabProps = {
   eventStatus?: string | null;
 };
 
+export type EventWindowsTabRefreshHandle = {
+  refresh: () => Promise<void>;
+};
+
 type MediaContentType = Exclude<EventWindowContentType, "text">;
 
 type SelectedMedia = {
@@ -171,7 +175,10 @@ function GalleryAudio({ uri, headers, durationSeconds }: { uri: string; headers?
   );
 }
 
-const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsTabProps) => {
+const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, AttendeeEventWindowsTabProps>(({
+  eventId,
+  eventStatus,
+}, ref) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -223,6 +230,10 @@ const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsT
       if (showLoader) setIsLoading(false);
     }
   }, [eventId]);
+
+  React.useImperativeHandle(ref, () => ({
+    refresh: () => loadWindows(false),
+  }), [loadWindows]);
 
   useEffect(() => {
     void loadWindows();
@@ -549,7 +560,7 @@ const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsT
       ) : windows.length === 0 ? (
         <View style={[styles.emptyState, { borderColor: colors.border }]}>
           <Feather name="clock" size={30} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>{eventEnded ? "No participated windows yet" : "No event windows yet"}</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting windows are currently available for this event.</Text>
         </View>
       ) : windows.map(renderWindow)}
 
@@ -645,7 +656,9 @@ const AttendeeEventWindowsTab = ({ eventId, eventStatus }: AttendeeEventWindowsT
       </Modal>
     </View>
   );
-};
+});
+
+AttendeeEventWindowsTab.displayName = "AttendeeEventWindowsTab";
 
 export default AttendeeEventWindowsTab;
 

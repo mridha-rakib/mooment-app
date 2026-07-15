@@ -75,6 +75,7 @@ import {
     KeyboardAvoidingView,
     Modal,
     Platform,
+    RefreshControl,
     ScrollView,
     StatusBar,
     StyleSheet,
@@ -216,6 +217,30 @@ const isTicketSalesEnded = (ticket?: EventTicketPayload | null, nowMs = Date.now
   const salesEndAt = getTicketSalesEndDate(ticket);
 
   return Boolean(salesEndAt && salesEndAt.getTime() <= nowMs);
+};
+
+const getDateTimeMs = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const time = new Date(value).getTime();
+
+  return Number.isNaN(time) ? null : time;
+};
+
+const shouldRefreshChatForEvent = (event?: EventResponse | null) => {
+  if (!event || event.status === "draft") {
+    return false;
+  }
+
+  const now = Date.now();
+  const startMs = getDateTimeMs(event.scheduledAt);
+  const endMs = getDateTimeMs(event.endAt);
+  const eventStarted = startMs === null || startMs <= now;
+  const eventClosed = event.status === "completed" || event.status === "cancelled" || (endMs !== null && endMs <= now);
+
+  return eventStarted && !eventClosed;
 };
 
 const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => {
@@ -395,6 +420,7 @@ const EventScreen = () => {
   const [claimedRewardIds, setClaimedRewardIds] = useState<string[]>([]);
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [purchasedTicketCounts, setPurchasedTicketCounts] = useState<Record<string, number>>({});
   const [ticketStats, setTicketStats] = useState<Record<string, TicketStatEntry> | undefined>(undefined);
   const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
@@ -422,6 +448,9 @@ const EventScreen = () => {
   const [reportDetailsVisible, setReportDetailsVisible] = useState(false);
   const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const isReportSubmittingRef = useRef(false);
+  const refreshRequestRef = useRef(false);
+  const windowsRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
+  const chatRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
   const [pendingCategoryDestination, setPendingCategoryDestination] = useState<EventCategory | null>(null);
   const [isCategoryDestinationNavigating, setIsCategoryDestinationNavigating] = useState(false);
   const [localIsSaved, setLocalIsSaved] = useState(false);
@@ -449,10 +478,101 @@ const EventScreen = () => {
   );
   const isHostMode = params.mode === "host" || isEventOwner;
   const isDraftPreview = Boolean(event && event.status === "draft" && isEventOwner);
-  const visibleTabs = useMemo(
-    () => isDraftPreview ? ["About", "Access"] : ["About", "Access", "Mooments", "Chat"],
-    [isDraftPreview],
+  const eventStartMs = getDateTimeMs(event?.scheduledAt);
+  const eventEndMs = getDateTimeMs(event?.endAt);
+  const hasValidEventWindowSchedule = Boolean(
+    eventStartMs !== null && eventEndMs !== null && eventStartMs < eventEndMs,
   );
+  const canManageEventWindows = Boolean(
+    isEventOwner &&
+    event &&
+    (event.status === "draft" || event.status === "published" || event.status === "live") &&
+    hasValidEventWindowSchedule &&
+    eventEndMs !== null &&
+    eventEndMs > currentTimeMs,
+  );
+  const visibleTabs = useMemo(
+    () => ["About", "Access", "Mooments", "Chat"],
+    [],
+  );
+
+  const loadEventDetails = useCallback(async ({
+    setInitialLoading = false,
+    navigateOnError = false,
+    isActive = () => true,
+  }: {
+    setInitialLoading?: boolean;
+    navigateOnError?: boolean;
+    isActive?: () => boolean;
+  } = {}) => {
+    if (!eventId) {
+      if (navigateOnError) {
+        Alert.alert("Unable to load event", "Missing event id.");
+        goBackOrHome(router);
+      }
+      return null;
+    }
+
+    if (setInitialLoading) {
+      setIsLoading(true);
+    }
+
+    try {
+      const loadedEvent = await getEventById(eventId);
+      const isLoadedDraft = loadedEvent.status === "draft";
+      const isLoadedOwner = Boolean(
+        currentUser?.id &&
+        (isSameId(currentUser.id, loadedEvent.userId) || isSameId(currentUser.id, loadedEvent.host?.id)),
+      );
+      const shouldLoadJoinRequests = loadedEvent.privacy === "locked" && isLoadedOwner && !isLoadedDraft;
+      const shouldLoadTicketStats = (params.mode === "host" || isLoadedOwner) && !isLoadedDraft;
+      const [
+        loadedClaims,
+        loadedCounts,
+        loadedJoinRequests,
+        loadedTicketStatsResult,
+      ] = await Promise.all([
+        isLoadedDraft ? Promise.resolve([]) : getMyEventRewardClaims(eventId).catch(() => []),
+        isLoadedDraft ? Promise.resolve({}) : getMyTicketPurchaseCounts(eventId).catch(() => ({})),
+        shouldLoadJoinRequests ? getJoinRequests(eventId).catch(() => []) : Promise.resolve([]),
+        shouldLoadTicketStats
+          ? getEventTicketStats(eventId)
+              .then((stats) => ({ ok: true as const, stats }))
+              .catch(() => ({ ok: false as const }))
+          : Promise.resolve({ ok: true as const, stats: undefined }),
+      ]);
+
+      if (!isActive()) {
+        return null;
+      }
+
+      setEvent(loadedEvent);
+      setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
+      setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
+      setPurchasedTicketCounts(loadedCounts);
+      setMyJoinRequestStatus(loadedEvent.myJoinRequestStatus ?? null);
+      setJoinRequests(loadedJoinRequests);
+
+      if (!shouldLoadTicketStats) {
+        setTicketStats(undefined);
+      } else if (loadedTicketStatsResult.ok) {
+        setTicketStats(loadedTicketStatsResult.stats);
+      }
+
+      return loadedEvent;
+    } catch {
+      if (isActive() && navigateOnError) {
+        Alert.alert("Unable to load event", "Please try again.");
+        goBackOrHome(router);
+      }
+
+      return null;
+    } finally {
+      if (isActive() && setInitialLoading) {
+        setIsLoading(false);
+      }
+    }
+  }, [currentUser?.id, eventId, params.mode, router]);
 
   const userLocation = useMemo(
     () =>
@@ -466,62 +586,16 @@ const EventScreen = () => {
   useEffect(() => {
     let isActive = true;
 
-    const loadEvent = async () => {
-      if (!eventId) {
-        Alert.alert("Unable to load event", "Missing event id.");
-        goBackOrHome(router);
-        return;
-      }
-
-      setIsLoading(true);
-
-      try {
-        const loadedEvent = await getEventById(eventId);
-        const isLoadedDraft = loadedEvent.status === "draft";
-        const [loadedClaims, loadedCounts] = isLoadedDraft
-          ? [[], {}]
-          : await Promise.all([
-              getMyEventRewardClaims(eventId).catch(() => []),
-              getMyTicketPurchaseCounts(eventId).catch(() => ({})),
-            ]);
-
-        if (!isActive) {
-          return;
-        }
-
-        setEvent(loadedEvent);
-        setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
-        setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
-        setPurchasedTicketCounts(loadedCounts);
-        setMyJoinRequestStatus(loadedEvent.myJoinRequestStatus ?? null);
-
-        const isEventOwner =
-          currentUser?.id &&
-          (loadedEvent.userId === currentUser.id || loadedEvent.host?.id === currentUser.id);
-
-        if (loadedEvent.privacy === "locked" && isEventOwner && !isLoadedDraft) {
-          getJoinRequests(eventId).then(setJoinRequests).catch(() => {});
-        }
-      } catch {
-        if (!isActive) {
-          return;
-        }
-
-        Alert.alert("Unable to load event", "Please try again.");
-        goBackOrHome(router);
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadEvent();
+    void loadEventDetails({
+      setInitialLoading: true,
+      navigateOnError: true,
+      isActive: () => isActive,
+    });
 
     return () => {
       isActive = false;
     };
-  }, [currentUser?.id, eventId, router]);
+  }, [loadEventDetails]);
 
   useFocusEffect(
     useCallback(() => {
@@ -533,52 +607,35 @@ const EventScreen = () => {
         };
       }
 
-      const refreshEvent = async () => {
-        try {
-          const loadedEvent = await getEventById(eventId);
-          const isLoadedDraft = loadedEvent.status === "draft";
-          const [loadedClaims, loadedCounts] = isLoadedDraft
-            ? [[], {}]
-            : await Promise.all([
-                getMyEventRewardClaims(eventId).catch(() => []),
-                getMyTicketPurchaseCounts(eventId).catch(() => ({})),
-              ]);
-
-          if (!isActive) {
-            return;
-          }
-
-          setEvent(loadedEvent);
-          setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
-          setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
-          setPurchasedTicketCounts(loadedCounts);
-        } catch {
-          // Initial loading handles user-facing errors. Focus refreshes stay quiet.
-        }
-      };
-
-      void refreshEvent();
+      void loadEventDetails({ isActive: () => isActive });
 
       return () => {
         isActive = false;
       };
-    }, [eventId, isLoading]),
+    }, [eventId, isLoading, loadEventDetails]),
   );
 
-  useEffect(() => {
-    if (!isHostMode || !eventId || isDraftPreview) return;
-    let cancelled = false;
+  const handleRefresh = useCallback(async () => {
+    if (refreshRequestRef.current) {
+      return;
+    }
 
-    getEventTicketStats(eventId)
-      .then((stats) => {
-        if (!cancelled) setTicketStats(stats);
-      })
-      .catch(() => {});
+    refreshRequestRef.current = true;
+    setIsRefreshing(true);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [isDraftPreview, isHostMode, eventId]);
+    try {
+      const loadedEvent = await loadEventDetails();
+
+      if (activeTab === "Mooments") {
+        await windowsRefreshRef.current?.refresh();
+      } else if (activeTab === "Chat" && shouldRefreshChatForEvent(loadedEvent)) {
+        await chatRefreshRef.current?.refresh();
+      }
+    } finally {
+      refreshRequestRef.current = false;
+      setIsRefreshing(false);
+    }
+  }, [activeTab, loadEventDetails]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
@@ -1596,6 +1653,13 @@ const EventScreen = () => {
       {renderHeader()}
       <ScrollView
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: footerHeight + 24 },
@@ -1808,25 +1872,28 @@ const EventScreen = () => {
               onClaimReward={isDraftPreview ? undefined : handleClaimReward}
             />
           )}
-          {!isDraftPreview && activeTab === "Mooments" && eventId && (
+          {activeTab === "Mooments" && eventId && (
             isEventOwner ? (
               <HostEventWindowsTab
+                ref={windowsRefreshRef}
                 eventId={eventId}
                 eventStartsAt={event?.scheduledAt}
                 eventEndsAt={event?.endAt}
-                canManageWindows={event?.status === "live"}
+                canManageWindows={canManageEventWindows}
               />
             ) : (
-              <AttendeeEventWindowsTab eventId={eventId} eventStatus={event?.status} />
+              <AttendeeEventWindowsTab ref={windowsRefreshRef} eventId={eventId} eventStatus={event?.status} />
             )
           )}
-          {!isDraftPreview && activeTab === "Chat" && eventId && (
+          {activeTab === "Chat" && eventId && (
             <ChatTab
+              ref={chatRefreshRef}
               eventId={eventId}
               eventName={event?.name ?? "Event"}
               scheduledAt={event?.scheduledAt ?? null}
               endAt={event?.endAt ?? null}
               eventStatus={event?.status}
+              isDraftPreviewDisabled={isDraftPreview}
             />
           )}
           {/* ProductTab hidden — preserved for future restoration
