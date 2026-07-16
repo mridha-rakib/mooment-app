@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Image, Modal, Platform, StyleSheet,
+  ActivityIndicator, Animated, FlatList, Image, Modal, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
 import { getMyPostTagEvents, type PostTagEvent, type PostTagEventStatus } from '@/lib/events';
 
 type SelectedEvent = {
@@ -63,6 +64,13 @@ export default function EventPickerModal({ visible, onClose, onSelect, selectedE
   const bottomInset = Platform.OS === 'android'
     ? Math.max(insets.bottom, ANDROID_NAV_FALLBACK)
     : insets.bottom;
+  const {
+    sheetTranslateY,
+    dragPanHandlers,
+  } = useBottomSheetDragDismiss({
+    visible,
+    onClose,
+  });
 
   useEffect(() => {
     if (!visible) return;
@@ -101,9 +109,11 @@ export default function EventPickerModal({ visible, onClose, onSelect, selectedE
       <View style={styles.overlay}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
-        <View style={[styles.sheet, { paddingBottom: bottomInset + 16 }]}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>Events</Text>
+        <Animated.View style={[styles.sheet, { paddingBottom: bottomInset + 16, transform: [{ translateY: sheetTranslateY }] }]}>
+          <View {...dragPanHandlers}>
+            <View style={styles.handle} />
+            <Text style={styles.title}>Events</Text>
+          </View>
 
           <View style={styles.searchRow}>
             <Feather name="search" size={16} color="#454555" style={{ marginRight: 10 }} />
@@ -177,7 +187,7 @@ export default function EventPickerModal({ visible, onClose, onSelect, selectedE
               </TouchableOpacity>
             </View>
           )}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

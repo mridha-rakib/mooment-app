@@ -35,6 +35,9 @@ export type PostContextNode = {
     avatar?: string | null;
     isFollowing?: boolean;
   };
+  taggedEvent?: {
+    id?: string | null;
+  };
 };
 
 export type AudioDetails = {
@@ -694,15 +697,17 @@ export default function FeedPost({
     );
   };
 
-  const handleEventPress = () => {
-    if (!resolvedEventId) {
+  const handleEventPress = (eventId = resolvedEventId) => {
+    const targetEventId = eventId?.trim();
+
+    if (!targetEventId) {
       Alert.alert('Unable to load event', 'This event is missing its event id.');
       return;
     }
 
     router.push({
       pathname: '/event-screen/event',
-      params: { eventId: resolvedEventId },
+      params: { eventId: targetEventId },
     });
   };
 
@@ -722,6 +727,10 @@ export default function FeedPost({
       avatar: taggedUser.avatar,
       isFollowing: taggedUser.isFollowing,
     });
+  };
+
+  const handleTaggedEventPress = (taggedEvent: NonNullable<PostContextNode['taggedEvent']>) => {
+    handleEventPress(taggedEvent.id ?? null);
   };
 
   if (isHidden) {
@@ -783,8 +792,14 @@ export default function FeedPost({
                   <Text
                     key={i}
                     style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}
-                    onPress={node.taggedUser?.id ? () => handleTaggedUserPress(node.taggedUser!) : undefined}
-                    suppressHighlighting={Boolean(node.taggedUser?.id)}
+                    onPress={
+                      node.taggedUser?.id
+                        ? () => handleTaggedUserPress(node.taggedUser!)
+                        : node.taggedEvent?.id
+                          ? () => handleTaggedEventPress(node.taggedEvent!)
+                          : undefined
+                    }
+                    suppressHighlighting={Boolean(node.taggedUser?.id || node.taggedEvent?.id)}
                   >
                     {node.text}
                   </Text>
