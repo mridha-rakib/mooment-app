@@ -51,6 +51,13 @@ const DEFAULT_LOCATION: LocationSearchResult = {
   name: '',
 };
 
+const getLocationSelectionKey = (location: LocationSearchResult) =>
+  [
+    location.providerId ?? location.id,
+    location.latitude.toFixed(6),
+    location.longitude.toFixed(6),
+  ].join(':');
+
 export default function LocationPickerScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -70,6 +77,7 @@ export default function LocationPickerScreen() {
     name: currentLocation.venue || currentLocation.searchLabel || currentLocation.address || DEFAULT_LOCATION.name,
   };
   const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult>(initialLocation);
+  const selectedLocationRef = useRef<LocationSearchResult>(initialLocation);
   const [query, setQuery] = useState(initialLocation.label);
   const [results, setResults] = useState<LocationSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -105,7 +113,6 @@ export default function LocationPickerScreen() {
     }
 
     return {
-      countryCode: location.label.toLowerCase().includes('bangladesh') ? 'bd' : undefined,
       label: location.label,
       latitude: location.latitude,
       longitude: location.longitude,
@@ -115,6 +122,10 @@ export default function LocationPickerScreen() {
   useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
   }, []);
+
+  useEffect(() => {
+    selectedLocationRef.current = selectedLocation;
+  }, [selectedLocation]);
 
   useEffect(() => {
     const hasCoordinates = typeof currentLocation.latitude === 'number' && typeof currentLocation.longitude === 'number';
@@ -151,6 +162,7 @@ export default function LocationPickerScreen() {
         }
 
         setSelectedLocation(location);
+        selectedLocationRef.current = location;
         setQuery(location.label);
       })
       .catch(() => undefined)
@@ -226,37 +238,61 @@ export default function LocationPickerScreen() {
   }, [query, selectedLocation.label, selectedLocation.latitude, selectedLocation.longitude]);
 
   const handleSelectLocation = (location: LocationSearchResult) => {
+    const currentSelection = selectedLocationRef.current;
+
+    if (
+      getLocationSelectionKey(currentSelection) === getLocationSelectionKey(location) &&
+      query === location.label
+    ) {
+      return;
+    }
+
+    searchAbortRef.current?.abort();
+    searchRequestId.current += 1;
+    selectedLocationRef.current = location;
     setSelectedLocation(location);
     setQuery(location.label);
     setResults([]);
+    setIsSearching(false);
     Keyboard.dismiss();
   };
 
   const resolveTypedLocation = async () => {
     const trimmedQuery = query.trim();
+    const currentSelection = selectedLocationRef.current;
 
-    if (trimmedQuery.length < 2 || trimmedQuery === selectedLocation.label) {
-      return selectedLocation;
+    if (trimmedQuery.length < 2 || trimmedQuery === currentSelection.label) {
+      return currentSelection;
     }
 
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    const requestId = searchRequestId.current + 1;
+    searchRequestId.current = requestId;
     setIsSearching(true);
 
     try {
-      const [location] = await searchLocations(trimmedQuery, getSelectedSearchContext());
+      const [location] = await searchLocations(trimmedQuery, getSelectedSearchContext(), {
+        signal: controller.signal,
+      });
 
-      if (location) {
+      if (requestId === searchRequestId.current && !controller.signal.aborted && location) {
+        selectedLocationRef.current = location;
         setSelectedLocation(location);
         setQuery(location.label);
         setResults([]);
         return location;
       }
     } catch {
-      return selectedLocation;
+      return selectedLocationRef.current;
     } finally {
-      setIsSearching(false);
+      if (requestId === searchRequestId.current) {
+        setIsSearching(false);
+      }
     }
 
-    return selectedLocation;
+    return selectedLocationRef.current;
   };
 
   const handleSubmitSearch = async () => {

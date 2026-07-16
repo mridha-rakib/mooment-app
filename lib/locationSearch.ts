@@ -9,6 +9,13 @@ export type LocationSearchResult = {
   longitude: number;
   isVenue: boolean;
   matchLabel?: string;
+  providerId?: string;
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  postalCode?: string;
+  providerOrder?: number;
 };
 
 export type LocationSearchContext = {
@@ -44,6 +51,7 @@ type MapboxFeature = {
     name?: string;
     place_formatted?: string;
     maki?: string;
+    mapbox_id?: string;
     coordinates?: {
       latitude?: number;
       longitude?: number;
@@ -62,6 +70,9 @@ type MapboxFeature = {
       region?: {
         name?: string;
       };
+      postcode?: {
+        name?: string;
+      };
     };
   };
 };
@@ -70,15 +81,18 @@ type MapboxResponse = {
   features?: MapboxFeature[];
 };
 
+type MapboxSuggestResponse = {
+  suggestions?: Array<{
+    mapbox_id?: string;
+  }>;
+};
+
 const MAPBOX_GEOCODING_URL = "https://api.mapbox.com/geocoding/v5/mapbox.places";
 const MAPBOX_SEARCHBOX_FORWARD_URL = "https://api.mapbox.com/search/searchbox/v1/forward";
+const MAPBOX_SEARCHBOX_SUGGEST_URL = "https://api.mapbox.com/search/searchbox/v1/suggest";
+const MAPBOX_SEARCHBOX_RETRIEVE_URL = "https://api.mapbox.com/search/searchbox/v1/retrieve";
 const LOCATION_SEARCH_CACHE_LIMIT = 50;
-const DHAKA_FALLBACK_CONTEXT: LocationSearchContext = {
-  countryCode: "bd",
-  label: "Dhaka, Bangladesh",
-  latitude: 23.77195,
-  longitude: 90.39018,
-};
+const LOCATION_SEARCH_TIMEOUT_MS = 8000;
 
 const locationSearchCache = new Map<string, LocationSearchResult[]>();
 
@@ -130,6 +144,75 @@ const normalizeText = (value: string) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
+const normalizeSegmentForCompare = (value: string) =>
+  value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const cleanDisplayText = (value?: string | null) =>
+  (value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/^,\s*|\s*,$/g, "")
+    .trim();
+
+const dedupeAdjacentAddressSegments = (value: string) => {
+  const segments = value
+    .split(",")
+    .map((segment) => cleanDisplayText(segment))
+    .filter(Boolean);
+  const dedupedSegments = segments.filter((segment, index) => {
+    if (index === 0) {
+      return true;
+    }
+
+    return normalizeSegmentForCompare(segment) !== normalizeSegmentForCompare(segments[index - 1]);
+  });
+
+  return dedupedSegments.join(", ");
+};
+
+const removeLeadingNameFromAddress = (address: string, name: string) => {
+  const cleanAddress = dedupeAdjacentAddressSegments(cleanDisplayText(address));
+  const cleanName = cleanDisplayText(name);
+
+  if (!cleanAddress || !cleanName) {
+    return cleanAddress;
+  }
+
+  const normalizedAddress = normalizeSegmentForCompare(cleanAddress);
+  const normalizedName = normalizeSegmentForCompare(cleanName);
+
+  if (normalizedAddress === normalizedName) {
+    return "";
+  }
+
+  if (normalizedAddress.startsWith(`${normalizedName}, `)) {
+    return cleanDisplayText(cleanAddress.slice(cleanName.length + 1));
+  }
+
+  if (normalizedAddress.startsWith(`${normalizedName} - `)) {
+    return cleanDisplayText(cleanAddress.slice(cleanName.length + 3));
+  }
+
+  return cleanAddress;
+};
+
+const buildLocationLabel = (name: string, address: string) => {
+  if (!address) {
+    return name;
+  }
+
+  if (!name) {
+    return address;
+  }
+
+  return `${name}, ${address}`;
+};
+
 const toIdSlug = (value: string, fallback = "location") => normalizeText(value).replace(/\s+/g, "-") || fallback;
 
 const tokenize = (value: string) =>
@@ -137,66 +220,36 @@ const tokenize = (value: string) =>
     .split(" ")
     .filter((token) => token.length > 1);
 
-const getCountryCodeFromContext = (context?: LocationSearchContext | null) => {
-  if (context?.countryCode) {
-    return context.countryCode.toLowerCase();
+const isFiniteCoordinate = (latitude: unknown, longitude: unknown) =>
+  typeof latitude === "number" &&
+  typeof longitude === "number" &&
+  Number.isFinite(latitude) &&
+  Number.isFinite(longitude) &&
+  latitude >= -90 &&
+  latitude <= 90 &&
+  longitude >= -180 &&
+  longitude <= 180;
+
+const getSearchContext = (context?: LocationSearchContext | null): LocationSearchContext | null => {
+  if (!context || !isFiniteCoordinate(context.latitude, context.longitude)) {
+    return null;
   }
 
-  const label = context?.label?.toLowerCase() ?? "";
-
-  if (label.includes("bangladesh")) {
-    return "bd";
-  }
-
-  return null;
-};
-
-const getSearchContext = (query: string, context?: LocationSearchContext | null): LocationSearchContext | null => {
-  const normalizedQuery = normalizeText(query);
-  const isDhakaSpecificQuery =
-    normalizedQuery.includes("dhaka") ||
-    normalizedQuery.includes("tejgaon") ||
-    normalizedQuery.includes("baf") ||
-    normalizedQuery.includes("falcon hall");
-
-  if (isDhakaSpecificQuery && (!context || distanceInKm(context, DHAKA_FALLBACK_CONTEXT) > 500)) {
-    return DHAKA_FALLBACK_CONTEXT;
-  }
-
-  if (context) {
-    return {
-      ...context,
-      countryCode: getCountryCodeFromContext(context),
-    };
-  }
-
-  return null;
-};
-
-const buildLocalBBox = (context: LocationSearchContext, radiusKm = 30) => {
-  const latitudeDelta = radiusKm / 111;
-  const longitudeDelta = radiusKm / (111 * Math.max(Math.cos(toRadians(context.latitude)), 0.2));
-
-  return [
-    context.longitude - longitudeDelta,
-    context.latitude - latitudeDelta,
-    context.longitude + longitudeDelta,
-    context.latitude + latitudeDelta,
-  ].join(",");
+  return {
+    label: context.label,
+    latitude: context.latitude,
+    longitude: context.longitude,
+  };
 };
 
 const getSearchCacheKey = (query: string, context?: LocationSearchContext | null) => {
   const normalizedQuery = normalizeText(query);
-  const normalizedContext = context
-    ? [
-        context.latitude.toFixed(3),
-        context.longitude.toFixed(3),
-        getCountryCodeFromContext(context) ?? "",
-        normalizeText(context.label ?? ""),
-      ].join("|")
+  const searchContext = getSearchContext(context);
+  const normalizedContext = searchContext
+    ? [searchContext.latitude.toFixed(3), searchContext.longitude.toFixed(3)].join("|")
     : "global";
 
-  return `${normalizedQuery}::${normalizedContext}`;
+  return `worldwide-v2::${normalizedQuery}::${normalizedContext}`;
 };
 
 const storeSearchResults = (key: string, results: LocationSearchResult[]) => {
@@ -248,13 +301,26 @@ const getFeatureCountryCode = (feature: MapboxFeature) => {
     ?.short_code?.toLowerCase() ?? null;
 };
 
+const getFeatureContextValue = (feature: MapboxFeature, prefix: string) =>
+  feature.context?.find((item) => item.id?.startsWith(prefix))?.text;
+
 const getFeaturePlaceName = (feature: MapboxFeature) =>
   feature.properties?.context?.place?.name ||
   feature.properties?.context?.locality?.name ||
   feature.context?.find((item) => item.id?.startsWith("place.") || item.id?.startsWith("locality."))?.text ||
   "";
 
-const toLocationResult = (feature: MapboxFeature, fallbackId: string): LocationSearchResult | null => {
+const getFeatureRegion = (feature: MapboxFeature) =>
+  feature.properties?.context?.region?.name || getFeatureContextValue(feature, "region.") || "";
+
+const getFeaturePostalCode = (feature: MapboxFeature) =>
+  feature.properties?.context?.postcode?.name || getFeatureContextValue(feature, "postcode.") || "";
+
+const toLocationResult = (
+  feature: MapboxFeature,
+  fallbackId: string,
+  providerOrder: number,
+): LocationSearchResult | null => {
   const coordinates = getFeatureCoordinates(feature);
 
   if (!coordinates) {
@@ -262,11 +328,18 @@ const toLocationResult = (feature: MapboxFeature, fallbackId: string): LocationS
   }
 
   const [longitude, latitude] = coordinates;
-  const name = feature.properties?.name?.trim() || feature.text?.trim() || "Selected location";
-  const placeFormatted = feature.properties?.place_formatted?.trim();
-  const fullAddress = feature.properties?.full_address?.trim();
-  const mapboxPlaceName = feature.place_name?.trim();
-  const label = fullAddress || (placeFormatted ? `${name}, ${placeFormatted}` : mapboxPlaceName || name);
+
+  if (!isFiniteCoordinate(latitude, longitude)) {
+    return null;
+  }
+
+  const name = cleanDisplayText(feature.properties?.name || feature.text || "Selected location");
+  const placeFormatted = cleanDisplayText(feature.properties?.place_formatted);
+  const fullAddress = cleanDisplayText(feature.properties?.full_address);
+  const mapboxPlaceName = cleanDisplayText(feature.place_name);
+  const rawAddress = fullAddress || placeFormatted || mapboxPlaceName;
+  const address = removeLeadingNameFromAddress(rawAddress, name);
+  const label = buildLocationLabel(name, address);
   const featureType = feature.properties?.feature_type || feature.place_type?.[0] || "";
   const category = feature.properties?.category || "";
   const isVenue =
@@ -274,25 +347,57 @@ const toLocationResult = (feature: MapboxFeature, fallbackId: string): LocationS
     feature.place_type?.includes("poi") ||
     Boolean(feature.properties?.maki) ||
     /hall|center|centre|hotel|restaurant|venue|convention|office|campus/i.test(`${name} ${category}`);
+  const country = feature.properties?.context?.country?.name || getFeatureContextValue(feature, "country.") || "";
+  const countryCode = getFeatureCountryCode(feature) || undefined;
+  const city = getFeaturePlaceName(feature);
+  const region = getFeatureRegion(feature);
+  const postalCode = getFeaturePostalCode(feature);
 
   return {
-    address: label,
-    id: feature.id ?? fallbackId,
+    address,
+    id: feature.id ?? feature.properties?.mapbox_id ?? fallbackId,
     isVenue,
     label,
     latitude,
     longitude,
     matchLabel: isVenue ? "Venue" : getFeaturePlaceName(feature) || undefined,
     name,
+    providerId: feature.id ?? feature.properties?.mapbox_id,
+    country: country || undefined,
+    countryCode,
+    region: region || undefined,
+    city: city || undefined,
+    postalCode: postalCode || undefined,
+    providerOrder,
   };
+};
+
+const fetchWithTimeout = async (url: string, signal?: AbortSignal): Promise<Response> => {
+  if (signal?.aborted) {
+    throw new Error("Location search aborted.");
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), LOCATION_SEARCH_TIMEOUT_MS);
+  const abortRequest = () => controller.abort();
+
+  signal?.addEventListener("abort", abortRequest, { once: true });
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", abortRequest);
+  }
 };
 
 const readLocationResults = async (
   url: string,
   fallbackIdPrefix = "location",
   signal?: AbortSignal,
+  providerOrderOffset = 0,
 ): Promise<LocationSearchResult[]> => {
-  const response = await fetch(url, signal ? { signal } : undefined);
+  const response = await fetchWithTimeout(url, signal);
 
   if (!response.ok) {
     throw new Error("Unable to search locations right now.");
@@ -301,14 +406,13 @@ const readLocationResults = async (
   const data = (await response.json()) as MapboxResponse;
 
   return (data.features ?? [])
-    .map((feature, index) => toLocationResult(feature, `${fallbackIdPrefix}-${index}`))
+    .map((feature, index) => toLocationResult(feature, `${fallbackIdPrefix}-${index}`, index + providerOrderOffset))
     .filter((result): result is LocationSearchResult => Boolean(result));
 };
 
 const searchBoxForward = async (
   query: string,
   context?: LocationSearchContext | null,
-  bbox?: string,
   options: LocationSearchOptions = {},
 ): Promise<LocationSearchResult[]> => {
   const params = new URLSearchParams({
@@ -322,21 +426,67 @@ const searchBoxForward = async (
     params.set("proximity", `${context.longitude},${context.latitude}`);
   }
 
-  if (bbox) {
-    params.set("bbox", bbox);
-  }
-
   return readLocationResults(
     `${MAPBOX_SEARCHBOX_FORWARD_URL}?${params.toString()}`,
-    `searchbox-${bbox ? "local" : "global"}-${toIdSlug(query)}`,
+    `searchbox-global-${toIdSlug(query)}`,
     options.signal,
   );
+};
+
+const createSearchSessionToken = () => `location-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const searchBoxSuggest = async (
+  query: string,
+  context?: LocationSearchContext | null,
+  options: LocationSearchOptions = {},
+): Promise<LocationSearchResult[]> => {
+  const sessionToken = createSearchSessionToken();
+  const params = new URLSearchParams({
+    access_token: MAPBOX_PUBLIC_TOKEN,
+    language: "en",
+    limit: "5",
+    q: query,
+    session_token: sessionToken,
+  });
+
+  if (context) {
+    params.set("proximity", `${context.longitude},${context.latitude}`);
+  }
+
+  const response = await fetchWithTimeout(`${MAPBOX_SEARCHBOX_SUGGEST_URL}?${params.toString()}`, options.signal);
+
+  if (!response.ok) {
+    throw new Error("Unable to search locations right now.");
+  }
+
+  const data = (await response.json()) as MapboxSuggestResponse;
+  const suggestions = (data.suggestions ?? []).filter((suggestion) => Boolean(suggestion.mapbox_id));
+  const retrievedResults = await Promise.allSettled(
+    suggestions.map((suggestion, index) => {
+      const retrieveParams = new URLSearchParams({
+        access_token: MAPBOX_PUBLIC_TOKEN,
+        session_token: sessionToken,
+      });
+
+      return readLocationResults(
+        `${MAPBOX_SEARCHBOX_RETRIEVE_URL}/${encodeURIComponent(suggestion.mapbox_id as string)}?${retrieveParams.toString()}`,
+        `suggest-global-${toIdSlug(query)}-${index}`,
+        options.signal,
+        index,
+      );
+    }),
+  );
+
+  if (options.signal?.aborted) {
+    throw new Error("Location search aborted.");
+  }
+
+  return retrievedResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 };
 
 const geocodeSearch = async (
   query: string,
   context?: LocationSearchContext | null,
-  bbox?: string,
   options: LocationSearchOptions = {},
 ): Promise<LocationSearchResult[]> => {
   const params = new URLSearchParams({
@@ -346,23 +496,14 @@ const geocodeSearch = async (
     limit: "8",
     types: "address,poi,place,locality,neighborhood,district",
   });
-  const countryCode = getCountryCodeFromContext(context);
 
   if (context) {
     params.set("proximity", `${context.longitude},${context.latitude}`);
   }
 
-  if (bbox) {
-    params.set("bbox", bbox);
-  }
-
-  if (countryCode) {
-    params.set("country", countryCode);
-  }
-
   return readLocationResults(
     `${MAPBOX_GEOCODING_URL}/${encodeURIComponent(query)}.json?${params.toString()}`,
-    `geocode-${bbox ? "local" : "global"}-${toIdSlug(query)}`,
+    `geocode-global-${toIdSlug(query)}`,
     options.signal,
   );
 };
@@ -389,49 +530,29 @@ const curatedSearch = (query: string, context?: LocationSearchContext | null): L
   }).map(({ aliases: _aliases, ...venue }) => venue);
 };
 
-const localFallbackSearch = (
-  query: string,
-  context?: LocationSearchContext | null,
-  localResults: LocationSearchResult[] = [],
-): LocationSearchResult[] => {
-  if (!context || query.trim().length < 3) {
-    return [];
-  }
-
-  const bestLocalResult = localResults.find((result) => distanceInKm(context, result) < 60);
-  const label = query.trim();
-  const anchor = bestLocalResult ?? {
-    address: context.label || "Nearby selected map area",
-    latitude: context.latitude,
-    longitude: context.longitude,
-  };
-  const contextLabel = bestLocalResult?.address || context.label || "Nearby selected map area";
-
-  return [
-    {
-      address: `${label}, ${contextLabel}`,
-      id: `typed-nearby-${normalizeText(label).replace(/\s+/g, "-")}`,
-      isVenue: /hall|center|centre|venue|convention|hotel|restaurant|office|club|auditorium/i.test(label),
-      label: `${label}, ${contextLabel}`,
-      latitude: anchor.latitude,
-      longitude: anchor.longitude,
-      matchLabel: "Near map area",
-      name: label,
-    },
-  ];
-};
-
 const dedupeResults = (results: LocationSearchResult[]) => {
-  const seen = new Set<string>();
+  const seenProviderIds = new Set<string>();
+  const seenLocationSignatures = new Set<string>();
 
   return results.filter((result) => {
-    const key = `${normalizeText(result.name)}:${result.latitude.toFixed(4)}:${result.longitude.toFixed(4)}`;
+    const providerKey = result.providerId ? `provider:${result.providerId}` : null;
+    const locationSignature = [
+      normalizeText(result.address || result.label || result.name),
+      result.latitude.toFixed(5),
+      result.longitude.toFixed(5),
+    ].join(":");
 
-    if (seen.has(key)) {
+    if (
+      (providerKey && seenProviderIds.has(providerKey)) ||
+      seenLocationSignatures.has(locationSignature)
+    ) {
       return false;
     }
 
-    seen.add(key);
+    if (providerKey) {
+      seenProviderIds.add(providerKey);
+    }
+    seenLocationSignatures.add(locationSignature);
     return true;
   });
 };
@@ -474,19 +595,55 @@ const rankResults = (
     const score = (result: LocationSearchResult) => {
       const normalizedName = normalizeText(result.name);
       const normalizedAddress = normalizeText(result.address);
-      const tokenMatches = queryTokens.filter((token) => normalizedAddress.includes(token)).length;
+      const nameTokenMatches = queryTokens.filter((token) => normalizedName.includes(token)).length;
+      const addressTokenMatches = queryTokens.filter((token) => normalizedAddress.includes(token)).length;
+      const allTokensInName = queryTokens.length > 0 && nameTokenMatches === queryTokens.length;
+      const allTokensInAddress = queryTokens.length > 0 && addressTokenMatches === queryTokens.length;
       const exactNameScore =
-        normalizedName === normalizedQuery ? 45 : normalizedName.includes(normalizedQuery) ? 28 : 0;
-      const venueScore = result.isVenue ? 18 : 0;
+        normalizedName === normalizedQuery
+          ? 520
+          : normalizedName.startsWith(normalizedQuery)
+            ? 240
+            : normalizedName.includes(normalizedQuery)
+              ? 185
+              : 0;
+      const tokenNameScore = allTokensInName ? 160 : nameTokenMatches * 36;
+      const baseAddressScore =
+        normalizedAddress === normalizedQuery
+          ? 120
+          : normalizedAddress.startsWith(normalizedQuery)
+            ? 95
+            : normalizedAddress.includes(normalizedQuery)
+              ? 70
+              : allTokensInAddress
+                ? 58
+                : addressTokenMatches * 12;
+      const addressScore = normalizedName === normalizedQuery ? 0 : baseAddressScore;
+      const providerScore = Math.max(0, 40 - (result.providerOrder ?? 40));
+      const venueScore = result.isVenue ? 30 : 0;
       const curatedScore = result.id.startsWith("curated-") ? 80 : 0;
-      const typedScore = result.id.startsWith("typed-nearby-") ? 12 : 0;
-      const distanceScore = context ? Math.max(0, 35 - distanceInKm(context, result) / 3) : 0;
+      const textScore = exactNameScore + tokenNameScore + addressScore;
+      const distanceScore =
+        context && textScore > 0 ? Math.max(0, 12 - distanceInKm(context, result) / 50) : 0;
 
-      return curatedScore + typedScore + exactNameScore + venueScore + tokenMatches * 10 + distanceScore;
+      return curatedScore + textScore + providerScore + venueScore + distanceScore;
     };
 
     return score(second) - score(first);
   });
+};
+
+const collectRemoteResults = async (
+  searches: Array<Promise<LocationSearchResult[]>>,
+  signal?: AbortSignal,
+): Promise<LocationSearchResult[]> => {
+  const settledResults = await Promise.allSettled(searches);
+
+  if (signal?.aborted) {
+    throw new Error("Location search aborted.");
+  }
+
+  return settledResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 };
 
 export const searchLocations = async (
@@ -507,35 +664,19 @@ export const searchLocations = async (
     return [...cachedResults];
   }
 
-  const searchContext = getSearchContext(trimmedQuery, context);
-  const bbox = searchContext ? buildLocalBBox(searchContext) : undefined;
+  const searchContext = getSearchContext(context);
   const curatedResults = curatedSearch(trimmedQuery, searchContext);
-  const searchboxPromise = searchBoxForward(trimmedQuery, searchContext, bbox, options);
-  const geocodePromise = geocodeSearch(trimmedQuery, searchContext, bbox, options);
-  const remoteResults = await Promise.any([
-    searchboxPromise.then((results) => {
-      if (results.length === 0) {
-        throw new Error("empty searchbox response");
-      }
-
-      return results;
-    }),
-    geocodePromise.then((results) => {
-      if (results.length === 0) {
-        throw new Error("empty geocode response");
-      }
-
-      return results;
-    }),
-  ]).catch(async () => {
-    const settledResults = await Promise.allSettled([searchboxPromise, geocodePromise]);
-
-    return settledResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  });
-  const fallbackResults = localFallbackSearch(trimmedQuery, searchContext, remoteResults);
+  const remoteResults = await collectRemoteResults(
+    [
+      searchBoxSuggest(trimmedQuery, searchContext, options),
+      searchBoxForward(trimmedQuery, searchContext, options),
+      geocodeSearch(trimmedQuery, searchContext, options),
+    ],
+    options.signal,
+  );
   const rankedResults = rankResults(
     trimmedQuery,
-    dedupeResults([...curatedResults, ...remoteResults, ...fallbackResults]),
+    dedupeResults([...curatedResults, ...remoteResults]),
     searchContext,
   );
   const finalResults = ensureUniqueResultIds(rankedResults.slice(0, 8));

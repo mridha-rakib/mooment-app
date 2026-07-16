@@ -109,11 +109,12 @@ export default function CreateEventStep3() {
 
         setStepThree({
           location: {
+            ...draftLocation,
             address: nextAddress,
             latitude: location.latitude,
             longitude: location.longitude,
             searchLabel: label,
-            venue: '',
+            venue: draftLocation.venue ?? '',
           },
         });
       })
@@ -133,7 +134,6 @@ export default function CreateEventStep3() {
   const persistStepThree = () => {
     const trimmedAddress = address.trim();
     const trimmedVenue = venue.trim();
-    const trimmedAdditionalInfo = additionalInfo.trim();
     const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
 
     setStepThree({
@@ -142,7 +142,7 @@ export default function CreateEventStep3() {
         address: trimmedAddress || null,
         searchLabel: nextSearchLabel || null,
         venue: trimmedVenue || null,
-        additionalInfo: trimmedAdditionalInfo || null,
+        additionalInfo: additionalInfo.length > 0 ? additionalInfo : null,
       },
     });
   };
