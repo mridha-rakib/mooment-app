@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -58,6 +59,55 @@ const getLocationSelectionKey = (location: LocationSearchResult) =>
     location.longitude.toFixed(6),
   ].join(':');
 
+const getCoordinateLabel = (latitude: number, longitude: number) =>
+  `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+
+const getCoordinateFromFeaturePayload = (payload: unknown): [number, number] | null => {
+  const coordinates = (payload as { geometry?: { coordinates?: unknown } })?.geometry?.coordinates;
+
+  if (
+    Array.isArray(coordinates) &&
+    typeof coordinates[0] === 'number' &&
+    typeof coordinates[1] === 'number' &&
+    Number.isFinite(coordinates[0]) &&
+    Number.isFinite(coordinates[1])
+  ) {
+    return [coordinates[0], coordinates[1]];
+  }
+
+  return null;
+};
+
+const buildDroppedLocation = (
+  latitude: number,
+  longitude: number,
+  reverseLocation?: LocationSearchResult | null,
+): LocationSearchResult => {
+  const coordinateLabel = getCoordinateLabel(latitude, longitude);
+
+  if (reverseLocation) {
+    return {
+      ...reverseLocation,
+      id: `dragged-location-${latitude.toFixed(6)}-${longitude.toFixed(6)}`,
+      label: reverseLocation.label || reverseLocation.address || reverseLocation.name || coordinateLabel,
+      latitude,
+      longitude,
+      matchLabel: reverseLocation.matchLabel || 'Dropped pin',
+    };
+  }
+
+  return {
+    address: coordinateLabel,
+    id: `dragged-location-${latitude.toFixed(6)}-${longitude.toFixed(6)}`,
+    isVenue: false,
+    label: coordinateLabel,
+    latitude,
+    longitude,
+    matchLabel: 'Dropped pin',
+    name: 'Dropped pin',
+  };
+};
+
 export default function LocationPickerScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -66,6 +116,7 @@ export default function LocationPickerScreen() {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const searchRequestId = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
+  const dragRequestId = useRef(0);
   const initialLocation: LocationSearchResult = {
     ...DEFAULT_LOCATION,
     address: currentLocation.address || currentLocation.searchLabel || DEFAULT_LOCATION.address,
@@ -107,17 +158,21 @@ export default function LocationPickerScreen() {
     satellite3d: 'business-outline',
   }[mapMode];
 
-  const getSelectedSearchContext = (location = selectedLocation): LocationSearchContext | null => {
+  const getSelectedSearchContext = useCallback((location = selectedLocation): LocationSearchContext | null => {
     if (!location.label && location.id === 'default-location') {
       return null;
     }
 
     return {
+      city: location.city,
+      country: location.country,
+      countryCode: location.countryCode,
       label: location.label,
       latitude: location.latitude,
       longitude: location.longitude,
+      region: location.region,
     };
-  };
+  }, [selectedLocation]);
 
   useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
@@ -235,7 +290,7 @@ export default function LocationPickerScreen() {
       clearTimeout(timeoutId);
       searchAbortRef.current?.abort();
     };
-  }, [query, selectedLocation.label, selectedLocation.latitude, selectedLocation.longitude]);
+  }, [getSelectedSearchContext, query, selectedLocation.label, selectedLocation.latitude, selectedLocation.longitude]);
 
   const handleSelectLocation = (location: LocationSearchResult) => {
     const currentSelection = selectedLocationRef.current;
@@ -256,6 +311,42 @@ export default function LocationPickerScreen() {
     setIsSearching(false);
     Keyboard.dismiss();
   };
+
+  const applyDroppedLocation = useCallback((location: LocationSearchResult) => {
+    searchAbortRef.current?.abort();
+    searchRequestId.current += 1;
+    selectedLocationRef.current = location;
+    setSelectedLocation(location);
+    setQuery(location.label);
+    setResults([]);
+    setIsSearching(false);
+    Keyboard.dismiss();
+  }, []);
+
+  const handleMarkerDragEnd = useCallback((payload: unknown) => {
+    const coordinate = getCoordinateFromFeaturePayload(payload);
+
+    if (!coordinate) {
+      return;
+    }
+
+    const [longitude, latitude] = coordinate;
+    const requestId = dragRequestId.current + 1;
+    dragRequestId.current = requestId;
+    const droppedLocation = buildDroppedLocation(latitude, longitude);
+
+    applyDroppedLocation(droppedLocation);
+
+    reverseGeocodeLocation(latitude, longitude)
+      .then((reverseLocation) => {
+        if (requestId !== dragRequestId.current) {
+          return;
+        }
+
+        applyDroppedLocation(buildDroppedLocation(latitude, longitude, reverseLocation));
+      })
+      .catch(() => undefined);
+  }, [applyDroppedLocation]);
 
   const resolveTypedLocation = async () => {
     const trimmedQuery = query.trim();
@@ -343,7 +434,14 @@ export default function LocationPickerScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.searchContainer,
+          results.length > 0 && styles.searchContainerWithResults,
+          { backgroundColor: results.length > 0 ? 'transparent' : colors.background },
+        ]}
+      >
         <View style={[styles.searchBox, { backgroundColor: colors.card }]}>
           <Ionicons name="location-outline" size={20} color={colors.textSecondary} style={{ marginRight: 10 }} />
           <TextInput
@@ -360,26 +458,32 @@ export default function LocationPickerScreen() {
         </View>
         {results.length > 0 && (
           <View style={[styles.resultsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {results.map((location) => (
-              <TouchableOpacity
-                key={location.id}
-                style={[styles.resultItem, { borderBottomColor: colors.border }]}
-                activeOpacity={0.8}
-                onPress={() => handleSelectLocation(location)}
-              >
-                <Text style={[styles.resultTitle, { color: colors.text }]} numberOfLines={1}>
-                  {location.name}
-                </Text>
-                {location.matchLabel && (
-                  <Text style={[styles.resultTag, { color: colors.primary }]} numberOfLines={1}>
-                    {location.matchLabel}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
+              {results.map((location) => (
+                <TouchableOpacity
+                  key={location.id}
+                  style={[styles.resultItem, { borderBottomColor: colors.border }]}
+                  activeOpacity={0.8}
+                  onPress={() => handleSelectLocation(location)}
+                >
+                  <Text style={[styles.resultTitle, { color: colors.text }]} numberOfLines={1}>
+                    {location.name}
                   </Text>
-                )}
-                <Text style={[styles.resultAddress, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {location.address}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  {location.matchLabel && (
+                    <Text style={[styles.resultTag, { color: colors.primary }]} numberOfLines={1}>
+                      {location.matchLabel}
+                    </Text>
+                  )}
+                  <Text style={[styles.resultAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {location.address}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
       </View>
@@ -478,9 +582,12 @@ export default function LocationPickerScreen() {
               }}
             />
           )}
-          <Mapbox.MarkerView
+          <Mapbox.PointAnnotation
+            id="create-event-selected-location"
             coordinate={[selectedLocation.longitude, selectedLocation.latitude]}
             anchor={{ x: 0.5, y: 0.5 }}
+            draggable
+            onDragEnd={handleMarkerDragEnd}
           >
             <View style={styles.markerContainer}>
               <View style={[styles.markerCircle, { borderColor: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0,0,0,0.2)' }]}>
@@ -488,7 +595,7 @@ export default function LocationPickerScreen() {
               </View>
               <View style={[styles.markerStem, { backgroundColor: colors.primary }]} />
             </View>
-          </Mapbox.MarkerView>
+          </Mapbox.PointAnnotation>
         </Mapbox.MapView>
         <TouchableOpacity
           style={[styles.modeButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -542,7 +649,12 @@ const styles = StyleSheet.create({
   searchContainer: {
     paddingHorizontal: 16,
     paddingVertical: 16,
+    elevation: 30,
     zIndex: 10,
+  },
+  searchContainerWithResults: {
+    marginBottom: -246,
+    paddingBottom: 246,
   },
   searchBox: {
     borderRadius: 12,
@@ -560,6 +672,7 @@ const styles = StyleSheet.create({
   resultsContainer: {
     borderRadius: 12,
     borderWidth: 1,
+    elevation: 30,
     left: 16,
     maxHeight: 230,
     overflow: 'hidden',
