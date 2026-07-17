@@ -148,7 +148,11 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     ...(moment.eventTitle
       ? [
           { text: " at ", type: "muted" as const },
-          { text: moment.eventTitle, type: "bold" as const },
+          {
+            text: moment.eventTitle,
+            type: "bold" as const,
+            taggedEvent: hasText(moment.eventId) ? { id: moment.eventId } : undefined,
+          },
         ]
       : []),
   ];
@@ -159,6 +163,7 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     authorId: moment.author?.id ?? moment.userId,
     authorName,
     authorContextNodes,
+    eventId: moment.eventId ?? undefined,
     authorAvatar,
     isFollowing: moment.author?.isFollowing ?? false,
     timeAgo: formatMomentTimeAgo(options.createdAt ?? moment.createdAt),
