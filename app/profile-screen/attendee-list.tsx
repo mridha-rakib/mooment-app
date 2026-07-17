@@ -4,9 +4,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import {
   getEventTicketStatItems,
+  getPublicEventGoingItems,
   type EventTicketStatFilter,
   type EventTicketStatItem,
   type EventTicketStatItemStatus,
+  type PublicEventGoingItem,
 } from "@/lib/payments";
 import { navigateToProfile } from "@/lib/profileNavigation";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -58,6 +60,11 @@ const getInitialFilter = (value?: string | string[]): EventTicketStatFilter => {
   return FILTERS.includes(filter as EventTicketStatFilter) ? filter as EventTicketStatFilter : "going";
 };
 
+type AttendeeListItem = EventTicketStatItem | PublicEventGoingItem;
+
+const isPrivateStatItem = (item: AttendeeListItem): item is EventTicketStatItem =>
+  "status" in item;
+
 const getAvatarUri = (avatarKey?: string | null) => {
   if (!avatarKey) return null;
 
@@ -82,12 +89,14 @@ export default function AttendeeListScreen() {
     eventId?: string | string[];
     eventName?: string | string[];
     initialFilter?: string | string[];
+    mode?: string | string[];
   }>();
   const authUser = useAuthStore((state) => state.user);
   const eventId = getRouteParam(params.eventId);
   const eventName = getRouteParam(params.eventName);
+  const isPublicGoingMode = getRouteParam(params.mode) === "publicGoing";
   const [selectedFilter, setSelectedFilter] = useState<EventTicketStatFilter>(() => getInitialFilter(params.initialFilter));
-  const [items, setItems] = useState<EventTicketStatItem[]>([]);
+  const [items, setItems] = useState<AttendeeListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -137,11 +146,16 @@ export default function AttendeeListScreen() {
     setErrorMessage(null);
 
     try {
-      const result = await getEventTicketStatItems(eventId, {
-        status: filter,
-        page: nextPage,
-        limit: PAGE_SIZE,
-      });
+      const result = isPublicGoingMode
+        ? await getPublicEventGoingItems(eventId, {
+          page: nextPage,
+          limit: PAGE_SIZE,
+        })
+        : await getEventTicketStatItems(eventId, {
+          status: filter,
+          page: nextPage,
+          limit: PAGE_SIZE,
+        });
       if (requestId !== requestIdRef.current) {
         return;
       }
@@ -157,7 +171,7 @@ export default function AttendeeListScreen() {
       setHasMore(Boolean(result.pagination && result.pagination.page < result.pagination.totalPages));
     } catch (error) {
       if (__DEV__) {
-        console.log("[AttendeeList] load failed", { eventId, filter, error });
+        console.log("[AttendeeList] load failed", { eventId, filter, isPublicGoingMode, error });
       }
       if (requestId !== requestIdRef.current) {
         return;
@@ -174,7 +188,7 @@ export default function AttendeeListScreen() {
       setIsRefreshing(false);
       setIsLoadingMore(false);
     }
-  }, [eventId]);
+  }, [eventId, isPublicGoingMode]);
 
   useEffect(() => {
     setItems([]);
@@ -201,7 +215,7 @@ export default function AttendeeListScreen() {
   }, [hasMore, isLoading, isLoadingMore, isRefreshing, loadItems, page, selectedFilter]);
 
   const openProfile = useCallback((
-    attendee: NonNullable<EventTicketStatItem["attendee"]>,
+    attendee: NonNullable<AttendeeListItem["attendee"]>,
     avatarUri: string | null,
   ) => {
     navigateToProfile(router, authUser?.id, {
@@ -220,7 +234,7 @@ export default function AttendeeListScreen() {
     )));
   };
 
-  const toggleFollow = async (item: EventTicketStatItem) => {
+  const toggleFollow = async (item: AttendeeListItem) => {
     const attendee = item.attendee;
     if (!attendee || attendee.id === authUser?.id || pendingUserIdsRef.current.has(attendee.id)) {
       return;
@@ -281,7 +295,7 @@ export default function AttendeeListScreen() {
     return (
       <View style={styles.stateContainer}>
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
-          {errorMessage ?? EMPTY_TEXT[selectedFilter]}
+          {errorMessage ?? (isPublicGoingMode ? EMPTY_TEXT.going : EMPTY_TEXT[selectedFilter])}
         </Text>
         {errorMessage ? (
           <TouchableOpacity
@@ -293,7 +307,7 @@ export default function AttendeeListScreen() {
         ) : null}
       </View>
     );
-  }, [colors.border, colors.text, colors.textSecondary, errorMessage, isLoading, loadItems, selectedFilter]);
+  }, [colors.border, colors.text, colors.textSecondary, errorMessage, isLoading, isPublicGoingMode, loadItems, selectedFilter]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -302,15 +316,19 @@ export default function AttendeeListScreen() {
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
           Attendee List
         </Text>
-        <TouchableOpacity
-          style={[styles.filterBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Open attendee filter"
-          onPress={() => setFilterMenuVisible(true)}
-        >
-          <Feather name="filter" size={16} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {!isPublicGoingMode ? (
+            <TouchableOpacity
+              style={[styles.filterBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Open attendee filter"
+              onPress={() => setFilterMenuVisible(true)}
+            >
+              <Feather name="filter" size={16} color={colors.text} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       <Text style={[styles.eventName, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -374,7 +392,7 @@ export default function AttendeeListScreen() {
                 </View>
               )}
 
-              {renderStatusIcon(item.status)}
+              {!isPublicGoingMode && isPrivateStatItem(item) ? renderStatusIcon(item.status) : null}
 
               <View style={styles.followArea}>
                 {attendee && !isSelf ? (
@@ -408,7 +426,7 @@ export default function AttendeeListScreen() {
       />
 
       <Modal
-        visible={filterMenuVisible}
+        visible={filterMenuVisible && !isPublicGoingMode}
         transparent
         animationType="fade"
         onRequestClose={() => setFilterMenuVisible(false)}
@@ -462,6 +480,12 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerRight: {
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
   },

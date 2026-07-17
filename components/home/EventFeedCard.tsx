@@ -149,21 +149,21 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const overlayLayout = useMemo(() => {
     if (categoryCount >= 3) {
       return {
-        overlay: { bottom: 6, height: 170, paddingBottom: 8 },
-        panel: { height: 154, paddingVertical: 8, gap: 4 },
+        overlay: { bottom: 6, height: 176, paddingBottom: 8 },
+        panel: { height: 160, paddingVertical: 8, gap: 4 },
       };
     }
 
     if (categoryCount === 2) {
       return {
-        overlay: { bottom: 8, height: 138, paddingBottom: 10 },
-        panel: { height: 118, paddingVertical: 10, gap: 5 },
+        overlay: { bottom: 8, height: 158, paddingBottom: 10 },
+        panel: { height: 138, paddingVertical: 10, gap: 5 },
       };
     }
 
     return {
-      overlay: { bottom: 0, height: 116, paddingBottom: 20 },
-      panel: { height: 96, paddingVertical: 10, gap: 5 },
+      overlay: { bottom: 0, height: 138, paddingBottom: 20 },
+      panel: { height: 118, paddingVertical: 10, gap: 5 },
     };
   }, [categoryCount]);
   const firstCategory = categories[0] ?? null;
@@ -191,6 +191,8 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     [eventEndAt, eventScheduledAt, eventStatus, statusNowMs],
   );
   const eventBadgeLabel = EVENT_STATUS_LABELS[eventBadgeStatus];
+  const publicGoingSummary = event.publicGoingSummary ?? { going: 0, avatars: [] };
+  const goingAvatars = publicGoingSummary.avatars.slice(0, 3);
 
   const [isFollowing, setIsFollowing] = useState(Boolean(event.host?.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
@@ -422,6 +424,22 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     });
   };
 
+  const goToGoingList = () => {
+    if (!eventId) {
+      return;
+    }
+
+    router.push({
+      pathname: "/profile-screen/attendee-list",
+      params: {
+        eventId,
+        eventName: event.name ?? "Event",
+        initialFilter: "going",
+        ...(canViewEventStats ? {} : { mode: "publicGoing" }),
+      },
+    });
+  };
+
   const goToHostProfile = () => {
     navigateToProfile(router, currentUserId, {
       userId: hostId,
@@ -611,6 +629,43 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
                   <Text style={[styles.metaText, styles.metaLocation]} numberOfLines={1}>{location}</Text>
                 </View>
               ) : null}
+
+              <TouchableOpacity
+                style={styles.goingRow}
+                activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityLabel={`${publicGoingSummary.going} going`}
+                hitSlop={4}
+                onPress={goToGoingList}
+              >
+                {goingAvatars.length > 0 ? (
+                  <View style={[styles.goingAvatarStack, { width: 20 + (goingAvatars.length - 1) * 12 }]}>
+                    {goingAvatars.map((avatar, index) => {
+                      const avatarUri = avatar.avatarKey
+                        ? (() => {
+                          try { return getStorageFileUrl(avatar.avatarKey); } catch { return null; }
+                        })()
+                        : null;
+
+                      return (
+                        <View
+                          key={avatar.userId}
+                          style={[
+                            styles.goingAvatarItem,
+                            index > 0 ? styles.goingAvatarOverlap : null,
+                            { zIndex: goingAvatars.length - index },
+                          ]}
+                        >
+                          <UserAvatar uri={avatarUri} name={avatar.name} size={20} />
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+                <Text style={styles.goingText} numberOfLines={1}>
+                  {publicGoingSummary.going} going
+                </Text>
+              </TouchableOpacity>
             </LinearGradient>
           </View>
 
@@ -923,7 +978,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingLeft: 8,
     paddingRight: 8,
-    justifyContent: "center",
+    justifyContent: "flex-end",
   },
   tagsRow: {
     flexDirection: "row",
@@ -970,6 +1025,35 @@ const styles = StyleSheet.create({
     flex: 1,
     color: "rgba(255,255,255,0.75)",
     marginLeft: 3,
+  },
+  goingRow: {
+    height: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    maxWidth: "100%",
+  },
+  goingAvatarStack: {
+    height: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  goingAvatarItem: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  goingAvatarOverlap: {
+    marginLeft: -8,
+  },
+  goingText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "400",
+    letterSpacing: -0.08,
   },
   infoRight: {
     flexDirection: "column",

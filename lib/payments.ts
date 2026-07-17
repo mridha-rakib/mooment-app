@@ -378,6 +378,11 @@ export type EventTicketStatItem = {
 
 export type EventTicketStatFilter = "going" | "attended" | "canceled" | "noShow";
 
+export type PublicEventGoingItem = {
+  id: string;
+  attendee?: EventTicketStatItem["attendee"];
+};
+
 const EVENT_TICKET_STAT_ITEM_STATUSES = new Set<EventTicketStatItemStatus>([
   "checked_in",
   "no_show",
@@ -461,6 +466,42 @@ export const getEventTicketStatItems = async (
 
   return {
     tickets: tickets.map(parseEventTicketStatItem),
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
+};
+
+const parsePublicEventGoingItem = (value: unknown): PublicEventGoingItem => {
+  if (!isRecord(value)) {
+    throw new Error("The event going list response was incomplete.");
+  }
+
+  const id = typeof value.id === "string" ? value.id.trim() : "";
+
+  if (!id) {
+    throw new Error("The event going list response was incomplete.");
+  }
+
+  return {
+    id,
+    attendee: parseEventTicketStatAttendee(value.attendee),
+  };
+};
+
+export const getPublicEventGoingItems = async (
+  eventId: string,
+  options: { page?: number; limit?: number } = {},
+): Promise<{ tickets: PublicEventGoingItem[]; pagination?: PaginationMeta }> => {
+  const response = await api.get(`/payments/event-going-items/${encodeURIComponent(eventId)}`, {
+    params: options,
+  });
+  const tickets = response.data?.data?.tickets as PublicEventGoingItem[] | undefined;
+
+  if (!Array.isArray(tickets)) {
+    throw new Error("The event going list response was incomplete.");
+  }
+
+  return {
+    tickets: tickets.map(parsePublicEventGoingItem),
     pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
   };
 };

@@ -149,6 +149,14 @@ export type EventResponse = {
     canReview: boolean;
     hasReviewed: boolean;
   };
+  publicGoingSummary?: {
+    going: number;
+    avatars: {
+      userId: string;
+      name: string;
+      avatarKey?: string | null;
+    }[];
+  };
   publishedAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
