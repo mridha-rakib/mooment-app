@@ -282,14 +282,78 @@ export type TicketStatEntry = {
   capacity: number;
 };
 
+export type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 export const getEventTicketStats = async (eventId: string): Promise<Record<string, TicketStatEntry>> => {
   const response = await api.get(`/payments/event-ticket-stats/${encodeURIComponent(eventId)}`);
   const stats = response.data?.data?.stats as Record<string, TicketStatEntry> | undefined;
   return stats ?? {};
 };
 
+export type EventAttendanceSummaryAvatar = {
+  userId: string;
+  name: string;
+  avatarUrl?: string | null;
+};
+
+export type EventAttendanceSummary = {
+  going: number;
+  attended: number;
+  canceled: number;
+  noShow: number;
+  avatars: EventAttendanceSummaryAvatar[];
+};
+
+const getAttendanceCount = (summary: Record<string, unknown>, field: keyof EventAttendanceSummary) => {
+  const value = summary[field];
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error("The event attendance summary response was incomplete.");
+  }
+
+  return value;
+};
+
+export const parseEventAttendanceSummary = (value: unknown): EventAttendanceSummary => {
+  if (!value || typeof value !== "object") {
+    throw new Error("The event attendance summary response was incomplete.");
+  }
+
+  const summary = value as Record<string, unknown>;
+  const avatars = Array.isArray(summary.avatars)
+    ? summary.avatars
+        .filter((avatar): avatar is Record<string, unknown> => Boolean(avatar) && typeof avatar === "object")
+        .map((avatar) => ({
+          userId: typeof avatar.userId === "string" ? avatar.userId : "",
+          name: typeof avatar.name === "string" ? avatar.name : "Attendee",
+          avatarUrl: typeof avatar.avatarUrl === "string" ? avatar.avatarUrl : null,
+        }))
+        .filter((avatar) => avatar.userId.trim())
+    : [];
+
+  return {
+    going: getAttendanceCount(summary, "going"),
+    attended: getAttendanceCount(summary, "attended"),
+    canceled: getAttendanceCount(summary, "canceled"),
+    noShow: getAttendanceCount(summary, "noShow"),
+    avatars,
+  };
+};
+
+export const getEventAttendanceSummary = async (eventId: string): Promise<EventAttendanceSummary> => {
+  const response = await api.get(`/payments/event-attendance-summary/${encodeURIComponent(eventId)}`);
+  return parseEventAttendanceSummary(response.data?.data?.summary);
+};
+
 export type EventTicketStatItemStatus =
   | "checked_in"
+  | "no_show"
+  | "active"
   | "requires_payment"
   | "processing"
   | "paid"
@@ -304,6 +368,7 @@ export type EventTicketStatItem = {
     name: string;
     username?: string;
     avatarKey?: string | null;
+    isFollowing?: boolean;
   } | null;
   ticketName: string;
   amount: number;
@@ -311,11 +376,93 @@ export type EventTicketStatItem = {
   status: EventTicketStatItemStatus;
 };
 
-export const getEventTicketStatItems = async (eventId: string): Promise<EventTicketStatItem[]> => {
-  const response = await api.get(`/payments/event-ticket-stat-items/${encodeURIComponent(eventId)}`);
+export type EventTicketStatFilter = "going" | "attended" | "canceled" | "noShow";
+
+const EVENT_TICKET_STAT_ITEM_STATUSES = new Set<EventTicketStatItemStatus>([
+  "checked_in",
+  "no_show",
+  "active",
+  "requires_payment",
+  "processing",
+  "paid",
+  "failed",
+  "canceled",
+  "refunded",
+]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object";
+
+const parseEventTicketStatAttendee = (value: unknown): EventTicketStatItem["attendee"] => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error("The event ticket stat item response was incomplete.");
+  }
+
+  const id = typeof value.id === "string" ? value.id.trim() : "";
+  const name = typeof value.name === "string" ? value.name : "";
+
+  if (!id || !name || typeof value.isFollowing !== "boolean") {
+    throw new Error("The event ticket stat item response was incomplete.");
+  }
+
+  return {
+    id,
+    name,
+    username: typeof value.username === "string" ? value.username : undefined,
+    avatarKey: typeof value.avatarKey === "string" ? value.avatarKey : null,
+    isFollowing: value.isFollowing,
+  };
+};
+
+const parseEventTicketStatItem = (value: unknown): EventTicketStatItem => {
+  if (!isRecord(value)) {
+    throw new Error("The event ticket stat item response was incomplete.");
+  }
+
+  const id = typeof value.id === "string" ? value.id.trim() : "";
+  const status = typeof value.status === "string" ? value.status : "";
+
+  if (
+    !id ||
+    typeof value.ticketName !== "string" ||
+    typeof value.amount !== "number" ||
+    typeof value.currency !== "string" ||
+    !EVENT_TICKET_STAT_ITEM_STATUSES.has(status as EventTicketStatItemStatus)
+  ) {
+    throw new Error("The event ticket stat item response was incomplete.");
+  }
+
+  return {
+    id,
+    attendee: parseEventTicketStatAttendee(value.attendee),
+    ticketName: value.ticketName,
+    amount: value.amount,
+    currency: value.currency,
+    status: status as EventTicketStatItemStatus,
+  };
+};
+
+export const getEventTicketStatItems = async (
+  eventId: string,
+  options: { status?: EventTicketStatFilter; page?: number; limit?: number } = {},
+): Promise<{ tickets: EventTicketStatItem[]; pagination?: PaginationMeta }> => {
+  const response = await api.get(`/payments/event-ticket-stat-items/${encodeURIComponent(eventId)}`, {
+    params: options,
+  });
   const tickets = response.data?.data?.tickets as EventTicketStatItem[] | undefined;
 
-  return Array.isArray(tickets) ? tickets : [];
+  if (!Array.isArray(tickets)) {
+    throw new Error("The event ticket stat item response was incomplete.");
+  }
+
+  return {
+    tickets: tickets.map(parseEventTicketStatItem),
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
 };
 
 export const getMyTicketPurchaseCounts = async (eventId: string): Promise<Record<string, number>> => {

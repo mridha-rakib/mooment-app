@@ -120,8 +120,8 @@ export default function TicketStatScreen() {
     setErrorMessage(null);
 
     try {
-      const tickets = await getEventTicketStatItems(eventId);
-      setItems(tickets.map(toTicketStatItem));
+      const result = await getEventTicketStatItems(eventId);
+      setItems(result.tickets.map(toTicketStatItem));
     } catch (error) {
       setItems([]);
       setErrorMessage(getAuthErrorMessage(error, "Unable to load ticket stats."));

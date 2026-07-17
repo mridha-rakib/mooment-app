@@ -1,7 +1,15 @@
 import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { getEventById, type EventResponse, type EventTicketPayload } from "@/lib/events";
-import { getMyEarningsByEvent, getEventTicketStats, type EventEarningsSummary, type TicketStatEntry } from "@/lib/payments";
+import {
+  getEventAttendanceSummary,
+  getMyEarningsByEvent,
+  getEventTicketStats,
+  type EventAttendanceSummary,
+  type EventEarningsSummary,
+  type TicketStatEntry,
+} from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { Feather } from "@expo/vector-icons";
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
@@ -23,6 +31,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const fmt = (n: number) => `$${n.toFixed(2)}`;
 
+type AttendanceSummaryState =
+  | { status: "idle"; data: null }
+  | { status: "loading"; data: null }
+  | { status: "success"; data: EventAttendanceSummary }
+  | { status: "error"; data: null };
+
+const getRouteParam = (value?: string | string[]) => {
+  if (Array.isArray(value)) {
+    return value[0]?.trim() ?? "";
+  }
+
+  return value?.trim() ?? "";
+};
+
 const getBannerUri = (event: EventResponse): string | null => {
   const key = event.bannerImageKey ?? event.bannerOriginalImageKey;
   if (!key) return null;
@@ -41,12 +63,17 @@ type TicketRowData = EventTicketPayload & {
 export default function EventDashboardScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ eventId?: string; eventName?: string }>();
-  const eventId = params.eventId;
+  const params = useLocalSearchParams<{ eventId?: string | string[]; eventName?: string | string[] }>();
+  const eventId = getRouteParam(params.eventId);
+  const eventNameParam = getRouteParam(params.eventName);
 
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [earnings, setEarnings] = useState<EventEarningsSummary | null>(null);
   const [ticketStats, setTicketStats] = useState<Record<string, TicketStatEntry>>({});
+  const [attendanceSummaryState, setAttendanceSummaryState] = useState<AttendanceSummaryState>({
+    status: "idle",
+    data: null,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -55,6 +82,18 @@ export default function EventDashboardScreen() {
       setLoading(false);
       return;
     }
+    setAttendanceSummaryState({ status: "loading", data: null });
+    void getEventAttendanceSummary(eventId)
+      .then((summary) => {
+        setAttendanceSummaryState({ status: "success", data: summary });
+      })
+      .catch((error) => {
+        if (__DEV__) {
+          console.log("[EventDashboard] attendance summary load failed", { eventId, error });
+        }
+        setAttendanceSummaryState({ status: "error", data: null });
+      });
+
     try {
       const [evt, earn, stats] = await Promise.all([
         getEventById(eventId),
@@ -81,7 +120,9 @@ export default function EventDashboardScreen() {
     loadData();
   }, [loadData]);
 
-  const eventName = event?.name ?? params.eventName ?? "Event";
+  const attendanceSummary = attendanceSummaryState.status === "success" ? attendanceSummaryState.data : null;
+  const attendanceAvatars = attendanceSummary?.avatars.slice(0, 3) ?? [];
+  const eventName = event?.name ?? (eventNameParam || "Event");
   const bannerUri = event ? getBannerUri(event) : null;
   const goToTicketStats = useCallback(() => {
     if (!eventId) return;
@@ -91,6 +132,19 @@ export default function EventDashboardScreen() {
       params: {
         eventId,
         eventName,
+      },
+    });
+  }, [eventId, eventName, router]);
+
+  const goToAttendeeList = useCallback((initialFilter: "going" | "attended" | "canceled" | "noShow") => {
+    if (!eventId) return;
+
+    router.push({
+      pathname: "/profile-screen/attendee-list",
+      params: {
+        eventId,
+        eventName,
+        initialFilter,
       },
     });
   }, [eventId, eventName, router]);
@@ -223,6 +277,87 @@ export default function EventDashboardScreen() {
                 </Text>
               )}
             </View>
+          )}
+
+          {attendanceSummary && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.attendanceScroll}
+              contentContainerStyle={styles.attendanceRow}
+            >
+              <TouchableOpacity
+                style={styles.attendanceGoingGroup}
+                activeOpacity={0.75}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="View going ticket holders"
+                onPress={() => goToAttendeeList("going")}
+              >
+                {attendanceAvatars.length > 0 && (
+                  <View style={styles.attendanceAvatarStack}>
+                    {attendanceAvatars.map((avatar, index) => (
+                      <UserAvatar
+                        key={avatar.userId}
+                        uri={avatar.avatarUrl ?? null}
+                        name={avatar.name}
+                        size={20}
+                        iconSize={10}
+                        style={[
+                          styles.attendanceAvatar,
+                          index > 0 ? styles.attendanceAvatarOverlap : null,
+                          { zIndex: attendanceAvatars.length - index },
+                        ]}
+                        textStyle={styles.attendanceAvatarText}
+                      />
+                    ))}
+                  </View>
+                )}
+                <Text style={styles.attendanceText}>{attendanceSummary.going} going</Text>
+              </TouchableOpacity>
+              <View style={styles.attendanceSeparator} />
+              <TouchableOpacity
+                style={styles.attendanceMetric}
+                activeOpacity={0.75}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="View attended ticket holders"
+                onPress={() => goToAttendeeList("attended")}
+              >
+                <View style={[styles.attendanceStatusIcon, { backgroundColor: "#26C08F" }]}>
+                  <Feather name="check" size={9} color="#FFFFFF" />
+                </View>
+                <Text style={styles.attendanceText}>{attendanceSummary.attended} attended</Text>
+              </TouchableOpacity>
+              <View style={styles.attendanceSeparator} />
+              <TouchableOpacity
+                style={styles.attendanceMetric}
+                activeOpacity={0.75}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="View canceled ticket holders"
+                onPress={() => goToAttendeeList("canceled")}
+              >
+                <View style={[styles.attendanceStatusIcon, { backgroundColor: "#D44343" }]}>
+                  <Feather name="x" size={9} color="#FFFFFF" />
+                </View>
+                <Text style={styles.attendanceText}>{attendanceSummary.canceled} canceled</Text>
+              </TouchableOpacity>
+              <View style={styles.attendanceSeparator} />
+              <TouchableOpacity
+                style={styles.attendanceMetric}
+                activeOpacity={0.75}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="View no-show ticket holders"
+                onPress={() => goToAttendeeList("noShow")}
+              >
+                <View style={[styles.attendanceStatusIcon, { backgroundColor: "#B3B3B3" }]}>
+                  <Feather name="minus" size={9} color="#111111" />
+                </View>
+                <Text style={styles.attendanceText}>{attendanceSummary.noShow} No show</Text>
+              </TouchableOpacity>
+            </ScrollView>
           )}
 
           {/* Ticket Sales */}
@@ -393,6 +528,61 @@ const styles = StyleSheet.create({
   cityText: { fontSize: 14, fontWeight: "bold" },
   locationDetail: { fontSize: 12, marginBottom: 4 },
   locationDetailLabel: {},
+  attendanceScroll: {
+    marginTop: -10,
+    marginBottom: 20,
+  },
+  attendanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 20,
+    gap: 6,
+    paddingRight: 2,
+  },
+  attendanceGoingGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 20,
+  },
+  attendanceAvatarStack: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 20,
+  },
+  attendanceAvatar: {
+    borderWidth: 0,
+  },
+  attendanceAvatarOverlap: {
+    marginLeft: -8,
+  },
+  attendanceAvatarText: {
+    fontSize: 9,
+  },
+  attendanceText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "400",
+    lineHeight: 16,
+  },
+  attendanceSeparator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D9D9D9",
+  },
+  attendanceMetric: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  attendanceStatusIcon: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",

@@ -821,7 +821,7 @@ export default function FeedPost({
             {!isPostByCurrentUser && (
               isFollowing ? (
                 <TouchableOpacity
-                  style={[styles.followingBtn, isNormalPost && styles.normalFollowingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+                  style={[styles.followingBtn, styles.normalFollowingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
                   activeOpacity={0.8}
                   disabled={isFollowPending}
                   onPress={toggleFollow}
@@ -830,13 +830,13 @@ export default function FeedPost({
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[styles.followBtn, isNormalPost && styles.normalFollowBtn, { borderColor: isNormalPost && isDark ? '#AC86D4' : colors.primary }]}
+                  style={[styles.followBtn, styles.normalFollowBtn, { borderColor: isDark ? '#AC86D4' : colors.primary }]}
                   activeOpacity={0.8}
                   disabled={isFollowPending}
                   onPress={toggleFollow}
                 >
-                  <Feather name="plus" size={12} color={isNormalPost && isDark ? '#AC86D4' : colors.primary} />
-                  <Text style={[styles.followBtnText, isNormalPost && styles.normalFollowBtnText, { color: isNormalPost && isDark ? '#AC86D4' : colors.primary }]}>Follow</Text>
+                  <Feather name="plus" size={12} color={isDark ? '#AC86D4' : colors.primary} />
+                  <Text style={[styles.followBtnText, styles.normalFollowBtnText, { color: isDark ? '#AC86D4' : colors.primary }]}>Follow</Text>
                 </TouchableOpacity>
               )
             )}

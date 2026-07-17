@@ -4,9 +4,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage, isBusinessAccountRequiredError, isTicketRewardConflictError } from "@/lib/authErrors";
 import { useAuthStore } from "@/stores/authStore";
 import {
+  createDraftReward,
   createEventReward,
   getEventById,
   ticketAlreadyHasReward,
+  updateDraftReward,
   updateEventReward,
   type EventResponse,
   type EventRewardPayload,
@@ -422,10 +424,21 @@ export default function RewardDetailsScreen() {
         capacity: parseWholeNumber(capacity, 0, 0),
       };
 
+      const isDraftEvent = event?.status === "draft";
+
+      if (event?.endAt) {
+        const eventEndAt = new Date(event.endAt);
+
+        if (!Number.isNaN(eventEndAt.getTime()) && expiresAt > eventEndAt) {
+          Alert.alert("Invalid expiry date", "Reward expiry must not be after the event end date and time.");
+          return;
+        }
+      }
+
       if (rewardId) {
-        await updateEventReward(eventId, rewardId, payload);
+        await (isDraftEvent ? updateDraftReward : updateEventReward)(eventId, rewardId, payload);
       } else {
-        await createEventReward(eventId, payload);
+        await (isDraftEvent ? createDraftReward : createEventReward)(eventId, payload);
       }
 
       safeBack();

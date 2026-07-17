@@ -67,6 +67,7 @@ type AccessTabProps = {
   onEditReward?: (reward: EventRewardPayload) => void;
   onDeleteReward?: (reward: EventRewardPayload) => void;
   onClaimReward?: (reward: EventRewardPayload) => void;
+  showRequestManagement?: boolean;
 };
 
 const formatExpiry = (value?: string | null, fallbackDate?: string | null) => {
@@ -199,11 +200,12 @@ const AccessTab = ({
   onEditReward,
   onDeleteReward,
   onClaimReward,
+  showRequestManagement = true,
 }: AccessTabProps) => {
   const { colors, isDark } = useTheme();
   const isLocked = privacy === "locked";
   const isPrivate = privacy === "private";
-  const showRequestTab = isLocked && isHostMode;
+  const showRequestTab = isLocked && isHostMode && showRequestManagement;
   const [localAccessSubTab, setLocalAccessSubTab] = useState("Tickets");
   const rawSubTab = selectedAccessSubTab ?? localAccessSubTab;
   const accessSubTab = rawSubTab === "Requests" && !showRequestTab ? "Tickets" : rawSubTab;

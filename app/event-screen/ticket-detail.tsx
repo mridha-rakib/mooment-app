@@ -209,6 +209,7 @@ const TicketDetailScreen = () => {
 
     return event.tickets.find((item) => item.id === ticketId) ?? null;
   }, [event, ticketId]);
+  const eventStatus = event?.status;
 
   const [ticketStat, setTicketStat] = useState<TicketStatEntry | null>(null);
 
@@ -267,7 +268,7 @@ const TicketDetailScreen = () => {
   );
 
   useEffect(() => {
-    if (!isHostMode || !eventId || !ticketId) return;
+    if (!eventStatus || !isHostMode || eventStatus === "draft" || !eventId || !ticketId) return;
     let cancelled = false;
 
     getEventTicketStats(eventId)
@@ -279,7 +280,7 @@ const TicketDetailScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [isHostMode, eventId, ticketId]);
+  }, [eventStatus, isHostMode, eventId, ticketId]);
 
   const handleEditTicket = () => {
     if (!event || !ticket || !isHostMode) {

@@ -46,6 +46,8 @@ export default function CreateEventStep3() {
   const setStepThree = useEventDraftStore((state) => state.setStepThree);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const isEditingEvent = Boolean(draftId || isEditingPublished);
   const [venue, setVenue] = useState(draftLocation.venue ?? '');
   const [address, setAddress] = useState(draftLocation.address ?? '');
   const [additionalInfo, setAdditionalInfo] = useState(draftLocation.additionalInfo ?? '');
@@ -239,7 +241,7 @@ export default function CreateEventStep3() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-2')} />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
         ) : (

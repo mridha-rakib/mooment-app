@@ -60,6 +60,8 @@ export default function CreateEventScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const isEditingEvent = Boolean(draftId || isEditingPublished);
   const draftName = useEventDraftStore((state) => state.name);
   const draftDescription = useEventDraftStore((state) => state.description);
   const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
@@ -260,7 +262,7 @@ export default function CreateEventScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton onPress={() => router.replace('/(tabs)/home')} />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
         ) : (

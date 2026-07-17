@@ -4,7 +4,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getStorageFileUrl } from "@/lib/storage";
 import { followUser, getUserFollowers, unfollowUser, type ProfileFollowUserResponse } from "@/lib/users";
-import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -16,7 +15,7 @@ const getHandle = (username?: string) => (username ? `@${username.replace(/^@/, 
 const PAGE_SIZE = 30;
 
 export default function FollowersScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ userId?: string }>();
   const authUser = useAuthStore((state) => state.user);
@@ -152,16 +151,19 @@ export default function FollowersScreen() {
                 <TouchableOpacity
                   style={[
                     styles.followBtn,
-                    { backgroundColor: buttonBackground(colors) },
-                    user.isFollowing && [styles.followingBtn, { backgroundColor: colors.card, borderColor: colors.border }],
+                    { borderColor: isDark ? "#AC86D4" : colors.primary },
+                    user.isFollowing && [
+                      styles.followingBtn,
+                      { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)" },
+                    ],
                   ]}
                   disabled={pendingUserIds.includes(user.id)}
                   onPress={() => toggleFollow(user)}
                 >
                   <Text style={[
                     styles.followBtnText,
-                    { color: buttonForeground(colors) },
-                    user.isFollowing && [styles.followingBtnText, { color: colors.text }],
+                    { color: isDark ? "#AC86D4" : colors.primary },
+                    user.isFollowing && [styles.followingBtnText, { color: colors.textSecondary }],
                   ]}>
                     {user.isFollowing ? "Following" : "Follow"}
                   </Text>
@@ -237,18 +239,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   followBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    alignItems: "center",
     borderRadius: 8,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 0,
   },
   followingBtn: {
-    borderWidth: 1,
+    borderWidth: 0,
   },
   followBtnText: {
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: "500",
+    lineHeight: 16,
   },
-  followingBtnText: {},
+  followingBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
   footerLoader: {
     paddingVertical: 18,
   },

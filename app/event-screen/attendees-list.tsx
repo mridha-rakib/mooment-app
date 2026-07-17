@@ -60,12 +60,25 @@ export default function AttendeesListScreen() {
                 
                 {user.name !== 'Anonymous' && (
                   <TouchableOpacity 
-                    style={[styles.followBtn, { borderColor: colors.border }, user.isFollowing && [styles.followingBtn, { backgroundColor: colors.card }]]} 
+                    style={[
+                      styles.followBtn,
+                      { borderColor: isDark ? '#AC86D4' : colors.primary },
+                      user.isFollowing && [
+                        styles.followingBtn,
+                        { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' },
+                      ],
+                    ]} 
                     activeOpacity={0.8}
                     onPress={() => toggleFollow(user.id)}
                   >
                     {user.isFollowing && <Feather name="check" size={12} color={colors.textSecondary} style={styles.checkIcon} />}
-                    <Text style={[styles.followBtnText, { color: colors.textSecondary }, user.isFollowing && { color: colors.textSecondary }]}>
+                    <Text
+                      style={[
+                        styles.followBtnText,
+                        { color: user.isFollowing ? colors.textSecondary : isDark ? '#AC86D4' : colors.primary },
+                        user.isFollowing && styles.followingBtnText,
+                      ]}
+                    >
                       {user.isFollowing ? 'Following' : 'Follow'}
                     </Text>
                   </TouchableOpacity>
@@ -142,17 +155,24 @@ const styles = StyleSheet.create({
   followBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 20,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    borderRadius: 8,
   },
   followingBtn: {
-    borderColor: 'transparent',
+    borderWidth: 0,
   },
   followBtnText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  followingBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   checkIcon: {
     marginRight: 4,

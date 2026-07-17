@@ -15,6 +15,8 @@ import {
     claimEventReward,
     completeEvent,
     declineJoinRequest,
+    deleteDraftReward,
+    deleteDraftTicket,
     deleteEvent,
     deleteEventReward,
     deleteEventTicket,
@@ -1168,7 +1170,7 @@ const EventScreen = () => {
   };
 
   const handleCreateTicket = () => {
-    if (!event || isDraftPreview || !isHostMode) {
+    if (!event || !isHostMode) {
       return;
     }
 
@@ -1181,7 +1183,7 @@ const EventScreen = () => {
   };
 
   const handleEditTicket = (ticket: EventTicketPayload) => {
-    if (!event || isDraftPreview || !isHostMode) {
+    if (!event || !isHostMode) {
       return;
     }
 
@@ -1222,6 +1224,10 @@ const EventScreen = () => {
   };
 
   const handleSelectTicket = (ticket: EventTicketPayload, ticketKey: string) => {
+    if (isDraftPreview) {
+      return;
+    }
+
     if ((ticket.availableCount ?? ticket.capacity) <= 0) {
       return;
     }
@@ -1264,7 +1270,7 @@ const EventScreen = () => {
   };
 
   const handleBuySelectedTicket = () => {
-    if (!event || !selectedTicket || !selectedTicketKey) {
+    if (!event || isDraftPreview || !selectedTicket || !selectedTicketKey) {
       return;
     }
 
@@ -1314,6 +1320,12 @@ const EventScreen = () => {
   };
 
   const handleTicketCtaPress = () => {
+    if (isDraftPreview) {
+      setActiveTab("Access");
+      setAccessSubTab("Tickets");
+      return;
+    }
+
     if (!selectedTicket || !selectedTicketKey) {
       setActiveTab("Access");
       setAccessSubTab("Tickets");
@@ -1358,7 +1370,7 @@ const EventScreen = () => {
   };
 
   const handleDeleteTicket = (ticket: EventTicketPayload) => {
-    if (!event || isDraftPreview || !isHostMode) {
+    if (!event || !isHostMode) {
       return;
     }
 
@@ -1376,9 +1388,13 @@ const EventScreen = () => {
             setDeletingTicketId(ticketId);
 
             try {
-              const updatedEvent = await deleteEventTicket(event.id, ticketId);
+              const updatedEvent = isDraftPreview
+                ? await deleteDraftTicket(event.id, ticketId)
+                : await deleteEventTicket(event.id, ticketId);
 
               mergeUpdatedEvent(updatedEvent);
+              setActiveTab("Access");
+              setAccessSubTab("Tickets");
             } catch (error) {
               Alert.alert("Unable to delete ticket", getAuthErrorMessage(error, "Please try again."));
             } finally {
@@ -1391,7 +1407,7 @@ const EventScreen = () => {
   };
 
   const openRewardForm = (rewardType: EventRewardType, reward?: EventRewardPayload) => {
-    if (!event || isDraftPreview || !isHostMode) {
+    if (!event || !isHostMode) {
       return;
     }
 
@@ -1406,7 +1422,7 @@ const EventScreen = () => {
   };
 
   const handleCreateReward = () => {
-    if (!event || isDraftPreview || !isHostMode) {
+    if (!event || !isHostMode) {
       return;
     }
 
@@ -1468,9 +1484,13 @@ const EventScreen = () => {
             setDeletingRewardId(rewardId);
 
             try {
-              const updatedEvent = await deleteEventReward(event.id, rewardId);
+              const updatedEvent = isDraftPreview
+                ? await deleteDraftReward(event.id, rewardId)
+                : await deleteEventReward(event.id, rewardId);
 
               mergeUpdatedEvent(updatedEvent);
+              setActiveTab("Access");
+              setAccessSubTab("Rewards");
             } catch (error) {
               Alert.alert("Unable to delete reward", getAuthErrorMessage(error, "Please try again."));
             } finally {
@@ -1739,18 +1759,19 @@ const EventScreen = () => {
                 <TouchableOpacity
                   style={[
                     styles.followBtnSmall,
-                    {
-                      backgroundColor: isFollowing
-                        ? colors.primary
-                        : isDark
-                          ? "rgba(255, 255, 255, 0.15)"
-                          : "rgba(0, 0, 0, 0.05)",
-                    },
+                    isFollowing && styles.followingBtnSmall,
+                    { borderColor: isDark ? "#AC86D4" : colors.primary },
                   ]}
                   disabled={isFollowPending}
                   onPress={toggleHostFollow}
                 >
-                  <Text style={[styles.followBtnTextSmall, { color: isFollowing ? "#FFF" : colors.text }]}>
+                  <Text
+                    style={[
+                      styles.followBtnTextSmall,
+                      { color: isFollowing ? colors.textSecondary : isDark ? "#AC86D4" : colors.primary },
+                      isFollowing && styles.followingBtnTextSmall,
+                    ]}
+                  >
                     {isFollowing ? "Following" : "Follow"}
                   </Text>
                 </TouchableOpacity>
@@ -1828,6 +1849,7 @@ const EventScreen = () => {
               eventImageUris={eventImageUris}
               isHostMode={isHostMode}
               category={event?.categories?.[0] ?? event?.category ?? null}
+              isDraft={event?.status === "draft"}
               onHostFollowChange={updateHostFollowState}
             />
           )}
@@ -1861,15 +1883,16 @@ const EventScreen = () => {
               onSubmitJoinRequest={handleSubmitJoinRequest}
               onAcceptJoinRequest={handleAcceptJoinRequest}
               onDeclineJoinRequest={handleDeclineJoinRequest}
-              onCreateTicket={isDraftPreview || isEventCompleted || isEventCancelled ? undefined : handleCreateTicket}
-              onViewTicket={isDraftPreview ? undefined : handleViewTicket}
-              onEditTicket={isDraftPreview || isEventCompleted || isEventCancelled ? undefined : handleEditTicket}
-              onDeleteTicket={isDraftPreview ? undefined : handleDeleteTicket}
-              onCreateReward={isDraftPreview ? undefined : handleCreateReward}
+              onCreateTicket={isEventCompleted || isEventCancelled ? undefined : handleCreateTicket}
+              onViewTicket={handleViewTicket}
+              onEditTicket={isEventCompleted || isEventCancelled ? undefined : handleEditTicket}
+              onDeleteTicket={handleDeleteTicket}
+              onCreateReward={handleCreateReward}
               onViewReward={handleViewReward}
-              onEditReward={isDraftPreview ? undefined : handleEditReward}
-              onDeleteReward={isDraftPreview ? undefined : handleDeleteReward}
+              onEditReward={handleEditReward}
+              onDeleteReward={handleDeleteReward}
               onClaimReward={isDraftPreview ? undefined : handleClaimReward}
+              showRequestManagement={!isDraftPreview}
             />
           )}
           {activeTab === "Mooments" && eventId && (
@@ -2617,12 +2640,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   followBtnSmall: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 18,
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+  },
+  followingBtnSmall: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 0,
   },
   followBtnTextSmall: {
     fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+  },
+  followingBtnTextSmall: {
+    fontSize: 11,
     fontWeight: "600",
   },
   attendeesStatsRow: {

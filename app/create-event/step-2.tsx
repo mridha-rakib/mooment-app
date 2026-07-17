@@ -99,6 +99,8 @@ export default function CreateEventStep2() {
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const isEditingEvent = Boolean(draftId || isEditingPublished);
   const [isSaving, setIsSaving] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
@@ -355,7 +357,7 @@ export default function CreateEventStep2() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event')} />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
         ) : (

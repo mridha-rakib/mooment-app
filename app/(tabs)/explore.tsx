@@ -256,20 +256,21 @@ export default function Explore() {
             style={[
               styles.followBtn,
               isFollowing
-                ? { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }
-                : { backgroundColor: colors.primary },
+                ? { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)", borderWidth: 0 }
+                : { borderColor: isDark ? "#AC86D4" : colors.primary },
             ]}
             activeOpacity={0.8}
             onPress={() => handleFollow(actorId)}
             disabled={isLoadingFollow}
           >
             {isLoadingFollow ? (
-              <ActivityIndicator size="small" color={isFollowing ? colors.text : colors.background} />
+              <ActivityIndicator size="small" color={isFollowing ? colors.textSecondary : isDark ? "#AC86D4" : colors.primary} />
             ) : (
               <Text
                 style={[
                   styles.followBtnText,
-                  { color: isFollowing ? colors.text : colors.background },
+                  { color: isFollowing ? colors.textSecondary : isDark ? "#AC86D4" : colors.primary },
+                  isFollowing && styles.followingBtnText,
                 ]}
               >
                 {isFollowing ? "Following" : "Follow"}
@@ -609,15 +610,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   followBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    minWidth: 80,
     alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 0,
   },
   followBtnText: {
-    fontSize: 13,
-    fontWeight: "bold",
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+  },
+  followingBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,

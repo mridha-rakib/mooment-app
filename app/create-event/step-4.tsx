@@ -33,6 +33,8 @@ export default function CreateEventStep4() {
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const isEditingEvent = Boolean(draftId || isEditingPublished);
 
   React.useEffect(() => () => {
     isMountedRef.current = false;
@@ -153,7 +155,7 @@ export default function CreateEventStep4() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-3')} />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingPublished ? 'Update Event' : 'Create Event'}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
           <View style={{ width: 60 }} />
         ) : (

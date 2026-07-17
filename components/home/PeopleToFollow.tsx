@@ -127,12 +127,20 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.followBtn}
+              style={[
+                styles.followBtn,
+                followedUserIds.includes(user.id) && styles.followingBtn,
+              ]}
               activeOpacity={0.8}
               disabled={pendingUserIds.includes(user.id)}
               onPress={() => handleFollowPress(user)}
             >
-              <Text style={styles.followBtnText}>
+              <Text
+                style={[
+                  styles.followBtnText,
+                  followedUserIds.includes(user.id) && styles.followingBtnText,
+                ]}
+              >
                 {followedUserIds.includes(user.id) ? 'Following' : 'Follow'}
               </Text>
             </TouchableOpacity>
@@ -198,16 +206,28 @@ const styles = StyleSheet.create({
     height: 32,
   },
   followBtn: {
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D4B0EB',
-    backgroundColor: 'rgba(212, 176, 235, 0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
+    borderColor: '#AC86D4',
+    borderRadius: 8,
+    height: 20,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+  },
+  followingBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 0,
   },
   followBtnText: {
-    color: '#D4B0EB',
-    fontSize: 10,
+    color: '#AC86D4',
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  followingBtnText: {
+    color: '#8E8E9B',
+    fontSize: 11,
     fontWeight: '600',
   },
 });

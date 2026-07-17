@@ -40,6 +40,7 @@ type AboutTabProps = {
   host?: EventHost | null;
   eventImageUris?: string[];
   isHostMode?: boolean;
+  isDraft?: boolean;
   category?: string | null;
   onHostFollowChange?: (isFollowing: boolean) => void;
 };
@@ -238,6 +239,7 @@ const AboutTab = ({
   host,
   eventImageUris = [],
   isHostMode = false,
+  isDraft = false,
   category,
   onHostFollowChange,
 }: AboutTabProps) => {
@@ -576,7 +578,7 @@ const AboutTab = ({
               </>
             )}
 
-            {isHostMode && (
+            {isHostMode && !isDraft && (
               <View style={styles.withdrawalCard}>
                 <Feather name="shield" size={20} color="#1D9E75" />
                 <Text style={styles.withdrawalText}>Withdrawal will be available 72 hours after event completion</Text>
@@ -764,19 +766,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 20,
     justifyContent: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
   },
   followingBtnLarge: {
-    backgroundColor: "rgba(172, 134, 212, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 0,
   },
   followBtnTextLarge: {
     color: "#AC86D4",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 16,
   },
   followingBtnTextLarge: {
-    color: "#FFFFFF",
+    color: "#8E8E9B",
+    fontSize: 11,
+    fontWeight: "600",
   },
   hostStatsRow: {
     flexDirection: "row",
