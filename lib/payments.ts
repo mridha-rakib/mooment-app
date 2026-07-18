@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { EventCategory } from "@/constants/eventCategories";
 import { isAxiosError } from "axios";
 import { DeviceEventEmitter } from "react-native";
 
@@ -165,6 +166,8 @@ export type TicketWalletItem = {
     name?: string | null;
     bannerImageKey?: string | null;
     bannerOriginalImageKey?: string | null;
+    category?: EventCategory | null;
+    categories?: EventCategory[];
     scheduledAt?: string | null;
     endAt?: string | null;
     location?: {
@@ -180,6 +183,14 @@ export type TicketWalletItem = {
       avatarKey?: string | null;
       isFollowing?: boolean;
     } | null;
+    publicGoingSummary?: {
+      going: number;
+      avatars: {
+        userId: string;
+        name: string;
+        avatarKey?: string | null;
+      }[];
+    };
   };
 };
 

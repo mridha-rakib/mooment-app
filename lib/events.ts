@@ -505,6 +505,12 @@ const ticketWalletEventToEventResponse = (walletItem: TicketWalletItem): EventRe
     return null;
   }
 
+  const categories = walletEvent.categories?.length
+    ? walletEvent.categories
+    : walletEvent.category
+      ? [walletEvent.category]
+      : [];
+
   return {
     id: walletEvent.id,
     userId: walletEvent.host?.id ?? "",
@@ -521,13 +527,15 @@ const ticketWalletEventToEventResponse = (walletItem: TicketWalletItem): EventRe
     name: walletEvent.name ?? null,
     bannerImageKey: walletEvent.bannerImageKey ?? null,
     bannerOriginalImageKey: walletEvent.bannerOriginalImageKey ?? null,
-    categories: [],
+    category: categories[0] ?? null,
+    categories,
     scheduledAt: walletEvent.scheduledAt ?? null,
     endAt: walletEvent.endAt ?? null,
     location: walletEvent.location ?? null,
     tickets: [],
     rewards: [],
     privacy: "locked",
+    publicGoingSummary: walletEvent.publicGoingSummary,
     createdAt: walletItem.purchasedAt ?? walletEvent.scheduledAt ?? new Date(0).toISOString(),
     updatedAt: walletItem.purchasedAt ?? walletEvent.scheduledAt ?? new Date(0).toISOString(),
   };

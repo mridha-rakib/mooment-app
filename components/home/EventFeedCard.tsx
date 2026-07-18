@@ -19,6 +19,7 @@ import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import UserAvatar from "@/components/ui/UserAvatar";
+import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
 
 const timeAgo = (dateStr?: string | Date | null): string => {
   if (!dateStr) return "";
@@ -191,8 +192,6 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     [eventEndAt, eventScheduledAt, eventStatus, statusNowMs],
   );
   const eventBadgeLabel = EVENT_STATUS_LABELS[eventBadgeStatus];
-  const publicGoingSummary = event.publicGoingSummary ?? { going: 0, avatars: [] };
-  const goingAvatars = publicGoingSummary.avatars.slice(0, 3);
 
   const [isFollowing, setIsFollowing] = useState(Boolean(event.host?.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
@@ -424,22 +423,6 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     });
   };
 
-  const goToGoingList = () => {
-    if (!eventId) {
-      return;
-    }
-
-    router.push({
-      pathname: "/profile-screen/attendee-list",
-      params: {
-        eventId,
-        eventName: event.name ?? "Event",
-        initialFilter: "going",
-        ...(canViewEventStats ? {} : { mode: "publicGoing" }),
-      },
-    });
-  };
-
   const goToHostProfile = () => {
     navigateToProfile(router, currentUserId, {
       userId: hostId,
@@ -630,42 +613,14 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
                 </View>
               ) : null}
 
-              <TouchableOpacity
+              <PublicGoingSummaryRow
+                eventId={eventId}
+                eventName={event.name ?? "Event"}
+                summary={event.publicGoingSummary}
+                canViewCreatorList={canViewEventStats}
                 style={styles.goingRow}
-                activeOpacity={0.82}
-                accessibilityRole="button"
-                accessibilityLabel={`${publicGoingSummary.going} going`}
-                hitSlop={4}
-                onPress={goToGoingList}
-              >
-                {goingAvatars.length > 0 ? (
-                  <View style={[styles.goingAvatarStack, { width: 20 + (goingAvatars.length - 1) * 12 }]}>
-                    {goingAvatars.map((avatar, index) => {
-                      const avatarUri = avatar.avatarKey
-                        ? (() => {
-                          try { return getStorageFileUrl(avatar.avatarKey); } catch { return null; }
-                        })()
-                        : null;
-
-                      return (
-                        <View
-                          key={avatar.userId}
-                          style={[
-                            styles.goingAvatarItem,
-                            index > 0 ? styles.goingAvatarOverlap : null,
-                            { zIndex: goingAvatars.length - index },
-                          ]}
-                        >
-                          <UserAvatar uri={avatarUri} name={avatar.name} size={20} />
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : null}
-                <Text style={styles.goingText} numberOfLines={1}>
-                  {publicGoingSummary.going} going
-                </Text>
-              </TouchableOpacity>
+                textStyle={styles.goingText}
+              />
             </LinearGradient>
           </View>
 
@@ -1027,26 +982,7 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
   goingRow: {
-    height: 20,
-    flexDirection: "row",
-    alignItems: "center",
     alignSelf: "flex-start",
-    gap: 4,
-    maxWidth: "100%",
-  },
-  goingAvatarStack: {
-    height: 20,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  goingAvatarItem: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  goingAvatarOverlap: {
-    marginLeft: -8,
   },
   goingText: {
     color: "#FFFFFF",

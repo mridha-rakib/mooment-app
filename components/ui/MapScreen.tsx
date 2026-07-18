@@ -47,9 +47,9 @@ import EventPreviewModal from "./EventPreviewModal";
 
 Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
-const DEFAULT_MAP_CENTER: [number, number] = [-73.935242, 40.73061];
 const DEFAULT_ZOOM_LEVEL = 12;
 const USER_LOCATION_ZOOM_LEVEL = 14;
+const INITIAL_CAMERA_CORRECTION_THRESHOLD_METERS = 25;
 const CATEGORY_RAIL_TOP = 60;
 const CATEGORY_RAIL_HEIGHT = 42;
 const MAP_SCALE_BAR_OFFSET = {
@@ -272,6 +272,33 @@ const toLocationPayload = (
 const isValidMapboxCoordinate = (coordinate: [number, number] | null | undefined) =>
   Boolean(coordinate && toLocationPayload(coordinate[0], coordinate[1], Date.now()));
 
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const getCoordinateDistanceMeters = (from: [number, number], to: [number, number]) => {
+  const earthRadiusMeters = 6371000;
+  const [fromLongitude, fromLatitude] = from;
+  const [toLongitude, toLatitude] = to;
+  const latitudeDelta = toRadians(toLatitude - fromLatitude);
+  const longitudeDelta = toRadians(toLongitude - fromLongitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(fromLatitude)) *
+      Math.cos(toRadians(toLatitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const areCoordinatesNear = (
+  from: [number, number] | null | undefined,
+  to: [number, number] | null | undefined,
+) =>
+  Boolean(
+    from &&
+      to &&
+      getCoordinateDistanceMeters(from, to) < INITIAL_CAMERA_CORRECTION_THRESHOLD_METERS,
+  );
+
 export default function MapScreen({
   markers = [],
   onUserLocationChange,
@@ -303,6 +330,8 @@ export default function MapScreen({
   const currentZoomRef = React.useRef(DEFAULT_ZOOM_LEVEL);
   const hasInitialUserLocationCenteredRef = React.useRef(false);
   const initialCenteredSourceRef = React.useRef<UserLocationSource | null>(null);
+  const initialCenteredCoordinateRef = React.useRef<[number, number] | null>(null);
+  const canCorrectInitialCenterRef = React.useRef(false);
   const userHasExploredMapRef = React.useRef(false);
   const isMountedRef = React.useRef(false);
   const isStyleLoadedRef = React.useRef(false);
@@ -313,11 +342,12 @@ export default function MapScreen({
   const userLocationRef = React.useRef<[number, number] | null>(null);
   const userLocationSourceRef = React.useRef<UserLocationSource | null>(null);
   const pendingCameraMoveRef = React.useRef<PendingCameraMove | null>(null);
+  const lastManualRecenterCoordinateRef = React.useRef<[number, number] | null>(null);
   const [mapMode, setMapMode] = useState<MapViewMode>("traffic");
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(
+  const [, setUserLocation] = useState<[number, number] | null>(
     null,
   );
-  const [userLocationSource, setUserLocationSource] = useState<UserLocationSource | null>(null);
+  const [, setUserLocationSource] = useState<UserLocationSource | null>(null);
   const [canUseStoredFallback, setCanUseStoredFallback] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const isSatellite = mapMode === "satellite";
@@ -345,11 +375,6 @@ export default function MapScreen({
   }[mapMode];
   const lastReportedLocationRef = React.useRef<string | null>(null);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
-  const defaultCameraCenter: [number, number] =
-    userLocation ??
-    (canUseStoredFallback && storedLocation
-      ? toMapboxCoordinate(storedLocation)
-      : DEFAULT_MAP_CENTER);
 
   React.useEffect(() => {
     isMountedRef.current = true;
@@ -361,51 +386,9 @@ export default function MapScreen({
       isLocationRequestInFlightRef.current = false;
       isManualRecenterInFlightRef.current = false;
       pendingCameraMoveRef.current = null;
+      lastManualRecenterCoordinateRef.current = null;
     };
   }, []);
-
-  const applyUserLocation = React.useCallback(
-    (location: CurrentLocationPayload, source: UserLocationSource) => {
-      if (!isValidLocationCoordinate(location)) {
-        return null;
-      }
-
-      if (
-        source === "stored" &&
-        userLocationSourceRef.current &&
-        userLocationSourceRef.current !== "stored"
-      ) {
-        return null;
-      }
-
-      if (source === "lastKnown" && userLocationSourceRef.current === "fresh") {
-        return null;
-      }
-
-      const coordinate = toMapboxCoordinate(location);
-
-      userLocationRef.current = coordinate;
-      userLocationSourceRef.current = source;
-      setUserLocation(coordinate);
-      setUserLocationSource(source);
-
-      const reportKey = `${coordinate[0].toFixed(4)},${coordinate[1].toFixed(4)}`;
-
-      if (lastReportedLocationRef.current !== reportKey) {
-        lastReportedLocationRef.current = reportKey;
-        onUserLocationChange?.(coordinate);
-      }
-
-      return coordinate;
-    },
-    [onUserLocationChange],
-  );
-
-  React.useEffect(() => {
-    if (canUseStoredFallback && storedLocation && !userLocationRef.current) {
-      applyUserLocation(storedLocation, "stored");
-    }
-  }, [applyUserLocation, canUseStoredFallback, storedLocation]);
 
   React.useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
@@ -416,16 +399,42 @@ export default function MapScreen({
   }, [restorePlans]);
 
   const executeCameraMove = React.useCallback((move: PendingCameraMove) => {
+    if (move.mode === "initial") {
+      if (userHasExploredMapRef.current) {
+        if (pendingCameraMoveRef.current?.mode === "initial") {
+          pendingCameraMoveRef.current = null;
+        }
+        return false;
+      }
+
+      if (hasInitialUserLocationCenteredRef.current) {
+        const canApplyFreshCorrection =
+          canCorrectInitialCenterRef.current &&
+          move.source === "fresh" &&
+          !areCoordinatesNear(initialCenteredCoordinateRef.current, move.coordinate);
+
+        if (!canApplyFreshCorrection) {
+          if (
+            move.source === "fresh" &&
+            canCorrectInitialCenterRef.current &&
+            areCoordinatesNear(initialCenteredCoordinateRef.current, move.coordinate)
+          ) {
+            initialCenteredSourceRef.current = "fresh";
+            canCorrectInitialCenterRef.current = false;
+          }
+
+          return false;
+        }
+      }
+    }
+
     if (
       !isMountedRef.current ||
       !isStyleLoadedRef.current ||
       !cameraRef.current ||
       !isValidMapboxCoordinate(move.coordinate)
     ) {
-      if (
-        pendingCameraMoveRef.current?.mode === "manual" &&
-        move.mode === "initial"
-      ) {
+      if (pendingCameraMoveRef.current?.mode === "manual" && move.mode === "initial") {
         return false;
       }
 
@@ -446,10 +455,111 @@ export default function MapScreen({
     if (move.mode === "initial") {
       hasInitialUserLocationCenteredRef.current = true;
       initialCenteredSourceRef.current = move.source;
+      initialCenteredCoordinateRef.current = move.coordinate;
+      canCorrectInitialCenterRef.current = move.source === "lastKnown";
     }
 
     return true;
   }, []);
+
+  const coordinateInitialCameraMove = React.useCallback(
+    (
+      coordinate: [number, number] | null,
+      source: UserLocationSource,
+      animationDuration = 650,
+    ) => {
+      if (!coordinate || !isValidMapboxCoordinate(coordinate) || userHasExploredMapRef.current) {
+        return false;
+      }
+
+      if (hasInitialUserLocationCenteredRef.current) {
+        const canApplyFreshCorrection =
+          canCorrectInitialCenterRef.current &&
+          source === "fresh" &&
+          !areCoordinatesNear(initialCenteredCoordinateRef.current, coordinate);
+
+        if (!canApplyFreshCorrection) {
+          if (
+            source === "fresh" &&
+            canCorrectInitialCenterRef.current &&
+            areCoordinatesNear(initialCenteredCoordinateRef.current, coordinate)
+          ) {
+            initialCenteredSourceRef.current = "fresh";
+            canCorrectInitialCenterRef.current = false;
+          }
+
+          return false;
+        }
+      }
+
+      const pendingMove = pendingCameraMoveRef.current;
+      if (
+        pendingMove?.mode === "initial" &&
+        pendingMove.source === source &&
+        areCoordinatesNear(pendingMove.coordinate, coordinate)
+      ) {
+        return false;
+      }
+
+      return executeCameraMove({
+        coordinate,
+        animationDuration,
+        source,
+        mode: "initial",
+      });
+    },
+    [executeCameraMove],
+  );
+
+  const applyUserLocation = React.useCallback(
+    (location: CurrentLocationPayload, source: UserLocationSource) => {
+      if (!isMountedRef.current || !isValidLocationCoordinate(location)) {
+        return null;
+      }
+
+      if (
+        source === "stored" &&
+        userLocationSourceRef.current &&
+        userLocationSourceRef.current !== "stored"
+      ) {
+        return null;
+      }
+
+      if (source === "lastKnown" && userLocationSourceRef.current === "fresh") {
+        return null;
+      }
+
+      const coordinate = toMapboxCoordinate(location);
+      const existingCoordinate = userLocationRef.current;
+      const existingSource = userLocationSourceRef.current;
+      const isNearExistingCoordinate = areCoordinatesNear(existingCoordinate, coordinate);
+
+      userLocationRef.current = isNearExistingCoordinate && existingCoordinate ? existingCoordinate : coordinate;
+      userLocationSourceRef.current = source;
+
+      if (!isNearExistingCoordinate || existingSource !== source) {
+        setUserLocation(userLocationRef.current);
+        setUserLocationSource(source);
+      }
+
+      const reportKey = `${coordinate[0].toFixed(4)},${coordinate[1].toFixed(4)}`;
+
+      if (lastReportedLocationRef.current !== reportKey) {
+        lastReportedLocationRef.current = reportKey;
+        onUserLocationChange?.(coordinate);
+      }
+
+      return coordinate;
+    },
+    [onUserLocationChange],
+  );
+
+  React.useEffect(() => {
+    if (canUseStoredFallback && storedLocation && !userLocationRef.current) {
+      const coordinate = applyUserLocation(storedLocation, "stored");
+      coordinateInitialCameraMove(coordinate, "stored");
+    }
+  }, [applyUserLocation, canUseStoredFallback, coordinateInitialCameraMove, storedLocation]);
 
   const flushPendingCameraMove = React.useCallback(() => {
     const pendingMove = pendingCameraMoveRef.current;
@@ -466,17 +576,15 @@ export default function MapScreen({
     ) => {
       const coordinate = applyUserLocation(result.location, result.status);
 
-      if (coordinate && options.center) {
-        userHasExploredMapRef.current = false;
-        executeCameraMove({
+      if (coordinate && options.center !== false) {
+        coordinateInitialCameraMove(
           coordinate,
-          animationDuration: options.animationDuration ?? 650,
-          source: result.status,
-          mode: "initial",
-        });
+          result.status,
+          options.animationDuration ?? 650,
+        );
       }
     },
-    [applyUserLocation, executeCameraMove],
+    [applyUserLocation, coordinateInitialCameraMove],
   );
 
   const requestCurrentDeviceLocation = React.useCallback(
@@ -529,7 +637,13 @@ export default function MapScreen({
       source: UserLocationSource,
       animationDuration = 1000,
     ) => {
+      if (areCoordinatesNear(lastManualRecenterCoordinateRef.current, coordinate)) {
+        return false;
+      }
+
       userHasExploredMapRef.current = false;
+      lastManualRecenterCoordinateRef.current = coordinate;
+
       return executeCameraMove({
         coordinate,
         animationDuration,
@@ -564,6 +678,7 @@ export default function MapScreen({
 
   const requestManualRecenter = React.useCallback(
     async (animationDuration = 1000) => {
+      lastManualRecenterCoordinateRef.current = null;
       const existingCoordinate = userLocationRef.current;
       const existingSource = userLocationSourceRef.current;
 
@@ -614,29 +729,6 @@ export default function MapScreen({
     },
     [centerOnManualCoordinate, handleManualDeviceLocationResult],
   );
-
-  React.useEffect(() => {
-    const canFreshLocationCorrectTemporaryCenter =
-      userLocationSource === "fresh" &&
-      initialCenteredSourceRef.current !== "fresh";
-
-    if (
-      !userLocation ||
-      !userLocationSource ||
-      (hasInitialUserLocationCenteredRef.current && !canFreshLocationCorrectTemporaryCenter) ||
-      userHasExploredMapRef.current ||
-      (userLocationSource === "stored" && !canUseStoredFallback)
-    ) {
-      return;
-    }
-
-    executeCameraMove({
-      coordinate: userLocation,
-      animationDuration: 650,
-      source: userLocationSource,
-      mode: "initial",
-    });
-  }, [canUseStoredFallback, executeCameraMove, userLocation, userLocationSource]);
 
   React.useEffect(() => {
     isStyleLoadedRef.current = isStyleLoaded;
@@ -733,6 +825,9 @@ export default function MapScreen({
 
     if (state.gestures.isGestureActive) {
       userHasExploredMapRef.current = true;
+      if (pendingCameraMoveRef.current?.mode === "initial") {
+        pendingCameraMoveRef.current = null;
+      }
     }
   }, []);
 
@@ -831,12 +926,6 @@ export default function MapScreen({
         >
           <Mapbox.Camera
             ref={cameraRef}
-            defaultSettings={{
-              centerCoordinate: defaultCameraCenter,
-              heading: 0,
-              pitch: 0,
-              zoomLevel: DEFAULT_ZOOM_LEVEL,
-            }}
           />
 
           {isStyleLoaded && visibleMarkers.map((marker) => (
@@ -863,7 +952,8 @@ export default function MapScreen({
                 );
 
                 if (deviceLocation) {
-                  applyUserLocation(deviceLocation, "fresh");
+                  const coordinate = applyUserLocation(deviceLocation, "fresh");
+                  coordinateInitialCameraMove(coordinate, "fresh");
                 }
               }
             }}

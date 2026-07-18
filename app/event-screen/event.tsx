@@ -47,6 +47,7 @@ import ShareModal from "@/components/post/ShareModal";
 import ReportModal from "@/components/modals/ReportModal";
 import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
+import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { createReport } from "@/lib/reports";
 import { useAuthStore } from "@/stores/authStore";
@@ -801,10 +802,9 @@ const EventScreen = () => {
   const distanceLabel = getDistanceLabel(event, userLocation);
   const eventDate = formatEventDate(event?.scheduledAt);
   const eventTime = formatEventTime(event?.scheduledAt);
-  const goingCount = (event as EventResponse & { attendeesCount?: number | null } | null)?.attendeesCount ?? 0;
+  const ticketsLeftText = `${ticketsLeft} tickets left`;
   const eventStats = event as
     | (EventResponse & {
-        attendeesCount?: number | null;
         likesCount?: number | null;
         commentsCount?: number | null;
         sharesCount?: number | null;
@@ -1779,9 +1779,16 @@ const EventScreen = () => {
             </View>
 
             <View style={styles.attendeesStatsRow}>
-              <Text style={[styles.statsText, { color: colors.text }]}>
-                {isHostMode ? `${ticketsLeft} tickets left` : `${goingCount} going • ${ticketsLeft} tickets left`}
-              </Text>
+              <PublicGoingSummaryRow
+                eventId={event?.id ?? eventId}
+                eventName={event?.name ?? "Event"}
+                summary={event?.publicGoingSummary}
+                canViewCreatorList={isEventOwner}
+                trailingText={ticketsLeftText}
+                textStyle={[styles.statsText, { color: colors.text }]}
+                separatorStyle={{ color: colors.text }}
+                trailingTextStyle={{ color: colors.text }}
+              />
             </View>
 
             {!isDraftPreview && (
