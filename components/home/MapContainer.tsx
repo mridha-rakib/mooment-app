@@ -1,14 +1,20 @@
 import React from "react";
 import MapScreen, { MapMarkerData } from "@/components/ui/MapScreen";
-import { getMapEvents, type EventResponse } from "@/lib/events";
-import { buildEventFilterRequestParams, createEmptyEventFilters, type SharedEventFilters } from "@/lib/eventFilters";
+import { getMapEventPage, type EventResponse, type EventMapQuery } from "@/lib/events";
+import { createEmptyEventFilters, type SharedEventFilters } from "@/lib/eventFilters";
+import {
+  buildMapEventRequestParams,
+  getMapViewportPageBudget,
+  getMapViewportRequestKey,
+  type EventMapViewport,
+} from "@/lib/mapEventRequests";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getCategoryColor } from "@/constants/categoryColors";
 import type { EventCategory } from "@/constants/eventCategories";
 import { isValidLocationCoordinate } from "@/lib/locationSharing";
 
-const EVENT_MAP_RADIUS_KM = 50;
 const EVENT_MAP_LIMIT = 100;
+const VIEWPORT_REQUEST_DEBOUNCE_MS = 500;
 const ACTIVE_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
 const FALLBACK_EVENT_IMAGE =
   "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop";
@@ -208,6 +214,36 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
   };
 };
 
+const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((marker, index) => {
+    const nextMarker = right[index];
+
+    return Boolean(
+      nextMarker &&
+        marker.id === nextMarker.id &&
+        marker.latitude === nextMarker.latitude &&
+        marker.longitude === nextMarker.longitude &&
+        marker.image === nextMarker.image &&
+        marker.label === nextMarker.label &&
+        marker.glowColor === nextMarker.glowColor &&
+        marker.distance === nextMarker.distance,
+    );
+  });
+};
+
+const applyMarkersIfChanged = (
+  setMarkers: React.Dispatch<React.SetStateAction<MapMarkerData[]>>,
+  nextMarkers: MapMarkerData[],
+) => {
+  setMarkers((currentMarkers) => (
+    areMarkerListsEqual(currentMarkers, nextMarkers) ? currentMarkers : nextMarkers
+  ));
+};
+
 export default function MapContainer({
   onBack,
   logoText = "Mooment",
@@ -216,7 +252,10 @@ export default function MapContainer({
 }: MapContainerProps) {
   const [markers, setMarkers] = React.useState<MapMarkerData[]>([]);
   const [userLocation, setUserLocation] = React.useState<[number, number] | null>(null);
+  const [settledViewport, setSettledViewport] = React.useState<EventMapViewport | null>(null);
+  const [debouncedViewport, setDebouncedViewport] = React.useState<EventMapViewport | null>(null);
   const mapRequestIdRef = React.useRef(0);
+  const debouncedViewportKeyRef = React.useRef<string | null>(null);
 
   // Keep a ref so the async fetch always reads the latest location without
   // being listed as an effect dependency (which would re-trigger fetches on
@@ -226,50 +265,87 @@ export default function MapContainer({
     userLocationRef.current = userLocation;
   }, [userLocation]);
 
-  // Round to 3 decimal places (~111 m precision) so the effect only
-  // re-fires when the user has moved far enough to warrant a new query.
-  const validUserLocation = userLocation && isValidMapboxCoordinate(userLocation) ? userLocation : null;
-  const queryLongitude = validUserLocation ? Number(validUserLocation[0].toFixed(3)) : undefined;
-  const queryLatitude = validUserLocation ? Number(validUserLocation[1].toFixed(3)) : undefined;
-  const mapRequestParams = React.useMemo(() => {
-    const params = buildEventFilterRequestParams(eventFilters, {
-      includeLocation: Boolean(eventFilters.nearby),
-      limit: EVENT_MAP_LIMIT,
-    });
+  React.useEffect(() => {
+    const viewportKey = getMapViewportRequestKey(settledViewport);
 
-    if (!eventFilters.nearby && queryLatitude !== undefined && queryLongitude !== undefined) {
-      params.latitude = queryLatitude;
-      params.longitude = queryLongitude;
-      params.radiusKm = EVENT_MAP_RADIUS_KM;
+    if (!viewportKey) {
+      return;
     }
 
-    return params;
-  }, [eventFilters, queryLatitude, queryLongitude]);
+    const timer = setTimeout(() => {
+      if (debouncedViewportKeyRef.current === viewportKey) {
+        return;
+      }
+
+      debouncedViewportKeyRef.current = viewportKey;
+      setDebouncedViewport(settledViewport);
+    }, VIEWPORT_REQUEST_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [settledViewport]);
+
+  const requestViewport = eventFilters.nearby ? null : debouncedViewport;
+  const pageBudget = React.useMemo(
+    () => getMapViewportPageBudget(eventFilters, requestViewport),
+    [eventFilters, requestViewport],
+  );
+  const mapRequestParams = React.useMemo<EventMapQuery | null>(
+    () => buildMapEventRequestParams(eventFilters, requestViewport, EVENT_MAP_LIMIT),
+    [eventFilters, requestViewport],
+  );
   const mapRequestKey = React.useMemo(() => JSON.stringify(mapRequestParams), [mapRequestParams]);
 
   React.useEffect(() => {
+    if (!mapRequestParams) {
+      return;
+    }
+
     let isMounted = true;
+    const abortController = new AbortController();
     const requestId = ++mapRequestIdRef.current;
 
     const loadMapEvents = async () => {
+      const markerById = new Map<string, MapMarkerData>();
+      let cursor: string | null | undefined;
+      let hasRenderedFirstPage = false;
+      let pagesFetched = 0;
+
       try {
-        const events = await getMapEvents(mapRequestParams);
+        do {
+          const page = await getMapEventPage({
+            ...mapRequestParams,
+            ...(cursor ? { cursor } : {}),
+          }, { signal: abortController.signal });
 
-        if (!isMounted || requestId !== mapRequestIdRef.current) {
-          return;
-        }
+          if (!isMounted || requestId !== mapRequestIdRef.current) {
+            return;
+          }
 
-        const distanceReference = eventFilters.nearby
-          ? [eventFilters.nearby.longitude, eventFilters.nearby.latitude] as [number, number]
-          : userLocationRef.current;
+          pagesFetched += 1;
+          const distanceReference = eventFilters.nearby
+            ? [eventFilters.nearby.longitude, eventFilters.nearby.latitude] as [number, number]
+            : userLocationRef.current;
 
-        setMarkers(
-          events
+          page.events
             .map((event) => toMapMarker(event, distanceReference))
-            .filter((marker): marker is MapMarkerData => Boolean(marker)),
-        );
+            .filter((marker): marker is MapMarkerData => Boolean(marker))
+            .forEach((marker) => {
+              markerById.set(marker.id, marker);
+            });
+
+          hasRenderedFirstPage = true;
+          const nextMarkers = [...markerById.values()];
+          if (pagesFetched === 1 || !page.nextCursor || (pageBudget && pagesFetched >= pageBudget)) {
+            applyMarkersIfChanged(setMarkers, nextMarkers);
+          }
+          cursor = page.nextCursor;
+        } while (cursor && (!pageBudget || pagesFetched < pageBudget));
       } catch {
-        // Leave existing markers visible; don't wipe them on a failed refetch.
+        if (isMounted && requestId === mapRequestIdRef.current && !hasRenderedFirstPage) {
+          applyMarkersIfChanged(setMarkers, []);
+        }
       }
     };
 
@@ -277,13 +353,18 @@ export default function MapContainer({
 
     return () => {
       isMounted = false;
+      abortController.abort();
     };
-  }, [eventFilters.nearby, mapRequestKey, mapRequestParams]);
+  }, [eventFilters.nearby, mapRequestKey, mapRequestParams, pageBudget]);
 
   const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
     if (isValidMapboxCoordinate(coordinate)) {
       setUserLocation(coordinate);
     }
+  }, []);
+
+  const handleViewportChange = React.useCallback((viewport: EventMapViewport) => {
+    setSettledViewport(viewport);
   }, []);
 
   return (
@@ -292,6 +373,7 @@ export default function MapContainer({
       logoText={logoText}
       onBack={onBack}
       onUserLocationChange={handleUserLocationChange}
+      onViewportChange={handleViewportChange}
       selectedCategory={eventFilters.category ?? null}
       onCategoryChange={onCategoryChange}
     />

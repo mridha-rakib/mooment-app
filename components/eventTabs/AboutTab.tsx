@@ -454,7 +454,8 @@ const AboutTab = ({
         options={["Description", "Gallery"]}
         selectedOption={subTab}
         onSelect={setSubTab}
-        containerStyle={{ marginTop: 16, marginBottom: 0 }}
+        containerStyle={styles.subTabContainer}
+        segmentStyle={styles.subTabSegment}
         renderOption={(option, isSelected) => (
           <Ionicons
             name={
@@ -799,6 +800,18 @@ const styles = StyleSheet.create({
   hostBio: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  subTabContainer: {
+    height: 40,
+    marginBottom: 0,
+    marginTop: 16,
+    minHeight: 40,
+    width: "100%",
+  },
+  subTabSegment: {
+    height: 32,
+    justifyContent: "center",
+    paddingVertical: 0,
   },
   withdrawalCard: {
     alignItems: "center",

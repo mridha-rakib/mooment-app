@@ -16,6 +16,7 @@ interface SegmentedControlProps {
   selectedOption: string;
   onSelect: (option: string) => void;
   containerStyle?: object;
+  segmentStyle?: object;
   activeSegmentStyle?: object;
   renderOption?: (option: string, isSelected: boolean) => React.ReactNode;
   getAccessibilityLabel?: (option: string) => string;
@@ -90,6 +91,7 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
   selectedOption,
   onSelect,
   containerStyle,
+  segmentStyle,
   activeSegmentStyle,
   renderOption,
   getAccessibilityLabel,
@@ -152,6 +154,7 @@ const SegmentedControl: React.FC<SegmentedControlProps> = ({
             style={[
               styles.segmentItem,
               flat && styles.flatSegmentItem,
+              segmentStyle,
               selectedOption === option && (
                 flat
                   ? { backgroundColor: "rgba(104, 104, 104, 0.4)" }

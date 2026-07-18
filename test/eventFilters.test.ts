@@ -13,6 +13,12 @@ import {
   type SharedEventFilters,
 } from "../lib/eventFilters";
 import {
+  buildMapEventRequestParams,
+  getMapViewportPageBudget,
+  getMapViewportRequestKey,
+  type EventMapViewport,
+} from "../lib/mapEventRequests";
+import {
   getEventCategoryFeedDestination,
   getEventCategoryMapDestination,
   normalizeEventDetailsSource,
@@ -305,6 +311,148 @@ test("map can omit explicit filter location without dropping other filters", () 
   assert.equal(params.latitude, undefined);
   assert.equal(params.longitude, undefined);
   assert.equal(params.radiusKm, undefined);
+});
+
+test("map viewport requests do not inject current location radius when nearby is off", () => {
+  const filters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    category: "Music",
+  };
+  const viewport: EventMapViewport = {
+    north: 41.123456,
+    south: 39.987654,
+    west: -74.555555,
+    east: -72.111111,
+    zoom: 7.123,
+  };
+
+  const params = buildMapEventRequestParams(filters, viewport, 100);
+
+  assert.equal(params?.category, "Music");
+  assert.equal(params?.limit, 100);
+  assert.equal(params?.north, 41.123);
+  assert.equal(params?.south, 39.988);
+  assert.equal(params?.west, -74.556);
+  assert.equal(params?.east, -72.111);
+  assert.equal(params?.latitude, undefined);
+  assert.equal(params?.longitude, undefined);
+  assert.equal(params?.radiusKm, undefined);
+});
+
+test("explicit nearby filter keeps existing radius params and ignores viewport bounds", () => {
+  const filters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      latitude: 40,
+      longitude: -73,
+      radiusMiles: 25,
+      label: "Current Location",
+      source: "current",
+    },
+  };
+  const viewport: EventMapViewport = {
+    north: 50,
+    south: 20,
+    west: 100,
+    east: 120,
+    zoom: 2,
+  };
+
+  const params = buildMapEventRequestParams(filters, viewport, 100);
+
+  assert.equal(params?.latitude, 40);
+  assert.equal(params?.longitude, -73);
+  assert.equal(params?.radiusKm, 40.2336);
+  assert.equal(params?.north, undefined);
+  assert.equal(params?.south, undefined);
+  assert.equal(params?.west, undefined);
+  assert.equal(params?.east, undefined);
+});
+
+test("equivalent settled viewport bounds share a stable request key", () => {
+  const first: EventMapViewport = {
+    north: 40.00001,
+    south: 39.00001,
+    west: -74.00001,
+    east: -73.00001,
+    zoom: 6.001,
+  };
+  const second: EventMapViewport = {
+    north: 40.00002,
+    south: 39.00002,
+    west: -74.00002,
+    east: -73.00002,
+    zoom: 6.002,
+  };
+
+  assert.equal(getMapViewportRequestKey(first), getMapViewportRequestKey(second));
+});
+
+test("low zoom globe bounds ignore small jitter but keep meaningful movement distinct", () => {
+  const first: EventMapViewport = {
+    north: 49.4,
+    south: -48.8,
+    west: 169.6,
+    east: -169.7,
+    zoom: 2.04,
+  };
+  const jittered: EventMapViewport = {
+    north: 49.49,
+    south: -48.71,
+    west: 169.51,
+    east: -169.62,
+    zoom: 2.18,
+  };
+  const moved: EventMapViewport = {
+    north: 55,
+    south: -43,
+    west: 150,
+    east: -160,
+    zoom: 2.04,
+  };
+
+  assert.equal(getMapViewportRequestKey(first), getMapViewportRequestKey(jittered));
+  assert.notEqual(getMapViewportRequestKey(first), getMapViewportRequestKey(moved));
+});
+
+test("low zoom map requests use a bounded page budget while focused views can exhaust pages", () => {
+  const filters = createEmptyEventFilters();
+  const lowZoom: EventMapViewport = {
+    north: 70,
+    south: -70,
+    west: -180,
+    east: 180,
+    zoom: 2,
+  };
+  const midZoom: EventMapViewport = {
+    north: 55,
+    south: 35,
+    west: -12,
+    east: 20,
+    zoom: 4,
+  };
+  const focusedZoom: EventMapViewport = {
+    north: 41,
+    south: 40,
+    west: -74,
+    east: -73,
+    zoom: 8,
+  };
+  const nearbyFilters: SharedEventFilters = {
+    ...filters,
+    nearby: {
+      latitude: 40,
+      longitude: -73,
+      radiusMiles: 25,
+      label: "Current Location",
+      source: "current",
+    },
+  };
+
+  assert.equal(getMapViewportPageBudget(filters, lowZoom), 1);
+  assert.equal(getMapViewportPageBudget(filters, midZoom), 2);
+  assert.equal(getMapViewportPageBudget(filters, focusedZoom), null);
+  assert.equal(getMapViewportPageBudget(nearbyFilters, lowZoom), null);
 });
 
 test("local date keys round trip without formatted string parsing", () => {

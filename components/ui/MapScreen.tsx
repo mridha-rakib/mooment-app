@@ -3,6 +3,7 @@ import { EVENT_CATEGORIES, type EventCategory } from "@/constants/eventCategorie
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
+import type { EventMapViewport } from "@/lib/mapEventRequests";
 import {
   getBestCurrentDeviceLocation,
   isValidLocationCoordinate,
@@ -56,6 +57,20 @@ const MAP_SCALE_BAR_OFFSET = {
   top: CATEGORY_RAIL_TOP + CATEGORY_RAIL_HEIGHT + 10,
   left: 16,
 };
+const MAP_GESTURE_SETTINGS = {
+  doubleTapToZoomInEnabled: true,
+  doubleTouchToZoomOutEnabled: true,
+  panEnabled: true,
+  pinchPanEnabled: true,
+  pinchZoomEnabled: true,
+  pinchZoomDecelerationEnabled: true,
+  pitchEnabled: true,
+  quickZoomEnabled: true,
+  rotateEnabled: true,
+  rotateDecelerationEnabled: true,
+  simultaneousRotateAndPinchToZoomEnabled: true,
+  simultaneousRotateAndPinchZoomEnabled: true,
+} as const;
 
 type MapViewMode = "traffic" | "satellite";
 type UserLocationSource = "fresh" | "lastKnown" | "stored";
@@ -94,25 +109,28 @@ type MapScreenProps = {
   onBack?: () => void;
   logoText?: string;
   onUserLocationChange?: (coordinate: [number, number]) => void;
+  onViewportChange?: (viewport: EventMapViewport) => void;
   selectedCategory?: EventCategory | null;
   onCategoryChange?: (category: EventCategory | null) => void;
 };
 
-const MapMarker = ({
-  coordinate,
-  image,
-  label,
-  glowColor = "#D4B0EB",
-  onPress,
-  isSatellite,
-}: {
+type MapMarkerProps = {
   coordinate: [number, number];
   image: string;
   label: string;
   glowColor: string;
   onPress: () => void;
   isSatellite: boolean;
-}) => {
+};
+
+const MapMarker = React.memo(({
+  coordinate,
+  image,
+  label,
+  glowColor = "#D4B0EB",
+  onPress,
+  isSatellite,
+}: MapMarkerProps) => {
   const { colors } = useTheme();
 
   if (isSatellite) {
@@ -124,7 +142,7 @@ const MapMarker = ({
           activeOpacity={0.9}
         >
           {/* Image Radial Glow - Moved behind the bubble */}
-          <View style={styles.satImageGlow}>
+          <View pointerEvents="none" style={styles.satImageGlow}>
             <Svg height="60" width="60" viewBox="0 0 60 60">
               <Defs>
                 <SvgRadialGradient
@@ -143,7 +161,7 @@ const MapMarker = ({
           </View>
 
           {/* Anchor Radial Glow - Moved behind the bubble */}
-          <View style={styles.satAnchorGlow}>
+          <View pointerEvents="none" style={styles.satAnchorGlow}>
             <Svg height="20" width="20" viewBox="0 0 20 20">
               <Defs>
                 <SvgRadialGradient
@@ -161,7 +179,7 @@ const MapMarker = ({
             </Svg>
           </View>
 
-          <BlurView intensity={80} tint="dark" style={styles.satBubble}>
+          <BlurView pointerEvents="none" intensity={80} tint="dark" style={styles.satBubble}>
             <LinearGradient
               colors={["rgba(0,0,0,0.8)", "rgba(0,0,0,0.4)"]}
               start={{ x: 0, y: 0 }}
@@ -190,6 +208,7 @@ const MapMarker = ({
             </View>
           </BlurView>
           <View
+            pointerEvents="none"
             style={[
               styles.satAnchorPoint,
               {
@@ -213,6 +232,7 @@ const MapMarker = ({
       >
         {/* Soft Radial Glow Layer */}
         <View
+          pointerEvents="none"
           style={[
             styles.glowLayer,
             { transform: [{ scale: 2.5 }], opacity: 0.5 },
@@ -244,7 +264,7 @@ const MapMarker = ({
           <Image source={{ uri: image }} style={styles.markerImage} />
         </View>
         {label && (
-          <View style={styles.labelContainer}>
+          <View pointerEvents="none" style={styles.labelContainer}>
             <Text style={[styles.labelText, { color: "#FFFFFF" }]}>
               {label}
             </Text>
@@ -253,7 +273,7 @@ const MapMarker = ({
       </TouchableOpacity>
     </Mapbox.MarkerView>
   );
-};
+});
 
 const toLocationPayload = (
   longitude: unknown,
@@ -273,6 +293,72 @@ const isValidMapboxCoordinate = (coordinate: [number, number] | null | undefined
   Boolean(coordinate && toLocationPayload(coordinate[0], coordinate[1], Date.now()));
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const normalizeLongitude = (longitude: number) => {
+  const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+
+  return normalized === -180 && longitude > 0 ? 180 : normalized;
+};
+
+MapMarker.displayName = "MapMarker";
+
+const EventMapMarker = React.memo(({
+  marker,
+  isSatellite,
+  onMarkerPress,
+}: {
+  marker: MapMarkerData;
+  isSatellite: boolean;
+  onMarkerPress: (marker: MapMarkerData) => void;
+}) => {
+  const handlePress = React.useCallback(() => {
+    onMarkerPress(marker);
+  }, [marker, onMarkerPress]);
+
+  return (
+    <MapMarker
+      coordinate={[marker.longitude, marker.latitude]}
+      image={marker.image}
+      label={marker.label}
+      glowColor={marker.glowColor}
+      onPress={handlePress}
+      isSatellite={isSatellite}
+    />
+  );
+});
+
+EventMapMarker.displayName = "EventMapMarker";
+
+const toEventMapViewport = (state: MapState): EventMapViewport | null => {
+  const northEast = state.properties.bounds?.ne;
+  const southWest = state.properties.bounds?.sw;
+  const zoom = state.properties.zoom;
+
+  if (
+    !Array.isArray(northEast) ||
+    !Array.isArray(southWest) ||
+    typeof northEast[0] !== "number" ||
+    typeof northEast[1] !== "number" ||
+    typeof southWest[0] !== "number" ||
+    typeof southWest[1] !== "number" ||
+    typeof zoom !== "number" ||
+    !Number.isFinite(northEast[0]) ||
+    !Number.isFinite(northEast[1]) ||
+    !Number.isFinite(southWest[0]) ||
+    !Number.isFinite(southWest[1]) ||
+    !Number.isFinite(zoom)
+  ) {
+    return null;
+  }
+
+  return {
+    north: Math.max(northEast[1], southWest[1]),
+    south: Math.min(northEast[1], southWest[1]),
+    east: normalizeLongitude(northEast[0]),
+    west: normalizeLongitude(southWest[0]),
+    zoom,
+  };
+};
 
 const getCoordinateDistanceMeters = (from: [number, number], to: [number, number]) => {
   const earthRadiusMeters = 6371000;
@@ -302,6 +388,7 @@ const areCoordinatesNear = (
 export default function MapScreen({
   markers = [],
   onUserLocationChange,
+  onViewportChange,
   selectedCategory,
   onCategoryChange,
 }: MapScreenProps) {
@@ -760,11 +847,11 @@ export default function MapScreen({
     [activeCategory, markers],
   );
 
-  const handleMarkerPress = (marker: MapMarkerData) => {
+  const handleMarkerPress = React.useCallback((marker: MapMarkerData) => {
     setSelectedMarker(marker);
     setSelectedThemeColor(marker.glowColor);
     setModalVisible(true);
-  };
+  }, []);
 
   const handleViewEvent = () => {
     if (!selectedMarker?.id) {
@@ -831,6 +918,14 @@ export default function MapScreen({
     }
   }, []);
 
+  const handleMapIdle = React.useCallback((state: MapState) => {
+    const viewport = toEventMapViewport(state);
+
+    if (viewport) {
+      onViewportChange?.(viewport);
+    }
+  }, [onViewportChange]);
+
   const handleZoomIn = () => {
     userHasExploredMapRef.current = true;
     const nextZoom = Math.min(currentZoomRef.current + 1, 20);
@@ -861,7 +956,7 @@ export default function MapScreen({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.topHeader}>
+      <View pointerEvents="box-none" style={styles.topHeader}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -911,13 +1006,19 @@ export default function MapScreen({
         <Mapbox.MapView
           style={styles.map}
           styleURL={currentMapStyle}
+          projection="globe"
           logoEnabled={false}
           attributionEnabled={false}
           scaleBarEnabled={true}
           scaleBarPosition={MAP_SCALE_BAR_OFFSET}
+          zoomEnabled={true}
+          scrollEnabled={true}
+          gestureSettings={MAP_GESTURE_SETTINGS}
           pitchEnabled={true}
           rotateEnabled={true}
+          requestDisallowInterceptTouchEvent={true}
           onCameraChanged={handleCameraChanged}
+          onMapIdle={handleMapIdle}
           onDidFinishLoadingStyle={() => {
             isStyleLoadedRef.current = true;
             setIsStyleLoaded(true);
@@ -929,13 +1030,10 @@ export default function MapScreen({
           />
 
           {isStyleLoaded && visibleMarkers.map((marker) => (
-            <MapMarker
+            <EventMapMarker
               key={`${marker.id}-${mapMode}`}
-              coordinate={[marker.longitude, marker.latitude]}
-              image={marker.image}
-              label={marker.label}
-              glowColor={marker.glowColor}
-              onPress={() => handleMarkerPress(marker)}
+              marker={marker}
+              onMarkerPress={handleMarkerPress}
               isSatellite={isSatellite}
             />
           ))}

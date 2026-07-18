@@ -180,6 +180,11 @@ export type EventMapQuery = {
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
+  north?: number;
+  south?: number;
+  east?: number;
+  west?: number;
+  cursor?: string;
   limit?: number;
   ageRestriction?: EventAgeRestriction;
   priceFilter?: "free" | "lt_10" | "lt_50" | "lt_100" | "gte_100";
@@ -187,6 +192,11 @@ export type EventMapQuery = {
   timePeriod?: "morning" | "noon" | "evening" | "late_night" | "any";
   timezoneOffsetMinutes?: number;
   hashtags?: string;
+};
+
+export type EventMapPage = {
+  events: EventResponse[];
+  nextCursor?: string | null;
 };
 
 export type EventFeedQuery = {
@@ -582,11 +592,24 @@ export const getProfileEvents = async (
   };
 };
 
-export const getMapEvents = async (params: EventMapQuery = {}): Promise<EventResponse[]> => {
-  const response = await api.get("/events/map", { params });
+export const getMapEventPage = async (
+  params: EventMapQuery = {},
+  options: { signal?: AbortSignal } = {},
+): Promise<EventMapPage> => {
+  const response = await api.get("/events/map", { params, signal: options.signal });
   const events = response.data?.data?.events;
+  const nextCursor = response.data?.data?.nextCursor;
 
-  return Array.isArray(events) ? (events as EventResponse[]) : [];
+  return {
+    events: Array.isArray(events) ? (events as EventResponse[]) : [],
+    nextCursor: typeof nextCursor === "string" && nextCursor.length > 0 ? nextCursor : null,
+  };
+};
+
+export const getMapEvents = async (params: EventMapQuery = {}): Promise<EventResponse[]> => {
+  const page = await getMapEventPage(params);
+
+  return page.events;
 };
 
 export const getNowModeEvents = async (params: NowModeQuery = {}): Promise<NowModeEventResponse[]> => {
