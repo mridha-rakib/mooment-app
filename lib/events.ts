@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import type { EventCategory } from "@/constants/eventCategories";
 import { getMyTicketWallet, type TicketWalletItem } from "@/lib/payments";
+import type { FeedAudience } from "@/lib/moments";
 
 export type EventStatus = "draft" | "published" | "live" | "completed" | "cancelled";
 export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
@@ -257,6 +258,7 @@ export type EventFeedQuery = {
   timePeriod?: "morning" | "noon" | "evening" | "late_night" | "any";
   timezoneOffsetMinutes?: number;
   hashtags?: string;
+  audience?: FeedAudience;
 };
 
 export type NowEventStatus = "live_now" | "starting_soon" | "last_call";

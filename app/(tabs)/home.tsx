@@ -18,8 +18,17 @@ import FeedPost, { PostData } from "@/components/post/FeedPost";
 import ShareModal from "@/components/post/ShareModal";
 import RepostFeedCard from "@/components/post/RepostFeedCard";
 
-import { consumePendingNewMoment, deleteMoment, getFeedMoments, getFeedReposts, shareMoment } from "@/lib/moments";
-import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
+import {
+  consumePendingNewMoment,
+  deleteMoment,
+  getFeedMoments,
+  getFeedReposts,
+  shareMoment,
+  type FeedAudience,
+  type MomentInteractionSummary,
+  type MomentTimelineItem,
+  type RepostPayload,
+} from "@/lib/moments";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -355,6 +364,7 @@ export default function HomeFeed() {
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedType, setSelectedType] = useState('Feed');
+  const [feedAudience, setFeedAudience] = useState<FeedAudience>("discover");
   const [stories, setStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
   const [friendStories, setFriendStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
@@ -373,12 +383,17 @@ export default function HomeFeed() {
   const feedScrollRef = useRef<FlatList>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
   const appliedEventFiltersRef = useRef(appliedEventFilters);
+  const feedAudienceRef = useRef(feedAudience);
   const didMountEventFilterEffectRef = useRef(false);
   const params = useLocalSearchParams<{ showSuccess?: string; view?: string; category?: string | string[] }>();
 
   useEffect(() => {
     appliedEventFiltersRef.current = appliedEventFilters;
   }, [appliedEventFilters]);
+
+  useEffect(() => {
+    feedAudienceRef.current = feedAudience;
+  }, [feedAudience]);
 
   const beginEventFilterTransition = useCallback(() => {
     feedRequestIdRef.current += 1;
@@ -395,6 +410,16 @@ export default function HomeFeed() {
     activeFeedVideoItemIdRef.current = itemId;
     setActiveFeedVideoItemId(itemId);
   }, []);
+
+  const beginAudienceTransition = useCallback(() => {
+    feedRequestIdRef.current += 1;
+    setActiveFeedVideoItemIdIfChanged(null);
+    setIsFeedLoading(true);
+    setIsEventFilterLoading(false);
+    setFeedMomentPosts([]);
+    setFeedEvents([]);
+    setFeedReposts([]);
+  }, [setActiveFeedVideoItemIdIfChanged]);
 
   const feedViewabilityConfig = useRef({
     itemVisiblePercentThreshold: FEED_VIDEO_VIEWABILITY_THRESHOLD,
@@ -458,11 +483,14 @@ export default function HomeFeed() {
     }
   }, [userId]);
 
-  const loadFeedEvents = useCallback(async () => {
+  const loadFeedEvents = useCallback(async (audience: FeedAudience) => {
     const requestId = ++feedRequestIdRef.current;
     setIsEventFilterLoading(true);
     try {
-      const events = await getFeedEvents(buildEventFilterRequestParams(appliedEventFiltersRef.current, { limit: 100 }));
+      const events = await getFeedEvents(buildEventFilterRequestParams(appliedEventFiltersRef.current, {
+        limit: 100,
+        audience,
+      }));
 
       if (!isLatestEventRequest(requestId, feedRequestIdRef.current)) return;
 
@@ -478,16 +506,20 @@ export default function HomeFeed() {
     }
   }, []);
 
-  const loadFeed = useCallback(async () => {
+  const loadFeed = useCallback(async (audience: FeedAudience = feedAudienceRef.current) => {
     const requestId = ++feedRequestIdRef.current;
     setIsFeedLoading(true);
     try {
       const eventFilters = appliedEventFiltersRef.current;
       const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
-        getFeedMoments({ hashtags: eventFilters.hashtags }),
-        getFeedEvents(buildEventFilterRequestParams(eventFilters, { limit: 100 })),
-        getFeedReposts(),
+        getFeedMoments({ hashtags: eventFilters.hashtags, audience }),
+        getFeedEvents(buildEventFilterRequestParams(eventFilters, { limit: 100, audience })),
+        getFeedReposts(50, audience),
       ]);
+
+      if (!isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+        return;
+      }
 
       if (momentsResult.status === "fulfilled") {
         setFeedMomentPosts(
@@ -501,18 +533,15 @@ export default function HomeFeed() {
         setFeedMomentPosts([]);
       }
 
-      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
-        setFeedEvents(
-          eventsResult.status === "fulfilled"
-            ? eventsResult.value
-            : [],
-        );
-      }
+      setFeedEvents(
+        eventsResult.status === "fulfilled"
+          ? eventsResult.value
+          : [],
+      );
       setFeedReposts(repostsResult.status === 'fulfilled' ? repostsResult.value : []);
     } finally {
-      setIsFeedLoading(false);
-
       if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+        setIsFeedLoading(false);
         setIsEventFilterLoading(false);
       }
     }
@@ -524,8 +553,18 @@ export default function HomeFeed() {
       return;
     }
 
-    void loadFeedEvents();
+    void loadFeedEvents(feedAudienceRef.current);
   }, [appliedEventFilters, loadFeedEvents]);
+
+  const handleAudienceChange = useCallback((audience: FeedAudience) => {
+    if (audience === feedAudience) {
+      return;
+    }
+
+    beginAudienceTransition();
+    setFeedAudience(audience);
+    void loadFeed(audience);
+  }, [beginAudienceTransition, feedAudience, loadFeed]);
 
   const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
     beginEventFilterTransition();
@@ -550,20 +589,20 @@ export default function HomeFeed() {
     setIsRefreshing(true);
     try {
       await Promise.race([
-        Promise.all([loadStories(), loadFeed()]),
+        Promise.all([loadStories(), loadFeed(feedAudience)]),
         new Promise((resolve) => setTimeout(resolve, REFRESH_TIMEOUT_MS)),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadFeed, loadStories]);
+  }, [feedAudience, loadFeed, loadStories]);
 
   const refreshFeedAfterRepost = useCallback(async () => {
-    await loadFeed();
+    await loadFeed(feedAudience);
     requestAnimationFrame(() => {
       feedScrollRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-  }, [loadFeed]);
+  }, [feedAudience, loadFeed]);
 
   useFocusEffect(
     useCallback(() => {
@@ -580,13 +619,13 @@ export default function HomeFeed() {
       }
 
       void loadStories();
-      void loadFeed();
+      void loadFeed(feedAudience);
 
       return () => {
         setActiveFeedVideoItemIdIfChanged(null);
         setIsRefreshing(false);
       };
-    }, [loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged]),
+    }, [feedAudience, loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged]),
   );
 
   useEffect(() => {
@@ -797,7 +836,12 @@ export default function HomeFeed() {
             }
             ListHeaderComponent={(
               <>
-                <StoryCarousel stories={stories} friendStories={friendStories} />
+                <StoryCarousel
+                  stories={stories}
+                  friendStories={friendStories}
+                  activeTab={feedAudience}
+                  onActiveTabChange={handleAudienceChange}
+                />
                 {showEventFilterSection ? (
                   <View style={styles.nearbyEventsSection}>
                     <View style={styles.nearbyEventsHeaderRow}>

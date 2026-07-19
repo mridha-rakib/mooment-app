@@ -1,5 +1,6 @@
 import { isEventCategory, type EventCategory } from "@/constants/eventCategories";
 import type { EventAgeRestriction, EventMapQuery } from "@/lib/events";
+import type { FeedAudience } from "@/lib/moments";
 
 export type EventPriceFilter = "free" | "lt_10" | "lt_50" | "lt_100" | "gte_100";
 export type EventTimePeriod = "morning" | "noon" | "evening" | "late_night" | "any";
@@ -30,6 +31,7 @@ export type EventFilterRequestParams = EventMapQuery & {
   timePeriod?: EventTimePeriod;
   timezoneOffsetMinutes?: number;
   hashtags?: string;
+  audience?: FeedAudience;
 };
 
 export const MILES_TO_KM = 1.609344;
@@ -146,7 +148,7 @@ export const hasActiveEventFilters = (filters: SharedEventFilters): boolean =>
 
 export const buildEventFilterRequestParams = (
   filters: SharedEventFilters,
-  options: { includeLocation?: boolean; limit?: number } = {},
+  options: { includeLocation?: boolean; limit?: number; audience?: FeedAudience } = {},
 ): EventFilterRequestParams => {
   const params: EventFilterRequestParams = {};
   const category = normalizeEventCategoryFilter(filters.category);
@@ -188,6 +190,10 @@ export const buildEventFilterRequestParams = (
 
   if (options.limit !== undefined) {
     params.limit = options.limit;
+  }
+
+  if (options.audience) {
+    params.audience = options.audience;
   }
 
   return params;

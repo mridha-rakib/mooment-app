@@ -577,6 +577,31 @@ const EventScreen = () => {
   const isDraftPreview = Boolean(event && event.status === "draft" && isEventOwner);
   const eventStartMs = getDateTimeMs(event?.scheduledAt);
   const eventEndMs = getDateTimeMs(event?.endAt);
+  useEffect(() => {
+    if (eventStartMs === null || eventStartMs <= currentTimeMs) {
+      return;
+    }
+
+    const timeoutId = setTimeout(
+      () => setCurrentTimeMs(Date.now()),
+      Math.min(eventStartMs - currentTimeMs, 2_147_483_647),
+    );
+
+    return () => clearTimeout(timeoutId);
+  }, [currentTimeMs, eventStartMs]);
+
+  const showManualStartEventButton = Boolean(false);
+  const showManualEndEventButton = Boolean(false);
+  const showCancelEvent = Boolean(
+    isHostMode &&
+    event?.status === "published" &&
+    eventStartMs !== null &&
+    currentTimeMs < eventStartMs,
+  );
+  const showHostLifecycleFooter = Boolean(
+    showCancelEvent ||
+    (isEventStarted ? showManualEndEventButton : showManualStartEventButton),
+  );
   const hasValidEventWindowSchedule = Boolean(
     eventStartMs !== null && eventEndMs !== null && eventStartMs < eventEndMs,
   );
@@ -892,6 +917,13 @@ const EventScreen = () => {
   const hostHandle = getHostHandle(event);
   const hostAvatarUri = getHostAvatarUri(event);
   const canReviewHost = Boolean(event?.hostReviewEligibility?.canReview);
+  const shouldRenderEventFooter = Boolean(
+    isDraftPreview ||
+    !isHostMode ||
+    showHostLifecycleFooter ||
+    isEventCompleted ||
+    isEventCancelled,
+  );
 
   const bannerImageUri = getBannerImageUri(event);
   const eventImageUris = useMemo(() => {
@@ -1793,7 +1825,7 @@ const EventScreen = () => {
         }
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: footerHeight + 24 },
+          { paddingBottom: (shouldRenderEventFooter ? footerHeight : 0) + 24 },
         ]}
       >
         <View style={styles.imageContainer}>
@@ -2076,114 +2108,119 @@ const EventScreen = () => {
 
       </ScrollView>
 
-      <View
-        onLayout={(layoutEvent) => setFooterHeight(layoutEvent.nativeEvent.layout.height)}
-        style={[
-          styles.footer,
-          {
-            paddingBottom: insets.bottom + 10,
-            backgroundColor: colors.background,
-            borderTopColor: colors.border,
-          },
-        ]}
-      >
-        {isDraftPreview ? (
-          <View style={styles.hostFooterBtns}>
-            <TouchableOpacity
-              style={styles.cancelEventBtn}
-              activeOpacity={0.8}
-              onPress={handleEdit}
-              disabled={isPublishingDraft}
-            >
-              <Feather name="edit-3" size={18} color="#D44343" />
-              <Text style={styles.cancelEventBtnText}>Edit Event</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.startEventBtn, { opacity: isPublishingDraft ? 0.7 : 1 }]}
-              activeOpacity={0.85}
-              onPress={handlePublishDraft}
-              disabled={isPublishingDraft}
-            >
-              {isPublishingDraft ? (
-                <ActivityIndicator size="small" color="#111111" />
-              ) : (
-                <Feather name="send" size={18} color="#111111" />
-              )}
-              <Text style={[styles.buyBtnText, { color: "#111111" }]}>
-                {isPublishingDraft ? "Publishing..." : "Publish Event"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : isHostMode ? (
-          !isEventCompleted && !isEventCancelled ? (
+      {shouldRenderEventFooter && (
+        <View
+          onLayout={(layoutEvent) => setFooterHeight(layoutEvent.nativeEvent.layout.height)}
+          style={[
+            styles.footer,
+            {
+              paddingBottom: insets.bottom + 10,
+              backgroundColor: colors.background,
+              borderTopColor: colors.border,
+            },
+          ]}
+        >
+          {isDraftPreview ? (
             <View style={styles.hostFooterBtns}>
               <TouchableOpacity
                 style={styles.cancelEventBtn}
                 activeOpacity={0.8}
-                onPress={handleCancelEvent}
+                onPress={handleEdit}
+                disabled={isPublishingDraft}
               >
-                <Feather name="x-circle" size={18} color="#D44343" />
-                <Text style={styles.cancelEventBtnText}>Cancel Event</Text>
+                <Feather name="edit-3" size={18} color="#D44343" />
+                <Text style={styles.cancelEventBtnText}>Edit Event</Text>
               </TouchableOpacity>
-              {isEventStarted ? (
-                <TouchableOpacity
-                  style={styles.endEventBtn}
-                  activeOpacity={0.85}
-                  onPress={handleEndEvent}
-                >
-                  <Feather name="check-circle" size={18} color="#FFFFFF" />
-                  <Text style={[styles.buyBtnText, { color: "#FFFFFF" }]}>End Event</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={styles.startEventBtn}
-                  activeOpacity={0.85}
-                  onPress={handleStartEvent}
-                >
-                  <Feather name="play-circle" size={18} color="#111111" />
-                  <Text style={[styles.buyBtnText, { color: "#111111" }]}>Start The Event</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : null
-        ) : canReviewHost ? (
-          <TouchableOpacity
-            style={[styles.reviewHostBtn, { backgroundColor: colors.primary }]}
-            activeOpacity={0.85}
-            onPress={() => setReviewModalVisible(true)}
-          >
-            <Text style={styles.reviewHostBtnText}>Review The Host</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <View style={styles.priceContainer}>
-              <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>{footerPriceLabel}</Text>
-              <Text style={[styles.priceValue, { color: colors.text }]}>{selectedTicketPriceLabel}</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.buyBtn,
-                {
-                  backgroundColor: selectedTicket && !selectedTicketSalesEnded ? colors.primary : colors.card,
-                  opacity: selectedTicketSalesEnded ? 0.55 : 1,
-                },
-              ]}
-              activeOpacity={0.8}
-              disabled={selectedTicketSalesEnded}
-              onPress={handleTicketCtaPress}
-            >
-              <Text
-                style={[
-                  styles.buyBtnText,
-                  { color: selectedTicket && !selectedTicketSalesEnded ? colors.background : colors.textSecondary },
-                ]}
+              <TouchableOpacity
+                style={[styles.startEventBtn, { opacity: isPublishingDraft ? 0.7 : 1 }]}
+                activeOpacity={0.85}
+                onPress={handlePublishDraft}
+                disabled={isPublishingDraft}
               >
-                {selectedTicketSalesEnded ? "Sales Ended" : selectedTicket ? "Buy Now" : "Select Ticket"}
-              </Text>
+                {isPublishingDraft ? (
+                  <ActivityIndicator size="small" color="#111111" />
+                ) : (
+                  <Feather name="send" size={18} color="#111111" />
+                )}
+                <Text style={[styles.buyBtnText, { color: "#111111" }]}>
+                  {isPublishingDraft ? "Publishing..." : "Publish Event"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : isHostMode ? (
+            !isEventCompleted && !isEventCancelled && showHostLifecycleFooter ? (
+              <View style={styles.hostFooterBtns}>
+                {showCancelEvent && (
+                  <TouchableOpacity
+                    style={styles.cancelEventBtn}
+                    activeOpacity={0.8}
+                    onPress={handleCancelEvent}
+                  >
+                    <Feather name="x-circle" size={18} color="#D44343" />
+                    <Text style={styles.cancelEventBtnText}>Cancel Event</Text>
+                  </TouchableOpacity>
+                )}
+                {showManualEndEventButton && isEventStarted && (
+                  <TouchableOpacity
+                    style={styles.endEventBtn}
+                    activeOpacity={0.85}
+                    onPress={handleEndEvent}
+                  >
+                    <Feather name="check-circle" size={18} color="#FFFFFF" />
+                    <Text style={[styles.buyBtnText, { color: "#FFFFFF" }]}>End Event</Text>
+                  </TouchableOpacity>
+                )}
+                {showManualStartEventButton && !isEventStarted && (
+                  <TouchableOpacity
+                    style={styles.startEventBtn}
+                    activeOpacity={0.85}
+                    onPress={handleStartEvent}
+                  >
+                    <Feather name="play-circle" size={18} color="#111111" />
+                    <Text style={[styles.buyBtnText, { color: "#111111" }]}>Start The Event</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null
+          ) : canReviewHost ? (
+            <TouchableOpacity
+              style={[styles.reviewHostBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.85}
+              onPress={() => setReviewModalVisible(true)}
+            >
+              <Text style={styles.reviewHostBtnText}>Review The Host</Text>
             </TouchableOpacity>
-          </>
-        )}
-      </View>
+          ) : (
+            <>
+              <View style={styles.priceContainer}>
+                <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>{footerPriceLabel}</Text>
+                <Text style={[styles.priceValue, { color: colors.text }]}>{selectedTicketPriceLabel}</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.buyBtn,
+                  {
+                    backgroundColor: selectedTicket && !selectedTicketSalesEnded ? colors.primary : colors.card,
+                    opacity: selectedTicketSalesEnded ? 0.55 : 1,
+                  },
+                ]}
+                activeOpacity={0.8}
+                disabled={selectedTicketSalesEnded}
+                onPress={handleTicketCtaPress}
+              >
+                <Text
+                  style={[
+                    styles.buyBtnText,
+                    { color: selectedTicket && !selectedTicketSalesEnded ? colors.background : colors.textSecondary },
+                  ]}
+                >
+                  {selectedTicketSalesEnded ? "Sales Ended" : selectedTicket ? "Buy Now" : "Select Ticket"}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
 
       <Modal
         visible={privacyDropdownVisible}

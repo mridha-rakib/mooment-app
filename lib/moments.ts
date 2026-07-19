@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 
 export type MomentMode = "feed" | "event";
 export type MomentAudience = "public" | "friends" | "only_me";
+export type FeedAudience = "discover" | "friends";
 export type MomentMediaType = "image" | "video" | "audio";
 export type MomentMediaSource = "gallery" | "camera" | "upload" | "external";
 
@@ -140,11 +141,12 @@ export const getMyMoments = async (): Promise<Moment[]> => {
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 
-export const getFeedMoments = async (options: { hashtags?: string[]; limit?: number } = {}): Promise<Moment[]> => {
+export const getFeedMoments = async (options: { hashtags?: string[]; limit?: number; audience?: FeedAudience } = {}): Promise<Moment[]> => {
   const response = await api.get("/moments", {
     params: {
       ...(options.hashtags?.length ? { hashtags: options.hashtags.join(',') } : {}),
       ...(options.limit ? { limit: options.limit } : {}),
+      ...(options.audience ? { audience: options.audience } : {}),
     },
   });
 
@@ -190,8 +192,13 @@ export const shareMoment = async (momentId: string, payload: RepostPayload = {})
   return share;
 };
 
-export const getFeedReposts = async (limit = 50): Promise<MomentTimelineItem[]> => {
-  const response = await api.get("/moments/shares/feed", { params: { limit } });
+export const getFeedReposts = async (limit = 50, audience?: FeedAudience): Promise<MomentTimelineItem[]> => {
+  const response = await api.get("/moments/shares/feed", {
+    params: {
+      limit,
+      ...(audience ? { audience } : {}),
+    },
+  });
   const shares = response.data?.data?.shares;
   return Array.isArray(shares) ? (shares as MomentTimelineItem[]) : [];
 };

@@ -85,6 +85,29 @@ test("shared event filters build one request contract for feed and map", () => {
   assert.equal(params.limit, 100);
 });
 
+test("feed event request params include the selected audience without changing filters", () => {
+  const filters: SharedEventFilters = {
+    ageRestriction: "18_plus",
+    category: "Food Trucks",
+    priceFilter: "lt_50",
+    selectedDate: "2026-07-14",
+    timePeriod: "evening",
+    hashtags: ["food"],
+    nearby: null,
+  };
+
+  const params = buildEventFilterRequestParams(filters, { limit: 100, audience: "friends" });
+
+  assert.equal(params.audience, "friends");
+  assert.equal(params.category, "Food Trucks");
+  assert.equal(params.ageRestriction, "18_plus");
+  assert.equal(params.priceFilter, "lt_50");
+  assert.equal(params.date, "2026-07-14");
+  assert.equal(params.timePeriod, "evening");
+  assert.equal(params.hashtags, "food");
+  assert.equal(params.limit, 100);
+});
+
 test("shared category filter normalizes valid values and omits invalid or empty values", () => {
   const filters = mergeCategoryIntoEventFilters(createEmptyEventFilters(), " Food Trucks ");
 

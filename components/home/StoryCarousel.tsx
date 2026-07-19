@@ -173,12 +173,15 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
 function StoryCarousel({
   stories,
   friendStories = [],
+  activeTab,
+  onActiveTabChange,
 }: {
   stories: StoryData[];
   friendStories?: StoryData[];
+  activeTab: StoryViewerTab;
+  onActiveTabChange: (tab: StoryViewerTab) => void;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = React.useState<StoryViewerTab>("discover");
   const [isOpeningAddStory, setIsOpeningAddStory] = React.useState(false);
   const isOpeningAddStoryRef = React.useRef(false);
   const openAddStoryTimeoutRef = React.useRef<ReturnType<
@@ -248,7 +251,7 @@ function StoryCarousel({
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => setActiveTab(tab)}
+            onPress={() => onActiveTabChange(tab)}
           >
             <Text
               style={[

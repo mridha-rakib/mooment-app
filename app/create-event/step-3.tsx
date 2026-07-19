@@ -18,6 +18,11 @@ import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import {
+  buildStepThreePersistedLocation,
+  buildStepThreeValidationLocation,
+  getStepThreeLocationDisplayLabel,
+} from '@/lib/eventStepThreeLocation';
 import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import { reverseGeocodeLocation } from '@/lib/locationSearch';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
@@ -63,7 +68,7 @@ export default function CreateEventStep3() {
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
   const isAdvancingRef = useRef(false);
-  const searchLabel = draftLocation.searchLabel ?? address;
+  const searchLabel = getStepThreeLocationDisplayLabel(draftLocation, address);
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -134,18 +139,13 @@ export default function CreateEventStep3() {
   ]);
 
   const persistStepThree = () => {
-    const trimmedAddress = address.trim();
-    const trimmedVenue = venue.trim();
-    const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
-
     setStepThree({
-      location: {
-        ...draftLocation,
-        address: trimmedAddress || null,
-        searchLabel: nextSearchLabel || null,
-        venue: trimmedVenue || null,
-        additionalInfo: additionalInfo.length > 0 ? additionalInfo : null,
-      },
+      location: buildStepThreePersistedLocation({
+        draftLocation,
+        venue,
+        address,
+        additionalInfo,
+      }),
     });
   };
 
@@ -171,15 +171,10 @@ export default function CreateEventStep3() {
 
   const handleNext = async () => {
     if (isSaving || isAdvancingRef.current) return;
-    const trimmedAddress = address.trim();
-    const trimmedVenue = venue.trim();
-    const nextSearchLabel = trimmedAddress && trimmedAddress !== draftLocation.address ? trimmedAddress : searchLabel;
 
-    const result = createEventStepThreeSchema.safeParse({
-      searchLabel: nextSearchLabel || null,
-      venue: trimmedVenue || null,
-      address: trimmedAddress || null,
-    });
+    const result = createEventStepThreeSchema.safeParse(
+      buildStepThreeValidationLocation(draftLocation, venue, address),
+    );
 
     const nextErrors: CreateEventStepThreeErrors = {};
 
