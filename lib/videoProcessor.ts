@@ -23,13 +23,16 @@ const getUriByteSize = (uri: string): Promise<number | null> =>
     }
   });
 
+export const getLocalUriByteSize = getUriByteSize;
+
 /**
  * Validates the Expo-processed video before upload.
  *
  * Camera videos are encoded by expo-camera at 720p with a bounded bitrate.
- * Gallery videos request the Image Picker H.264 720p export preset on platforms
- * that support it. This final step deliberately fails open: inability to inspect
- * a local URI must never prevent the original playable video from uploading.
+ * Story gallery videos request the Image Picker H.264 720p export preset on
+ * platforms that support it. This final step deliberately fails open: inability
+ * to inspect a local URI must never prevent the original playable video from
+ * uploading.
  */
 export const prepareStoryVideoForUpload = async (
   uri: string,
@@ -39,6 +42,26 @@ export const prepareStoryVideoForUpload = async (
   onProgress('Checking video...', 0);
   const bytes = await getUriByteSize(uri);
   onProgress('Checking video...', 100);
+
+  return {
+    uri,
+    contentType,
+    bytes,
+  };
+};
+
+export const prepareEventGalleryVideoForUpload = async (
+  uri: string,
+  contentType: string,
+  onProgress: VideoProcessProgressCallback,
+): Promise<VideoProcessResult> => {
+  onProgress('Checking video...', 0);
+  const bytes = await getUriByteSize(uri);
+  onProgress('Checking video...', 100);
+
+  if (!bytes || bytes <= 0) {
+    throw new Error("Unable to inspect the selected video.");
+  }
 
   return {
     uri,

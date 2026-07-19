@@ -162,6 +162,33 @@ const formatEventTime = (scheduledAt?: string | null) => {
   }).format(date);
 };
 
+const isValidDateTimeValue = (value?: string | null) => {
+  if (!value) {
+    return false;
+  }
+
+  return !Number.isNaN(new Date(value).getTime());
+};
+
+const formatEventDateTime = (dateTime?: string | null) =>
+  `${formatEventDate(dateTime)} • ${formatEventTime(dateTime)}`;
+
+const formatEventScheduleRange = (scheduledAt?: string | null, endAt?: string | null) => {
+  const startDateTime = formatEventDateTime(scheduledAt);
+
+  if (!isValidDateTimeValue(endAt)) {
+    return {
+      startDateTime,
+      endDateTime: null,
+    };
+  }
+
+  return {
+    startDateTime,
+    endDateTime: formatEventDateTime(endAt),
+  };
+};
+
 function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
 function resolveStorageUrl(key?: string | null, fallback?: string | null): string | null;
 function resolveStorageUrl(key?: string | null, fallback: string | null = null) {
@@ -244,6 +271,71 @@ const shouldRefreshChatForEvent = (event?: EventResponse | null) => {
   const eventClosed = event.status === "completed" || event.status === "cancelled" || (endMs !== null && endMs <= now);
 
   return eventStarted && !eventClosed;
+};
+
+const getEventMediaOrder = (item: NonNullable<EventResponse["eventMedia"]>[number]) => (
+  typeof item.displayOrder === "number"
+    ? item.displayOrder
+    : new Date(item.createdAt).getTime()
+);
+
+const mergeEventMedia = (
+  currentMedia?: EventResponse["eventMedia"],
+  incomingMedia?: EventResponse["eventMedia"],
+) => {
+  if (!currentMedia?.length && !incomingMedia?.length) {
+    return incomingMedia;
+  }
+
+  const mediaById = new Map<string, NonNullable<EventResponse["eventMedia"]>[number]>();
+
+  for (const item of currentMedia ?? []) {
+    mediaById.set(item.id, item);
+  }
+
+  for (const item of incomingMedia ?? []) {
+    mediaById.set(item.id, item);
+  }
+
+  return [...mediaById.values()].sort((first, second) => {
+    const orderDelta = getEventMediaOrder(first) - getEventMediaOrder(second);
+
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    return first.id.localeCompare(second.id);
+  });
+};
+
+const mergeEventResponse = (
+  currentEvent: EventResponse | null,
+  updatedEvent: EventResponse,
+  options: { preserveCurrentMedia?: boolean; deletedMediaIds?: Set<string> } = {},
+): EventResponse => {
+  if (!currentEvent) {
+    return updatedEvent;
+  }
+
+  const mergedEvent: EventResponse = {
+    ...currentEvent,
+    ...updatedEvent,
+    host: updatedEvent.host ?? currentEvent.host,
+  };
+
+  if (options.preserveCurrentMedia || updatedEvent.eventMedia) {
+    const mergedMedia = mergeEventMedia(
+      options.preserveCurrentMedia ? currentEvent.eventMedia : undefined,
+      updatedEvent.eventMedia,
+    );
+    mergedEvent.eventMedia = options.deletedMediaIds?.size
+      ? mergedMedia?.filter((item) => !options.deletedMediaIds?.has(item.id))
+      : mergedMedia;
+  } else if (currentEvent.eventMedia) {
+    mergedEvent.eventMedia = currentEvent.eventMedia;
+  }
+
+  return mergedEvent;
 };
 
 const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => {
@@ -452,6 +544,8 @@ const EventScreen = () => {
   const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const isReportSubmittingRef = useRef(false);
   const refreshRequestRef = useRef(false);
+  const eventMediaWriteGenerationRef = useRef(0);
+  const deletedEventMediaIdsRef = useRef(new Set<string>());
   const windowsRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
   const chatRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
   const [pendingCategoryDestination, setPendingCategoryDestination] = useState<EventCategory | null>(null);
@@ -520,6 +614,8 @@ const EventScreen = () => {
       setIsLoading(true);
     }
 
+    const mediaWriteGenerationAtStart = eventMediaWriteGenerationRef.current;
+
     try {
       const loadedEvent = await getEventById(eventId);
       const isLoadedDraft = loadedEvent.status === "draft";
@@ -549,7 +645,11 @@ const EventScreen = () => {
         return null;
       }
 
-      setEvent(loadedEvent);
+      setEvent((currentEvent) =>
+        mergeEventResponse(currentEvent, loadedEvent, {
+          preserveCurrentMedia: eventMediaWriteGenerationRef.current > mediaWriteGenerationAtStart,
+          deletedMediaIds: deletedEventMediaIdsRef.current,
+        }));
       setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
       setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
       setPurchasedTicketCounts(loadedCounts);
@@ -802,6 +902,7 @@ const EventScreen = () => {
   const distanceLabel = getDistanceLabel(event, userLocation);
   const eventDate = formatEventDate(event?.scheduledAt);
   const eventTime = formatEventTime(event?.scheduledAt);
+  const eventScheduleDisplay = formatEventScheduleRange(event?.scheduledAt, event?.endAt);
   const ticketsLeftText = `${ticketsLeft} tickets left`;
   const eventStats = event as
     | (EventResponse & {
@@ -1158,15 +1259,25 @@ const EventScreen = () => {
   };
 
   const mergeUpdatedEvent = (updatedEvent: EventResponse) => {
-    setEvent((currentEvent) =>
-      currentEvent
-        ? {
-            ...currentEvent,
-            ...updatedEvent,
-            host: updatedEvent.host ?? currentEvent.host,
+    if (updatedEvent.eventMedia) {
+      eventMediaWriteGenerationRef.current += 1;
+    }
+
+    setEvent((currentEvent) => {
+      if (currentEvent?.eventMedia && updatedEvent.eventMedia) {
+        const updatedIds = new Set(updatedEvent.eventMedia.map((item) => item.id));
+
+        for (const item of currentEvent.eventMedia) {
+          if (!updatedIds.has(item.id)) {
+            deletedEventMediaIdsRef.current.add(item.id);
           }
-        : updatedEvent,
-    );
+        }
+      }
+
+      return mergeEventResponse(currentEvent, updatedEvent, {
+        deletedMediaIds: deletedEventMediaIdsRef.current,
+      });
+    });
   };
 
   const handleCreateTicket = () => {
@@ -1809,13 +1920,35 @@ const EventScreen = () => {
         <View style={styles.contentPadding}>
           <Text style={[styles.eventTitle, { color: colors.text }]}>{event?.name ?? "Event"}</Text>
           <View style={styles.eventInfoRow}>
-            <View style={styles.infoItem}>
-              <Feather name="calendar" size={14} color={colors.textSecondary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventDate}</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Feather name="clock" size={14} color={colors.textSecondary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventTime}</Text>
+            <View style={styles.eventScheduleRow}>
+              {eventScheduleDisplay.endDateTime ? (
+                <>
+                  <View style={styles.infoItem}>
+                    <Feather name="calendar" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                      {eventScheduleDisplay.startDateTime}
+                    </Text>
+                  </View>
+                  <Text style={[styles.infoText, { color: colors.textSecondary }]}>-</Text>
+                  <View style={styles.infoItem}>
+                    <Feather name="clock" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                      {eventScheduleDisplay.endDateTime}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.infoItem}>
+                    <Feather name="calendar" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventDate}</Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Feather name="clock" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventTime}</Text>
+                  </View>
+                </>
+              )}
             </View>
             <View style={styles.infoItem}>
               <Feather name="map-pin" size={14} color={colors.textSecondary} />
@@ -1849,15 +1982,19 @@ const EventScreen = () => {
         <View style={styles.contentPadding}>
           {activeTab === "About" && (
             <AboutTab
+              eventId={event?.id ?? eventId ?? null}
+              eventStatus={event?.status ?? null}
               description={event?.description ?? null}
               ageRestriction={event?.ageRestriction ?? null}
               location={event?.location ?? null}
               host={event?.host ?? null}
+              eventMedia={event?.eventMedia ?? []}
               eventImageUris={eventImageUris}
               isHostMode={isHostMode}
               category={event?.categories?.[0] ?? event?.category ?? null}
               isDraft={event?.status === "draft"}
               onHostFollowChange={updateHostFollowState}
+              onEventMediaUpdated={mergeUpdatedEvent}
             />
           )}
           {activeTab === "Access" && (
@@ -2686,17 +2823,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   eventInfoRow: {
-    flexDirection: "row",
-    gap: 16,
+    gap: 8,
     marginBottom: 20,
+  },
+  eventScheduleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    rowGap: 8,
   },
   infoItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexShrink: 1,
   },
   infoText: {
     fontSize: 13,
+    flexShrink: 1,
   },
   tabBar: {
     flexDirection: "row",

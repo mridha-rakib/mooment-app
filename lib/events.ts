@@ -46,6 +46,51 @@ export type EventRewardPayload = {
   capacity: number;
 };
 
+export type EventMediaType = "image" | "video";
+
+export const MAX_EVENT_MEDIA_ITEMS = 30;
+export const MAX_EVENT_MEDIA_BATCH_ITEMS = 5;
+export const MAX_EVENT_MEDIA_VIDEO_DURATION_SECONDS = 10 * 60;
+export const EVENT_MEDIA_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+export const EVENT_MEDIA_VIDEO_MAX_BYTES = 300 * 1024 * 1024;
+
+export type EventMedia = {
+  id: string;
+  type: EventMediaType;
+  url: string;
+  contentType: string;
+  fileSize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  durationSeconds?: number | null;
+  displayOrder?: number | null;
+  createdAt: string;
+};
+
+export type EventMediaInput = {
+  type: EventMediaType;
+  storageKey: string;
+  contentType: string;
+  fileSize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  durationSeconds?: number | null;
+};
+
+export type AddEventMediaResponse = {
+  event: EventResponse;
+  mediaItems: EventMedia[];
+  failures: {
+    index: number;
+    message: string;
+  }[];
+};
+
+export type DeleteEventMediaResponse = {
+  event: EventResponse;
+  mediaItem: EventMedia;
+};
+
 export type EventHost = {
   id: string;
   name: string;
@@ -141,6 +186,7 @@ export type EventResponse = {
   location?: EventLocation | null;
   tickets: EventTicketPayload[];
   rewards: EventRewardPayload[];
+  eventMedia?: EventMedia[];
   privacy: EventPrivacy;
   memberCount?: number;
   isMember?: boolean;
@@ -289,6 +335,34 @@ const getEventsFromResponse = (response: unknown): EventResponse[] => {
   const events = (response as { data?: { data?: { events?: EventResponse[] } } })?.data?.data?.events;
 
   return Array.isArray(events) ? events : [];
+};
+
+const resolveApiUrl = (pathOrUrl: string) => {
+  if (/^(https?:|data:|file:|content:)/i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+
+  const baseURL = api.defaults.baseURL;
+
+  if (!baseURL) {
+    throw new Error("Missing EXPO_PUBLIC_API_BASE_URL.");
+  }
+
+  return `${baseURL.replace(/\/+$/, "")}/${pathOrUrl.replace(/^\/+/, "")}`;
+};
+
+const normalizeEventMediaUrls = (event: EventResponse): EventResponse => {
+  if (!Array.isArray(event.eventMedia)) {
+    return event;
+  }
+
+  return {
+    ...event,
+    eventMedia: event.eventMedia.map((item) => ({
+      ...item,
+      url: resolveApiUrl(item.url),
+    })),
+  };
 };
 
 export const saveEventDraft = async (payload: EventPayload, eventId?: string | null): Promise<EventResponse> => {
@@ -450,7 +524,49 @@ export const deleteDraftReward = async (eventId: string, rewardId: string): Prom
 export const getEventById = async (eventId: string): Promise<EventResponse> => {
   const response = await api.get(`/events/${encodeURIComponent(eventId)}`);
 
-  return getEventFromResponse(response);
+  return normalizeEventMediaUrls(getEventFromResponse(response));
+};
+
+export const addEventMedia = async (
+  eventId: string,
+  mediaItems: EventMediaInput[],
+): Promise<AddEventMediaResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/media`, { mediaItems });
+  const result = response.data?.data as AddEventMediaResponse | undefined;
+
+  if (!result?.event || !Array.isArray(result.mediaItems) || !Array.isArray(result.failures)) {
+    throw new Error("The event media response was incomplete.");
+  }
+
+  return {
+    ...result,
+    event: normalizeEventMediaUrls(result.event),
+    mediaItems: result.mediaItems.map((item) => ({
+      ...item,
+      url: resolveApiUrl(item.url),
+    })),
+  };
+};
+
+export const deleteEventMedia = async (
+  eventId: string,
+  mediaId: string,
+): Promise<DeleteEventMediaResponse> => {
+  const response = await api.delete(`/events/${encodeURIComponent(eventId)}/media/${encodeURIComponent(mediaId)}`);
+  const result = response.data?.data as DeleteEventMediaResponse | undefined;
+
+  if (!result?.event || !result.mediaItem) {
+    throw new Error("The event media deletion response was incomplete.");
+  }
+
+  return {
+    ...result,
+    event: normalizeEventMediaUrls(result.event),
+    mediaItem: {
+      ...result.mediaItem,
+      url: resolveApiUrl(result.mediaItem.url),
+    },
+  };
 };
 
 export const submitEventHostReview = async (

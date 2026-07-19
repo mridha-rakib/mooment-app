@@ -19,14 +19,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export type FullScreenMediaItem = {
+  id?: string;
   uri: string;
   type: 'image' | 'video';
+  headers?: Record<string, string>;
 };
 
 interface FullScreenMediaModalProps {
   visible: boolean;
   onClose: () => void;
   onIndexChange?: (index: number) => void;
+  onDeleteCurrent?: (item: FullScreenMediaItem, index: number) => void;
+  canDeleteCurrent?: (item: FullScreenMediaItem, index: number) => boolean;
+  deletingItemId?: string | null;
   mediaItems: FullScreenMediaItem[];
   initialIndex: number;
 }
@@ -35,7 +40,7 @@ const clampIndex = (index: number, itemCount: number) => (
   Math.min(Math.max(Math.round(index) || 0, 0), Math.max(itemCount - 1, 0))
 );
 
-function FullScreenImage({ uri }: { uri: string }) {
+function FullScreenImage({ uri, headers }: { uri: string; headers?: Record<string, string> }) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -48,7 +53,7 @@ function FullScreenImage({ uri }: { uri: string }) {
     <View style={styles.fullMedia}>
       {!hasError ? (
         <Image
-          source={{ uri }}
+          source={{ uri, headers }}
           style={styles.fullMedia}
           resizeMode="contain"
           onLoadStart={() => setIsLoading(true)}
@@ -72,8 +77,9 @@ function FullScreenImage({ uri }: { uri: string }) {
   );
 }
 
-function FullScreenVideo({ uri, isActive }: { uri: string; isActive: boolean }) {
-  const player = useVideoPlayer(uri, (videoPlayer) => {
+function FullScreenVideo({ uri, headers, isActive }: { uri: string; headers?: Record<string, string>; isActive: boolean }) {
+  const source = useMemo(() => (headers ? { uri, headers } : uri), [headers, uri]);
+  const player = useVideoPlayer(source, (videoPlayer) => {
     videoPlayer.loop = false;
   });
 
@@ -97,6 +103,9 @@ export default function FullScreenMediaModal({
   visible,
   onClose,
   onIndexChange,
+  onDeleteCurrent,
+  canDeleteCurrent,
+  deletingItemId,
   mediaItems,
   initialIndex,
 }: FullScreenMediaModalProps) {
@@ -108,6 +117,9 @@ export default function FullScreenMediaModal({
   );
   const requestedIndex = clampIndex(initialIndex, normalizedMediaItems.length);
   const [currentIndex, setCurrentIndex] = useState(requestedIndex);
+  const currentItem = normalizedMediaItems[currentIndex] ?? null;
+  const showDelete = Boolean(currentItem && canDeleteCurrent?.(currentItem, currentIndex));
+  const isDeletingCurrent = Boolean(currentItem?.id && deletingItemId === currentItem.id);
 
   const scrollToRequestedItem = useCallback(() => {
     if (!visible || normalizedMediaItems.length === 0 || width <= 0) {
@@ -166,9 +178,9 @@ export default function FullScreenMediaModal({
           renderItem={({ item, index }) => (
             <View style={[styles.slide, { width, height }]}>
               {item.type === 'video' ? (
-                <FullScreenVideo uri={item.uri} isActive={visible && index === currentIndex} />
+                <FullScreenVideo uri={item.uri} headers={item.headers} isActive={visible && index === currentIndex} />
               ) : (
-                <FullScreenImage uri={item.uri} />
+                <FullScreenImage uri={item.uri} headers={item.headers} />
               )}
             </View>
           )}
@@ -195,6 +207,23 @@ export default function FullScreenMediaModal({
           >
             <Feather name="x" size={24} color="#FFFFFF" />
           </TouchableOpacity>
+          {showDelete && currentItem ? (
+            <TouchableOpacity
+              style={[styles.closeBtn, styles.deleteBtn]}
+              onPress={() => onDeleteCurrent?.(currentItem, currentIndex)}
+              activeOpacity={0.7}
+              disabled={isDeletingCurrent}
+              accessibilityRole="button"
+              accessibilityLabel="Delete media"
+              accessibilityState={{ disabled: isDeletingCurrent }}
+            >
+              {isDeletingCurrent ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Feather name="trash-2" size={22} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          ) : null}
         </SafeAreaView>
 
         {normalizedMediaItems.length > 1 ? (
@@ -223,6 +252,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 16 : 4,
     alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   closeBtn: {
     width: 44,
@@ -231,6 +262,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(32, 32, 32, 0.82)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deleteBtn: {
+    backgroundColor: 'rgba(181, 38, 38, 0.82)',
   },
   mediaContainer: {
     flex: 1,

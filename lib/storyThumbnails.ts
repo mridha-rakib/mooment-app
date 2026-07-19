@@ -1,4 +1,4 @@
-import { createVideoPlayer, type VideoThumbnail } from 'expo-video';
+import { createVideoPlayer, type VideoSource, type VideoThumbnail } from 'expo-video';
 
 export type StoryThumbnailSource = VideoThumbnail | { uri: string } | null;
 
@@ -33,8 +33,12 @@ export const setCachedStoryThumbnail = (storyId: string, thumbnail: StoryThumbna
   thumbnailCache.set(storyId, thumbnail);
 };
 
-export const generateStoryThumbnail = async (uri: string): Promise<VideoThumbnail | null> => {
-  const player = createVideoPlayer({ uri, useCaching: true });
+export const generateStoryThumbnail = async (
+  uri: string,
+  headers?: Record<string, string>,
+): Promise<VideoThumbnail | null> => {
+  const source: VideoSource = headers ? { uri, headers, useCaching: true } : { uri, useCaching: true };
+  const player = createVideoPlayer(source);
 
   try {
     await waitForPlayerReady(player);
