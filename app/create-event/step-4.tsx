@@ -12,10 +12,15 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import DeleteModal from '../../components/ui/DeleteModal';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import {
+  isTicketCreationCutoffReached,
+  TICKET_CREATION_CUTOFF_MESSAGE,
+} from '@/lib/ticketAvailability';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -30,15 +35,24 @@ export default function CreateEventStep4() {
   const isMountedRef = React.useRef(true);
   const isAdvancingRef = React.useRef(false);
   const tickets = useEventDraftStore((state) => state.tickets);
+  const endAt = useEventDraftStore((state) => state.endAt);
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
   const draftId = useEventDraftStore((state) => state.draftId);
   const isEditingEvent = Boolean(draftId || isEditingPublished);
+  const [currentTimeMs, setCurrentTimeMs] = React.useState(Date.now());
+  const ticketCreationCutoffReached = isTicketCreationCutoffReached(endAt, currentTimeMs);
 
   React.useEffect(() => () => {
     isMountedRef.current = false;
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setCurrentTimeMs(Date.now());
+    }, []),
+  );
 
   const formatTicketExpiry = (value?: string | null) => {
     if (!value) {
@@ -181,12 +195,23 @@ export default function CreateEventStep4() {
       >
         {/* Create Ticket Button */}
         <TouchableOpacity 
-          style={[styles.createTicketButton, { backgroundColor: buttonBackground(colors) }]}
+          style={[
+            styles.createTicketButton,
+            { backgroundColor: buttonBackground(colors) },
+            ticketCreationCutoffReached ? styles.createTicketButtonDisabled : null,
+            ticketCreationCutoffReached ? styles.createTicketButtonWithHelper : null,
+          ]}
           onPress={() => router.push('/create-event/ticket-details')}
+          disabled={ticketCreationCutoffReached}
         >
           <Ionicons name="add" size={20} color={buttonForeground(colors)} style={{ marginRight: 8 }} />
           <Text style={[styles.createTicketText, { color: buttonForeground(colors) }]}>Create Ticket</Text>
         </TouchableOpacity>
+        {ticketCreationCutoffReached ? (
+          <Text style={[styles.createTicketHelperText, { color: colors.textSecondary }]}>
+            {TICKET_CREATION_CUTOFF_MESSAGE}
+          </Text>
+        ) : null}
 
         {tickets.map((ticket) => {
           const isFreeTicket = ticket.type === 'free' || ticket.price <= 0;
@@ -327,9 +352,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 28,
   },
+  createTicketButtonDisabled: {
+    opacity: 0.45,
+  },
+  createTicketButtonWithHelper: {
+    marginBottom: 8,
+  },
   createTicketText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  createTicketHelperText: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+    marginBottom: 20,
   },
   ticketCard: {
     borderRadius: 16,

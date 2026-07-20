@@ -58,6 +58,7 @@ import {
     getEventCategoryMapDestination,
 } from "@/lib/eventCategoryNavigation";
 import { normalizeEventCategoryFilter } from "@/lib/eventFilters";
+import { isTicketCreationCutoffReached } from "@/lib/ticketAvailability";
 import { Feather } from "@expo/vector-icons";
 import {
     Bookmark01Icon,
@@ -1321,6 +1322,10 @@ const EventScreen = () => {
       return;
     }
 
+    if (isTicketCreationCutoffReached(event.endAt, currentTimeMs)) {
+      return;
+    }
+
     loadEventForEdit(event);
     router.push("/create-event/ticket-details");
   };
@@ -2034,6 +2039,7 @@ const EventScreen = () => {
               tickets={event?.tickets ?? []}
               rewards={event?.rewards ?? []}
               scheduledAt={event?.scheduledAt ?? null}
+              endAt={event?.endAt ?? null}
               privacy={event?.privacy}
               isMember={event?.isMember ?? false}
               purchasedTicketCounts={purchasedTicketCounts}

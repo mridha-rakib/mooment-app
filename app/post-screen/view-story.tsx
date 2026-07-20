@@ -24,6 +24,8 @@ import {
   getStoryGroupCommitTranslateY,
   getStoryGroupSwipeDirection,
   getStoryGroupSwipeTarget,
+  STORY_GROUP_ACTIVATION_DISTANCE,
+  STORY_GROUP_DIRECTION_DOMINANCE,
   type StoryGroupSwipeDirection,
 } from "@/lib/storyViewerGestures";
 import {
@@ -1520,7 +1522,7 @@ export default function ViewStoryScreen() {
   );
 
   const commitVerticalGroupSwipe = useCallback(
-    (direction: StoryGroupSwipeDirection) => {
+    (direction: StoryGroupSwipeDirection, releaseVelocity = 0) => {
       if (groupSwipeLockRef.current || advanceLockRef.current) {
         return false;
       }
@@ -1544,6 +1546,7 @@ export default function ViewStoryScreen() {
             currentDragY,
             targetDragY,
             viewportHeight,
+            releaseVelocity,
           ),
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
@@ -1818,7 +1821,8 @@ export default function ViewStoryScreen() {
           const absDx = Math.abs(gesture.dx);
           const absDy = Math.abs(gesture.dy);
           return (
-            (absDy > 18 && absDy > absDx * 1.15) ||
+            (absDy > STORY_GROUP_ACTIVATION_DISTANCE &&
+              absDy > absDx * STORY_GROUP_DIRECTION_DOMINANCE) ||
             (absDx > 24 && absDx > absDy * 1.15)
           );
         },
@@ -1827,7 +1831,8 @@ export default function ViewStoryScreen() {
           const absDx = Math.abs(gesture.dx);
           const absDy = Math.abs(gesture.dy);
           return (
-            (absDy > 18 && absDy > absDx * 1.15) ||
+            (absDy > STORY_GROUP_ACTIVATION_DISTANCE &&
+              absDy > absDx * STORY_GROUP_DIRECTION_DOMINANCE) ||
             (absDx > 24 && absDx > absDy * 1.15)
           );
         },
@@ -1845,7 +1850,7 @@ export default function ViewStoryScreen() {
             });
 
             if (direction) {
-              if (!commitVerticalGroupSwipe(direction)) {
+              if (!commitVerticalGroupSwipe(direction, gesture.vy)) {
                 resetVerticalGroupDrag();
               }
               return;

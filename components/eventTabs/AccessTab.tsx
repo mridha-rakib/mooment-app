@@ -11,6 +11,10 @@ import { Spinner } from "@/components/ui/spinner";
 import UserAvatar from "../ui/UserAvatar";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import {
+  isTicketCreationCutoffReached,
+  TICKET_CREATION_CUTOFF_MESSAGE,
+} from "@/lib/ticketAvailability";
 type TicketStat = { sold: number; available: number; capacity: number };
 
 const resolveAvatarUri = (avatarKey?: string | null, avatarUrl?: string | null) => {
@@ -33,6 +37,7 @@ type AccessTabProps = {
   tickets?: EventTicketPayload[];
   rewards?: EventRewardPayload[];
   scheduledAt?: string | null;
+  endAt?: string | null;
   privacy?: EventPrivacy;
   isMember?: boolean;
   purchasedTicketCounts?: Record<string, number>;
@@ -166,6 +171,7 @@ const AccessTab = ({
   tickets = [],
   rewards = [],
   scheduledAt,
+  endAt,
   privacy,
   isMember = false,
   purchasedTicketCounts = {},
@@ -221,6 +227,7 @@ const AccessTab = ({
     () => tickets.reduce((total, ticket) => total + getTicketAvailability(ticket), 0),
     [tickets],
   );
+  const ticketCreationCutoffReached = isTicketCreationCutoffReached(endAt, currentTimeMs);
 
   const renderRequestButton = () => {
     if (myJoinRequestStatus === "pending") {
@@ -693,14 +700,25 @@ const AccessTab = ({
   const renderCreatorTickets = () => (
     <View style={styles.creatorTicketsContainer}>
       {onCreateTicket ? (
-        <TouchableOpacity
-          style={styles.createTicketButton}
-          onPress={onCreateTicket}
-          activeOpacity={0.85}
-        >
-          <Feather name="plus" size={20} color="#111111" />
-          <Text style={styles.createTicketText}>Create ticket</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={[
+              styles.createTicketButton,
+              ticketCreationCutoffReached ? styles.createTicketButtonDisabled : null,
+            ]}
+            onPress={onCreateTicket}
+            activeOpacity={0.85}
+            disabled={ticketCreationCutoffReached}
+          >
+            <Feather name="plus" size={20} color="#111111" />
+            <Text style={styles.createTicketText}>Create ticket</Text>
+          </TouchableOpacity>
+          {ticketCreationCutoffReached ? (
+            <Text style={styles.createTicketHelperText}>
+              {TICKET_CREATION_CUTOFF_MESSAGE}
+            </Text>
+          ) : null}
+        </>
       ) : null}
 
       <View style={styles.creatorTicketList}>
@@ -1063,10 +1081,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 12,
   },
+  createTicketButtonDisabled: {
+    opacity: 0.45,
+  },
   createTicketText: {
     color: "#111111",
     fontSize: 16,
     fontWeight: "400",
+  },
+  createTicketHelperText: {
+    color: "#B3B3B3",
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+    marginTop: -8,
   },
   creatorTicketList: {
     gap: 16,

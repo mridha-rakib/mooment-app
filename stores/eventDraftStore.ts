@@ -189,9 +189,9 @@ const mergeTicketsFromEvent = (
 
 const getEventSyncState = (event: EventResponse, currentTickets: EventDraftTicket[]) => ({
   draftId: event.id,
-  isEditingPublishedEvent: event.status === "published",
+  isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
   publishedEventBaseline: getPublishedEventBaseline(event),
-  publishedEventBaselineEvent: event.status === "published" ? event : null,
+  publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
   bannerImageKey: event.bannerImageKey ?? null,
   bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
   bannerImageDisplay: event.bannerImageDisplay ?? null,
@@ -222,6 +222,9 @@ const normalizeForComparison = (value: unknown): unknown => {
 
 const stringifyComparablePayload = (payload: EventPayload) =>
   JSON.stringify(normalizeForComparison(payload));
+
+const isPersistedEventEditStatus = (status: EventResponse["status"]) =>
+  status === "published" || status === "live";
 
 const getComparablePayloadFromState = (state: EventDraftState): EventPayload | null => {
   if (
@@ -549,9 +552,9 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
 
     set({
       draftId: event.id,
-      isEditingPublishedEvent: event.status === "published",
+      isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
       publishedEventBaseline: getPublishedEventBaseline(event),
-      publishedEventBaselineEvent: event.status === "published" ? event : null,
+      publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
       name: event.name ?? "",
       description: event.description ?? "",
       bannerImageUri,

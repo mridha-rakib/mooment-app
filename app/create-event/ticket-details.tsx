@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { z } from 'zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,15 @@ import { useTheme } from '@/hooks/useTheme';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { getAuthErrorDetails, getAuthErrorMessage } from '@/lib/authErrors';
+import {
+  getTicketSalesEndEventEndError,
+  isTicketCreationCutoffReached,
+  normalizeTicketPrice,
+  TICKET_CREATION_CUTOFF_MESSAGE,
+  TICKET_PRICE_EDIT_CUTOFF_MESSAGE,
+  TICKET_SALES_END_DATE_AFTER_EVENT_END_MESSAGE,
+  TICKET_SALES_END_TIME_NOT_BEFORE_EVENT_END_MESSAGE,
+} from '@/lib/ticketAvailability';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const ticketSchema = z
@@ -75,6 +85,24 @@ const parseBackendTicketErrors = (error: unknown): TicketErrors => {
     return { form: getAuthErrorMessage(error, 'Please try saving the ticket again.') };
   }
 
+  const message = getAuthErrorMessage(error, 'Please try saving the ticket again.');
+
+  if (details.code === 'TICKET_SALES_END_DATE_AFTER_EVENT_END') {
+    return { salesEndDate: TICKET_SALES_END_DATE_AFTER_EVENT_END_MESSAGE };
+  }
+
+  if (details.code === 'TICKET_SALES_END_TIME_NOT_BEFORE_EVENT_END') {
+    return { salesEndTime: TICKET_SALES_END_TIME_NOT_BEFORE_EVENT_END_MESSAGE };
+  }
+
+  if (details.code === 'TICKET_PRICE_EDIT_CUTOFF') {
+    return { price: message };
+  }
+
+  if (details.code === 'TICKET_CREATION_CUTOFF') {
+    return { form: message };
+  }
+
   const errors: TicketErrors = {};
 
   if (details.fields) {
@@ -109,7 +137,7 @@ export default function TicketDetailsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { height: windowHeight } = useWindowDimensions();
-  const scheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const endAt = useEventDraftStore((state) => state.endAt);
   const scrollViewRef = useRef<ScrollView>(null);
   const fieldRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
   const activeFieldRef = useRef<string | null>(null);
@@ -122,20 +150,24 @@ export default function TicketDetailsScreen() {
     selectedLocalId ? state.tickets.find((ticket) => ticket.localId === selectedLocalId) ?? null : null,
   );
   const ticketLocalIdRef = useRef(selectedLocalId ?? generateTicketLocalId());
-  const eventDate = useMemo(() => {
-    if (!scheduledAt) {
+  const eventEndDate = useMemo(() => {
+    if (!endAt) {
       return null;
     }
 
-    const parsed = new Date(scheduledAt);
+    const parsed = new Date(endAt);
 
     return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }, [scheduledAt]);
+  }, [endAt]);
   const initialSalesEndAt = selectedTicket?.salesEndAt ? new Date(selectedTicket.salesEndAt) : null;
   const validInitialSalesEndAt = initialSalesEndAt && !Number.isNaN(initialSalesEndAt.getTime())
     ? initialSalesEndAt
     : null;
-  const maximumSalesEndAt = eventDate && eventDate >= new Date() ? eventDate : null;
+  const maximumSalesEndAt = eventEndDate && eventEndDate >= new Date() ? eventEndDate : null;
+  const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
+  const ticketCreationCutoffReached = isTicketCreationCutoffReached(endAt, currentTimeMs);
+  const isEditingTicket = Boolean(selectedTicket);
+  const isPriceEditable = !isEditingTicket || !ticketCreationCutoffReached;
   const [ticketType, setTicketType] = useState<'Free' | 'Pay'>(selectedTicket?.type === 'pay' ? 'Pay' : 'Free');
   const [ticketName, setTicketName] = useState(selectedTicket?.name ?? '');
   const [ticketDescription, setTicketDescription] = useState(selectedTicket?.description ?? '');
@@ -232,6 +264,12 @@ export default function TicketDetailsScreen() {
     };
   }, [ensureFieldVisible]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setCurrentTimeMs(Date.now());
+    }, []),
+  );
+
   const handleConfirm = async () => {
     if (isSaving) {
       return;
@@ -240,6 +278,7 @@ export default function TicketDetailsScreen() {
     const parsedCapacity = Number.parseInt(capacity, 10);
     const parsedPrice = Number.parseFloat(ticketPrice);
     const type = ticketType === 'Free' ? 'free' : 'pay';
+    const submittedPrice = type === 'free' ? 0 : (Number.isFinite(parsedPrice) ? parsedPrice : undefined);
     const confirmTime = new Date();
     const salesEndAt = salesEndDate && salesEndTime
       ? new Date(
@@ -253,23 +292,40 @@ export default function TicketDetailsScreen() {
         )
       : null;
     let salesEndDateError = salesEndDate ? undefined : 'Sales end date is required';
-    const salesEndTimeError = salesEndTime ? undefined : 'Sales end time is required';
+    let salesEndTimeError = salesEndTime ? undefined : 'Sales end time is required';
 
     if (salesEndAt && salesEndAt <= confirmTime) {
       salesEndDateError = 'Sales end date and time must be in the future.';
-    } else if (salesEndAt && eventDate && salesEndAt > eventDate) {
-      salesEndDateError = 'Sales end date must not be after the event start date and time.';
+    } else if (salesEndAt) {
+      const eventEndError = getTicketSalesEndEventEndError(salesEndAt, eventEndDate);
+
+      if (eventEndError?.field === 'salesEndDate') {
+        salesEndDateError = eventEndError.message;
+      } else if (eventEndError?.field === 'salesEndTime') {
+        salesEndTimeError = eventEndError.message;
+      }
     }
 
     const result = ticketSchema.safeParse({
       name: ticketName,
       description: ticketDescription,
       capacity: Number.isNaN(parsedCapacity) ? undefined : parsedCapacity,
-      price: type === 'pay' ? (Number.isFinite(parsedPrice) ? parsedPrice : undefined) : undefined,
+      price: type === 'pay' ? submittedPrice : undefined,
       type,
     });
 
-    if (!result.success || salesEndDateError || salesEndTimeError) {
+    const submittedPriceChanged = Boolean(
+      selectedTicket &&
+      (selectedTicket.type !== type || normalizeTicketPrice(selectedTicket.price) !== normalizeTicketPrice(submittedPrice ?? 0)),
+    );
+    const priceCutoffError = !isPriceEditable && submittedPriceChanged
+      ? TICKET_PRICE_EDIT_CUTOFF_MESSAGE
+      : undefined;
+    const creationCutoffError = !selectedTicket && ticketCreationCutoffReached
+      ? TICKET_CREATION_CUTOFF_MESSAGE
+      : undefined;
+
+    if (!result.success || salesEndDateError || salesEndTimeError || priceCutoffError || creationCutoffError) {
       const fieldErrors = result.success ? {} : result.error.flatten().fieldErrors;
 
       setErrors({
@@ -278,7 +334,8 @@ export default function TicketDetailsScreen() {
         salesEndDate: salesEndDateError,
         salesEndTime: salesEndTimeError,
         capacity: fieldErrors.capacity?.[0],
-        price: fieldErrors.price?.[0],
+        price: priceCutoffError ?? fieldErrors.price?.[0],
+        form: creationCutoffError,
       });
 
       return;
@@ -292,14 +349,21 @@ export default function TicketDetailsScreen() {
     setIsSaving(true);
 
     try {
+      const savedType = selectedTicket && !isPriceEditable ? selectedTicket.type : result.data.type;
+      const savedPrice = selectedTicket && !isPriceEditable
+        ? selectedTicket.price
+        : result.data.type === 'free'
+          ? 0
+          : (result.data.price ?? 0);
+
       await saveTicket({
         capacity: result.data.capacity,
         description: result.data.description,
         localId: ticketLocalIdRef.current,
         name: result.data.name,
-        price: result.data.type === 'free' ? 0 : (result.data.price ?? 0),
+        price: savedPrice,
         salesEndAt: salesEndAt.toISOString(),
-        type: result.data.type,
+        type: savedType,
       });
       setTimeout(() => {
         router.back();
@@ -483,7 +547,8 @@ export default function TicketDetailsScreen() {
         {/* Ticket Type (Free/Pay) */}
         <View style={styles.radioRow}>
           <TouchableOpacity
-            style={styles.radioItem}
+            style={[styles.radioItem, !isPriceEditable ? styles.disabledControl : null]}
+            disabled={!isPriceEditable}
             onPress={() => { setTicketType('Free'); clearFieldError('price'); }}
           >
             <View style={[styles.radioOuter, { borderColor: colors.border }, ticketType === 'Free' && { borderColor: colors.primary }]}>
@@ -493,8 +558,9 @@ export default function TicketDetailsScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.radioItem}
-            onPress={() => setTicketType('Pay')}
+            style={[styles.radioItem, !isPriceEditable ? styles.disabledControl : null]}
+            disabled={!isPriceEditable}
+            onPress={() => { setTicketType('Pay'); clearFieldError('price'); }}
           >
             <View style={[styles.radioOuter, { borderColor: colors.border }, ticketType === 'Pay' && { borderColor: colors.primary }]}>
               {ticketType === 'Pay' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
@@ -511,6 +577,7 @@ export default function TicketDetailsScreen() {
                 styles.priceInput,
                 { backgroundColor: colors.card },
                 errors.price ? [styles.inputError, { borderColor: colors.danger }] : null,
+                !isPriceEditable ? styles.disabledControl : null,
               ]}
             >
               <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>$</Text>
@@ -522,6 +589,7 @@ export default function TicketDetailsScreen() {
                 value={ticketPrice}
                 onChangeText={(v) => { setTicketPrice(v); clearFieldError('price'); }}
                 onFocus={() => focusField('ticketPrice')}
+                editable={isPriceEditable}
               />
             </View>
             {errors.price ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.price}</Text> : null}
@@ -639,6 +707,9 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderWidth: 1,
+  },
+  disabledControl: {
+    opacity: 0.55,
   },
   errorText: {
     fontSize: 12,
