@@ -16,6 +16,16 @@ import {
   type StoryTextOverlay,
 } from "@/lib/stories";
 import { markStoriesSeen } from "@/lib/storySeen";
+import { getCachedStoryThumbnail } from "@/lib/storyThumbnails";
+import {
+  clampStoryGroupDrag,
+  clampStoryGroupPagerDrag,
+  getStoryGroupCommitDuration,
+  getStoryGroupCommitTranslateY,
+  getStoryGroupSwipeDirection,
+  getStoryGroupSwipeTarget,
+  type StoryGroupSwipeDirection,
+} from "@/lib/storyViewerGestures";
 import {
   getStoryViewerSession,
   type StoryViewerTab,
@@ -39,8 +49,10 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
   BackHandler,
+  Easing,
   PanResponder,
   Platform,
   Pressable,
@@ -49,6 +61,7 @@ import {
   TouchableOpacity,
   View,
   type AppStateStatus,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -79,6 +92,11 @@ type StoryGroup = {
   authorId?: string;
   authorAvatar?: string | null;
   stories: StorySequenceItem[];
+};
+
+type AdjacentStoryLayer = {
+  direction: StoryGroupSwipeDirection;
+  story: StorySequenceItem;
 };
 
 const LONG_PRESS_DELAY_MS = 160;
@@ -245,6 +263,7 @@ function StoryBackground({
 export default function ViewStoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: viewportHeight } = useWindowDimensions();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const {
     mediaUri,
@@ -356,7 +375,10 @@ export default function ViewStoryScreen() {
   const [activePlayerSlot, setActivePlayerSlot] = useState<0 | 1>(0);
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [adjacentStoryLayer, setAdjacentStoryLayer] =
+    useState<AdjacentStoryLayer | null>(null);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const verticalDragY = useRef(new Animated.Value(0)).current;
 
   const triggerFeedback = useCallback(() => {
     if (feedbackTimeoutRef.current) {
@@ -387,6 +409,11 @@ export default function ViewStoryScreen() {
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const [isDeletingStory, setIsDeletingStory] = useState(false);
   const advanceLockRef = useRef(false);
+  const groupSwipeLockRef = useRef(false);
+  const verticalGestureActiveRef = useRef(false);
+  const resumeAfterGroupGestureRef = useRef(false);
+  const wasHoldingBeforeGroupGestureRef = useRef(false);
+  const adjacentStoryLayerRef = useRef<AdjacentStoryLayer | null>(null);
   const loadRequestIdRef = useRef(0);
   const autoPlayRequestedRef = useRef(false);
   const holdActivatedRef = useRef(false);
@@ -406,6 +433,8 @@ export default function ViewStoryScreen() {
   const deletingStoryIdRef = useRef<string | null>(null);
   const preloadedUriRef = useRef<[string | null, string | null]>([null, null]);
   const preloadRequestRef = useRef(0);
+  const activeGroupIndexRef = useRef(activeGroupIndex);
+  const groupsRef = useRef(groups);
   const playbackTimingRef = useRef({
     storyId: "",
     requestStartedAt: 0,
@@ -437,6 +466,34 @@ export default function ViewStoryScreen() {
       (normalizedCurrentUserId &&
         currentStoryAuthorId &&
         normalizedCurrentUserId === currentStoryAuthorId),
+  );
+
+  const verticalSurfaceTranslateY = verticalDragY;
+  const adjacentSurfaceTranslateY = useMemo(() => {
+    if (!adjacentStoryLayer) {
+      return verticalDragY;
+    }
+
+    return Animated.add(
+      verticalDragY,
+      adjacentStoryLayer.direction === "next" ? viewportHeight : -viewportHeight,
+    );
+  }, [adjacentStoryLayer, verticalDragY, viewportHeight]);
+
+  useEffect(() => {
+    activeGroupIndexRef.current = activeGroupIndex;
+  }, [activeGroupIndex]);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
+  const setAdjacentStoryLayerState = useCallback(
+    (nextLayer: AdjacentStoryLayer | null) => {
+      adjacentStoryLayerRef.current = nextLayer;
+      setAdjacentStoryLayer(nextLayer);
+    },
+    [],
   );
 
   useEffect(() => {
@@ -1317,6 +1374,232 @@ export default function ViewStoryScreen() {
     resumeImagePlaybackProgress,
   ]);
 
+  const clearVerticalGroupGesture = useCallback(() => {
+    verticalDragY.stopAnimation(() => {
+      verticalDragY.setValue(0);
+    });
+    setAdjacentStoryLayerState(null);
+    groupSwipeLockRef.current = false;
+    verticalGestureActiveRef.current = false;
+    resumeAfterGroupGestureRef.current = false;
+    wasHoldingBeforeGroupGestureRef.current = false;
+  }, [setAdjacentStoryLayerState, verticalDragY]);
+
+  const pausePlaybackForVerticalGroupGesture = useCallback(() => {
+    if (verticalGestureActiveRef.current) {
+      return;
+    }
+
+    verticalGestureActiveRef.current = true;
+    wasHoldingBeforeGroupGestureRef.current = isHolding;
+    resumeAfterGroupGestureRef.current = isCurrentVideo ? isPlaying : !isHolding;
+
+    if (!isCurrentVideo) {
+      freezeImagePlaybackProgress();
+    }
+
+    setIsHolding(true);
+
+    if (isCurrentVideo && isPlaying) {
+      try {
+        player.pause();
+      } catch {
+        resumeAfterGroupGestureRef.current = false;
+      }
+    }
+  }, [
+    freezeImagePlaybackProgress,
+    isCurrentVideo,
+    isHolding,
+    isPlaying,
+    player,
+  ]);
+
+  const resumePlaybackAfterVerticalGroupGesture = useCallback(() => {
+    const shouldResume = resumeAfterGroupGestureRef.current;
+    const wasHolding = wasHoldingBeforeGroupGestureRef.current;
+
+    resumeAfterGroupGestureRef.current = false;
+    wasHoldingBeforeGroupGestureRef.current = false;
+
+    if (!shouldResume) {
+      setIsHolding(wasHolding);
+      return;
+    }
+
+    setIsHolding(false);
+
+    if (!isCurrentVideo) {
+      resumeImagePlaybackProgress();
+      return;
+    }
+
+    if (currentStory?.mediaUri && !isLoadingStory && !loadFailed) {
+      try {
+        player.play();
+      } catch {
+        // The existing player status listeners recover playback when ready.
+      }
+    }
+  }, [
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    isLoadingStory,
+    loadFailed,
+    player,
+    resumeImagePlaybackProgress,
+  ]);
+
+  const resetVerticalGroupDrag = useCallback(() => {
+    groupSwipeLockRef.current = true;
+    Animated.spring(verticalDragY, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 12,
+    }).start(() => {
+      verticalDragY.setValue(0);
+      setAdjacentStoryLayerState(null);
+      groupSwipeLockRef.current = false;
+      verticalGestureActiveRef.current = false;
+      resumePlaybackAfterVerticalGroupGesture();
+    });
+  }, [
+    resumePlaybackAfterVerticalGroupGesture,
+    setAdjacentStoryLayerState,
+    verticalDragY,
+  ]);
+
+  const getVerticalGroupSwipeTarget = useCallback(
+    (direction: StoryGroupSwipeDirection) => {
+      const currentGroupIndex = activeGroupIndexRef.current;
+      const currentGroups = groupsRef.current;
+      const targetGroup =
+        direction === "next"
+          ? currentGroups[currentGroupIndex + 1]
+          : currentGroups[currentGroupIndex - 1];
+
+      return getStoryGroupSwipeTarget({
+        direction,
+        currentGroupIndex,
+        groupCount: currentGroups.length,
+        targetGroupStoryCount: targetGroup?.stories.length ?? 0,
+      });
+    },
+    [],
+  );
+
+  const getVerticalGroupAdjacentLayer = useCallback(
+    (direction: StoryGroupSwipeDirection): AdjacentStoryLayer | null => {
+      const target = getVerticalGroupSwipeTarget(direction);
+
+      if (!target) {
+        return null;
+      }
+
+      const story = groupsRef.current[target.groupIndex]?.stories[target.storyIndex];
+
+      return story ? { direction, story } : null;
+    },
+    [getVerticalGroupSwipeTarget],
+  );
+
+  const prepareVerticalGroupAdjacentLayer = useCallback(
+    (direction: StoryGroupSwipeDirection) => {
+      const currentLayer = adjacentStoryLayerRef.current;
+
+      if (currentLayer?.direction === direction) {
+        return currentLayer;
+      }
+
+      const nextLayer = getVerticalGroupAdjacentLayer(direction);
+      setAdjacentStoryLayerState(nextLayer);
+      return nextLayer;
+    },
+    [getVerticalGroupAdjacentLayer, setAdjacentStoryLayerState],
+  );
+
+  const commitVerticalGroupSwipe = useCallback(
+    (direction: StoryGroupSwipeDirection) => {
+      if (groupSwipeLockRef.current || advanceLockRef.current) {
+        return false;
+      }
+
+      if (!prepareVerticalGroupAdjacentLayer(direction)) {
+        return false;
+      }
+
+      groupSwipeLockRef.current = true;
+      advanceLockRef.current = true;
+
+      verticalDragY.stopAnimation((currentDragY) => {
+        const targetDragY = getStoryGroupCommitTranslateY(
+          direction,
+          viewportHeight,
+        );
+
+        Animated.timing(verticalDragY, {
+          toValue: targetDragY,
+          duration: getStoryGroupCommitDuration(
+            currentDragY,
+            targetDragY,
+            viewportHeight,
+          ),
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          verticalGestureActiveRef.current = false;
+
+          if (!finished) {
+            groupSwipeLockRef.current = false;
+            advanceLockRef.current = false;
+            resumePlaybackAfterVerticalGroupGesture();
+            return;
+          }
+
+          const target = getVerticalGroupSwipeTarget(direction);
+
+          if (!target) {
+            groupSwipeLockRef.current = false;
+            advanceLockRef.current = false;
+            resumePlaybackAfterVerticalGroupGesture();
+            return;
+          }
+
+          resumeAfterGroupGestureRef.current = false;
+          wasHoldingBeforeGroupGestureRef.current = false;
+          pendingStoryIndexRef.current = target.storyIndex;
+          setCurrentIndex(target.storyIndex);
+          setProgressTime(0);
+          setLoadedDuration(null);
+          setIsHolding(false);
+          setActiveGroupIndex(target.groupIndex);
+        });
+      });
+
+      return true;
+    },
+    [
+      getVerticalGroupSwipeTarget,
+      prepareVerticalGroupAdjacentLayer,
+      resumePlaybackAfterVerticalGroupGesture,
+      viewportHeight,
+      verticalDragY,
+    ],
+  );
+
+  useEffect(() => {
+    clearVerticalGroupGesture();
+  }, [activeGroupIndex, activeStoryTab, clearVerticalGroupGesture]);
+
+  useEffect(() => {
+    if (isOverlayOpen) {
+      clearVerticalGroupGesture();
+    }
+  }, [clearVerticalGroupGesture, isOverlayOpen]);
+
+  useEffect(() => clearVerticalGroupGesture, [clearVerticalGroupGesture]);
+
   const renderTextOverlay = (overlay?: StoryTextOverlay | null) => {
     if (!overlay?.text) {
       return null;
@@ -1446,6 +1729,7 @@ export default function ViewStoryScreen() {
       return;
     }
 
+    clearVerticalGroupGesture();
     setActiveStoryTab(tab);
     setActiveGroupIndex(0);
     setCurrentIndex(0);
@@ -1550,27 +1834,24 @@ export default function ViewStoryScreen() {
         onPanResponderRelease: (_event, gesture) => {
           const absDx = Math.abs(gesture.dx);
           const absDy = Math.abs(gesture.dy);
+          const isVerticalGesture = verticalGestureActiveRef.current || absDy > absDx;
 
-          if ((gesture.dy < -56 || gesture.vy < -0.45) && absDy > absDx) {
-            if (
-              activeGroupIndex < groups.length - 1 &&
-              !advanceLockRef.current
-            ) {
-              advanceLockRef.current = true;
-              pendingStoryIndexRef.current = 0;
-              setCurrentIndex(0);
-              setProgressTime(0);
-              setLoadedDuration(null);
-              setIsHolding(false);
-              setActiveGroupIndex((index) =>
-                Math.min(index + 1, groups.length - 1),
-              );
+          if (isVerticalGesture) {
+            const direction = getStoryGroupSwipeDirection({
+              dx: gesture.dx,
+              dy: gesture.dy,
+              vx: gesture.vx,
+              vy: gesture.vy,
+            });
+
+            if (direction) {
+              if (!commitVerticalGroupSwipe(direction)) {
+                resetVerticalGroupDrag();
+              }
+              return;
             }
-            return;
-          }
 
-          if ((gesture.dy > 80 || gesture.vy > 0.6) && absDy > absDx) {
-            safeBack(router, "/(tabs)/home");
+            resetVerticalGroupDrag();
             return;
           }
 
@@ -1583,121 +1864,228 @@ export default function ViewStoryScreen() {
             goToPreviousStory();
           }
         },
+        onPanResponderMove: (_event, gesture) => {
+          if (isOverlayOpen || groupSwipeLockRef.current) {
+            return;
+          }
+
+          const absDx = Math.abs(gesture.dx);
+          const absDy = Math.abs(gesture.dy);
+
+          if (absDy <= absDx && !verticalGestureActiveRef.current) {
+            verticalDragY.setValue(0);
+            return;
+          }
+
+          const direction = gesture.dy >= 0 ? "previous" : "next";
+          const adjacentLayer = prepareVerticalGroupAdjacentLayer(direction);
+
+          pausePlaybackForVerticalGroupGesture();
+          verticalDragY.setValue(
+            adjacentLayer
+              ? clampStoryGroupPagerDrag(gesture.dy, viewportHeight)
+              : clampStoryGroupDrag(gesture.dy),
+          );
+        },
+        onPanResponderTerminate: () => {
+          if (verticalGestureActiveRef.current) {
+            resetVerticalGroupDrag();
+            return;
+          }
+
+          verticalDragY.setValue(0);
+          groupSwipeLockRef.current = false;
+        },
       }),
     [
-      activeGroupIndex,
+      commitVerticalGroupSwipe,
       goToNextStory,
       goToPreviousStory,
-      groups.length,
       isOverlayOpen,
-      router,
+      pausePlaybackForVerticalGroupGesture,
+      prepareVerticalGroupAdjacentLayer,
+      resetVerticalGroupDrag,
+      viewportHeight,
+      verticalDragY,
     ],
   );
 
-  return (
-    <View style={styles.container}>
-      <StatusBar style="light" translucent />
-      {isCurrentVideo && currentStory?.mediaUri && !loadFailed ? (
-        <VideoView
-          style={styles.media}
-          player={player}
-          contentFit="cover"
-          nativeControls={false}
-          useExoShutter={false}
-          surfaceType={Platform.OS === "android" ? "surfaceView" : undefined}
-          onFirstFrameRender={() => {
-            const timing = playbackTimingRef.current;
-            setHasRenderedFirstFrame(true);
-            setIsLoadingCurrentStory(false);
-            if (timing.firstFrameAt) return;
-            timing.firstFrameAt = Date.now();
-            if (__DEV__) {
-              console.log("[StoryPlaybackTiming] first-frame", {
-                storyId: timing.storyId,
-                requestToFirstFrameMs: timing.requestStartedAt
-                  ? timing.firstFrameAt - timing.requestStartedAt
-                  : null,
-                sourceLoadToFirstFrameMs: timing.sourceLoadedAt
-                  ? timing.firstFrameAt - timing.sourceLoadedAt
-                  : null,
-                bufferingMs: timing.bufferingMs,
-                storyOpenToFirstFrameMs: timing.firstFrameAt - openedAt,
-              });
-            }
-          }}
-        />
-      ) : isCurrentImage && currentStory?.mediaUri && !loadFailed ? (
+  const renderStaticStoryVisual = (story: StorySequenceItem) => {
+    const mediaType = story.mediaType ?? "video";
+
+    if (mediaType === "text") {
+      return (
+        <StoryBackground background={story.textBackground}>
+          <Text style={styles.textStoryText}>{story.textContent}</Text>
+        </StoryBackground>
+      );
+    }
+
+    if (mediaType === "image" && story.mediaUri) {
+      return (
         <Image
-          source={{ uri: currentStory.mediaUri }}
+          source={{ uri: story.mediaUri }}
           style={styles.media}
           contentFit="cover"
           contentPosition="center"
-          transition={100}
           cachePolicy="memory-disk"
-          onLoadStart={() => {
-            if (__DEV__)
-              console.log("[StoryPlaybackTiming] image-request-start", {
-                storyId: currentStory.id,
-                sinceOpenMs: Date.now() - openedAt,
-              });
-          }}
-          onLoad={() => {
-            if (__DEV__)
-              console.log("[StoryPlaybackTiming] image-loaded", {
-                storyId: currentStory.id,
-                sinceOpenMs: Date.now() - openedAt,
-              });
-          }}
-          onDisplay={() => {
-            if (__DEV__)
-              console.log("[StoryPlaybackTiming] image-displayed", {
-                storyId: currentStory.id,
-                sinceOpenMs: Date.now() - openedAt,
-              });
-          }}
         />
-      ) : isCurrentText && currentStory && !loadFailed ? (
-        <StoryBackground background={currentStory.textBackground}>
-          <Text style={styles.textStoryText}>{currentStory.textContent}</Text>
-        </StoryBackground>
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Story unavailable</Text>
-        </View>
-      )}
-      {!isCurrentText ? renderTextOverlay(currentStory?.textOverlay) : null}
-      {isLoadingStory && !loadFailed && (
-        <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#FFFFFF" />
-        </View>
-      )}
+      );
+    }
 
-      <View
+    const thumbnailSource = story.mediaUri
+      ? getCachedStoryThumbnail(story.id)
+      : null;
+
+    if (thumbnailSource) {
+      return (
+        <Image
+          source={thumbnailSource}
+          style={styles.media}
+          contentFit="cover"
+          contentPosition="center"
+          cachePolicy="memory-disk"
+        />
+      );
+    }
+
+    return <View style={styles.adjacentVideoPreview} />;
+  };
+
+  const renderAdjacentStoryLayer = () => {
+    if (!adjacentStoryLayer) {
+      return null;
+    }
+
+    const mediaType = adjacentStoryLayer.story.mediaType ?? "video";
+
+    return (
+      <Animated.View
+        pointerEvents="none"
         style={[
-          styles.tapZones,
-          {
-            top: insets.top + 72,
-            right: 0,
-            bottom: Math.max(insets.bottom + 112, 148),
-          },
+          styles.adjacentStorySurface,
+          { transform: [{ translateY: adjacentSurfaceTranslateY }] },
         ]}
-        {...panResponder.panHandlers}
       >
-        <Pressable
-          style={styles.tapZone}
-          delayLongPress={LONG_PRESS_DELAY_MS}
-          onLongPress={pauseForHold}
-          onPress={() => handlePressAction(goToPreviousStory)}
-          onPressOut={resumeFromHold}
-        />
-        <Pressable
-          style={styles.tapZone}
-          delayLongPress={LONG_PRESS_DELAY_MS}
-          onLongPress={pauseForHold}
-          onPress={() => handlePressAction(goToNextStory)}
-          onPressOut={resumeFromHold}
-        />
-      </View>
+        {renderStaticStoryVisual(adjacentStoryLayer.story)}
+        {mediaType !== "text"
+          ? renderTextOverlay(adjacentStoryLayer.story.textOverlay)
+          : null}
+      </Animated.View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {renderAdjacentStoryLayer()}
+      <Animated.View
+        style={[
+          styles.storySurface,
+          { transform: [{ translateY: verticalSurfaceTranslateY }] },
+        ]}
+      >
+        <StatusBar style="light" translucent />
+        {isCurrentVideo && currentStory?.mediaUri && !loadFailed ? (
+          <VideoView
+            style={styles.media}
+            player={player}
+            contentFit="cover"
+            nativeControls={false}
+            useExoShutter={false}
+            surfaceType={Platform.OS === "android" ? "surfaceView" : undefined}
+            onFirstFrameRender={() => {
+              const timing = playbackTimingRef.current;
+              setHasRenderedFirstFrame(true);
+              setIsLoadingCurrentStory(false);
+              if (timing.firstFrameAt) return;
+              timing.firstFrameAt = Date.now();
+              if (__DEV__) {
+                console.log("[StoryPlaybackTiming] first-frame", {
+                  storyId: timing.storyId,
+                  requestToFirstFrameMs: timing.requestStartedAt
+                    ? timing.firstFrameAt - timing.requestStartedAt
+                    : null,
+                  sourceLoadToFirstFrameMs: timing.sourceLoadedAt
+                    ? timing.firstFrameAt - timing.sourceLoadedAt
+                    : null,
+                  bufferingMs: timing.bufferingMs,
+                  storyOpenToFirstFrameMs: timing.firstFrameAt - openedAt,
+                });
+              }
+            }}
+          />
+        ) : isCurrentImage && currentStory?.mediaUri && !loadFailed ? (
+          <Image
+            source={{ uri: currentStory.mediaUri }}
+            style={styles.media}
+            contentFit="cover"
+            contentPosition="center"
+            transition={100}
+            cachePolicy="memory-disk"
+            onLoadStart={() => {
+              if (__DEV__)
+                console.log("[StoryPlaybackTiming] image-request-start", {
+                  storyId: currentStory.id,
+                  sinceOpenMs: Date.now() - openedAt,
+                });
+            }}
+            onLoad={() => {
+              if (__DEV__)
+                console.log("[StoryPlaybackTiming] image-loaded", {
+                  storyId: currentStory.id,
+                  sinceOpenMs: Date.now() - openedAt,
+                });
+            }}
+            onDisplay={() => {
+              if (__DEV__)
+                console.log("[StoryPlaybackTiming] image-displayed", {
+                  storyId: currentStory.id,
+                  sinceOpenMs: Date.now() - openedAt,
+                });
+            }}
+          />
+        ) : isCurrentText && currentStory && !loadFailed ? (
+          <StoryBackground background={currentStory.textBackground}>
+            <Text style={styles.textStoryText}>{currentStory.textContent}</Text>
+          </StoryBackground>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Story unavailable</Text>
+          </View>
+        )}
+        {!isCurrentText ? renderTextOverlay(currentStory?.textOverlay) : null}
+        {isLoadingStory && !loadFailed && (
+          <View style={styles.loadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </View>
+        )}
+
+        <View
+          style={[
+            styles.tapZones,
+            {
+              top: insets.top + 72,
+              right: 0,
+              bottom: Math.max(insets.bottom + 112, 148),
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <Pressable
+            style={styles.tapZone}
+            delayLongPress={LONG_PRESS_DELAY_MS}
+            onLongPress={pauseForHold}
+            onPress={() => handlePressAction(goToPreviousStory)}
+            onPressOut={resumeFromHold}
+          />
+          <Pressable
+            style={styles.tapZone}
+            delayLongPress={LONG_PRESS_DELAY_MS}
+            onLongPress={pauseForHold}
+            onPress={() => handlePressAction(goToNextStory)}
+            onPressOut={resumeFromHold}
+          />
+        </View>
 
       {isCurrentVideo && !loadFailed && !!currentStory && (
         <Pressable
@@ -1880,6 +2268,7 @@ export default function ViewStoryScreen() {
           </View>
         </View>
       )}
+      </Animated.View>
 
       <CommentsModal
         visible={commentsVisible}
@@ -1918,6 +2307,18 @@ export default function ViewStoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#000000",
+  },
+  storySurface: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  adjacentStorySurface: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000000",
+  },
+  adjacentVideoPreview: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000000",
   },
   media: {
