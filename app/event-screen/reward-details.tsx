@@ -1,7 +1,7 @@
 import BackButton from "@/components/ui/BackButton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
-import { getAuthErrorMessage, isBusinessAccountRequiredError, isTicketRewardConflictError } from "@/lib/authErrors";
+import { getAuthErrorDetails, getAuthErrorMessage, isBusinessAccountRequiredError, isTicketRewardConflictError } from "@/lib/authErrors";
 import { useAuthStore } from "@/stores/authStore";
 import {
   createDraftReward,
@@ -49,66 +49,29 @@ import {
   getRewardSelectorSheetBottomPadding,
   getRewardSelectorSheetMaxHeight,
 } from "@/lib/rewardSelectorModalLayout";
+import {
+  getRewardTicketSalesEndError,
+  REWARD_END_DATE_AFTER_TICKET_SALES_END_MESSAGE,
+  REWARD_END_TIME_AFTER_TICKET_SALES_END_MESSAGE,
+} from "@/lib/rewardValidation";
 const isRewardType = (value: unknown): value is EventRewardType =>
   value === "ticket" || value === "product";
 
 const startOfToday = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
 
-const clampDate = (value: Date, max?: Date | null) => {
-  if (!max || Number.isNaN(max.getTime())) {
-    return value;
-  }
-
-  return value > max ? new Date(max) : value;
-};
-
-const getSalesEndDate = (event?: EventResponse | null, ticketId?: string | null): Date | null => {
-  if (!event) {
-    return null;
-  }
-
-  if (ticketId) {
-    const ticket = event.tickets.find((t) => t.id === ticketId);
-    if (ticket?.salesEndAt) {
-      const parsed = new Date(ticket.salesEndAt);
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed;
-      }
-    }
-  }
-
-  // Fallback: use the latest salesEndAt across all tickets, or event scheduledAt
-  const allSalesEnds = event.tickets
-    .map((t) => (t.salesEndAt ? new Date(t.salesEndAt).getTime() : NaN))
-    .filter((t) => !Number.isNaN(t));
-
-  if (allSalesEnds.length > 0) {
-    return new Date(Math.max(...allSalesEnds));
-  }
-
-  if (event.scheduledAt) {
-    const parsed = new Date(event.scheduledAt);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
-  }
-
-  return null;
-};
-
-const getInitialRewardDate = (reward?: EventRewardPayload | null, event?: EventResponse | null, maxDate?: Date | null) => {
+const getInitialRewardDate = (reward?: EventRewardPayload | null, event?: EventResponse | null) => {
   const source = reward?.expiresAt ?? event?.scheduledAt ?? null;
   const parsed = source ? new Date(source) : null;
 
   if (parsed && !Number.isNaN(parsed.getTime())) {
-    return clampDate(parsed, maxDate);
+    return parsed;
   }
 
   const fallback = new Date();
   fallback.setDate(fallback.getDate() + 7);
   fallback.setSeconds(0, 0);
 
-  return clampDate(fallback, maxDate);
+  return fallback;
 };
 
 const formatDate = (value: Date) =>
@@ -146,6 +109,8 @@ type SelectorItem = {
   imageUri?: string | null;
 };
 
+type RewardFormErrors = Partial<Record<"endDate" | "endTime", string>>;
+
 export default function RewardDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ eventId?: string; rewardId?: string; rewardType?: string }>();
@@ -177,6 +142,7 @@ export default function RewardDetailsScreen() {
   const [buyQuantity, setBuyQuantity] = useState("");
   const [freeQuantity, setFreeQuantity] = useState("");
   const [capacity, setCapacity] = useState("");
+  const [formErrors, setFormErrors] = useState<RewardFormErrors>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -197,11 +163,6 @@ export default function RewardDetailsScreen() {
   const reward = useMemo(
     () => event?.rewards.find((item) => item.id === rewardId) ?? null,
     [event?.rewards, rewardId],
-  );
-
-  const salesEndDate = useMemo(
-    () => (isProductReward ? null : getSalesEndDate(event, selectedTargetId)),
-    [event, isProductReward, selectedTargetId],
   );
 
   const selectorItems: SelectorItem[] = useMemo(() => {
@@ -373,24 +334,24 @@ export default function RewardDetailsScreen() {
       return;
     }
 
-    const maxDate = isProductReward ? null : getSalesEndDate(event, reward?.ticketId ?? null);
-
     if (reward) {
       setSelectedTargetId(isProductReward ? reward.productId ?? null : reward.ticketId ?? null);
       setOfferName(reward.name);
       setDescription(reward.description ?? "");
-      setExpiresAt(getInitialRewardDate(reward, event, maxDate));
+      setExpiresAt(getInitialRewardDate(reward, event));
       setDiscountPercent(String(reward.discountPercent));
       setBuyQuantity(String(reward.buyQuantity));
       setFreeQuantity(String(reward.freeQuantity));
       setCapacity(String(reward.capacity));
+      setFormErrors({});
       return;
     }
 
     setSelectedTargetId((current) => current ?? selectorItems[0]?.id ?? null);
     setOfferName("");
     setDescription("");
-    setExpiresAt(getInitialRewardDate(null, event, maxDate));
+    setExpiresAt(getInitialRewardDate(null, event));
+    setFormErrors({});
   }, [event, isLoading, isProductReward, reward, selectorItems]);
 
   const parseWholeNumber = (value: string, fallback: number, minimum: number) => {
@@ -415,6 +376,25 @@ export default function RewardDetailsScreen() {
     if (pct <= 0) return null;
     return selectedTicket.price * (1 - pct / 100);
   }, [selectedTicket, discountPercent]);
+
+  const setRewardTicketSalesEndError = useCallback((error: ReturnType<typeof getRewardTicketSalesEndError>) => {
+    if (!error) {
+      setFormErrors({});
+      return;
+    }
+
+    setFormErrors({
+      [error.field]: error.message,
+    });
+  }, []);
+
+  const getSelectedTicketSalesEndError = useCallback(() => {
+    if (isProductReward || !selectedTicket) {
+      return null;
+    }
+
+    return getRewardTicketSalesEndError(expiresAt, selectedTicket.salesEndAt ?? null);
+  }, [expiresAt, isProductReward, selectedTicket]);
 
   const handleConfirm = async () => {
     if (!eventId || isSaving) {
@@ -441,6 +421,14 @@ export default function RewardDetailsScreen() {
       return;
     }
 
+    const ticketSalesEndError = getSelectedTicketSalesEndError();
+
+    if (ticketSalesEndError) {
+      setRewardTicketSalesEndError(ticketSalesEndError);
+      return;
+    }
+
+    setFormErrors({});
     setIsSaving(true);
 
     try {
@@ -522,6 +510,18 @@ export default function RewardDetailsScreen() {
           ),
         );
       } else {
+        const details = getAuthErrorDetails(error);
+
+        if (details?.code === "REWARD_END_DATE_AFTER_TICKET_SALES_END") {
+          setFormErrors({ endDate: REWARD_END_DATE_AFTER_TICKET_SALES_END_MESSAGE });
+          return;
+        }
+
+        if (details?.code === "REWARD_END_TIME_AFTER_TICKET_SALES_END") {
+          setFormErrors({ endTime: REWARD_END_TIME_AFTER_TICKET_SALES_END_MESSAGE });
+          return;
+        }
+
         Alert.alert("Unable to save reward", getAuthErrorMessage(error, "Please try again."));
       }
     } finally {
@@ -536,7 +536,8 @@ export default function RewardDetailsScreen() {
       const nextDate = new Date(expiresAt);
       nextDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
       nextDate.setSeconds(0, 0);
-      setExpiresAt(clampDate(nextDate, salesEndDate));
+      setExpiresAt(nextDate);
+      setFormErrors((current) => ({ ...current, endDate: undefined }));
     }
   };
 
@@ -546,7 +547,8 @@ export default function RewardDetailsScreen() {
     if (selectedTime) {
       const nextDate = new Date(expiresAt);
       nextDate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-      setExpiresAt(clampDate(nextDate, salesEndDate));
+      setExpiresAt(nextDate);
+      setFormErrors((current) => ({ ...current, endTime: undefined }));
     }
   };
 
@@ -554,15 +556,9 @@ export default function RewardDetailsScreen() {
     (item: SelectorItem) => {
       setSelectedTargetId(item.id);
       setSelectorVisible(false);
-
-      if (!isProductReward) {
-        const nextSalesEnd = getSalesEndDate(event, item.id);
-        if (nextSalesEnd) {
-          setExpiresAt((current) => clampDate(current, nextSalesEnd));
-        }
-      }
+      setFormErrors({});
     },
-    [event, isProductReward],
+    [],
   );
 
   const renderSelectorItem = useCallback(
@@ -746,7 +742,11 @@ export default function RewardDetailsScreen() {
             <View style={[styles.inputGroup, styles.rowItemLeft]}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
               <TouchableOpacity
-                style={[styles.dateSelector, { backgroundColor: colors.card }]}
+                style={[
+                  styles.dateSelector,
+                  { backgroundColor: colors.card },
+                  formErrors.endDate ? [styles.inputError, { borderColor: colors.danger }] : null,
+                ]}
                 activeOpacity={0.85}
                 onPress={() => setShowDatePicker(true)}
               >
@@ -755,12 +755,19 @@ export default function RewardDetailsScreen() {
                   {formatDate(expiresAt)}
                 </Text>
               </TouchableOpacity>
+              {formErrors.endDate ? (
+                <Text style={[styles.errorText, { color: colors.danger }]}>{formErrors.endDate}</Text>
+              ) : null}
             </View>
 
             <View style={[styles.inputGroup, styles.rowItemRight]}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
               <TouchableOpacity
-                style={[styles.dateSelector, { backgroundColor: colors.card }]}
+                style={[
+                  styles.dateSelector,
+                  { backgroundColor: colors.card },
+                  formErrors.endTime ? [styles.inputError, { borderColor: colors.danger }] : null,
+                ]}
                 activeOpacity={0.85}
                 onPress={() => setShowTimePicker(true)}
               >
@@ -769,6 +776,9 @@ export default function RewardDetailsScreen() {
                   {formatTime(expiresAt)}
                 </Text>
               </TouchableOpacity>
+              {formErrors.endTime ? (
+                <Text style={[styles.errorText, { color: colors.danger }]}>{formErrors.endTime}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -777,7 +787,6 @@ export default function RewardDetailsScreen() {
               value={expiresAt}
               mode="date"
               minimumDate={startOfToday(new Date())}
-              maximumDate={salesEndDate ?? undefined}
               display={Platform.OS === "ios" ? "spinner" : "default"}
               onChange={onDateChange}
             />
@@ -938,6 +947,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingVertical: 18,
   },
+  errorText: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
+  },
   footer: {
     flexDirection: "row",
     gap: 16,
@@ -965,6 +979,9 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 16,
+  },
+  inputError: {
+    borderWidth: 1,
   },
   label: {
     fontSize: 11,
