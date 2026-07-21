@@ -97,6 +97,15 @@ const getLocationLabel = (item: TicketWalletItem) =>
 const getAddressLabel = (item: TicketWalletItem) =>
   item.event.location?.address || item.event.location?.searchLabel || "Address TBA";
 
+const getRefundStatusLabel = (item: TicketWalletItem): string | null => {
+  if (!item.refund) return null;
+  if (item.refund.status === "succeeded") return "Refunded";
+  if (item.refund.status === "failed_terminal" || item.refund.status === "reconciliation_required") {
+    return "Refund needs attention";
+  }
+  return "Refund processing";
+};
+
 const getWalletEventId = (item: TicketWalletItem) =>
   typeof item.event?.id === "string" ? item.event.id.trim() : "";
 
@@ -394,6 +403,9 @@ const TicketWalletScreen = () => {
                     <View>
                       <Text style={[styles.eventTitle, { color: colors.text }]}>{item.event.name ?? item.ticketName}</Text>
                       <Text style={[styles.hostText, { color: colors.textSecondary }]}>by {item.event.host?.name ?? "Host"}</Text>
+                      {getRefundStatusLabel(item) && (
+                        <Text style={[styles.refundStatusText, { color: colors.textSecondary }]}>{getRefundStatusLabel(item)}</Text>
+                      )}
                     </View>
                     <View
                       style={[
@@ -442,6 +454,8 @@ const TicketWalletScreen = () => {
                             params: {
                               source: "wallet",
                               walletSource: item.source,
+                              walletStatus: item.walletStatus,
+                              cancellationReason: item.event.cancellationDisplayReason ?? (item.event.status === "cancelled" ? "Event cancelled" : ""),
                               purchaseCount: String(item.quantity),
                               paidQuantity: String(item.paidQuantity ?? item.quantity),
                               freeQuantity: String(item.freeQuantity ?? 0),
@@ -462,6 +476,12 @@ const TicketWalletScreen = () => {
                               eventEndDateTime: formatDateTime(item.event.endAt),
                               amount: String(item.totalAmount),
                               currency: item.currency,
+                              refundStatus: item.refund?.status ?? "",
+                              refundRequestedAmountMinor: item.refund ? String(item.refund.requestedAmountMinor) : "",
+                              refundCompletedAmountMinor: item.refund ? String(item.refund.completedAmountMinor) : "",
+                              refundUpdatedAt: item.refund?.updatedAt ?? "",
+                              refundCompletedAt: item.refund?.completedAt ?? "",
+                              refundError: item.refund?.safeLastErrorMessage ?? "",
                               currentShareId: item.currentShare?.id ?? "",
                               currentShareFriendName: item.currentShare?.friend?.name ?? "",
                               currentShareFriendId: item.currentShare?.friend?.id ?? "",
@@ -635,6 +655,11 @@ const styles = StyleSheet.create({
   hostText: {
     fontSize: 12,
     marginTop: 2,
+  },
+  refundStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
   },
   statusBadge: {
     paddingHorizontal: 10,

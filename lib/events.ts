@@ -8,6 +8,13 @@ export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
 export type EventPrivacy = "public" | "locked" | "private";
 export type EventTicketType = "free" | "pay";
 export type EventRewardType = "ticket" | "product";
+export type EventCancellationReasonType =
+  | "Schedule conflict"
+  | "Venue unavailable"
+  | "Safety concern"
+  | "Insufficient attendance"
+  | "Organizer issue"
+  | "Other";
 
 export type EventLocation = {
   searchLabel?: string | null;
@@ -208,6 +215,9 @@ export type EventResponse = {
   startedAt?: string | null;
   completedAt?: string | null;
   cancelledAt?: string | null;
+  cancellationReasonType?: EventCancellationReasonType | null;
+  cancellationCustomReason?: string | null;
+  cancellationDisplayReason?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -793,18 +803,11 @@ export const toggleEventSave = async (eventId: string): Promise<EventSaveSummary
   return summary;
 };
 
-export const startEvent = async (eventId: string): Promise<EventResponse> => {
-  const response = await api.post(`/events/${encodeURIComponent(eventId)}/start`);
-  return getEventFromResponse(response);
-};
-
-export const completeEvent = async (eventId: string): Promise<EventResponse> => {
-  const response = await api.post(`/events/${encodeURIComponent(eventId)}/complete`);
-  return getEventFromResponse(response);
-};
-
-export const cancelEvent = async (eventId: string): Promise<EventResponse> => {
-  const response = await api.post(`/events/${encodeURIComponent(eventId)}/cancel`);
+export const cancelEvent = async (
+  eventId: string,
+  payload: { reasonType: EventCancellationReasonType; customReason?: string | null },
+): Promise<EventResponse> => {
+  const response = await api.post(`/events/${encodeURIComponent(eventId)}/cancel`, payload);
   return getEventFromResponse(response);
 };
 

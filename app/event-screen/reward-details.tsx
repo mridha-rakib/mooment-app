@@ -25,6 +25,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  FlatList,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -38,9 +40,15 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
+import {
+  getRewardSelectorListMaxHeight,
+  getRewardSelectorSheetBottomPadding,
+  getRewardSelectorSheetMaxHeight,
+} from "@/lib/rewardSelectorModalLayout";
 const isRewardType = (value: unknown): value is EventRewardType =>
   value === "ticket" || value === "product";
 
@@ -150,6 +158,7 @@ export default function RewardDetailsScreen() {
     }
   };
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const eventId = typeof params.eventId === "string" ? params.eventId : null;
   const rewardId = typeof params.rewardId === "string" ? params.rewardId : null;
@@ -173,6 +182,7 @@ export default function RewardDetailsScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  const selectorListOffsetYRef = useRef(0);
   const fieldRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
   const activeFieldRef = useRef<string | null>(null);
   const scrollOffsetRef = useRef(0);
@@ -217,6 +227,25 @@ export default function RewardDetailsScreen() {
     () => selectorItems.find((item) => item.id === selectedTargetId) ?? null,
     [selectedTargetId, selectorItems],
   );
+  const selectorSheetBottomPadding = getRewardSelectorSheetBottomPadding(insets.bottom);
+  const selectorSheetMaxHeight = getRewardSelectorSheetMaxHeight({
+    windowHeight,
+    topInset: insets.top,
+    bottomInset: insets.bottom,
+  });
+  const selectorListMaxHeight = getRewardSelectorListMaxHeight({
+    sheetMaxHeight: selectorSheetMaxHeight,
+    bottomPadding: selectorSheetBottomPadding,
+  });
+  const {
+    sheetTranslateY: selectorSheetTranslateY,
+    dragPanHandlers: selectorDragPanHandlers,
+    contentPanHandlers: selectorContentPanHandlers,
+  } = useBottomSheetDragDismiss({
+    visible: selectorVisible,
+    onClose: () => setSelectorVisible(false),
+    canStartContentDrag: () => selectorListOffsetYRef.current <= 0,
+  });
 
   const selectedTicket = useMemo(
     () => (!isProductReward && selectedTargetId
@@ -259,6 +288,10 @@ export default function RewardDetailsScreen() {
     },
     [ensureFieldVisible],
   );
+
+  useEffect(() => {
+    selectorListOffsetYRef.current = 0;
+  }, [selectorVisible]);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -517,6 +550,64 @@ export default function RewardDetailsScreen() {
     }
   };
 
+  const handleSelectTarget = useCallback(
+    (item: SelectorItem) => {
+      setSelectedTargetId(item.id);
+      setSelectorVisible(false);
+
+      if (!isProductReward) {
+        const nextSalesEnd = getSalesEndDate(event, item.id);
+        if (nextSalesEnd) {
+          setExpiresAt((current) => clampDate(current, nextSalesEnd));
+        }
+      }
+    },
+    [event, isProductReward],
+  );
+
+  const renderSelectorItem = useCallback(
+    ({ item }: { item: SelectorItem }) => (
+      <TouchableOpacity
+        style={[styles.selectorOption, { borderBottomColor: colors.border }]}
+        activeOpacity={0.8}
+        onPress={() => handleSelectTarget(item)}
+      >
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.selectorImage} contentFit="cover" />
+        ) : (
+          <View style={[styles.selectorIcon, { backgroundColor: colors.background }]}>
+            <Ionicons
+              name={isProductReward ? "cube-outline" : "ticket-outline"}
+              size={20}
+              color={colors.textSecondary}
+            />
+          </View>
+        )}
+        <View style={styles.selectorOptionText}>
+          <Text style={[styles.selectorOptionTitle, { color: colors.text }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          {!!item.subtitle && (
+            <Text style={[styles.selectorOptionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.subtitle}
+            </Text>
+          )}
+        </View>
+        {selectedTargetId === item.id && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+      </TouchableOpacity>
+    ),
+    [
+      colors.background,
+      colors.border,
+      colors.primary,
+      colors.text,
+      colors.textSecondary,
+      handleSelectTarget,
+      isProductReward,
+      selectedTargetId,
+    ],
+  );
+
   const renderInput = (
     id: string,
     label: string,
@@ -749,63 +840,48 @@ export default function RewardDetailsScreen() {
       </KeyboardAvoidingView>
 
       <Modal visible={selectorVisible} transparent animationType="fade" onRequestClose={() => setSelectorVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSelectorVisible(false)}>
-          <View style={[styles.selectorSheet, { backgroundColor: colors.card }]}>
-            <Text style={[styles.selectorTitle, { color: colors.text }]}>
-              {isProductReward ? "Select Product" : "Select Ticket"}
-            </Text>
-            <ScrollView style={styles.selectorList} showsVerticalScrollIndicator={false}>
-              {selectorItems.length > 0 ? (
-                selectorItems.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.selectorOption, { borderBottomColor: colors.border }]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setSelectedTargetId(item.id);
-                      setSelectorVisible(false);
-
-                      // Clamp the expiry date to the new ticket's sales end date
-                      if (!isProductReward) {
-                        const nextSalesEnd = getSalesEndDate(event, item.id);
-                        if (nextSalesEnd) {
-                          setExpiresAt((current) => clampDate(current, nextSalesEnd));
-                        }
-                      }
-                    }}
-                  >
-                    {item.imageUri ? (
-                      <Image source={{ uri: item.imageUri }} style={styles.selectorImage} contentFit="cover" />
-                    ) : (
-                      <View style={[styles.selectorIcon, { backgroundColor: colors.background }]}>
-                        <Ionicons
-                          name={isProductReward ? "cube-outline" : "ticket-outline"}
-                          size={20}
-                          color={colors.textSecondary}
-                        />
-                      </View>
-                    )}
-                    <View style={styles.selectorOptionText}>
-                      <Text style={[styles.selectorOptionTitle, { color: colors.text }]} numberOfLines={1}>
-                        {item.title}
-                      </Text>
-                      {!!item.subtitle && (
-                        <Text style={[styles.selectorOptionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                          {item.subtitle}
-                        </Text>
-                      )}
-                    </View>
-                    {selectedTargetId === item.id && <Ionicons name="checkmark" size={20} color={colors.primary} />}
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <Text style={[styles.emptySelectorText, { color: colors.textSecondary }]}>
-                  {isProductReward ? "No products available." : "No tickets available."}
-                </Text>
-              )}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setSelectorVisible(false)} />
+          <Animated.View
+            style={[
+              styles.selectorSheet,
+              {
+                backgroundColor: colors.card,
+                maxHeight: selectorSheetMaxHeight,
+                paddingBottom: selectorSheetBottomPadding,
+                transform: [{ translateY: selectorSheetTranslateY }],
+              },
+            ]}
+            {...selectorContentPanHandlers}
+          >
+            <View {...selectorDragPanHandlers}>
+              <Text style={[styles.selectorTitle, { color: colors.text }]}>
+                {isProductReward ? "Select Product" : "Select Ticket"}
+              </Text>
+            </View>
+            {selectorItems.length > 0 ? (
+              <FlatList
+                data={selectorItems}
+                keyExtractor={(item) => item.id}
+                renderItem={renderSelectorItem}
+                style={[styles.selectorList, { maxHeight: selectorListMaxHeight }]}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                keyboardShouldPersistTaps="handled"
+                onScroll={(event) => {
+                  selectorListOffsetYRef.current = event.nativeEvent.contentOffset.y;
+                }}
+                onScrollBeginDrag={(event) => {
+                  selectorListOffsetYRef.current = event.nativeEvent.contentOffset.y;
+                }}
+              />
+            ) : (
+              <Text style={[styles.emptySelectorText, { color: colors.textSecondary }]}>
+                {isProductReward ? "No products available." : "No tickets available."}
+              </Text>
+            )}
+          </Animated.View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

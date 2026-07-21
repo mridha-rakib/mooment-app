@@ -149,6 +149,40 @@ const formatWalletAmount = (amount: string | string[] | undefined, currency: str
   }).format(parsedAmount);
 };
 
+const formatWalletMinorAmount = (amountMinor: string | string[] | undefined, currency: string | string[] | undefined) => {
+  const source = Array.isArray(amountMinor) ? amountMinor[0] : amountMinor;
+  const parsed = Number.parseInt(source ?? "", 10);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: getParamValue(currency, "usd").toUpperCase(),
+  }).format(parsed / 100);
+};
+
+const formatWalletRefundDate = (value: string | string[] | undefined) => {
+  const source = getParamValue(value, "");
+  if (!source) return "";
+
+  const date = new Date(source);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+};
+
+const getWalletRefundStatusLabel = (status: string) => {
+  if (status === "succeeded") return "Refund completed";
+  if (status === "failed_terminal" || status === "reconciliation_required") return "Refund needs attention";
+  return status ? "Refund processing" : "";
+};
+
 const TicketDetailScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -174,6 +208,14 @@ const TicketDetailScreen = () => {
     eventEndDateTime?: string;
     amount?: string;
     currency?: string;
+    walletStatus?: string;
+    cancellationReason?: string;
+    refundStatus?: string;
+    refundRequestedAmountMinor?: string;
+    refundCompletedAmountMinor?: string;
+    refundUpdatedAt?: string;
+    refundCompletedAt?: string;
+    refundError?: string;
     walletSource?: string;
     currentShareId?: string;
     currentShareFriendName?: string;
@@ -352,6 +394,14 @@ const TicketDetailScreen = () => {
   const walletEventEndDateTime = getParamValue(params.eventEndDateTime, "Date TBA");
   const walletAmount = formatWalletAmount(params.amount, params.currency);
   const walletSource = getParamValue(params.walletSource, "owned");
+  const walletStatusParam = getParamValue(params.walletStatus, "");
+  const walletCancellationReason = getParamValue(params.cancellationReason, "");
+  const walletRefundStatus = getWalletRefundStatusLabel(getParamValue(params.refundStatus, ""));
+  const walletRefundRequestedAmount = formatWalletMinorAmount(params.refundRequestedAmountMinor, params.currency);
+  const walletRefundCompletedAmount = formatWalletMinorAmount(params.refundCompletedAmountMinor, params.currency);
+  const walletRefundUpdatedAt = formatWalletRefundDate(params.refundUpdatedAt);
+  const walletRefundCompletedAt = formatWalletRefundDate(params.refundCompletedAt);
+  const walletRefundError = getParamValue(params.refundError, "");
   const initialWalletTicketPasses = useMemo<TicketWalletPass[]>(() => {
     const rawPasses = getParamValue(params.ticketPasses, "");
     const currentShareId = getParamValue(params.currentShareId, "");
@@ -425,9 +475,10 @@ const TicketDetailScreen = () => {
     () => (walletSource === "owned" ? walletTicketPasses.filter((pass) => !pass.currentShare) : walletTicketPasses),
     [walletSource, walletTicketPasses],
   );
+  const walletIsCancelled = walletStatusParam === "cancelled" || Boolean(walletRefundStatus);
   const walletActiveVisiblePassCount = walletVisibleTicketPasses.filter((pass) => pass.status !== "used").length;
-  const walletCanShare = walletSource === "owned" && walletActiveVisiblePassCount >= 2;
-  const walletCanShowQr = walletVisibleTicketPasses.length > 0;
+  const walletCanShare = !walletIsCancelled && walletSource === "owned" && walletActiveVisiblePassCount >= 2;
+  const walletCanShowQr = !walletIsCancelled && walletVisibleTicketPasses.length > 0;
   const selectedSharePass = walletTicketPasses[Math.min(selectedSharePassIndex, Math.max(0, walletTicketPasses.length - 1))] ?? null;
   const selectedShare = selectedSharePass?.currentShare ?? null;
   const hasAnySharedPass = walletTicketPasses.some((pass) => Boolean(pass.currentShare));
@@ -531,6 +582,17 @@ const TicketDetailScreen = () => {
       value: walletAmount,
       isPrice: true,
     },
+    ...(walletRefundStatus
+      ? [
+          { label: "Refund status", value: walletRefundStatus },
+          ...(walletCancellationReason ? [{ label: "Cancellation reason", value: walletCancellationReason }] : []),
+          ...(walletRefundRequestedAmount ? [{ label: "Refund requested", value: walletRefundRequestedAmount, isPrice: true }] : []),
+          ...(walletRefundCompletedAmount ? [{ label: "Refund completed", value: walletRefundCompletedAmount, isPrice: true }] : []),
+          ...(walletRefundUpdatedAt ? [{ label: "Refund updated", value: walletRefundUpdatedAt }] : []),
+          ...(walletRefundCompletedAt ? [{ label: "Refund completed on", value: walletRefundCompletedAt }] : []),
+          ...(walletRefundError ? [{ label: "Refund note", value: walletRefundError }] : []),
+        ]
+      : []),
   ];
 
   const loadFriends = async (search = friendSearch) => {

@@ -20,6 +20,7 @@ import ShareModal from "@/components/post/ShareModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import UserAvatar from "@/components/ui/UserAvatar";
 import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
+import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
 
 const timeAgo = (dateStr?: string | Date | null): string => {
   if (!dateStr) return "";
@@ -211,6 +212,8 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const [isLikePending, setIsLikePending] = useState(false);
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
+  const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
+  const [isCancellingEvent, setIsCancellingEvent] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -344,25 +347,23 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
 
   const handleCancelEvent = () => {
     setShowMoreMenu(false);
-    Alert.alert(
-      "Cancel Event",
-      "Are you sure you want to cancel this event? This cannot be undone.",
-      [
-        { text: "Keep Event", style: "cancel" },
-        {
-          text: "Cancel Event",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await cancelEvent(event.id);
-              onEventCancelled?.(event.id);
-            } catch (error) {
-              Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
-            }
-          },
-        },
-      ],
-    );
+    setCancelReasonVisible(true);
+  };
+
+  const submitEventCancellation = async (payload: Parameters<typeof cancelEvent>[1]) => {
+    if (isCancellingEvent) return;
+
+    setIsCancellingEvent(true);
+    try {
+      await cancelEvent(event.id, payload);
+      setCancelReasonVisible(false);
+      onEventCancelled?.(event.id);
+      Alert.alert("Event cancelled", "Refunds are being processed for attendees.");
+    } catch (error) {
+      Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      if (mountedRef.current) setIsCancellingEvent(false);
+    }
   };
 
   const handleSave = async () => {
@@ -703,6 +704,15 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         onBlock={!isOwnEvent && Boolean(hostId) ? handleBlock : undefined}
         onDelete={isOwnEvent ? handleCancelEvent : undefined}
         top={menuTop}
+      />
+
+      <EventCancellationReasonModal
+        visible={cancelReasonVisible}
+        pending={isCancellingEvent}
+        onClose={() => {
+          if (!isCancellingEvent) setCancelReasonVisible(false);
+        }}
+        onSubmit={submitEventCancellation}
       />
 
       <ReportModal

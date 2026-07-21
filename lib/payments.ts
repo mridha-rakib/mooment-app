@@ -94,6 +94,13 @@ export type CheckoutIntent = {
 export type TicketWalletStatus = "active" | "used" | "cancelled";
 export type TicketWalletSource = "owned" | "shared";
 export type TicketPassStatus = "active" | "used";
+export type CancellationRefundStatus =
+  | "pending"
+  | "processing"
+  | "succeeded"
+  | "failed_retryable"
+  | "failed_terminal"
+  | "reconciliation_required";
 
 export type TicketShare = {
   id: string;
@@ -152,6 +159,18 @@ export type TicketWalletItem = {
   currency: string;
   paymentStatus: CheckoutPaymentStatus;
   walletStatus: TicketWalletStatus;
+  refund?: {
+    id: string;
+    status: CancellationRefundStatus;
+    requestedAmountMinor: number;
+    completedAmountMinor: number;
+    remainingRefundableAmountMinor: number;
+    currency: string;
+    providerStatus?: string | null;
+    safeLastErrorMessage?: string | null;
+    updatedAt: string;
+    completedAt?: string | null;
+  } | null;
   purchasedAt?: string | null;
   ticketPasses?: TicketWalletPass[];
   currentShare?: TicketShare | null;
@@ -176,6 +195,7 @@ export type TicketWalletItem = {
       address?: string | null;
     } | null;
     status: string;
+    cancellationDisplayReason?: string | null;
     host?: {
       id: string;
       name: string;

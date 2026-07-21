@@ -5,6 +5,7 @@ import ChatTab from "@/components/eventTabs/ChatTab";
 // import ProductTab from "@/components/eventTabs/ProductTab";
 import HostEventWindowsTab from "@/components/eventTabs/HostEventWindowsTab";
 import AttendeeEventWindowsTab from "@/components/eventTabs/AttendeeEventWindowsTab";
+import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
 import BackButton from "@/components/ui/BackButton";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
@@ -13,7 +14,6 @@ import {
     acceptJoinRequest,
     cancelEvent,
     claimEventReward,
-    completeEvent,
     declineJoinRequest,
     deleteDraftReward,
     deleteDraftTicket,
@@ -23,7 +23,6 @@ import {
     getEventById,
     getJoinRequests,
     getMyEventRewardClaims,
-    startEvent,
     publishEvent as publishSavedEventDraft,
     submitJoinRequest,
     submitEventHostReview,
@@ -523,7 +522,6 @@ const EventScreen = () => {
   const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [accessSubTab, setAccessSubTab] = useState("Tickets");
-  const isEventStarted = event?.status === 'live';
   const isEventCompleted = event?.status === 'completed';
   const isEventCancelled = event?.status === 'cancelled';
   const [selectedReward, setSelectedReward] = useState<EventRewardPayload | null>(null);
@@ -558,6 +556,8 @@ const EventScreen = () => {
   const [reviewLiked, setReviewLiked] = useState<boolean | null>(null);
   const [reviewText, setReviewText] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
+  const [isCancellingEvent, setIsCancellingEvent] = useState(false);
 
   const eventId = useMemo(() => {
     const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
@@ -591,18 +591,13 @@ const EventScreen = () => {
     return () => clearTimeout(timeoutId);
   }, [currentTimeMs, eventStartMs]);
 
-  const showManualStartEventButton = Boolean(false);
-  const showManualEndEventButton = Boolean(false);
   const showCancelEvent = Boolean(
     isHostMode &&
     event?.status === "published" &&
     eventStartMs !== null &&
     currentTimeMs < eventStartMs,
   );
-  const showHostLifecycleFooter = Boolean(
-    showCancelEvent ||
-    (isEventStarted ? showManualEndEventButton : showManualStartEventButton),
-  );
+  const showHostLifecycleFooter = showCancelEvent;
   const hasValidEventWindowSchedule = Boolean(
     eventStartMs !== null && eventEndMs !== null && eventStartMs < eventEndMs,
   );
@@ -1196,99 +1191,24 @@ const EventScreen = () => {
       completedProfileTypes,
       updateProfile,
       router,
-      onReady: () => {
-        Alert.alert(
-          "Cancel Event",
-          "Are you sure you want to cancel this event? This action cannot be undone.",
-          [
-            { text: "No, Go Back", style: "cancel" },
-            {
-              text: "Yes, Cancel Event",
-              style: "destructive",
-              onPress: async () => {
-                try {
-                  const updated = await cancelEvent(event.id);
-                  mergeUpdatedEvent(updated);
-                } catch (error) {
-                  Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
-                }
-              },
-            },
-          ],
-        );
-      },
+      onReady: () => setCancelReasonVisible(true),
     });
   };
 
-  const handleStartEvent = () => {
-    if (!event || isDraftPreview || !isHostMode) {
-      return;
+  const submitEventCancellation = async (payload: Parameters<typeof cancelEvent>[1]) => {
+    if (!event || isCancellingEvent) return;
+
+    setIsCancellingEvent(true);
+    try {
+      const updated = await cancelEvent(event.id, payload);
+      mergeUpdatedEvent(updated);
+      setCancelReasonVisible(false);
+      Alert.alert("Event cancelled", "Refunds are being processed for attendees.");
+    } catch (error) {
+      Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsCancellingEvent(false);
     }
-
-    requireBusinessAccountForEvent({
-      user: currentUser,
-      completedProfileTypes,
-      updateProfile,
-      router,
-      onReady: () => {
-        Alert.alert(
-          "Start Event",
-          "Are you ready to start this event? Attendees will be notified.",
-          [
-            { text: "Not Yet", style: "cancel" },
-            {
-              text: "Start Now",
-              onPress: async () => {
-                try {
-                  const updated = await startEvent(event.id);
-                  mergeUpdatedEvent(updated);
-                  router.push({
-                    pathname: "/profile-screen/event-dashboard",
-                    params: { eventId: event.id, eventName: event.name ?? "Event" },
-                  });
-                } catch (error) {
-                  Alert.alert("Unable to start event", getAuthErrorMessage(error, "Please try again."));
-                }
-              },
-            },
-          ],
-        );
-      },
-    });
-  };
-
-  const handleEndEvent = () => {
-    if (!event || isDraftPreview || !isHostMode) {
-      return;
-    }
-
-    requireBusinessAccountForEvent({
-      user: currentUser,
-      completedProfileTypes,
-      updateProfile,
-      router,
-      onReady: () => {
-        Alert.alert(
-          "End Event",
-          "Mark this event as successfully completed? This action cannot be undone.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "End Event",
-              style: "destructive",
-              onPress: async () => {
-                try {
-                  const updated = await completeEvent(event.id);
-                  mergeUpdatedEvent(updated);
-                } catch (error) {
-                  Alert.alert("Unable to end event", getAuthErrorMessage(error, "Please try again."));
-                }
-              },
-            },
-          ],
-        );
-      },
-    });
   };
 
   const mergeUpdatedEvent = (updatedEvent: EventResponse) => {
@@ -2138,7 +2058,7 @@ const EventScreen = () => {
                 <Text style={styles.cancelEventBtnText}>Edit Event</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.startEventBtn, { opacity: isPublishingDraft ? 0.7 : 1 }]}
+                style={[styles.publishDraftBtn, { opacity: isPublishingDraft ? 0.7 : 1 }]}
                 activeOpacity={0.85}
                 onPress={handlePublishDraft}
                 disabled={isPublishingDraft}
@@ -2158,32 +2078,17 @@ const EventScreen = () => {
               <View style={styles.hostFooterBtns}>
                 {showCancelEvent && (
                   <TouchableOpacity
-                    style={styles.cancelEventBtn}
+                    style={[styles.cancelEventBtn, isCancellingEvent && { opacity: 0.7 }]}
                     activeOpacity={0.8}
                     onPress={handleCancelEvent}
+                    disabled={isCancellingEvent}
                   >
-                    <Feather name="x-circle" size={18} color="#D44343" />
-                    <Text style={styles.cancelEventBtnText}>Cancel Event</Text>
-                  </TouchableOpacity>
-                )}
-                {showManualEndEventButton && isEventStarted && (
-                  <TouchableOpacity
-                    style={styles.endEventBtn}
-                    activeOpacity={0.85}
-                    onPress={handleEndEvent}
-                  >
-                    <Feather name="check-circle" size={18} color="#FFFFFF" />
-                    <Text style={[styles.buyBtnText, { color: "#FFFFFF" }]}>End Event</Text>
-                  </TouchableOpacity>
-                )}
-                {showManualStartEventButton && !isEventStarted && (
-                  <TouchableOpacity
-                    style={styles.startEventBtn}
-                    activeOpacity={0.85}
-                    onPress={handleStartEvent}
-                  >
-                    <Feather name="play-circle" size={18} color="#111111" />
-                    <Text style={[styles.buyBtnText, { color: "#111111" }]}>Start The Event</Text>
+                    {isCancellingEvent ? (
+                      <ActivityIndicator color="#D44343" />
+                    ) : (
+                      <Feather name="x-circle" size={18} color="#D44343" />
+                    )}
+                    <Text style={styles.cancelEventBtnText}>{isCancellingEvent ? "Cancelling..." : "Cancel Event"}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -2647,6 +2552,15 @@ const EventScreen = () => {
         </KeyboardAvoidingView>
       </Modal>
 
+      <EventCancellationReasonModal
+        visible={cancelReasonVisible}
+        pending={isCancellingEvent}
+        onClose={() => {
+          if (!isCancellingEvent) setCancelReasonVisible(false);
+        }}
+        onSubmit={submitEventCancellation}
+      />
+
       <CommentsModal
         visible={showComments}
         onClose={() => setShowComments(false)}
@@ -2953,7 +2867,7 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     gap: 10,
   },
-  startEventBtn: {
+  publishDraftBtn: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
