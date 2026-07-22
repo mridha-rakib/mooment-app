@@ -44,6 +44,15 @@ export type ProfileFollowUserResponse = {
   isFollowing: boolean;
 };
 
+export type BlockedUserResponse = {
+  id: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
+  blockedAt: string;
+};
+
 export type UserReviewResponse = {
   id: string;
   author: {
@@ -73,6 +82,11 @@ export type UserResponse = {
   avatarUrl?: string | null;
   bio?: string | null;
   isFollowing?: boolean;
+  profileAccess?: "open" | "blocked";
+  viewerHasBlockedTarget?: boolean;
+  targetHasBlockedViewer?: boolean;
+  blockedTitle?: string;
+  blockedDescription?: string;
 };
 
 const parseFollowStatus = (payload: unknown, fallbackUserId: string): FollowStatusResponse => {
@@ -172,6 +186,24 @@ export const getUserFollowing = async (
 
   return {
     users: Array.isArray(users) ? (users as ProfileFollowUserResponse[]) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
+};
+
+export const getBlockedUsers = async (
+  page = 1,
+  limit = 30,
+): Promise<{ users: BlockedUserResponse[]; pagination?: PaginationMeta }> => {
+  const response = await api.get("/users/me/blocked-users", {
+    params: {
+      page,
+      limit,
+    },
+  });
+  const users = response.data?.data?.users;
+
+  return {
+    users: Array.isArray(users) ? (users as BlockedUserResponse[]) : [],
     pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
   };
 };

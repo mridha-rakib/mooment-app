@@ -1,8 +1,10 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { PostData } from "@/components/post/FeedPost";
 import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
+import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getProfileEvents, type ProfileEventGroups } from "@/lib/events";
@@ -66,6 +68,7 @@ export default function UserProfileScreen() {
   const [eventPages, setEventPages] = useState({ active: 1, past: 1 });
   const [hasMoreEvents, setHasMoreEvents] = useState({ active: false, past: false });
   const [isEventsLoadingMore, setIsEventsLoadingMore] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [profileUser, setProfileUser] = useState<UserProfileData>({
     id: userId || "unknown",
     name: params.name || FALLBACK_PROFILE_NAME,
@@ -93,17 +96,14 @@ export default function UserProfileScreen() {
 
   const loadProfile = useCallback(async () => {
     if (!userId || isOwnProfile) {
+      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
+
     try {
-      const [user, timeline, stats, activeEvents, pastEvents] = await Promise.all([
-        getUserById(userId),
-        getProfileTimeline(userId, { page: 1, limit: PAGE_SIZE }),
-        getUserProfileStats(userId),
-        getProfileEvents(userId, { filter: "active", page: 1, limit: PAGE_SIZE }),
-        getProfileEvents(userId, { filter: "past", page: 1, limit: PAGE_SIZE }),
-      ]);
+      const user = await getUserById(userId);
       const resolvedUserId = user.id ?? user._id ?? userId;
       let nextAvatar = params.avatar || null;
 
@@ -114,6 +114,39 @@ export default function UserProfileScreen() {
       }
 
       setAvatarUri(nextAvatar);
+
+      if (user.profileAccess === "blocked") {
+        setProfileUser({
+          id: resolvedUserId,
+          name: user.name?.trim() || params.name || FALLBACK_PROFILE_NAME,
+          handle: formatHandle(user.username, null),
+          avatar: nextAvatar,
+          bio: "",
+          accountType: user.accountType,
+          stats: EMPTY_STATS,
+          profileAccess: "blocked",
+          viewerHasBlockedTarget: Boolean(user.viewerHasBlockedTarget),
+          targetHasBlockedViewer: Boolean(user.targetHasBlockedViewer),
+          blockedTitle: user.blockedTitle,
+          blockedDescription: user.blockedDescription,
+        });
+        setPosts([]);
+        setReposts([]);
+        setProfileEvents(EMPTY_PROFILE_EVENTS);
+        setFeedPage(1);
+        setHasMoreFeed(false);
+        setEventPages({ active: 1, past: 1 });
+        setHasMoreEvents({ active: false, past: false });
+        return;
+      }
+
+      const [timeline, stats, activeEvents, pastEvents] = await Promise.all([
+        getProfileTimeline(userId, { page: 1, limit: PAGE_SIZE }),
+        getUserProfileStats(userId),
+        getProfileEvents(userId, { filter: "active", page: 1, limit: PAGE_SIZE }),
+        getProfileEvents(userId, { filter: "past", page: 1, limit: PAGE_SIZE }),
+      ]);
+
       setProfileUser({
         id: resolvedUserId,
         name: user.name?.trim() || params.name || FALLBACK_PROFILE_NAME,
@@ -122,6 +155,7 @@ export default function UserProfileScreen() {
         bio: user.bio?.trim() || DEFAULT_BIO,
         accountType: user.accountType,
         isFollowing: typeof user.isFollowing === "boolean" ? user.isFollowing : routeIsFollowing,
+        profileAccess: "open",
         stats: {
           events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
           reviews: stats.reviews,
@@ -143,6 +177,8 @@ export default function UserProfileScreen() {
       setReposts([]);
       setProfileEvents(EMPTY_PROFILE_EVENTS);
       Alert.alert("Unable to load profile", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsLoading(false);
     }
   }, [isOwnProfile, applyTimelineItems, params.avatar, params.name, routeIsFollowing, userId]);
 
@@ -185,9 +221,11 @@ export default function UserProfileScreen() {
       .finally(() => setIsEventsLoadingMore(false));
   }, [eventPages, hasMoreEvents, isEventsLoadingMore, userId]);
 
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
 
   const handleInteractionChange = useCallback((postId: string, summary: MomentInteractionSummary) => {
     setPosts((currentPosts) => currentPosts.map((post) => (
@@ -225,6 +263,14 @@ export default function UserProfileScreen() {
     return null;
   }
 
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }}>
+        <Spinner color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ProfileView
@@ -240,6 +286,7 @@ export default function UserProfileScreen() {
         isFeedLoadingMore={isFeedLoadingMore}
         onLoadMoreEvents={loadMoreEvents}
         isEventsLoadingMore={isEventsLoadingMore}
+        onUnblockProfile={loadProfile}
         onProfileEventsChange={(events) => {
           setProfileEvents(events);
           setProfileUser((current) => ({
