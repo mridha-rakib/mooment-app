@@ -206,6 +206,17 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* PRIVACY & SAFETY Section */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>PRIVACY & SAFETY</Text>
+        <View style={styles.sectionGroup}>
+          <SettingItem
+            icon="slash"
+            label="Blocked Accounts"
+            onPress={() => router.push('/profile-screen/blocked-accounts')}
+            colors={colors}
+          />
+        </View>
+
         {/* BUSINESS Section — only visible for business accounts */}
         {user?.accountType === 'business' && (
           <>

@@ -120,12 +120,25 @@ export default function LocationPickerScreen() {
   const initialLocation: LocationSearchResult = {
     ...DEFAULT_LOCATION,
     address: currentLocation.address || currentLocation.searchLabel || DEFAULT_LOCATION.address,
+    formattedAddress: currentLocation.formattedAddress ?? undefined,
+    addressLine1: currentLocation.addressLine1 ?? undefined,
+    neighborhood: currentLocation.neighborhood ?? undefined,
+    district: currentLocation.district ?? undefined,
+    city: currentLocation.city ?? undefined,
+    region: currentLocation.region ?? undefined,
+    regionCode: currentLocation.regionCode ?? undefined,
+    postalCode: currentLocation.postalCode ?? undefined,
+    country: currentLocation.country ?? undefined,
+    countryCode: currentLocation.countryCode ?? undefined,
     id: 'draft-location',
     isVenue: Boolean(currentLocation.venue),
     label: currentLocation.searchLabel || currentLocation.address || DEFAULT_LOCATION.label,
     latitude: typeof currentLocation.latitude === 'number' ? currentLocation.latitude : DEFAULT_LOCATION.latitude,
     longitude: typeof currentLocation.longitude === 'number' ? currentLocation.longitude : DEFAULT_LOCATION.longitude,
+    mapboxPlaceId: currentLocation.mapboxPlaceId ?? undefined,
     name: currentLocation.venue || currentLocation.searchLabel || currentLocation.address || DEFAULT_LOCATION.name,
+    providerId: currentLocation.mapboxPlaceId ?? undefined,
+    providerResultType: currentLocation.providerResultType ?? undefined,
   };
   const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult>(initialLocation);
   const selectedLocationRef = useRef<LocationSearchResult>(initialLocation);
@@ -396,12 +409,25 @@ export default function LocationPickerScreen() {
 
     setStepThree({
       location: {
-        ...currentLocation,
         address: location.address,
+        formattedAddress: location.formattedAddress ?? location.address ?? null,
+        addressLine1: location.addressLine1 ?? null,
+        neighborhood: location.neighborhood ?? null,
+        district: location.district ?? null,
+        city: location.city ?? null,
+        region: location.region ?? null,
+        regionCode: location.regionCode ?? null,
+        postalCode: location.postalCode ?? null,
+        country: location.country ?? null,
+        countryCode: location.countryCode ?? null,
         latitude: location.latitude,
         longitude: location.longitude,
+        mapboxPlaceId: location.mapboxPlaceId ?? location.providerId ?? null,
+        locationProvider: location.providerId ? 'mapbox' : null,
+        providerResultType: location.providerResultType ?? null,
         searchLabel: location.label,
         venue: location.isVenue ? location.name : currentLocation.venue,
+        additionalInfo: currentLocation.additionalInfo ?? null,
       },
     });
     router.back();

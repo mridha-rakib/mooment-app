@@ -20,8 +20,21 @@ export type EventLocation = {
   searchLabel?: string | null;
   venue?: string | null;
   address?: string | null;
+  formattedAddress?: string | null;
+  addressLine1?: string | null;
+  neighborhood?: string | null;
+  district?: string | null;
+  city?: string | null;
+  region?: string | null;
+  regionCode?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  mapboxPlaceId?: string | null;
+  locationProvider?: string | null;
+  providerResultType?: string | null;
   additionalInfo?: string | null;
 };
 

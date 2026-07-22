@@ -9,12 +9,18 @@ import type {
 import { createReport } from "@/lib/reports";
 import { getUserStories, type Story } from "@/lib/stories";
 import { createStoryViewerSession } from "@/lib/storyViewerSession";
+import { unblockUser } from "@/lib/users";
+import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   RefreshControl,
   StatusBar,
   StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -22,6 +28,7 @@ import ReportDetailsModal from "../modals/ReportDetailsModal";
 import ReportModal from "../modals/ReportModal";
 import CommentsModal from "../post/CommentsModal";
 import { PostData } from "../post/FeedPost";
+import MoreMenuModal from "../post/MoreMenuModal";
 import ShareModal from "../post/ShareModal";
 import AddProductModal from "./AddProductModal";
 import ProfileAvatarModal, { type ProfileAvatarModalMode } from "./ProfileAvatarModal";
@@ -31,6 +38,8 @@ import ProfileContent from "./ProfileContent";
 import ProfileHeader, { ProfileStats } from "./ProfileHeader";
 import ProfileMenuDrawer from "./ProfileMenuDrawer";
 import ProfileTabs, { ProfileTabType } from "./ProfileTabs";
+import BackButton from "../ui/BackButton";
+import UserAvatar from "../ui/UserAvatar";
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 const PROFILE_STORY_CACHE_TTL_MS = 15_000;
@@ -76,6 +85,11 @@ export type UserProfileData = {
   stats: ProfileStats;
   accountType?: "personal" | "business";
   isFollowing?: boolean;
+  profileAccess?: "open" | "blocked";
+  viewerHasBlockedTarget?: boolean;
+  targetHasBlockedViewer?: boolean;
+  blockedTitle?: string;
+  blockedDescription?: string;
 };
 
 type ProfileViewProps = {
@@ -98,6 +112,7 @@ type ProfileViewProps = {
   isFeedLoadingMore?: boolean;
   onLoadMoreEvents?: (filter: "active" | "past") => void;
   isEventsLoadingMore?: boolean;
+  onUnblockProfile?: () => Promise<void>;
 };
 
 export default function ProfileView({
@@ -117,12 +132,16 @@ export default function ProfileView({
   isFeedLoadingMore = false,
   onLoadMoreEvents,
   isEventsLoadingMore = false,
+  onUnblockProfile,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTabType>("feed");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [avatarModalMode, setAvatarModalMode] = useState<ProfileAvatarModalMode>(null);
+  const [isUnblockingProfile, setIsUnblockingProfile] = useState(false);
+  const [blockedMenuVisible, setBlockedMenuVisible] = useState(false);
+  const isBlockedProfile = user.profileAccess === "blocked";
   const profileStoriesRef = useRef<{
     userId: string;
     stories: Story[];
@@ -136,6 +155,10 @@ export default function ProfileView({
   viewedUserIdRef.current = user.id;
 
   const loadProfileStories = useCallback(() => {
+    if (isBlockedProfile) {
+      return Promise.resolve([] as Story[]);
+    }
+
     const cached = profileStoriesRef.current;
     if (
       cached?.userId === user.id &&
@@ -171,7 +194,7 @@ export default function ProfileView({
 
     profileStoriesRequestRef.current = { userId: requestedUserId, request };
     return request;
-  }, [user.id]);
+  }, [isBlockedProfile, user.id]);
 
   useEffect(() => {
     setAvatarModalMode(null);
@@ -181,6 +204,10 @@ export default function ProfileView({
   }, [loadProfileStories]);
 
   const handleAvatarPress = useCallback(async () => {
+    if (isBlockedProfile) {
+      return;
+    }
+
     if (avatarTapInFlightRef.current || avatarModalMode) {
       return;
     }
@@ -209,7 +236,7 @@ export default function ProfileView({
     } finally {
       avatarTapInFlightRef.current = false;
     }
-  }, [avatarModalMode, loadProfileStories, user.id]);
+  }, [avatarModalMode, isBlockedProfile, loadProfileStories, user.id]);
 
   const handleViewProfileStory = useCallback(() => {
     if (storyNavigationInFlightRef.current) {
@@ -377,6 +404,141 @@ export default function ProfileView({
       "Profile save is not supported by the API yet. No saved state was changed.",
     );
   }, []);
+
+  const handleUnblockProfile = useCallback(async () => {
+    if (!user.viewerHasBlockedTarget || isUnblockingProfile) {
+      return;
+    }
+
+    setIsUnblockingProfile(true);
+
+    try {
+      await unblockUser(user.id);
+      await onUnblockProfile?.();
+    } catch (error) {
+      Alert.alert(
+        "Unable to unblock",
+        getAuthErrorMessage(error, "Please try again."),
+      );
+    } finally {
+      setIsUnblockingProfile(false);
+    }
+  }, [isUnblockingProfile, onUnblockProfile, user.id, user.viewerHasBlockedTarget]);
+
+  const reportModals = (
+    <>
+      <ReportModal
+        visible={reportReasonVisible}
+        onClose={() => setReportReasonVisible(false)}
+        onReport={handleReportReason}
+      />
+      <ReportDetailsModal
+        visible={reportDetailsVisible}
+        onClose={handleReportDetailsClose}
+        onDone={handleSubmitProfileReport}
+        isSubmitting={isReportSubmitting}
+      />
+    </>
+  );
+
+  if (isBlockedProfile) {
+    const blockedTitle = user.viewerHasBlockedTarget
+      ? "You blocked this account"
+      : (user.blockedTitle ?? "This account isn't available");
+    const blockedDescription = user.viewerHasBlockedTarget
+      ? "Unblock to view this profile, posts, and interact again."
+      : (user.blockedDescription ?? "You can't view this profile or interact with this account.");
+
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <View style={styles.blockedHeader}>
+          <BackButton size={20} style={styles.blockedHeaderButton} />
+          {!isOwnProfile ? (
+            <TouchableOpacity
+              style={styles.blockedHeaderButton}
+              activeOpacity={0.8}
+              onPress={() => setBlockedMenuVisible(true)}
+            >
+              <Feather name="more-horizontal" size={20} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.blockedHeaderButton} />
+          )}
+        </View>
+
+        <View style={styles.blockedIdentityRow}>
+          <View style={[styles.blockedAvatarBorder, { borderColor: colors.primary }]}>
+            <UserAvatar
+              uri={user.avatar}
+              name={user.name}
+              size={80}
+              style={styles.blockedAvatar}
+              iconSize={36}
+            />
+          </View>
+          <View style={styles.blockedIdentityText}>
+            <Text style={[styles.blockedName, { color: colors.text }]} numberOfLines={1}>
+              {user.name}
+            </Text>
+            <Text style={[styles.blockedHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {user.handle}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.blockedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.blockedIconCircle}>
+            <Feather name="slash" size={48} color="#AC86D4" />
+          </View>
+          <Text style={[styles.blockedCardTitle, { color: colors.text }]}>
+            {blockedTitle}
+          </Text>
+          <Text style={[styles.blockedCardDescription, { color: colors.textSecondary }]}>
+            {blockedDescription}
+          </Text>
+          {user.viewerHasBlockedTarget ? (
+            <TouchableOpacity
+              style={[styles.blockedUnblockButton, { borderColor: "#AC86D4" }]}
+              activeOpacity={0.85}
+              disabled={isUnblockingProfile}
+              onPress={handleUnblockProfile}
+            >
+              {isUnblockingProfile ? (
+                <ActivityIndicator size="small" color="#AC86D4" />
+              ) : (
+                <Text style={styles.blockedUnblockText}>Unblock</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <View style={styles.blockedUnavailable}>
+          <View style={[styles.blockedLockCircle, { backgroundColor: colors.card }]}>
+            <Feather name="lock" size={22} color={colors.textSecondary} />
+          </View>
+          <Text style={[styles.blockedUnavailableTitle, { color: colors.text }]}>
+            {"This content isn't available"}
+          </Text>
+          <Text style={[styles.blockedUnavailableText, { color: colors.textSecondary }]}>
+            {user.viewerHasBlockedTarget
+              ? "Unblock to see this profile and its content."
+              : "This profile and its content are unavailable."}
+          </Text>
+        </View>
+
+        <MoreMenuModal
+          visible={blockedMenuVisible}
+          onClose={() => setBlockedMenuVisible(false)}
+          showDelete={false}
+          onReport={handleReportPress}
+          onSave={handleSavePress}
+          top={88}
+        />
+        {reportModals}
+      </SafeAreaView>
+    );
+  }
 
   const listHeader = (
     <>
@@ -561,17 +723,7 @@ export default function ProfileView({
         onViewProfilePicture={() => setAvatarModalMode("preview")}
       />
 
-      <ReportModal
-        visible={reportReasonVisible}
-        onClose={() => setReportReasonVisible(false)}
-        onReport={handleReportReason}
-      />
-      <ReportDetailsModal
-        visible={reportDetailsVisible}
-        onClose={handleReportDetailsClose}
-        onDone={handleSubmitProfileReport}
-        isSubmitting={isReportSubmitting}
-      />
+      {reportModals}
     </SafeAreaView>
   );
 }
@@ -579,5 +731,127 @@ export default function ProfileView({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
+  },
+  blockedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  blockedHeaderButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  blockedIdentityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    paddingHorizontal: 16,
+    paddingTop: 26,
+    paddingBottom: 28,
+  },
+  blockedAvatarBorder: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blockedAvatar: {
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  blockedIdentityText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  blockedName: {
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 28,
+  },
+  blockedHandle: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  blockedCard: {
+    marginHorizontal: 16,
+    minHeight: 296,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    paddingVertical: 28,
+  },
+  blockedIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(172,134,212,0.10)",
+    marginBottom: 18,
+  },
+  blockedCardTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    lineHeight: 26,
+    textAlign: "center",
+  },
+  blockedCardDescription: {
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: "center",
+    marginTop: 10,
+    maxWidth: 250,
+  },
+  blockedUnblockButton: {
+    minWidth: 160,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 24,
+  },
+  blockedUnblockText: {
+    color: "#AC86D4",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  blockedUnavailable: {
+    alignItems: "center",
+    paddingHorizontal: 28,
+    paddingTop: 44,
+  },
+  blockedLockCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  blockedUnavailableTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  blockedUnavailableText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: 6,
   },
 });

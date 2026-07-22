@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StatusBar,
@@ -19,8 +20,7 @@ import {
   CheckoutFooter,
 } from "@/components/event/checkout";
 import { useTheme } from "@/hooks/useTheme";
-import { createCheckoutIntent, emitTicketWalletChanged, type CheckoutOrder } from "@/lib/payments";
-import { claimEventReward } from "@/lib/events";
+import { createCheckoutIntent, emitTicketWalletChanged, getCheckoutQuote, type CheckoutOrder, type CheckoutQuote } from "@/lib/payments";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
 
 const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
@@ -30,32 +30,23 @@ const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const parsePrice = (value: string | string[] | undefined) => {
-  const source = Array.isArray(value) ? value[0] : value;
-  const parsed = Number.parseFloat(source ?? "");
-
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-};
-
 const getParam = (value: string | string[] | undefined, fallback: string) => {
   const source = Array.isArray(value) ? value[0] : value;
 
   return source?.trim() || fallback;
 };
 
-const BUYER_FEE_STRIPE = 0.10;
-
-const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number, currency = "usd") => {
   if (value <= 0) {
     return "$0";
   }
 
-  return `$${value.toLocaleString("en-US", {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
-  })}`;
+  }).format(value);
 };
 
 const EventCheckoutScreen = () => {
@@ -81,10 +72,12 @@ const EventCheckoutScreen = () => {
   const [payWith, setPayWith] = useState("Card");
   const [agreed, setAgreed] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(true);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const eventId = typeof params.eventId === "string" ? params.eventId : "";
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : "";
-  const rewardId = typeof params.rewardId === "string" ? params.rewardId : "";
   const eventName = getParam(params.eventName, "Event");
   const eventDateTime = getParam(params.eventDateTime, "Date TBA");
   const eventDateDisplay = getParam(params.eventDateDisplay, eventDateTime);
@@ -93,27 +86,84 @@ const EventCheckoutScreen = () => {
   const venue = getParam(params.venue, "");
   const address = getParam(params.address, "");
   const quantity = parsePositiveInteger(params.quantity);
-  const rewardBuyQuantity = parsePositiveInteger(params.rewardBuyQuantity, 0);
-  const rewardFreeQuantity = parsePositiveInteger(params.rewardFreeQuantity, 0);
-  const previewFreeQuantity =
-    rewardBuyQuantity > 0 && rewardFreeQuantity > 0
-      ? Math.floor(quantity / rewardBuyQuantity) * rewardFreeQuantity
-      : 0;
-  const ticketPrice = parsePrice(params.ticketPrice);
-  const isFreeTicket = params.ticketType === "free" || ticketPrice <= 0;
-  const subtotalValue = isFreeTicket ? 0 : roundCurrency(ticketPrice * quantity);
-  const feeValue = isFreeTicket ? 0 : roundCurrency(subtotalValue * BUYER_FEE_STRIPE);
-  const totalValue = isFreeTicket ? 0 : roundCurrency(subtotalValue + feeValue);
-  const subtotal = isFreeTicket ? "Free" : formatCurrency(subtotalValue);
-  const fee = isFreeTicket ? "$0" : formatCurrency(feeValue);
-  const total = isFreeTicket ? "Free" : formatCurrency(totalValue);
+  const subtotal = quote ? (quote.subtotalAmount <= 0 ? "Free" : formatCurrency(quote.subtotalAmount, quote.currency)) : "";
+  const fee = quote ? formatCurrency(quote.platformFeeAmount, quote.currency) : "";
+  const tax = quote ? formatCurrency(quote.taxAmount, quote.currency) : "";
+  const total = quote ? (quote.totalAmount <= 0 ? "Free" : formatCurrency(quote.totalAmount, quote.currency)) : "";
+  const ticketLineItem = quote?.lineItems.find(
+    (item) => item.itemType === "ticket" && item.itemId === ticketId,
+  );
+  const quoteFreeQuantity = ticketLineItem?.freeQuantity ?? 0;
 
-  const orderItems = [
-    { name: `${ticketName} paid x ${quantity}`, price: subtotal },
-    ...(previewFreeQuantity > 0
-      ? [{ name: `${ticketName} rewarded x ${previewFreeQuantity}`, price: "Free" }]
-      : []),
-  ];
+  const orderItems = useMemo(() => {
+    if (isQuoteLoading) {
+      return [{ name: "Loading order", price: "" }];
+    }
+
+    if (!quote) {
+      return [{ name: "Quote unavailable", price: "" }];
+    }
+
+    return quote.lineItems.flatMap((item) => {
+      const paidQuantity = item.paidQuantity ?? item.quantity;
+      const freeQuantity = item.freeQuantity ?? 0;
+      const rows = [{
+        name: `${item.name} paid x ${paidQuantity}`,
+        price: item.totalAmount <= 0 ? "Free" : formatCurrency(item.totalAmount, quote.currency),
+      }];
+
+      if (freeQuantity > 0) {
+        rows.push({ name: `${item.name} rewarded x ${freeQuantity}`, price: "Free" });
+      }
+
+      return rows;
+    });
+  }, [isQuoteLoading, quote]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadQuote = async () => {
+      if (!eventId || !ticketId) {
+        setIsQuoteLoading(false);
+        setQuoteError("This ticket checkout is missing event details.");
+        return;
+      }
+
+      setIsQuoteLoading(true);
+      setQuoteError(null);
+
+      try {
+        const nextQuote = await getCheckoutQuote({
+          kind: "ticket",
+          paymentMethod: "card",
+          eventId,
+          ticketId,
+          quantity,
+          anonymous: false,
+        });
+
+        if (!cancelled) {
+          setQuote(nextQuote);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setQuote(null);
+          setQuoteError(error instanceof Error ? error.message : "Unable to load checkout quote.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsQuoteLoading(false);
+        }
+      }
+    };
+
+    void loadQuote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, ticketId, quantity]);
 
   const handleContinue = async () => {
     if (!agreed) {
@@ -126,12 +176,17 @@ const EventCheckoutScreen = () => {
       return;
     }
 
+    if (!quote) {
+      Alert.alert("Quote unavailable", quoteError ?? "Please wait for the checkout quote to load.");
+      return;
+    }
+
     setIsPaying(true);
 
     try {
       let order: CheckoutOrder;
 
-      if (isFreeTicket) {
+      if (quote.totalAmount <= 0) {
         const checkout = await createCheckoutIntent({
           kind: "ticket",
           paymentMethod: "card",
@@ -153,22 +208,33 @@ const EventCheckoutScreen = () => {
             anonymous: false,
             acceptedTerms: agreed,
           },
-          { isDark },
+          {
+            isDark,
+            onCheckoutCreated: (checkout) => {
+              setQuote({
+                currency: checkout.order.currency,
+                subtotalAmount: checkout.order.subtotalAmount,
+                platformFeeAmount: checkout.order.platformFeeAmount,
+                taxAmount: checkout.order.taxAmount,
+                discountAmount: checkout.order.discountAmount ?? 0,
+                totalAmount: checkout.order.totalAmount,
+                taxSnapshot: checkout.order.taxSnapshot ?? quote.taxSnapshot,
+                policySnapshot: checkout.order.policySnapshot ?? quote.policySnapshot,
+                lineItems: checkout.order.lineItems,
+              });
+            },
+          },
         );
 
         if (stripeResult === null) {
-          // User dismissed the PaymentSheet — stay on checkout screen, no error shown
+          // User dismissed the PaymentSheet - stay on checkout screen, no error shown
           return;
         }
 
         order = stripeResult;
       }
 
-      if (rewardId) {
-        await claimEventReward(eventId, rewardId).catch(() => {});
-      }
-
-      if (isFreeTicket) {
+      if (order.totalAmount <= 0) {
         emitTicketWalletChanged();
       }
 
@@ -176,35 +242,16 @@ const EventCheckoutScreen = () => {
         (item) => item.itemType === "ticket" && item.itemId === ticketId,
       );
       const paidQuantity = ticketLineItem?.paidQuantity ?? ticketLineItem?.quantity ?? quantity;
-      const freeQuantity = Math.max(ticketLineItem?.freeQuantity ?? 0, previewFreeQuantity);
+      const freeQuantity = ticketLineItem?.freeQuantity ?? 0;
       const totalQuantity = Math.max(ticketLineItem?.totalQuantity ?? 0, paidQuantity + freeQuantity);
 
       router.replace({
-        pathname: "/event-screen/payment-success",
-        params: {
-          orderId: order.id,
-          eventId,
-          ticketId,
-          ticketName,
-          eventName,
-          eventDateDisplay,
-          hostName,
-          venue,
-          address,
-          quantity: String(totalQuantity),
-          paidQuantity: String(paidQuantity),
-          freeQuantity: String(freeQuantity),
-          totalQuantity: String(totalQuantity),
-          amount: isFreeTicket ? "0" : String(order.totalAmount),
-          currency: order.currency,
-          createdAt: order.createdAt,
-          ticketPasses: JSON.stringify(order.ticketPasses),
-          ...(isFreeTicket ? { isFree: "true" } : {}),
-        },
+        pathname: "/event-screen/event",
+        params: { eventId },
       });
     } catch (error) {
       Alert.alert(
-        isFreeTicket ? "Unable to claim ticket" : "Payment failed",
+        quote.totalAmount <= 0 ? "Unable to claim ticket" : "Payment failed",
         error instanceof Error ? error.message : "Please try again.",
       );
     } finally {
@@ -236,11 +283,18 @@ const EventCheckoutScreen = () => {
         <OrderSummary
           items={orderItems}
           subtotal={subtotal}
-          reward={previewFreeQuantity > 0 ? `${previewFreeQuantity} free` : "$0"}
+          reward={quoteFreeQuantity > 0 ? `${quoteFreeQuantity} free` : "$0"}
           fee={fee}
-          tax="$0"
+          tax={tax}
           total={total}
         />
+        {isQuoteLoading ? (
+          <View style={styles.quoteStatus}>
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+          </View>
+        ) : quoteError ? (
+          <Text style={[styles.quoteError, { color: "#E75737" }]}>{quoteError}</Text>
+        ) : null}
 
         <View style={styles.noticeCard}>
           <Ionicons name="information-circle-outline" size={20} color="#E75737" />
@@ -261,7 +315,7 @@ const EventCheckoutScreen = () => {
         <CheckoutFooter 
           buttonText="Continue to payment"
           onPress={handleContinue}
-          disabled={!agreed || isPaying}
+          disabled={!agreed || isPaying || isQuoteLoading || !quote}
           loading={isPaying}
         />
       </View>
@@ -302,5 +356,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     lineHeight: 18,
+  },
+  quoteStatus: {
+    alignItems: "center",
+    marginBottom: 12,
+    minHeight: 20,
+  },
+  quoteError: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+    marginBottom: 12,
   },
 });

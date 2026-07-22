@@ -10,11 +10,18 @@ export type LocationSearchResult = {
   isVenue: boolean;
   matchLabel?: string;
   providerId?: string;
+  mapboxPlaceId?: string;
+  formattedAddress?: string;
+  addressLine1?: string;
+  neighborhood?: string;
+  district?: string;
   country?: string;
   countryCode?: string;
   region?: string;
+  regionCode?: string;
   city?: string;
   postalCode?: string;
+  providerResultType?: string;
   providerOrder?: number;
   distanceKm?: number;
 };
@@ -72,8 +79,15 @@ type MapboxFeature = {
       locality?: {
         name?: string;
       };
+      neighborhood?: {
+        name?: string;
+      };
+      district?: {
+        name?: string;
+      };
       region?: {
         name?: string;
+        region_code?: string;
       };
       postcode?: {
         name?: string;
@@ -345,8 +359,19 @@ const getFeaturePlaceName = (feature: MapboxFeature) =>
   feature.context?.find((item) => item.id?.startsWith("place.") || item.id?.startsWith("locality."))?.text ||
   "";
 
+const getFeatureNeighborhood = (feature: MapboxFeature) =>
+  feature.properties?.context?.neighborhood?.name || getFeatureContextValue(feature, "neighborhood.") || "";
+
+const getFeatureDistrict = (feature: MapboxFeature) =>
+  feature.properties?.context?.district?.name || getFeatureContextValue(feature, "district.") || "";
+
 const getFeatureRegion = (feature: MapboxFeature) =>
   feature.properties?.context?.region?.name || getFeatureContextValue(feature, "region.") || "";
+
+const getFeatureRegionCode = (feature: MapboxFeature) =>
+  feature.properties?.context?.region?.region_code ||
+  feature.context?.find((item) => item.id?.startsWith("region."))?.short_code ||
+  "";
 
 const getFeaturePostalCode = (feature: MapboxFeature) =>
   feature.properties?.context?.postcode?.name || getFeatureContextValue(feature, "postcode.") || "";
@@ -390,24 +415,35 @@ const toLocationResult = (
   const country = feature.properties?.context?.country?.name || getFeatureContextValue(feature, "country.") || "";
   const countryCode = getFeatureCountryCode(feature) || undefined;
   const city = getFeaturePlaceName(feature);
+  const neighborhood = getFeatureNeighborhood(feature);
+  const district = getFeatureDistrict(feature);
   const region = getFeatureRegion(feature);
+  const regionCode = getFeatureRegionCode(feature);
   const postalCode = getFeaturePostalCode(feature);
+  const providerId = feature.id ?? feature.properties?.mapbox_id;
 
   return {
     address,
-    id: feature.id ?? feature.properties?.mapbox_id ?? fallbackId,
+    formattedAddress: rawAddress || label || undefined,
+    addressLine1: cleanDisplayText(feature.properties?.address) || undefined,
+    id: providerId ?? fallbackId,
     isVenue,
     label,
     latitude,
     longitude,
     matchLabel: isVenue ? toTitleCase(category) || "Venue" : getFeaturePlaceName(feature) || undefined,
     name,
-    providerId: feature.id ?? feature.properties?.mapbox_id,
+    providerId,
+    mapboxPlaceId: providerId,
+    neighborhood: neighborhood || undefined,
+    district: district || undefined,
     country: country || undefined,
     countryCode,
     region: region || undefined,
+    regionCode: regionCode || undefined,
     city: city || undefined,
     postalCode: postalCode || undefined,
+    providerResultType: featureType || undefined,
     providerOrder,
   };
 };

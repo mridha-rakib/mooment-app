@@ -45,7 +45,7 @@ const OrderSummary = ({ items, subtotal, reward, fee, tax, total }: OrderSummary
           <Text style={[styles.value, { color: colors.text }]}>{fee}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Tax 5%</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Tax</Text>
           <Text style={[styles.value, { color: colors.text }]}>{tax}</Text>
         </View>
 

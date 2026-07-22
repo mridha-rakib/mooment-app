@@ -34,7 +34,7 @@ const loadStripeSdk = async () => {
 
 export const startStripeCheckout = async (
   payload: CreateCheckoutIntentPayload,
-  options?: { isDark?: boolean },
+  options?: { isDark?: boolean; onCheckoutCreated?: (checkout: Awaited<ReturnType<typeof createCheckoutIntent>>) => void },
 ): Promise<CheckoutOrder | null> => {
   if (payload.paymentMethod === "apple_pay" && Platform.OS !== "ios") {
     throw new Error("Apple Pay is only available on iOS devices.");
@@ -46,6 +46,7 @@ export const startStripeCheckout = async (
 
   const { initPaymentSheet, initStripe, presentPaymentSheet } = await loadStripeSdk();
   const checkout = await createCheckoutIntent(payload);
+  options?.onCheckoutCreated?.(checkout);
 
   if (!checkout.publishableKey || !checkout.paymentIntentClientSecret) {
     throw new Error("Stripe checkout was not initialized by the server.");

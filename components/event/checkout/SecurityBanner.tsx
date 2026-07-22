@@ -10,7 +10,7 @@ const SecurityBanner = () => {
     <View style={[styles.container, { backgroundColor: colors.success + '0D' }]}>
       <Ionicons name="shield-checkmark" size={20} color={colors.success} />
       <Text style={[styles.text, { color: colors.success }]}>
-        Payment held securely until event completes. Released 48hrs after event.
+        Payment held securely until event completes. Released 72hrs after event.
       </Text>
     </View>
   );

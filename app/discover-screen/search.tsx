@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Image, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { getMapEvents, type EventResponse } from '@/lib/events';
 import { getMyProducts, type Product } from '@/lib/products';
@@ -125,41 +126,43 @@ export default function SearchScreen() {
   const query = searchQuery.toLowerCase().trim();
   const hashtagQuery = normalizeHashtag(query);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadSearchData = useCallback(async (isMounted: () => boolean) => {
+    setIsLoading(true);
 
-    const loadSearchData = async () => {
-      setIsLoading(true);
+    const [peopleResult, eventsResult, productsResult] = await Promise.allSettled([
+      getSuggestedUsers(SEARCH_RESULT_LIMIT),
+      getMapEvents({ limit: SEARCH_RESULT_LIMIT }),
+      getMyProducts(),
+    ]);
 
-      const [peopleResult, eventsResult, productsResult] = await Promise.allSettled([
-        getSuggestedUsers(SEARCH_RESULT_LIMIT),
-        getMapEvents({ limit: SEARCH_RESULT_LIMIT }),
-        getMyProducts(),
-      ]);
+    if (!isMounted()) {
+      return;
+    }
 
-      if (!isMounted) {
-        return;
-      }
-
-      setPeople(peopleResult.status === 'fulfilled'
-        ? peopleResult.value.map(user => ({
-            id: user.id,
-            name: user.name,
-            handle: user.username ? `@${user.username}` : '@xenog',
-            avatarUrl: user.avatarUrl,
-          }))
-        : []);
-      setEvents(eventsResult.status === 'fulfilled' ? eventsResult.value.map(toSearchEvent) : []);
-      setProducts(productsResult.status === 'fulfilled' ? productsResult.value.map(toSearchProduct) : []);
-      setIsLoading(false);
-    };
-
-    void loadSearchData();
-
-    return () => {
-      isMounted = false;
-    };
+    setPeople(peopleResult.status === 'fulfilled'
+      ? peopleResult.value.map(user => ({
+          id: user.id,
+          name: user.name,
+          handle: user.username ? `@${user.username}` : '@xenog',
+          avatarUrl: user.avatarUrl,
+        }))
+      : []);
+    setEvents(eventsResult.status === 'fulfilled' ? eventsResult.value.map(toSearchEvent) : []);
+    setProducts(productsResult.status === 'fulfilled' ? productsResult.value.map(toSearchProduct) : []);
+    setIsLoading(false);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+
+      void loadSearchData(() => isMounted);
+
+      return () => {
+        isMounted = false;
+      };
+    }, [loadSearchData]),
+  );
 
   const filteredPeople = useMemo(
     () => people.filter(

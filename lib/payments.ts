@@ -22,7 +22,24 @@ export type CheckoutOrder = {
   subtotalAmount: number;
   platformFeeAmount: number;
   taxAmount: number;
+  discountAmount?: number;
   totalAmount: number;
+  taxSnapshot?: {
+    amount: number;
+    status: string;
+    provider: string;
+    calculationId?: string | null;
+    transactionId?: string | null;
+    failureCode?: string | null;
+    failureReason?: string | null;
+    jurisdictionSummary?: string | null;
+    calculatedAt: string;
+  } | null;
+  policySnapshot?: {
+    termsVersion: string;
+    refundEscrowVersion: string;
+    acceptedAt: string;
+  } | null;
   lineItems: {
     itemType: "ticket" | "product" | "custom";
     itemId?: string | null;
@@ -82,6 +99,11 @@ export type CreateCheckoutIntentPayload =
   | CreateTicketCheckoutIntentPayload
   | CreateProductCheckoutIntentPayload
   | CreateCustomCheckoutIntentPayload;
+
+export type CheckoutQuotePayload =
+  | Omit<CreateTicketCheckoutIntentPayload, "acceptedTerms">
+  | Omit<CreateProductCheckoutIntentPayload, "acceptedTerms">
+  | Omit<CreateCustomCheckoutIntentPayload, "acceptedTerms">;
 
 export type CheckoutIntent = {
   order: CheckoutOrder;
@@ -214,6 +236,18 @@ export type TicketWalletItem = {
   };
 };
 
+export type CheckoutQuote = {
+  currency: string;
+  subtotalAmount: number;
+  platformFeeAmount: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  taxSnapshot: NonNullable<CheckoutOrder["taxSnapshot"]>;
+  policySnapshot: NonNullable<CheckoutOrder["policySnapshot"]>;
+  lineItems: CheckoutOrder["lineItems"];
+};
+
 export type TicketWalletChangedEvent = {
   activeTicketCount?: number;
 };
@@ -311,6 +345,19 @@ export type TicketStatEntry = {
   sold: number;
   available: number;
   capacity: number;
+};
+
+export const getCheckoutQuote = async (
+  payload: CheckoutQuotePayload,
+): Promise<CheckoutQuote> => {
+  const response = await api.post("/payments/checkout-quotes", payload);
+  const quote = response.data?.data?.quote as CheckoutQuote | undefined;
+
+  if (!quote?.lineItems || typeof quote.totalAmount !== "number") {
+    throw new Error("The checkout quote response was incomplete.");
+  }
+
+  return quote;
 };
 
 export type PaginationMeta = {
