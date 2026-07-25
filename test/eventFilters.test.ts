@@ -18,11 +18,84 @@ import {
   getMapViewportRequestKey,
   type EventMapViewport,
 } from "../lib/mapEventRequests";
+import { getCategoryColor, getCategoryMarkerColor } from "../constants/categoryColors";
+import { EVENT_CATEGORIES, EVENT_CATEGORY_METADATA, isEventCategory } from "../constants/eventCategories";
 import {
   getEventCategoryFeedDestination,
   getEventCategoryMapDestination,
   normalizeEventDetailsSource,
 } from "../lib/eventCategoryNavigation";
+
+const FINALIZED_CATEGORIES = [
+  ["Parties & Celebrations", "#FF1493", "🎉"],
+  ["Nightlife & Clubs", "#8A2BE2", "🍻"],
+  ["Social Meetups", "#00F0FF", "💬"],
+  ["College & Campus", "#1F51FF", "🎓"],
+  ["Live Music & Concerts", "#FF6B00", "🎸"],
+  ["Entertainment & Shows", "#E50914", "🎭"],
+  ["Arts & Culture", "#DDA0DD", "🎨"],
+  ["Community & Movements", "#580F24", "✊"],
+  ["Food & Drinks", "#FFC700", "🍹"],
+  ["Markets & Shopping", "#FF7F50", "🛍️"],
+  ["Sports & Outdoors", "#00A86B", "🏃"],
+  ["Games & Recreation", "#39FF14", "🎮"],
+  ["Workshops & Classes", "#8B5A2B", "🧶"],
+  ["Conferences & Talks", "#708090", "🎤"],
+  ["Family & Gathering", "#AAF0D1", "🏡"],
+  ["Wellness & Spirituality", "#C0C0C0", "🧘"],
+  ["Travel & Experiences", "#008080", "✈️"],
+  ["Pop-Ups & Exclusives", "#D4AF37", "✨"],
+] as const;
+
+const LEGACY_CATEGORIES = [
+  "Music",
+  "Nightlife",
+  "Shows & Entertainment",
+  "Dining Experiences",
+  "Food Trucks",
+  "Social Pop-ups",
+  "Sports & Outdoor",
+  "Games & Leisure",
+  "Learning & Classes",
+  "Markets & Trade",
+  "Street Performances",
+  "Religious & Spiritual",
+  "College Events",
+  "Premium Experiences",
+  "Family & Community",
+  "Other",
+] as const;
+
+test("mobile canonical event taxonomy matches the finalized PDF order and colors", () => {
+  assert.equal(EVENT_CATEGORY_METADATA.length, 18);
+  assert.deepEqual(EVENT_CATEGORIES, FINALIZED_CATEGORIES.map(([name]) => name));
+  assert.deepEqual(EVENT_CATEGORY_METADATA.map((category) => category.order), Array.from({ length: 18 }, (_, index) => index + 1));
+  assert.deepEqual(EVENT_CATEGORY_METADATA.map((category) => category.hexColor), FINALIZED_CATEGORIES.map(([, hex]) => hex));
+  assert.deepEqual(EVENT_CATEGORY_METADATA.map((category) => category.emoji), FINALIZED_CATEGORIES.map(([, , emoji]) => emoji));
+  assert.equal(new Set(EVENT_CATEGORIES).size, 18);
+
+  for (const [name, hex] of FINALIZED_CATEGORIES) {
+    assert.equal(isEventCategory(name), true);
+    assert.equal(getCategoryColor(name), hex);
+  }
+
+  for (const legacyCategory of LEGACY_CATEGORIES) {
+    assert.equal(isEventCategory(legacyCategory), false);
+  }
+});
+
+test("mobile map marker colors use primary category by default and active filter category when present", () => {
+  for (const [name, hex] of FINALIZED_CATEGORIES) {
+    assert.equal(getCategoryMarkerColor({ categories: [name] }), hex);
+    assert.equal(getCategoryMarkerColor({ category: name }), hex);
+    assert.equal(getCategoryMarkerColor({ categories: ["Social Meetups", name], activeCategory: name }), hex);
+  }
+
+  assert.equal(getCategoryMarkerColor({ categories: ["Social Meetups", "Food & Drinks", "Travel & Experiences"] }), "#00F0FF");
+  assert.equal(getCategoryMarkerColor({ categories: ["Social Meetups", "Food & Drinks", "Travel & Experiences"], activeCategory: "Food & Drinks" }), "#FFC700");
+  assert.equal(getCategoryMarkerColor({ categories: ["Social Meetups", "Food & Drinks", "Travel & Experiences"], activeCategory: "Travel & Experiences" }), "#008080");
+  assert.equal(getCategoryMarkerColor({ categories: ["Unknown"] }), "#9CA3AF");
+});
 
 test("empty shared event filters do not emit event-only request params", () => {
   const filters = createEmptyEventFilters();
@@ -41,7 +114,7 @@ test("real applied event filters drive clear button visibility", () => {
   assert.equal(hasActiveEventFilters({ ...empty, selectedDate: "2026-07-14" }), true);
   assert.equal(hasActiveEventFilters({ ...empty, timePeriod: "morning" }), true);
   assert.equal(hasActiveEventFilters({ ...empty, hashtags: ["music"] }), true);
-  assert.equal(hasActiveEventFilters({ ...empty, category: "Music" }), true);
+  assert.equal(hasActiveEventFilters({ ...empty, category: "Live Music & Concerts" }), true);
   assert.equal(hasActiveEventFilters({
     ...empty,
     nearby: {
@@ -88,7 +161,7 @@ test("shared event filters build one request contract for feed and map", () => {
 test("feed event request params include the selected audience without changing filters", () => {
   const filters: SharedEventFilters = {
     ageRestriction: "18_plus",
-    category: "Food Trucks",
+    category: "Markets & Shopping",
     priceFilter: "lt_50",
     selectedDate: "2026-07-14",
     timePeriod: "evening",
@@ -99,7 +172,7 @@ test("feed event request params include the selected audience without changing f
   const params = buildEventFilterRequestParams(filters, { limit: 100, audience: "friends" });
 
   assert.equal(params.audience, "friends");
-  assert.equal(params.category, "Food Trucks");
+  assert.equal(params.category, "Markets & Shopping");
   assert.equal(params.ageRestriction, "18_plus");
   assert.equal(params.priceFilter, "lt_50");
   assert.equal(params.date, "2026-07-14");
@@ -109,11 +182,11 @@ test("feed event request params include the selected audience without changing f
 });
 
 test("shared category filter normalizes valid values and omits invalid or empty values", () => {
-  const filters = mergeCategoryIntoEventFilters(createEmptyEventFilters(), " Food Trucks ");
+  const filters = mergeCategoryIntoEventFilters(createEmptyEventFilters(), " Markets & Shopping ");
 
-  assert.equal(filters.category, "Food Trucks");
+  assert.equal(filters.category, "Markets & Shopping");
   assert.equal(hasActiveEventFilters(filters), true);
-  assert.equal(buildEventFilterRequestParams(filters).category, "Food Trucks");
+  assert.equal(buildEventFilterRequestParams(filters).category, "Markets & Shopping");
 
   assert.deepEqual(
     buildEventFilterRequestParams({ ...filters, category: "Unknown" as never }),
@@ -128,7 +201,7 @@ test("shared category filter normalizes valid values and omits invalid or empty 
 test("category intent merge replaces only the active category", () => {
   const current: SharedEventFilters = {
     ageRestriction: "21_plus",
-    category: "Music",
+    category: "Live Music & Concerts",
     priceFilter: "lt_50",
     selectedDate: "2026-07-14",
     timePeriod: "late_night",
@@ -156,7 +229,7 @@ test("category intent merge replaces only the active category", () => {
 test("map selector category updates replace or clear only category", () => {
   const current: SharedEventFilters = {
     ageRestriction: "21_plus",
-    category: "Music",
+    category: "Live Music & Concerts",
     priceFilter: "lt_50",
     selectedDate: "2026-07-14",
     timePeriod: "late_night",
@@ -170,8 +243,8 @@ test("map selector category updates replace or clear only category", () => {
     },
   };
 
-  const replaced = setCategoryInEventFilters(current, "Food Trucks");
-  assert.equal(replaced.category, "Food Trucks");
+  const replaced = setCategoryInEventFilters(current, "Markets & Shopping");
+  assert.equal(replaced.category, "Markets & Shopping");
   assert.equal(replaced.ageRestriction, "21_plus");
   assert.equal(replaced.priceFilter, "lt_50");
   assert.equal(replaced.nearby?.radiusMiles, 20);
@@ -188,22 +261,22 @@ test("event details source normalization remains safe but no longer chooses cate
   assert.equal(normalizeEventDetailsSource(undefined), "feed");
   assert.equal(normalizeEventDetailsSource("other"), "feed");
 
-  const feedDestination = getEventCategoryFeedDestination("Food Trucks");
+  const feedDestination = getEventCategoryFeedDestination("Markets & Shopping");
   assert.deepEqual(feedDestination, {
     pathname: "/discover-screen/event-category",
-    params: { category: "Food Trucks" },
+    params: { category: "Markets & Shopping" },
   });
 
-  const mapDestination = getEventCategoryMapDestination("Food Trucks");
+  const mapDestination = getEventCategoryMapDestination("Markets & Shopping");
   assert.deepEqual(mapDestination, {
     pathname: "/(tabs)/home",
-    params: { view: "map", category: "Food Trucks" },
+    params: { view: "map", category: "Markets & Shopping" },
   });
 
   assert.equal(getEventCategoryFeedDestination("Food"), null);
   assert.equal(getEventCategoryMapDestination("Food"), null);
-  assert.deepEqual(getEventCategoryFeedDestination(" Food Trucks "), feedDestination);
-  assert.deepEqual(getEventCategoryMapDestination(" Food Trucks "), mapDestination);
+  assert.deepEqual(getEventCategoryFeedDestination(" Markets & Shopping "), feedDestination);
+  assert.deepEqual(getEventCategoryMapDestination(" Markets & Shopping "), mapDestination);
 });
 
 test("visible filter apply preserves hidden category unless reset apply clears it", () => {
@@ -231,7 +304,7 @@ test("visible filter apply preserves hidden category unless reset apply clears i
 test("reset confirmation clears every applied event filter and restores unfiltered params", () => {
   const current: SharedEventFilters = {
     ageRestriction: "21_plus",
-    category: "Music",
+    category: "Live Music & Concerts",
     priceFilter: "lt_50",
     selectedDate: "2026-07-14",
     timePeriod: "late_night",
@@ -339,7 +412,7 @@ test("map can omit explicit filter location without dropping other filters", () 
 test("map viewport requests do not inject current location radius when nearby is off", () => {
   const filters: SharedEventFilters = {
     ...createEmptyEventFilters(),
-    category: "Music",
+    category: "Live Music & Concerts",
   };
   const viewport: EventMapViewport = {
     north: 41.123456,
@@ -351,7 +424,7 @@ test("map viewport requests do not inject current location radius when nearby is
 
   const params = buildMapEventRequestParams(filters, viewport, 100);
 
-  assert.equal(params?.category, "Music");
+  assert.equal(params?.category, "Live Music & Concerts");
   assert.equal(params?.limit, 100);
   assert.equal(params?.north, 41.123);
   assert.equal(params?.south, 39.988);

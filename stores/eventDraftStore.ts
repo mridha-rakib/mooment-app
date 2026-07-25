@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { EventCategory } from "@/constants/eventCategories";
+import { isEventCategory, type EventCategory } from "@/constants/eventCategories";
 import {
   createDraftTicket,
   createEventTicket,
@@ -288,6 +288,14 @@ const assertValidCategories = (categories: EventCategory[]) => {
 
   if (categories.length > 3) {
     throw new Error("You can select up to 3 categories.");
+  }
+
+  if (categories.some((category) => !isEventCategory(category))) {
+    throw new Error("Select valid event categories.");
+  }
+
+  if (new Set(categories).size !== categories.length) {
+    throw new Error("Categories must be unique.");
   }
 };
 

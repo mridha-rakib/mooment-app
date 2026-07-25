@@ -37,7 +37,8 @@ const isAgeOption = (value: string): value is AgeOption => (AGE_OPTIONS as reado
 const categorySelectionSchema = z
   .array(z.custom<EventCategory>((value) => isEventCategory(value)))
   .min(MIN_CATEGORIES, REQUIRED_CATEGORY_MESSAGE)
-  .max(MAX_CATEGORIES, MAX_CATEGORY_MESSAGE);
+  .max(MAX_CATEGORIES, MAX_CATEGORY_MESSAGE)
+  .refine((values) => new Set(values).size === values.length, "Categories must be unique.");
 
 const requiredDate = (message: string) => z.custom<Date>(
   (value) => value instanceof Date && !Number.isNaN(value.getTime()),

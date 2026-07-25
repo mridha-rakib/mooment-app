@@ -1030,6 +1030,8 @@ const TicketDetailScreen = () => {
     );
   }
 
+  const eventCategories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -1052,11 +1054,15 @@ const TicketDetailScreen = () => {
           </View>
 
           <View style={styles.heroContent}>
-            {!!event.category && (
-              <View style={styles.categoryTag}>
-                <Text style={styles.categoryText}>{event.category}</Text>
+            {eventCategories.length > 0 ? (
+              <View style={styles.tagsRow}>
+                {eventCategories.map((category) => (
+                  <View key={category} style={styles.categoryTag}>
+                    <Text style={styles.categoryText}>{category}</Text>
+                  </View>
+                ))}
               </View>
-            )}
+            ) : null}
 
             <View style={styles.hostRow}>
               <UserAvatar uri={hostAvatarUri} name={event.host?.name} size={52} style={styles.hostAvatar} />
@@ -1196,11 +1202,16 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
   },
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 16,
+  },
   categoryTag: {
     alignSelf: "flex-start",
     backgroundColor: "rgba(255, 255, 255, 0.18)",
     borderRadius: 12,
-    marginBottom: 16,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },

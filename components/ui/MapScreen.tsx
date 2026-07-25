@@ -1,4 +1,4 @@
-import { getCategoryColor } from "@/constants/categoryColors";
+import { getCategoryColor, getCategoryMarkerColor } from "@/constants/categoryColors";
 import { EVENT_CATEGORIES, type EventCategory } from "@/constants/eventCategories";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
@@ -304,10 +304,12 @@ MapMarker.displayName = "MapMarker";
 
 const EventMapMarker = React.memo(({
   marker,
+  glowColor,
   isSatellite,
   onMarkerPress,
 }: {
   marker: MapMarkerData;
+  glowColor: string;
   isSatellite: boolean;
   onMarkerPress: (marker: MapMarkerData) => void;
 }) => {
@@ -320,7 +322,7 @@ const EventMapMarker = React.memo(({
       coordinate={[marker.longitude, marker.latitude]}
       image={marker.image}
       label={marker.label}
-      glowColor={marker.glowColor}
+      glowColor={glowColor}
       onPress={handlePress}
       isSatellite={isSatellite}
     />
@@ -384,6 +386,18 @@ const areCoordinatesNear = (
       to &&
       getCoordinateDistanceMeters(from, to) < INITIAL_CAMERA_CORRECTION_THRESHOLD_METERS,
   );
+
+const markerMatchesCategory = (marker: MapMarkerData, category: EventCategory) =>
+  Boolean(marker.categories?.includes(category) || marker.category === category);
+
+const getMarkerDisplayColor = (
+  marker: MapMarkerData,
+  category: EventCategory | "All",
+) => getCategoryMarkerColor({
+  category: marker.category,
+  categories: marker.categories,
+  activeCategory: category === "All" ? null : category,
+});
 
 export default function MapScreen({
   markers = [],
@@ -841,17 +855,16 @@ export default function MapScreen({
     () =>
       activeCategory === "All"
         ? markers
-        : markers.filter((marker) => (
-            marker.categories?.includes(activeCategory) ?? marker.category === activeCategory
-          )),
+        : markers.filter((marker) => markerMatchesCategory(marker, activeCategory)),
     [activeCategory, markers],
   );
 
   const handleMarkerPress = React.useCallback((marker: MapMarkerData) => {
-    setSelectedMarker(marker);
-    setSelectedThemeColor(marker.glowColor);
+    const displayColor = getMarkerDisplayColor(marker, activeCategory);
+    setSelectedMarker({ ...marker, glowColor: displayColor });
+    setSelectedThemeColor(displayColor);
     setModalVisible(true);
-  }, []);
+  }, [activeCategory]);
 
   const handleViewEvent = () => {
     if (!selectedMarker?.id) {
@@ -1029,14 +1042,19 @@ export default function MapScreen({
             ref={cameraRef}
           />
 
-          {isStyleLoaded && visibleMarkers.map((marker) => (
-            <EventMapMarker
-              key={`${marker.id}-${mapMode}`}
-              marker={marker}
-              onMarkerPress={handleMarkerPress}
-              isSatellite={isSatellite}
-            />
-          ))}
+          {isStyleLoaded && visibleMarkers.map((marker) => {
+            const markerGlowColor = getMarkerDisplayColor(marker, activeCategory);
+
+            return (
+              <EventMapMarker
+                key={`${marker.id}-${mapMode}`}
+                marker={marker}
+                glowColor={markerGlowColor}
+                onMarkerPress={handleMarkerPress}
+                isSatellite={isSatellite}
+              />
+            );
+          })}
 
           <Mapbox.UserLocation
             visible={true}

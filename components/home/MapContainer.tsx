@@ -9,7 +9,7 @@ import {
   type EventMapViewport,
 } from "@/lib/mapEventRequests";
 import { getStorageFileUrl } from "@/lib/storage";
-import { getCategoryColor } from "@/constants/categoryColors";
+import { getCategoryMarkerColor } from "@/constants/categoryColors";
 import type { EventCategory } from "@/constants/eventCategories";
 import { isValidLocationCoordinate } from "@/lib/locationSharing";
 
@@ -182,7 +182,11 @@ const isLiveEvent = (scheduledAt?: string | null) => {
 const getHostName = (event: EventResponse) =>
   (event.host?.username || event.host?.name || `user-${event.userId.slice(-4)}`).replace(/^@/, "");
 
-const toMapMarker = (event: EventResponse, userLocation: [number, number] | null): MapMarkerData | null => {
+const toMapMarker = (
+  event: EventResponse,
+  userLocation: [number, number] | null,
+  activeCategory: EventCategory | null,
+): MapMarkerData | null => {
   const latitude = event.location?.latitude;
   const longitude = event.location?.longitude;
 
@@ -190,15 +194,18 @@ const toMapMarker = (event: EventResponse, userLocation: [number, number] | null
     return null;
   }
 
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+  const primaryCategory = categories[0] ?? null;
+
   return {
     id: event.id,
     latitude,
     longitude,
     image: event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : FALLBACK_EVENT_IMAGE,
     label: event.name || "Event",
-    glowColor: getCategoryColor(event.category ?? null),
-    category: event.category ?? null,
-    categories: event.categories?.length ? event.categories : event.category ? [event.category] : [],
+    glowColor: getCategoryMarkerColor({ category: primaryCategory, categories, activeCategory }),
+    category: primaryCategory,
+    categories,
     scheduledAt: event.scheduledAt ?? null,
     hostName: getHostName(event),
     distance: formatDistance(userLocation, [longitude, latitude]),
@@ -329,7 +336,7 @@ export default function MapContainer({
             : userLocationRef.current;
 
           page.events
-            .map((event) => toMapMarker(event, distanceReference))
+            .map((event) => toMapMarker(event, distanceReference, eventFilters.category ?? null))
             .filter((marker): marker is MapMarkerData => Boolean(marker))
             .forEach((marker) => {
               markerById.set(marker.id, marker);
@@ -355,7 +362,7 @@ export default function MapContainer({
       isMounted = false;
       abortController.abort();
     };
-  }, [eventFilters.nearby, mapRequestKey, mapRequestParams, pageBudget]);
+  }, [eventFilters.category, eventFilters.nearby, mapRequestKey, mapRequestParams, pageBudget]);
 
   const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
     if (isValidMapboxCoordinate(coordinate)) {

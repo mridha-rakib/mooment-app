@@ -270,7 +270,7 @@ export type EventMapPage = {
 };
 
 export type EventFeedQuery = {
-  category?: EventCategory | string;
+  category?: EventCategory;
   latitude?: number;
   longitude?: number;
   radiusKm?: number;

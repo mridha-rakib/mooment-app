@@ -153,7 +153,7 @@ type EventCardProps = {
 
 const EventCard = ({ event, userLocation, onViewEvent }: EventCardProps) => {
   const statusConfig = getStatusConfig(event.nowStatus);
-  const categoryColor = getCategoryColor(event.category ?? null);
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
 
   const lat = event.location?.latitude;
   const lon = event.location?.longitude;
@@ -205,11 +205,19 @@ const EventCard = ({ event, userLocation, onViewEvent }: EventCardProps) => {
               {hostName}
             </Text>
           </View>
-          {event.category ? (
-            <View style={[styles.categoryBadge, { backgroundColor: `${categoryColor}22`, borderColor: `${categoryColor}44` }]}>
-              <Text style={[styles.categoryText, { color: categoryColor }]} numberOfLines={1}>
-                {event.category}
-              </Text>
+          {categories.length > 0 ? (
+            <View style={styles.categoryBadgeRow}>
+              {categories.map((category) => {
+                const categoryColor = getCategoryColor(category);
+
+                return (
+                  <View key={category} style={[styles.categoryBadge, { backgroundColor: `${categoryColor}22`, borderColor: `${categoryColor}44` }]}>
+                    <Text style={[styles.categoryText, { color: categoryColor }]} numberOfLines={1}>
+                      {category}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           ) : null}
         </View>
@@ -694,6 +702,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     maxWidth: 130,
+  },
+  categoryBadgeRow: {
+    flexDirection: "row",
+    flexShrink: 1,
+    flexWrap: "wrap",
+    gap: 4,
+    justifyContent: "flex-end",
+    maxWidth: 180,
   },
   categoryText: {
     fontSize: 11,
