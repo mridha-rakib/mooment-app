@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Keyboard,
   KeyboardAvoidingView,
@@ -15,13 +16,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
 import { useTheme } from "@/hooks/useTheme";
 import {
+  getCancelEventKeyboardBottomInset,
   getCancelEventModalLayoutHeight,
-  getCancelEventSheetBottomPadding,
+  getCancelEventReasonInputScrollOffset,
   getCancelEventSheetMaxHeight,
+  getCancelEventSheetScrollBottomPadding,
   shouldDismissKeyboardForCancelEventBack,
   shouldUseCancelEventKeyboardAvoidingView,
 } from "@/lib/eventCancellationModalLayout";
@@ -49,12 +54,21 @@ type Props = {
 export default function EventCancellationReasonModal({ visible, pending = false, onClose, onSubmit }: Props) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView | null>(null);
   const stableInsetsRef = useRef({
     top: Math.max(insets.top, 0),
     bottom: Math.max(insets.bottom, 0),
   });
   const wasVisibleRef = useRef(false);
   const keyboardVisibleRef = useRef(false);
+  const keyboardBottomInsetRef = useRef(0);
+  const scrollOffsetYRef = useRef(0);
+  const scrollViewportHeightRef = useRef(0);
+  const scrollContentHeightRef = useRef(0);
+  const reasonInputLayoutRef = useRef<{ y: number; height: number } | null>(null);
+  const reasonInputFocusedRef = useRef(false);
+  const focusScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
   const [selectedReason, setSelectedReason] = useState<EventCancellationReasonType>("Schedule conflict");
   const [customReason, setCustomReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +93,10 @@ export default function EventCancellationReasonModal({ visible, pending = false,
     screenHeight: Dimensions.get("screen").height,
     windowHeight: Dimensions.get("window").height,
   });
-  const sheetBottomPadding = getCancelEventSheetBottomPadding(stableInsets.bottom);
+  const scrollBottomPadding = getCancelEventSheetScrollBottomPadding({
+    bottomInset: stableInsets.bottom,
+    keyboardBottomInset,
+  });
   const sheetMaxHeight = getCancelEventSheetMaxHeight({
     layoutHeight,
     topInset: stableInsets.top,
@@ -87,27 +104,116 @@ export default function EventCancellationReasonModal({ visible, pending = false,
   });
   const useKeyboardAvoidingView = shouldUseCancelEventKeyboardAvoidingView(platform);
 
+  const ensureReasonInputVisible = useCallback(() => {
+    const reasonInputLayout = reasonInputLayoutRef.current;
+    const viewportHeight = scrollViewportHeightRef.current;
+
+    if (!reasonInputLayout || viewportHeight <= 0 || keyboardBottomInsetRef.current <= 0) {
+      return;
+    }
+
+    scrollViewRef.current?.scrollTo({
+      y: getCancelEventReasonInputScrollOffset({
+        currentScrollY: scrollOffsetYRef.current,
+        inputY: reasonInputLayout.y,
+        inputHeight: reasonInputLayout.height,
+        viewportHeight,
+        keyboardBottomInset: keyboardBottomInsetRef.current,
+      }),
+      animated: true,
+    });
+  }, []);
+
+  const scheduleReasonInputVisibilityCheck = useCallback(() => {
+    if (focusScrollTimeoutRef.current) {
+      clearTimeout(focusScrollTimeoutRef.current);
+    }
+
+    requestAnimationFrame(ensureReasonInputVisible);
+    focusScrollTimeoutRef.current = setTimeout(ensureReasonInputVisible, 220);
+  }, [ensureReasonInputVisible]);
+
+  const closeModal = useCallback(() => {
+    if (pending) {
+      return;
+    }
+
+    Keyboard.dismiss();
+    onClose();
+  }, [onClose, pending]);
+
+  const {
+    sheetTranslateY,
+    dragPanHandlers,
+    contentPanHandlers,
+    contentTouchHandlers,
+  } = useBottomSheetDragDismiss({
+    visible,
+    onClose: closeModal,
+    canStartContentDrag: () =>
+      !pending &&
+      !reasonInputFocusedRef.current &&
+      (scrollOffsetYRef.current <= 0 ||
+        scrollContentHeightRef.current <= scrollViewportHeightRef.current + 1),
+    captureContentDrag: true,
+  });
+
   useEffect(() => {
     if (platform !== "android" || !visible) {
       keyboardVisibleRef.current = false;
+      keyboardBottomInsetRef.current = 0;
+      setKeyboardBottomInset(0);
       return;
     }
 
     keyboardVisibleRef.current = Keyboard.isVisible();
 
-    const showSubscription = Keyboard.addListener("keyboardDidShow", () => {
+    const showSubscription = Keyboard.addListener("keyboardDidShow", (event) => {
+      const nextKeyboardBottomInset = getCancelEventKeyboardBottomInset({
+        platform,
+        layoutHeight,
+        keyboardHeight: event.endCoordinates.height,
+        keyboardScreenY: event.endCoordinates.screenY,
+      });
+
       keyboardVisibleRef.current = true;
+      keyboardBottomInsetRef.current = nextKeyboardBottomInset;
+      setKeyboardBottomInset(nextKeyboardBottomInset);
+      if (reasonInputFocusedRef.current) {
+        scheduleReasonInputVisibilityCheck();
+      }
     });
     const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
       keyboardVisibleRef.current = false;
+      keyboardBottomInsetRef.current = 0;
+      setKeyboardBottomInset(0);
     });
 
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
       keyboardVisibleRef.current = false;
+      keyboardBottomInsetRef.current = 0;
+      setKeyboardBottomInset(0);
+      if (focusScrollTimeoutRef.current) {
+        clearTimeout(focusScrollTimeoutRef.current);
+        focusScrollTimeoutRef.current = null;
+      }
     };
-  }, [platform, visible]);
+  }, [layoutHeight, platform, scheduleReasonInputVisibilityCheck, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      reasonInputFocusedRef.current = false;
+      keyboardBottomInsetRef.current = 0;
+      scrollOffsetYRef.current = 0;
+      setKeyboardBottomInset(0);
+      if (focusScrollTimeoutRef.current) {
+        clearTimeout(focusScrollTimeoutRef.current);
+        focusScrollTimeoutRef.current = null;
+      }
+    }
+  }, [visible]);
 
   const canSubmit = useMemo(
     () => selectedReason !== "Other" || customReason.trim().length > 0,
@@ -139,30 +245,68 @@ export default function EventCancellationReasonModal({ visible, pending = false,
       return;
     }
 
-    onClose();
-  }, [onClose, platform, visible]);
+    closeModal();
+  }, [closeModal, platform, visible]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  const handleScrollLayout = useCallback((event: LayoutChangeEvent) => {
+    scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+    if (reasonInputFocusedRef.current) {
+      scheduleReasonInputVisibilityCheck();
+    }
+  }, [scheduleReasonInputVisibilityCheck]);
+
+  const handleReasonInputLayout = useCallback((event: LayoutChangeEvent) => {
+    reasonInputLayoutRef.current = {
+      y: event.nativeEvent.layout.y,
+      height: event.nativeEvent.layout.height,
+    };
+    if (reasonInputFocusedRef.current) {
+      scheduleReasonInputVisibilityCheck();
+    }
+  }, [scheduleReasonInputVisibilityCheck]);
 
   const modalContent = (
     <View style={styles.overlay}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={pending ? undefined : onClose} />
-      <View
+      <Pressable style={StyleSheet.absoluteFill} onPress={pending ? undefined : closeModal} />
+      <Animated.View
+        {...contentPanHandlers}
         style={[
           styles.sheet,
-          { backgroundColor: isDark ? "#1E1E1E" : colors.card, maxHeight: sheetMaxHeight },
+          {
+            backgroundColor: isDark ? "#1E1E1E" : colors.card,
+            maxHeight: sheetMaxHeight,
+            transform: [{ translateY: sheetTranslateY }],
+          },
         ]}
       >
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Cancel Event</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose} disabled={pending} activeOpacity={0.8}>
+        <View style={styles.header} {...contentPanHandlers}>
+          <View style={styles.headerTitleDragArea} {...dragPanHandlers}>
+            <Text style={[styles.title, { color: colors.text }]}>Cancel Event</Text>
+          </View>
+          <TouchableOpacity style={styles.closeButton} onPress={closeModal} disabled={pending} activeOpacity={0.8}>
             <Feather name="x" size={18} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         <ScrollView
+          {...contentPanHandlers}
+          {...contentTouchHandlers}
+          ref={scrollViewRef}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: sheetBottomPadding }]}
+          scrollEventThrottle={16}
+          onLayout={handleScrollLayout}
+          onScroll={handleScroll}
+          onScrollBeginDrag={handleScroll}
+          onContentSizeChange={(_width, height) => {
+            scrollContentHeightRef.current = height;
+          }}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPadding }]}
         >
           <Text style={[styles.message, { color: colors.textSecondary }]}>
             Attendees will be refunded automatically to their original payment method.
@@ -201,6 +345,7 @@ export default function EventCancellationReasonModal({ visible, pending = false,
 
           {selectedReason === "Other" && (
             <TextInput
+              onLayout={handleReasonInputLayout}
               style={[
                 styles.input,
                 {
@@ -219,6 +364,13 @@ export default function EventCancellationReasonModal({ visible, pending = false,
               multiline
               maxLength={500}
               editable={!pending}
+              onFocus={() => {
+                reasonInputFocusedRef.current = true;
+                scheduleReasonInputVisibilityCheck();
+              }}
+              onBlur={() => {
+                reasonInputFocusedRef.current = false;
+              }}
             />
           )}
 
@@ -227,7 +379,7 @@ export default function EventCancellationReasonModal({ visible, pending = false,
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.secondaryAction, { borderColor: colors.border }]}
-              onPress={onClose}
+              onPress={closeModal}
               disabled={pending}
             >
               <Text style={[styles.secondaryText, { color: colors.text }]}>Keep Event</Text>
@@ -245,7 +397,7 @@ export default function EventCancellationReasonModal({ visible, pending = false,
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </View>
+      </Animated.View>
     </View>
   );
 
@@ -287,6 +439,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  headerTitleDragArea: {
+    flex: 1,
   },
   title: {
     fontSize: 20,

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, PanResponder } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 
 type UseBottomSheetDragDismissOptions = {
   visible: boolean;
   onClose: () => void | Promise<void>;
   canStartContentDrag?: () => boolean;
+  captureContentDrag?: boolean;
 };
 
 const MAX_UPWARD_DRAG = -72;
@@ -16,11 +18,19 @@ export function useBottomSheetDragDismiss({
   visible,
   onClose,
   canStartContentDrag,
+  captureContentDrag = false,
 }: UseBottomSheetDragDismissOptions) {
   const translateY = useRef(new Animated.Value(0)).current;
   const closingFromDragRef = useRef(false);
   const onCloseRef = useRef(onClose);
   const canStartContentDragRef = useRef(canStartContentDrag);
+  const touchDragRef = useRef<{
+    startX: number;
+    startY: number;
+    lastY: number;
+    lastTimestamp: number;
+    dragging: boolean;
+  } | null>(null);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -106,23 +116,107 @@ export function useBottomSheetDragDismiss({
   );
 
   const contentResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
-          const canStart = canStartContentDragRef.current?.() ?? false;
+    () => {
+      const shouldSetContentPanResponder = (_event: unknown, gesture: { dx: number; dy: number }) => {
+        const canStart = canStartContentDragRef.current?.() ?? false;
 
-          return canStart && gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx);
-        },
+        return canStart && gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx);
+      };
+
+      return PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: captureContentDrag
+          ? shouldSetContentPanResponder
+          : undefined,
+        onMoveShouldSetPanResponderCapture: shouldSetContentPanResponder,
         ...responderCallbacks,
-      }),
-    [responderCallbacks],
+      });
+    },
+    [captureContentDrag, responderCallbacks],
+  );
+
+  const contentTouchHandlers = useMemo(
+    () => ({
+      onTouchStart: (event: GestureResponderEvent) => {
+        if (!(canStartContentDragRef.current?.() ?? false)) {
+          touchDragRef.current = null;
+          return;
+        }
+
+        const { pageX, pageY, timestamp } = event.nativeEvent;
+        touchDragRef.current = {
+          startX: pageX,
+          startY: pageY,
+          lastY: pageY,
+          lastTimestamp: timestamp,
+          dragging: false,
+        };
+      },
+      onTouchMove: (event: GestureResponderEvent) => {
+        const touchDrag = touchDragRef.current;
+
+        if (!touchDrag || closingFromDragRef.current) {
+          return;
+        }
+
+        const { pageX, pageY, timestamp } = event.nativeEvent;
+        const dx = pageX - touchDrag.startX;
+        const dy = pageY - touchDrag.startY;
+
+        if (!touchDrag.dragging) {
+          if (dy <= 4) {
+            touchDrag.lastY = pageY;
+            touchDrag.lastTimestamp = timestamp;
+            return;
+          }
+
+          if (Math.abs(dy) <= Math.abs(dx)) {
+            touchDragRef.current = null;
+            return;
+          }
+
+          touchDrag.dragging = true;
+          translateY.stopAnimation(() => {
+            translateY.setValue(0);
+          });
+        }
+
+        translateY.setValue(Math.max(MAX_UPWARD_DRAG, dy));
+        touchDrag.lastY = pageY;
+        touchDrag.lastTimestamp = timestamp;
+      },
+      onTouchEnd: (event: GestureResponderEvent) => {
+        const touchDrag = touchDragRef.current;
+        touchDragRef.current = null;
+
+        if (!touchDrag?.dragging || closingFromDragRef.current) {
+          return;
+        }
+
+        const { pageY, timestamp } = event.nativeEvent;
+        const dy = pageY - touchDrag.startY;
+        const elapsed = Math.max(1, timestamp - touchDrag.lastTimestamp);
+        const vy = (pageY - touchDrag.lastY) / elapsed;
+
+        finishGesture(dy, vy);
+      },
+      onTouchCancel: () => {
+        const touchDrag = touchDragRef.current;
+        touchDragRef.current = null;
+
+        if (touchDrag?.dragging && !closingFromDragRef.current) {
+          resetSheet();
+        }
+      },
+    }),
+    [finishGesture, resetSheet, translateY],
   );
 
   return {
     sheetTranslateY,
     dragPanHandlers: dragResponder.panHandlers,
     contentPanHandlers: contentResponder.panHandlers,
+    contentTouchHandlers,
     resetSheetPosition: () => translateY.setValue(0),
   };
 }

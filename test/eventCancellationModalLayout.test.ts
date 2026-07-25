@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getCancelEventKeyboardBottomInset,
   getCancelEventModalLayoutHeight,
+  getCancelEventReasonInputScrollOffset,
   getCancelEventSheetBottomPadding,
   getCancelEventSheetMaxHeight,
+  getCancelEventSheetScrollBottomPadding,
   shouldDismissKeyboardForCancelEventBack,
   shouldUseCancelEventKeyboardAvoidingView,
 } from "../lib/eventCancellationModalLayout";
@@ -51,6 +54,13 @@ test("sheet height and footer padding keep safe-area inset math single-pass", ()
     1464,
   );
   assert.equal(getCancelEventSheetBottomPadding(72), 96);
+  assert.equal(
+    getCancelEventSheetScrollBottomPadding({
+      bottomInset: 72,
+      keyboardBottomInset: 0,
+    }),
+    96,
+  );
 });
 
 test("sheet height and footer padding clamp invalid inset values without changing layout branch", () => {
@@ -63,6 +73,84 @@ test("sheet height and footer padding clamp invalid inset values without changin
     1,
   );
   assert.equal(getCancelEventSheetBottomPadding(-10), 24);
+  assert.equal(
+    getCancelEventSheetScrollBottomPadding({
+      bottomInset: -10,
+      keyboardBottomInset: -20,
+    }),
+    24,
+  );
+});
+
+test("Android cancellation modal scroll padding uses the larger keyboard or safe-area inset once", () => {
+  assert.equal(
+    getCancelEventSheetScrollBottomPadding({
+      bottomInset: 48,
+      keyboardBottomInset: 320,
+    }),
+    344,
+  );
+  assert.equal(
+    getCancelEventSheetScrollBottomPadding({
+      bottomInset: 72,
+      keyboardBottomInset: 40,
+    }),
+    96,
+  );
+});
+
+test("Android cancellation modal keyboard inset uses frame overlap when available", () => {
+  assert.equal(
+    getCancelEventKeyboardBottomInset({
+      platform: "android",
+      layoutHeight: 1600,
+      keyboardHeight: 540,
+      keyboardScreenY: 980,
+    }),
+    620,
+  );
+  assert.equal(
+    getCancelEventKeyboardBottomInset({
+      platform: "android",
+      layoutHeight: 1600,
+      keyboardHeight: 540,
+    }),
+    540,
+  );
+  assert.equal(
+    getCancelEventKeyboardBottomInset({
+      platform: "ios",
+      layoutHeight: 1600,
+      keyboardHeight: 540,
+      keyboardScreenY: 980,
+    }),
+    0,
+  );
+});
+
+test("focused Other reason input scrolls only enough to clear the keyboard", () => {
+  assert.equal(
+    getCancelEventReasonInputScrollOffset({
+      currentScrollY: 0,
+      inputY: 430,
+      inputHeight: 88,
+      viewportHeight: 520,
+      keyboardBottomInset: 300,
+      margin: 16,
+    }),
+    314,
+  );
+  assert.equal(
+    getCancelEventReasonInputScrollOffset({
+      currentScrollY: 360,
+      inputY: 430,
+      inputHeight: 88,
+      viewportHeight: 520,
+      keyboardBottomInset: 300,
+      margin: 16,
+    }),
+    360,
+  );
 });
 
 test("Android cancellation modal Back consumes only keyboard-open presses", () => {
