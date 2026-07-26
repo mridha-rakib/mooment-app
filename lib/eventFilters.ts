@@ -34,7 +34,86 @@ export type EventFilterRequestParams = EventMapQuery & {
   audience?: FeedAudience;
 };
 
+export type EventFilterApplyLocationDraft = {
+  useCurrentLocation: boolean;
+  selectedLocationLabel?: string | null;
+  selectedLatitude?: number | null;
+  selectedLongitude?: number | null;
+};
+
 export const MILES_TO_KM = 1.609344;
+export const MIN_EVENT_RADIUS_MILES = 1;
+export const MAX_EVENT_RADIUS_MILES = 200;
+export const DEFAULT_EVENT_RADIUS_MILES = 75;
+
+const isFiniteCoordinate = (
+  latitude: unknown,
+  longitude: unknown,
+): latitude is number =>
+  typeof latitude === "number" &&
+  typeof longitude === "number" &&
+  Number.isFinite(latitude) &&
+  Number.isFinite(longitude) &&
+  latitude >= -90 &&
+  latitude <= 90 &&
+  longitude >= -180 &&
+  longitude <= 180;
+
+export const normalizeEventRadiusMiles = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_EVENT_RADIUS_MILES;
+  }
+
+  return Math.min(MAX_EVENT_RADIUS_MILES, Math.max(MIN_EVENT_RADIUS_MILES, value));
+};
+
+export const isValidEventRadiusMiles = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value >= MIN_EVENT_RADIUS_MILES &&
+  value <= MAX_EVENT_RADIUS_MILES;
+
+export const isValidEventLocationFilter = (
+  filter: EventLocationFilter | null | undefined,
+): filter is EventLocationFilter =>
+  Boolean(
+    filter &&
+      isFiniteCoordinate(filter.latitude, filter.longitude) &&
+      isValidEventRadiusMiles(filter.radiusMiles),
+  );
+
+export const getEventLocationFilterKey = (
+  filter: EventLocationFilter | null | undefined,
+): string | null => {
+  if (!isValidEventLocationFilter(filter)) {
+    return null;
+  }
+
+  return [
+    filter.source,
+    filter.latitude.toFixed(6),
+    filter.longitude.toFixed(6),
+    filter.radiusMiles.toFixed(3),
+  ].join(":");
+};
+
+export const hasValidSelectedEventFilterLocation = (
+  draft: EventFilterApplyLocationDraft,
+): boolean =>
+  Boolean(
+    draft.selectedLocationLabel?.trim() &&
+      isFiniteCoordinate(draft.selectedLatitude, draft.selectedLongitude),
+  );
+
+export const canApplyEventFilters = (
+  draft: EventFilterApplyLocationDraft,
+): boolean =>
+  draft.useCurrentLocation || hasValidSelectedEventFilterLocation(draft);
+
+export const toggleSingleSelectFilterValue = <T extends string>(
+  currentValue: T | null | undefined,
+  nextValue: T,
+): T | null => (currentValue === nextValue ? null : nextValue);
 
 export const createEmptyEventFilters = (): SharedEventFilters => ({
   category: null,
@@ -143,7 +222,7 @@ export const hasActiveEventFilters = (filters: SharedEventFilters): boolean =>
       filters.selectedDate ||
       (filters.timePeriod && filters.timePeriod !== "any") ||
       filters.hashtags.length > 0 ||
-      filters.nearby,
+      isValidEventLocationFilter(filters.nearby),
   );
 
 export const buildEventFilterRequestParams = (
@@ -182,7 +261,7 @@ export const buildEventFilterRequestParams = (
     params.hashtags = filters.hashtags.join(",");
   }
 
-  if (options.includeLocation !== false && filters.nearby) {
+  if (options.includeLocation !== false && isValidEventLocationFilter(filters.nearby)) {
     params.latitude = filters.nearby.latitude;
     params.longitude = filters.nearby.longitude;
     params.radiusKm = filters.nearby.radiusMiles * MILES_TO_KM;

@@ -43,7 +43,8 @@ import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
 import {
-  getVisibleFeedEvents,
+  getEventFilterSectionEvents,
+  getMixedFeedEvents,
   isLatestEventRequest,
   shouldShowEventFilterEmptyState,
   shouldShowEventFilterSection,
@@ -51,6 +52,7 @@ import {
 import {
   buildEventFilterRequestParams,
   createEmptyEventFilters,
+  getEventLocationFilterKey,
   hasActiveEventFilters,
   mergeCategoryIntoEventFilters,
   normalizeEventCategoryFilter,
@@ -372,6 +374,7 @@ export default function HomeFeed() {
   const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
   const [feedReposts, setFeedReposts] = useState<MomentTimelineItem[]>([]);
   const [appliedEventFilters, setAppliedEventFilters] = useState<SharedEventFilters>(() => createEmptyEventFilters());
+  const [pendingMapFilterRecenterKey, setPendingMapFilterRecenterKey] = useState<string | null>(null);
   const [isFeedLoading, setIsFeedLoading] = useState(false);
   const [isEventFilterLoading, setIsEventFilterLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
@@ -383,12 +386,14 @@ export default function HomeFeed() {
   const feedScrollRef = useRef<FlatList>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
   const appliedEventFiltersRef = useRef(appliedEventFilters);
+  const appliedNearbyFilterKeyRef = useRef(getEventLocationFilterKey(appliedEventFilters.nearby));
   const feedAudienceRef = useRef(feedAudience);
   const didMountEventFilterEffectRef = useRef(false);
   const params = useLocalSearchParams<{ showSuccess?: string; view?: string; category?: string | string[] }>();
 
   useEffect(() => {
     appliedEventFiltersRef.current = appliedEventFilters;
+    appliedNearbyFilterKeyRef.current = getEventLocationFilterKey(appliedEventFilters.nearby);
   }, [appliedEventFilters]);
 
   useEffect(() => {
@@ -567,14 +572,27 @@ export default function HomeFeed() {
   }, [beginAudienceTransition, feedAudience, loadFeed]);
 
   const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
+    const nextNearbyKey = getEventLocationFilterKey(filters.nearby);
     beginEventFilterTransition();
+    setPendingMapFilterRecenterKey(
+      nextNearbyKey && nextNearbyKey !== appliedNearbyFilterKeyRef.current
+        ? nextNearbyKey
+        : null,
+    );
     setAppliedEventFilters(filters);
   }, [beginEventFilterTransition]);
 
   const handleClearEventFilters = useCallback(() => {
     beginEventFilterTransition();
+    setPendingMapFilterRecenterKey(null);
     setAppliedEventFilters(createEmptyEventFilters());
   }, [beginEventFilterTransition]);
+
+  const handleMapFilterRecenterHandled = useCallback((key: string) => {
+    setPendingMapFilterRecenterKey((currentKey) => (
+      currentKey === key ? null : currentKey
+    ));
+  }, []);
 
   const handleMapCategoryChange = useCallback((category: EventCategory | null) => {
     const nextFilters = setCategoryInEventFilters(appliedEventFiltersRef.current, category);
@@ -780,21 +798,48 @@ export default function HomeFeed() {
     });
   }, [pendingVideoUploads]);
 
-  const feedItems = useMemo(
-    () => buildFeedItems(
-      feedMomentPosts,
-      getVisibleFeedEvents(feedEvents, isEventFilterLoading),
-      feedReposts,
-      suggestedUsers,
-      pendingVideoUploads,
-    ),
-    [feedEvents, feedMomentPosts, feedReposts, isEventFilterLoading, suggestedUsers, pendingVideoUploads],
-  );
   const hasAppliedEventFilters = useMemo(
     () => hasActiveEventFilters(appliedEventFilters),
     [appliedEventFilters],
   );
   const showEventFilterSection = shouldShowEventFilterSection(hasAppliedEventFilters, isEventFilterLoading);
+  const eventFilterSectionEvents = useMemo(
+    () => getEventFilterSectionEvents(feedEvents, hasAppliedEventFilters, isEventFilterLoading),
+    [feedEvents, hasAppliedEventFilters, isEventFilterLoading],
+  );
+  const mixedFeedEvents = useMemo(
+    () => getMixedFeedEvents(feedEvents, showEventFilterSection, isEventFilterLoading),
+    [feedEvents, isEventFilterLoading, showEventFilterSection],
+  );
+  const feedItems = useMemo(() => {
+    const nonEventFeedItems = buildFeedItems(
+      feedMomentPosts,
+      mixedFeedEvents,
+      feedReposts,
+      suggestedUsers,
+      pendingVideoUploads,
+    );
+
+    if (!showEventFilterSection) {
+      return nonEventFeedItems;
+    }
+
+    const eventSectionItems: FeedItem[] = eventFilterSectionEvents.map((event) => ({
+      type: 'event' as const,
+      id: `event-section-${event.id}`,
+      data: event,
+    }));
+
+    return [...eventSectionItems, ...nonEventFeedItems];
+  }, [
+    eventFilterSectionEvents,
+    feedMomentPosts,
+    feedReposts,
+    mixedFeedEvents,
+    pendingVideoUploads,
+    showEventFilterSection,
+    suggestedUsers,
+  ]);
   const showEventFilterEmptyState = shouldShowEventFilterEmptyState({
     hasAppliedEventFilters,
     isEventLoading: isEventFilterLoading,
@@ -912,6 +957,8 @@ export default function HomeFeed() {
           <MapContainer
             onBack={() => setSelectedType('Feed')}
             eventFilters={appliedEventFilters}
+            filterRecenterKey={pendingMapFilterRecenterKey}
+            onFilterRecenterHandled={handleMapFilterRecenterHandled}
             onCategoryChange={handleMapCategoryChange}
           />
         )}

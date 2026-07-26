@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getEventFilterSectionEvents,
+  getMixedFeedEvents,
   getVisibleFeedEvents,
   isLatestEventRequest,
   shouldShowEventFilterEmptyState,
@@ -20,6 +22,28 @@ test("event filter section stays visible while loading or filters are active", (
   assert.equal(shouldShowEventFilterSection(true, false), true);
   assert.equal(shouldShowEventFilterSection(false, true), true);
   assert.equal(shouldShowEventFilterSection(true, true), true);
+});
+
+test("active filters place events in the dedicated section only", () => {
+  const events = [{ id: "event-1" }, { id: "event-2" }];
+
+  assert.deepEqual(getEventFilterSectionEvents(events, true, false), events);
+  assert.deepEqual(getMixedFeedEvents(events, true, false), []);
+});
+
+test("unfiltered feed keeps events in the mixed feed", () => {
+  const events = [{ id: "event-1" }, { id: "event-2" }];
+
+  assert.deepEqual(getEventFilterSectionEvents(events, false, false), []);
+  assert.deepEqual(getMixedFeedEvents(events, false, false), events);
+});
+
+test("event loading withholds stale events from both feed placements", () => {
+  const events = [{ id: "event-1" }, { id: "event-2" }];
+
+  assert.deepEqual(getEventFilterSectionEvents(events, true, true), []);
+  assert.deepEqual(getMixedFeedEvents(events, true, true), []);
+  assert.deepEqual(getMixedFeedEvents(events, false, true), []);
 });
 
 test("event empty state waits until the latest filter loading finishes", () => {

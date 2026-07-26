@@ -1,21 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DEFAULT_EVENT_RADIUS_MILES,
+  MAX_EVENT_RADIUS_MILES,
+  MIN_EVENT_RADIUS_MILES,
   buildEventFilterRequestParams,
+  canApplyEventFilters,
   confirmVisibleEventFilters,
   createEmptyEventFilters,
+  getEventLocationFilterKey,
+  hasValidSelectedEventFilterLocation,
   hasActiveEventFilters,
+  isValidEventLocationFilter,
   mergeCategoryIntoEventFilters,
   mergeVisibleEventFilters,
+  normalizeEventRadiusMiles,
   parseLocalDateKey,
   setCategoryInEventFilters,
   toLocalDateKey,
+  toggleSingleSelectFilterValue,
   type SharedEventFilters,
 } from "../lib/eventFilters";
 import {
   buildMapEventRequestParams,
   getMapViewportPageBudget,
   getMapViewportRequestKey,
+  getRadiusAwareMapZoom,
   type EventMapViewport,
 } from "../lib/mapEventRequests";
 import { getCategoryColor, getCategoryMarkerColor } from "../constants/categoryColors";
@@ -156,6 +166,171 @@ test("shared event filters build one request contract for feed and map", () => {
   assert.equal(params.longitude, 90.4074);
   assert.equal(params.radiusKm, 32.18688);
   assert.equal(params.limit, 100);
+});
+
+test("location and radius alone omit every optional request constraint", () => {
+  const filters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      latitude: 23.7806,
+      longitude: 90.4074,
+      radiusMiles: 75,
+      label: "Dhaka",
+      source: "selected",
+    },
+  };
+
+  const feedParams = buildEventFilterRequestParams(filters, { limit: 100, audience: "discover" });
+  const mapParams = buildMapEventRequestParams(filters, null, 100);
+
+  assert.equal(feedParams.latitude, 23.7806);
+  assert.equal(feedParams.longitude, 90.4074);
+  assert.ok(Math.abs((feedParams.radiusKm ?? 0) - 120.7008) < 0.0000001);
+  assert.equal(feedParams.ageRestriction, undefined);
+  assert.equal(feedParams.priceFilter, undefined);
+  assert.equal(feedParams.date, undefined);
+  assert.equal(feedParams.timePeriod, undefined);
+  assert.equal(feedParams.hashtags, undefined);
+  assert.equal(mapParams?.latitude, feedParams.latitude);
+  assert.equal(mapParams?.longitude, feedParams.longitude);
+  assert.equal(mapParams?.radiusKm, feedParams.radiusKm);
+  assert.equal(mapParams?.ageRestriction, undefined);
+  assert.equal(mapParams?.priceFilter, undefined);
+  assert.equal(mapParams?.date, undefined);
+  assert.equal(mapParams?.timePeriod, undefined);
+  assert.equal(mapParams?.hashtags, undefined);
+});
+
+test("home filter draft apply eligibility requires a location source", () => {
+  const noLocation = {
+    useCurrentLocation: false,
+    selectedLocationLabel: "",
+    selectedLatitude: null,
+    selectedLongitude: null,
+  };
+
+  assert.equal(canApplyEventFilters(noLocation), false);
+  assert.equal(canApplyEventFilters({
+    ...noLocation,
+    selectedLocationLabel: "Typed but not selected",
+  }), false);
+  assert.equal(canApplyEventFilters({
+    ...noLocation,
+    selectedLocationLabel: "Dhaka",
+    selectedLatitude: Number.NaN,
+    selectedLongitude: 90.4074,
+  }), false);
+  assert.equal(canApplyEventFilters({
+    ...noLocation,
+    selectedLocationLabel: "Dhaka",
+    selectedLatitude: 23.7806,
+    selectedLongitude: 90.4074,
+  }), true);
+  assert.equal(hasValidSelectedEventFilterLocation({
+    ...noLocation,
+    selectedLocationLabel: "Dhaka",
+    selectedLatitude: 23.7806,
+    selectedLongitude: 90.4074,
+  }), true);
+  assert.equal(canApplyEventFilters({
+    ...noLocation,
+    useCurrentLocation: true,
+  }), true);
+});
+
+test("optional single-select filter values can be selected, replaced, and deselected", () => {
+  assert.equal(toggleSingleSelectFilterValue<string>(null, "Free"), "Free");
+  assert.equal(toggleSingleSelectFilterValue("Free", "< $10"), "< $10");
+  assert.equal(toggleSingleSelectFilterValue("Free", "Free"), null);
+  assert.equal(toggleSingleSelectFilterValue<string>(null, "Morning"), "Morning");
+  assert.equal(toggleSingleSelectFilterValue("Morning", "Noon"), "Noon");
+  assert.equal(toggleSingleSelectFilterValue("Morning", "Morning"), null);
+});
+
+test("event location filter radius is constrained to the approved mile range", () => {
+  assert.equal(MIN_EVENT_RADIUS_MILES, 1);
+  assert.equal(MAX_EVENT_RADIUS_MILES, 200);
+  assert.equal(DEFAULT_EVENT_RADIUS_MILES, 75);
+  assert.equal(normalizeEventRadiusMiles(0), 1);
+  assert.equal(normalizeEventRadiusMiles(-10), 1);
+  assert.equal(normalizeEventRadiusMiles(Number.NaN), 75);
+  assert.equal(normalizeEventRadiusMiles(Number.POSITIVE_INFINITY), 75);
+  assert.equal(normalizeEventRadiusMiles(225), 200);
+  assert.equal(normalizeEventRadiusMiles(75), 75);
+});
+
+test("invalid nearby filters do not emit stale or unsafe location request params", () => {
+  const filters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      latitude: 23.7806,
+      longitude: 90.4074,
+      radiusMiles: 0,
+      label: "Dhaka",
+      source: "selected",
+    },
+  };
+
+  assert.equal(isValidEventLocationFilter(filters.nearby), false);
+  assert.equal(hasActiveEventFilters(filters), false);
+  assert.equal(getEventLocationFilterKey(filters.nearby), null);
+  assert.deepEqual(buildEventFilterRequestParams(filters), {});
+
+  const mapParams = buildMapEventRequestParams(filters, {
+    north: 24,
+    south: 23,
+    west: 90,
+    east: 91,
+    zoom: 8,
+  }, 100);
+  assert.equal(mapParams?.latitude, undefined);
+  assert.equal(mapParams?.longitude, undefined);
+  assert.equal(mapParams?.radiusKm, undefined);
+  assert.equal(mapParams?.north, 24);
+});
+
+test("one-mile and two-hundred-mile radii convert to kilometres exactly once", () => {
+  const oneMileFilters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      latitude: 23.7806,
+      longitude: 90.4074,
+      radiusMiles: 1,
+      label: "Dhaka",
+      source: "selected",
+    },
+  };
+  const maxMileFilters: SharedEventFilters = {
+    ...oneMileFilters,
+    nearby: {
+      ...oneMileFilters.nearby!,
+      radiusMiles: 200,
+    },
+  };
+
+  assert.equal(buildEventFilterRequestParams(oneMileFilters).radiusKm, 1.609344);
+  assert.equal(buildEventFilterRequestParams(maxMileFilters).radiusKm, 321.8688);
+  assert.equal(buildMapEventRequestParams(oneMileFilters, null, 100)?.radiusKm, 1.609344);
+  assert.equal(buildMapEventRequestParams(maxMileFilters, null, 100)?.radiusKm, 321.8688);
+});
+
+test("nearby filter key is stable for map recenter intents", () => {
+  const filters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      latitude: 23.7806,
+      longitude: 90.4074,
+      radiusMiles: 75,
+      label: "Dhaka",
+      source: "selected",
+    },
+  };
+
+  assert.equal(getEventLocationFilterKey(filters.nearby), "selected:23.780600:90.407400:75.000");
+  assert.notEqual(
+    getEventLocationFilterKey({ ...filters.nearby!, radiusMiles: 25 }),
+    getEventLocationFilterKey(filters.nearby),
+  );
 });
 
 test("feed event request params include the selected audience without changing filters", () => {
@@ -318,18 +493,12 @@ test("reset confirmation clears every applied event filter and restores unfilter
     },
   };
   const resetDraftDefaults: SharedEventFilters = {
-    ageRestriction: "all_ages",
-    priceFilter: "free",
+    ageRestriction: undefined,
+    priceFilter: undefined,
     selectedDate: null,
-    timePeriod: "morning",
+    timePeriod: undefined,
     hashtags: [],
-    nearby: {
-      latitude: 34.052235,
-      longitude: -118.243683,
-      radiusMiles: 75,
-      label: "Los Angeles, CA",
-      source: "selected",
-    },
+    nearby: null,
   };
 
   const cleared = confirmVisibleEventFilters(current, resetDraftDefaults, { resetAll: true });
@@ -549,6 +718,19 @@ test("low zoom map requests use a bounded page budget while focused views can ex
   assert.equal(getMapViewportPageBudget(filters, midZoom), 2);
   assert.equal(getMapViewportPageBudget(filters, focusedZoom), null);
   assert.equal(getMapViewportPageBudget(nearbyFilters, lowZoom), null);
+});
+
+test("radius-aware map zoom stays deterministic across the approved range", () => {
+  const oneMileZoom = getRadiusAwareMapZoom(1);
+  const mediumZoom = getRadiusAwareMapZoom(75);
+  const maxZoom = getRadiusAwareMapZoom(200);
+
+  assert.equal(oneMileZoom, 14);
+  assert.equal(maxZoom, 6);
+  assert.equal(mediumZoom < oneMileZoom, true);
+  assert.equal(mediumZoom > maxZoom, true);
+  assert.equal(getRadiusAwareMapZoom(0), 14);
+  assert.equal(getRadiusAwareMapZoom(300), 6);
 });
 
 test("local date keys round trip without formatted string parsing", () => {

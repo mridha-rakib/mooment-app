@@ -1,4 +1,11 @@
-import { buildEventFilterRequestParams, type SharedEventFilters } from "@/lib/eventFilters";
+import {
+  MAX_EVENT_RADIUS_MILES,
+  MIN_EVENT_RADIUS_MILES,
+  buildEventFilterRequestParams,
+  isValidEventLocationFilter,
+  normalizeEventRadiusMiles,
+  type SharedEventFilters,
+} from "@/lib/eventFilters";
 import type { EventMapQuery } from "@/lib/events";
 
 export type EventMapViewport = {
@@ -16,6 +23,8 @@ const MID_ZOOM_COORDINATE_PRECISION = 1;
 const HIGH_ZOOM_COORDINATE_PRECISION = 3;
 const LOW_ZOOM_BUCKET_SIZE = 0.5;
 const HIGH_ZOOM_BUCKET_SIZE = 0.25;
+const MIN_FILTER_RECENTER_ZOOM = 6;
+const MAX_FILTER_RECENTER_ZOOM = 14;
 
 const roundToPrecision = (value: number, precision: number) =>
   Number(value.toFixed(precision));
@@ -71,7 +80,7 @@ export const getMapViewportPageBudget = (
   filters: SharedEventFilters,
   viewport: EventMapViewport | null | undefined,
 ): number | null => {
-  if (filters.nearby) {
+  if (isValidEventLocationFilter(filters.nearby)) {
     return null;
   }
 
@@ -99,17 +108,28 @@ export const getMapViewportRequestKey = (
   return normalized ? JSON.stringify(normalized) : null;
 };
 
+export const getRadiusAwareMapZoom = (radiusMiles: number): number => {
+  const normalizedRadius = normalizeEventRadiusMiles(radiusMiles);
+  const radiusProgress = Math.log2(normalizedRadius / MIN_EVENT_RADIUS_MILES);
+  const maxProgress = Math.log2(MAX_EVENT_RADIUS_MILES / MIN_EVENT_RADIUS_MILES);
+  const zoom = MAX_FILTER_RECENTER_ZOOM -
+    (radiusProgress / maxProgress) * (MAX_FILTER_RECENTER_ZOOM - MIN_FILTER_RECENTER_ZOOM);
+
+  return Number(Math.max(MIN_FILTER_RECENTER_ZOOM, Math.min(MAX_FILTER_RECENTER_ZOOM, zoom)).toFixed(2));
+};
+
 export const buildMapEventRequestParams = (
   filters: SharedEventFilters,
   viewport: EventMapViewport | null,
   limit: number,
 ): EventMapQuery | null => {
+  const hasValidNearbyFilter = isValidEventLocationFilter(filters.nearby);
   const params = buildEventFilterRequestParams(filters, {
-    includeLocation: Boolean(filters.nearby),
+    includeLocation: hasValidNearbyFilter,
     limit,
   });
 
-  if (filters.nearby) {
+  if (hasValidNearbyFilter) {
     return params;
   }
 

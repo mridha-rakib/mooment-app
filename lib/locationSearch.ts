@@ -1,4 +1,11 @@
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import {
+  getLocationSearchContext,
+  getLocationSearchProximityParam,
+  type LocationSearchContext,
+} from "@/lib/locationSearchContext";
+
+export { getLocationSearchProximityParam, type LocationSearchContext } from "@/lib/locationSearchContext";
 
 export type LocationSearchResult = {
   id: string;
@@ -26,17 +33,8 @@ export type LocationSearchResult = {
   distanceKm?: number;
 };
 
-export type LocationSearchContext = {
-  latitude: number;
-  longitude: number;
-  label?: string | null;
-  city?: string | null;
-  country?: string | null;
-  countryCode?: string | null;
-  region?: string | null;
-};
-
 type LocationSearchOptions = {
+  includeCuratedResults?: boolean;
   signal?: AbortSignal;
 };
 
@@ -235,12 +233,6 @@ const buildLocationLabel = (name: string, address: string) => {
 
 const toIdSlug = (value: string, fallback = "location") => normalizeText(value).replace(/\s+/g, "-") || fallback;
 
-const normalizeCountryCode = (value?: string | null) => {
-  const normalized = cleanDisplayText(value).toLowerCase();
-
-  return /^[a-z]{2}$/.test(normalized) ? normalized : null;
-};
-
 const toTitleCase = (value: string) =>
   value
     .split(/[,\s]+/)
@@ -259,25 +251,13 @@ const isFiniteCoordinate = (latitude: unknown, longitude: unknown) =>
   longitude >= -180 &&
   longitude <= 180;
 
-const getSearchContext = (context?: LocationSearchContext | null): LocationSearchContext | null => {
-  if (!context || !isFiniteCoordinate(context.latitude, context.longitude)) {
-    return null;
-  }
-
-  return {
-    city: cleanDisplayText(context.city),
-    country: cleanDisplayText(context.country),
-    countryCode: normalizeCountryCode(context.countryCode),
-    label: context.label,
-    latitude: context.latitude,
-    longitude: context.longitude,
-    region: cleanDisplayText(context.region),
-  };
-};
-
-const getSearchCacheKey = (query: string, context?: LocationSearchContext | null) => {
+const getSearchCacheKey = (
+  query: string,
+  context?: LocationSearchContext | null,
+  includeCuratedResults = true,
+) => {
   const normalizedQuery = normalizeText(query);
-  const searchContext = getSearchContext(context);
+  const searchContext = getLocationSearchContext(context);
   const normalizedContext = searchContext
     ? [
         searchContext.latitude.toFixed(3),
@@ -286,18 +266,24 @@ const getSearchCacheKey = (query: string, context?: LocationSearchContext | null
       ].join("|")
     : "global";
 
-  return `worldwide-v3::${normalizedQuery}::${normalizedContext}`;
+  return `worldwide-v3::${includeCuratedResults ? "curated" : "provider"}::${normalizedQuery}::${normalizedContext}`;
 };
 
 const applySearchContextParams = (params: URLSearchParams, context?: LocationSearchContext | null) => {
-  if (!context) {
+  const searchContext = getLocationSearchContext(context);
+
+  if (!searchContext) {
     return;
   }
 
-  params.set("proximity", `${context.longitude},${context.latitude}`);
+  const proximity = getLocationSearchProximityParam(searchContext);
 
-  if (context.countryCode) {
-    params.set("country", context.countryCode);
+  if (proximity) {
+    params.set("proximity", proximity);
+  }
+
+  if (searchContext.countryCode) {
+    params.set("country", searchContext.countryCode);
   }
 };
 
@@ -678,15 +664,16 @@ export const searchLocations = async (
     return [];
   }
 
-  const cacheKey = getSearchCacheKey(trimmedQuery, context);
+  const includeCuratedResults = options.includeCuratedResults ?? true;
+  const cacheKey = getSearchCacheKey(trimmedQuery, context, includeCuratedResults);
   const cachedResults = locationSearchCache.get(cacheKey);
 
   if (cachedResults) {
     return [...cachedResults];
   }
 
-  const searchContext = getSearchContext(context);
-  const curatedResults = curatedSearch(trimmedQuery, searchContext);
+  const searchContext = getLocationSearchContext(context);
+  const curatedResults = includeCuratedResults ? curatedSearch(trimmedQuery, searchContext) : [];
   const remoteResults = await collectRemoteResults(
     [
       searchBoxSuggest(trimmedQuery, searchContext, options),

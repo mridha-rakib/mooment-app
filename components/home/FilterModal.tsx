@@ -1,6 +1,6 @@
 import LocationSearchModal from '@/components/post/LocationSearchModal';
 import { getCurrentLocationForSharing, getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
-import { reverseGeocodeLocation, type LocationSearchResult } from '@/lib/locationSearch';
+import type { LocationSearchContext, LocationSearchResult } from '@/lib/locationSearch';
 import {
   useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
@@ -25,11 +25,17 @@ import { Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
-import { useAuthStore } from '@/stores/authStore';
 import {
+  DEFAULT_EVENT_RADIUS_MILES,
+  MAX_EVENT_RADIUS_MILES,
+  MIN_EVENT_RADIUS_MILES,
+  canApplyEventFilters,
   confirmVisibleEventFilters,
+  isValidEventLocationFilter,
+  normalizeEventRadiusMiles,
   parseLocalDateKey,
   toLocalDateKey,
+  toggleSingleSelectFilterValue,
   type EventLocationFilter,
   type EventPriceFilter,
   type EventTimePeriod,
@@ -89,14 +95,31 @@ const TIME_VALUE_TO_OPTION: Record<EventTimePeriod, string> = {
   late_night: 'Late Night',
   any: 'Any',
 };
-const DEFAULT_LOCATION = {
-  label: 'Los Angeles, CA',
-  latitude: 34.052235,
-  longitude: -118.243683,
+type DraftLocationCoords = {
+  latitude: number | null;
+  longitude: number | null;
+};
+
+const EMPTY_LOCATION_COORDS: DraftLocationCoords = {
+  latitude: null,
+  longitude: null,
 };
 
 const isFiniteCoordinate = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
+
+const isValidLocationCoords = (
+  coords: DraftLocationCoords | { latitude: number; longitude: number } | null | undefined,
+): coords is { latitude: number; longitude: number } =>
+  Boolean(
+    coords &&
+      isFiniteCoordinate(coords.latitude) &&
+      isFiniteCoordinate(coords.longitude) &&
+      coords.latitude >= -90 &&
+      coords.latitude <= 90 &&
+      coords.longitude >= -180 &&
+      coords.longitude <= 180,
+  );
 
 export default function FilterModal({
   visible,
@@ -105,80 +128,67 @@ export default function FilterModal({
   onApply,
 }: FilterModalProps) {
   const { colors, isDark } = useTheme();
-  const currentLocation = useAuthStore((state) => state.user?.currentLocation);
-  const [activeAge, setActiveAge] = useState('All Ages');
-  const [activePrice, setActivePrice] = useState('Free');
-  const [activeTime, setActiveTime] = useState('Morning');
+  const [activeAge, setActiveAge] = useState<string | null>(null);
+  const [activePrice, setActivePrice] = useState<string | null>(null);
+  const [activeTime, setActiveTime] = useState<string | null>(null);
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [hashtags, setHashtags] = useState('');
-  const [useCurrentLocation, setUseCurrentLocation] = useState(true);
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
 
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState(DEFAULT_LOCATION.label);
-  const [selectedLocationCoords, setSelectedLocationCoords] = useState({
-    latitude: DEFAULT_LOCATION.latitude,
-    longitude: DEFAULT_LOCATION.longitude,
-  });
+  const [locationSearchContext, setLocationSearchContext] = useState<LocationSearchContext | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [selectedLocationCoords, setSelectedLocationCoords] = useState<DraftLocationCoords>(EMPTY_LOCATION_COORDS);
+  const [selectedLocationResult, setSelectedLocationResult] = useState<LocationSearchResult | null>(null);
 
-  const [radius, setRadius] = useState(75);
+  const [radius, setRadius] = useState(DEFAULT_EVENT_RADIUS_MILES);
   const [trackWidth, setTrackWidth] = useState(0);
   const [isApplying, setIsApplying] = useState(false);
 
-  // Refs to manage async location fetch lifecycle
-  const abortFetchRef = useRef(false);
-  const locationResolvedRef = useRef(false);
-  const isFetchingRef = useRef(false);
   const updateRadiusRef = useRef<(x: number) => void>(null!);
-  const activeNearbyFilterRef = useRef(activeFilters.nearby);
-  activeNearbyFilterRef.current = activeFilters.nearby;
   const resetDraftRef = useRef(false);
-  const fetchLocationRef = useRef<(silent: boolean) => Promise<void>>(null!);
+  const searchContextRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (!visible) return;
 
     resetDraftRef.current = false;
-    setActiveAge(activeFilters.ageRestriction ? AGE_VALUE_TO_OPTION[activeFilters.ageRestriction] : 'All Ages');
-    setActivePrice(activeFilters.priceFilter ? PRICE_VALUE_TO_OPTION[activeFilters.priceFilter] : 'Free');
-    setActiveTime(activeFilters.timePeriod ? TIME_VALUE_TO_OPTION[activeFilters.timePeriod] : 'Morning');
+    setActiveAge(activeFilters.ageRestriction ? AGE_VALUE_TO_OPTION[activeFilters.ageRestriction] : null);
+    setActivePrice(activeFilters.priceFilter ? PRICE_VALUE_TO_OPTION[activeFilters.priceFilter] : null);
+    setActiveTime(
+      activeFilters.timePeriod && activeFilters.timePeriod !== 'any'
+        ? TIME_VALUE_TO_OPTION[activeFilters.timePeriod]
+        : null,
+    );
     setSelectedDate(parseLocalDateKey(activeFilters.selectedDate));
     setHashtags(activeFilters.hashtags.map((tag) => `#${tag}`).join(' '));
-    if (activeFilters.nearby) {
-      setRadius(activeFilters.nearby.radiusMiles);
-      setUseCurrentLocation(activeFilters.nearby.source === 'current');
-      setSelectedLocation(activeFilters.nearby.label || DEFAULT_LOCATION.label);
-      setSelectedLocationCoords({
-        latitude: activeFilters.nearby.latitude,
-        longitude: activeFilters.nearby.longitude,
-      });
-      // Treat an existing 'current' filter as already resolved
-      locationResolvedRef.current = activeFilters.nearby.source === 'current';
+    if (isValidEventLocationFilter(activeFilters.nearby)) {
+      setRadius(normalizeEventRadiusMiles(activeFilters.nearby.radiusMiles));
+      if (activeFilters.nearby.source === 'current') {
+        setUseCurrentLocation(true);
+        setSelectedLocation('');
+        setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
+        setSelectedLocationResult(null);
+      } else {
+        setUseCurrentLocation(false);
+        setSelectedLocation(activeFilters.nearby.label);
+        setSelectedLocationCoords({
+          latitude: activeFilters.nearby.latitude,
+          longitude: activeFilters.nearby.longitude,
+        });
+        setSelectedLocationResult(null);
+      }
     } else {
-      setRadius(75);
-      setUseCurrentLocation(true);
-      setSelectedLocation(DEFAULT_LOCATION.label);
-      setSelectedLocationCoords({
-        latitude: DEFAULT_LOCATION.latitude,
-        longitude: DEFAULT_LOCATION.longitude,
-      });
-      locationResolvedRef.current = false;
+      setRadius(DEFAULT_EVENT_RADIUS_MILES);
+      setUseCurrentLocation(false);
+      setSelectedLocation('');
+      setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
+      setSelectedLocationResult(null);
     }
   }, [activeFilters, visible]);
-
-  // On modal open (no active filter): silently resolve current location display
-  useEffect(() => {
-    if (!visible) {
-      abortFetchRef.current = true;
-      locationResolvedRef.current = false;
-      return;
-    }
-    if (activeNearbyFilterRef.current) return;
-    abortFetchRef.current = false;
-    void fetchLocationRef.current?.(true);
-  }, [visible]);
 
   // Fix: panResponder is created once; use a ref so callbacks always call the latest updateRadius
   const panResponder = useRef(
@@ -192,66 +202,55 @@ export default function FilterModal({
 
   const updateRadius = (x: number) => {
     if (trackWidth > 0) {
-      let percent = Math.max(0, Math.min(1, x / trackWidth));
-      setRadius(Math.round(percent * 200));
+      const percent = Math.max(0, Math.min(1, x / trackWidth));
+      const nextRadius = MIN_EVENT_RADIUS_MILES +
+        Math.round(percent * (MAX_EVENT_RADIUS_MILES - MIN_EVENT_RADIUS_MILES));
+      setRadius(normalizeEventRadiusMiles(nextRadius));
     }
   };
   updateRadiusRef.current = updateRadius;
 
-  // Fetch current GPS location and reverse-geocode it for display.
-  // silent=true: only proceeds if permission already granted (no permission prompt).
-  // silent=false: requests permission if needed (called when user explicitly enables the toggle).
-  const fetchAndDisplayCurrentLocation = useCallback(async (silent: boolean): Promise<void> => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
+  const clearSelectedLocationDraft = useCallback(() => {
+    setSelectedLocation('');
+    setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
+    setSelectedLocationResult(null);
+  }, []);
 
-    try {
-      let coords: { latitude: number; longitude: number } | null = null;
-
-      if (isFiniteCoordinate(currentLocation?.latitude) && isFiniteCoordinate(currentLocation?.longitude)) {
-        coords = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
-      } else if (silent) {
-        coords = await getCurrentLocationIfPermissionGranted();
-      } else {
-        const loc = await getCurrentLocationForSharing();
-        coords = { latitude: loc.latitude, longitude: loc.longitude };
-      }
-
-      if (abortFetchRef.current || !coords) return;
-
-      setSelectedLocationCoords(coords);
-
-      const geocoded = await reverseGeocodeLocation(coords.latitude, coords.longitude);
-
-      if (abortFetchRef.current) return;
-
-      if (geocoded?.label) {
-        setSelectedLocation(geocoded.label);
-      }
-      locationResolvedRef.current = true;
-    } catch (error) {
-      if (abortFetchRef.current) return;
-      if (!silent) {
-        setUseCurrentLocation(false);
-        Alert.alert(
-          'Location Error',
-          error instanceof Error ? error.message : 'Unable to get your current location. Check your location settings.',
-        );
-      }
-    } finally {
-      isFetchingRef.current = false;
-    }
-  }, [currentLocation]);
-  fetchLocationRef.current = fetchAndDisplayCurrentLocation;
-
-  const handleToggleCurrentLocation = useCallback(async (value: boolean) => {
+  const handleToggleCurrentLocation = useCallback((value: boolean) => {
     setUseCurrentLocation(value);
     if (value) {
-      locationResolvedRef.current = false;
-      abortFetchRef.current = false;
-      await fetchAndDisplayCurrentLocation(false);
+      clearSelectedLocationDraft();
     }
-  }, [fetchAndDisplayCurrentLocation]);
+  }, [clearSelectedLocationDraft]);
+
+  const resolveSearchProximityContext = useCallback(async (requestId: number) => {
+    try {
+      const location = await getCurrentLocationIfPermissionGranted();
+      if (requestId !== searchContextRequestIdRef.current) {
+        return;
+      }
+
+      setLocationSearchContext(isValidLocationCoords(location)
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            label: 'Device Location',
+          }
+        : null);
+    } catch {
+      if (requestId === searchContextRequestIdRef.current) {
+        setLocationSearchContext(null);
+      }
+    }
+  }, []);
+
+  const handleOpenLocationSearch = useCallback(() => {
+    setLocationSearchVisible(true);
+    setLocationSearchContext(null);
+    const requestId = searchContextRequestIdRef.current + 1;
+    searchContextRequestIdRef.current = requestId;
+    void resolveSearchProximityContext(requestId);
+  }, [resolveSearchProximityContext]);
 
   const handleDateChange = (event: any, date?: Date) => {
     setShowDatePicker(false);
@@ -262,47 +261,39 @@ export default function FilterModal({
 
   const handleReset = () => {
     resetDraftRef.current = true;
-    setActiveAge('All Ages');
-    setActivePrice('Free');
-    setActiveTime('Morning');
+    setActiveAge(null);
+    setActivePrice(null);
+    setActiveTime(null);
     setSelectedDate(null);
     setHashtags('');
     setUseCurrentLocation(false);
-    setSelectedLocation(DEFAULT_LOCATION.label);
-    setSelectedLocationCoords({
-      latitude: DEFAULT_LOCATION.latitude,
-      longitude: DEFAULT_LOCATION.longitude,
-    });
-    setRadius(75);
+    clearSelectedLocationDraft();
+    setRadius(DEFAULT_EVENT_RADIUS_MILES);
   };
 
   const handleApply = async () => {
-    if (isApplying) return;
+    if (isApplying || !canApplyCurrentDraft) return;
 
     setIsApplying(true);
     try {
       const parsedHashtags = parseHashtagFilterInput(hashtags);
+      const committedRadius = normalizeEventRadiusMiles(radius);
+      const timePeriod = activeTime ? TIME_OPTION_TO_VALUE[activeTime] : undefined;
       const nearby = useCurrentLocation
-        ? await resolveCurrentLocationFilter()
-        : {
-            latitude: selectedLocationCoords.latitude,
-            longitude: selectedLocationCoords.longitude,
-            radiusMiles: radius,
-            label: selectedLocation,
-            source: 'selected' as const,
-          };
+        ? await resolveCurrentLocationFilter(committedRadius)
+        : resolveSelectedLocationFilter(committedRadius);
 
       onApply(confirmVisibleEventFilters(
         activeFilters,
         {
-          ageRestriction: AGE_OPTION_TO_VALUE[activeAge],
-          priceFilter: PRICE_OPTION_TO_VALUE[activePrice],
+          ageRestriction: activeAge ? AGE_OPTION_TO_VALUE[activeAge] : undefined,
+          priceFilter: activePrice ? PRICE_OPTION_TO_VALUE[activePrice] : undefined,
           selectedDate: selectedDate ? toLocalDateKey(selectedDate) : null,
-          timePeriod: TIME_OPTION_TO_VALUE[activeTime],
+          timePeriod: timePeriod && timePeriod !== 'any' ? timePeriod : undefined,
           hashtags: parsedHashtags,
           nearby,
         },
-        { clearCategory: resetDraftRef.current, resetAll: resetDraftRef.current },
+        { clearCategory: resetDraftRef.current },
       ));
       onClose();
     } catch (error) {
@@ -315,36 +306,63 @@ export default function FilterModal({
     }
   };
 
-  const resolveCurrentLocationFilter = async (): Promise<NearbyEventsFilter> => {
-    const location = isFiniteCoordinate(currentLocation?.latitude) && isFiniteCoordinate(currentLocation?.longitude)
-      ? {
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude,
-        }
-      : await getCurrentLocationForSharing();
+  const resolveSelectedLocationFilter = (radiusMiles: number): NearbyEventsFilter | null => {
+    if (!selectedLocation.trim() && !selectedLocationResult) {
+      return null;
+    }
 
-    // Use the label already resolved via reverse geocoding; fall back to placeholder
-    const label = locationResolvedRef.current ? selectedLocation : 'Current Location';
+    if (!isValidLocationCoords(selectedLocationCoords)) {
+      throw new Error('Select a valid location result before applying this filter.');
+    }
+
+    return {
+      latitude: selectedLocationCoords.latitude,
+      longitude: selectedLocationCoords.longitude,
+      radiusMiles,
+      label: selectedLocation.trim() || selectedLocationResult?.label || 'Selected Location',
+      source: 'selected',
+    };
+  };
+
+  const resolveCurrentLocationFilter = async (radiusMiles: number): Promise<NearbyEventsFilter> => {
+    const location = await getCurrentLocationForSharing();
+
+    if (!isValidLocationCoords(location)) {
+      throw new Error('Unable to read a valid current location. Check Location Services and try again.');
+    }
 
     return {
       latitude: location.latitude,
       longitude: location.longitude,
-      radiusMiles: radius,
-      label,
+      radiusMiles,
+      label: 'Current Location',
       source: 'current',
     };
   };
 
   const handleSelectLocation = (location: LocationSearchResult) => {
+    if (!isValidLocationCoords(location)) {
+      return;
+    }
+
     setSelectedLocation(location.label);
     setSelectedLocationCoords({
       latitude: location.latitude,
       longitude: location.longitude,
     });
+    setSelectedLocationResult(location);
     setUseCurrentLocation(false);
   };
 
-  const renderPills = (options: string[], active: string, onSelect: (val: string) => void) => {
+  const canApplyCurrentDraft = canApplyEventFilters({
+    useCurrentLocation,
+    selectedLocationLabel: selectedLocation,
+    selectedLatitude: selectedLocationCoords.latitude,
+    selectedLongitude: selectedLocationCoords.longitude,
+  });
+  const isApplyDisabled = isApplying || !canApplyCurrentDraft;
+
+  const renderPills = (options: string[], active: string | null, onSelect: (val: string | null) => void) => {
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillContainer}>
         {options.map(opt => {
@@ -353,7 +371,7 @@ export default function FilterModal({
             <TouchableOpacity
               key={opt}
               style={[styles.pill, { borderColor: colors.border }, isActive && { backgroundColor: buttonBackground(colors), borderColor: colors.primary }]}
-              onPress={() => onSelect(opt)}
+              onPress={() => onSelect(toggleSingleSelectFilterValue(active, opt))}
               activeOpacity={0.8}
             >
               <Text style={[styles.pillText, { color: colors.textSecondary }, isActive && { color: buttonForeground(colors), fontWeight: 'bold' }]}>{opt}</Text>
@@ -442,16 +460,18 @@ export default function FilterModal({
               <TouchableOpacity
                 style={[styles.inputBox, styles.locationSearchBox, { borderColor: colors.border }]}
                 activeOpacity={0.8}
-                onPress={() => setLocationSearchVisible(true)}
+                onPress={handleOpenLocationSearch}
               >
                 <Feather name="search" size={16} color={colors.textSecondary} style={styles.inputIcon} />
                 <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>Search another location</Text>
               </TouchableOpacity>
 
-              <View style={[styles.inputBox, styles.selectedLocationBox, { backgroundColor: isDark ? '#52525A' : '#F0F0F3' }]}>
-                <Feather name="map-pin" size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                <Text style={[styles.inputText, { color: colors.text }]}>{selectedLocation}</Text>
-              </View>
+              {selectedLocation.trim() ? (
+                <View style={[styles.inputBox, styles.selectedLocationBox, { backgroundColor: isDark ? '#52525A' : '#F0F0F3' }]}>
+                  <Feather name="map-pin" size={16} color={colors.textSecondary} style={styles.inputIcon} />
+                  <Text style={[styles.inputText, { color: colors.text }]}>{selectedLocation}</Text>
+                </View>
+              ) : null}
 
               <View style={[styles.currentLocationRow, { borderColor: colors.border }]}>
                 <View style={styles.currentLocationLeft}>
@@ -477,11 +497,11 @@ export default function FilterModal({
                   onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
                   {...panResponder.panHandlers}
                 >
-                  <View style={[styles.sliderFill, { width: `${(radius / 200) * 100}%`, backgroundColor: colors.primary }]} />
-                  <View style={[styles.sliderThumb, { left: `${(radius / 200) * 100}%`, backgroundColor: colors.text }]} />
+                  <View style={[styles.sliderFill, { width: `${((radius - MIN_EVENT_RADIUS_MILES) / (MAX_EVENT_RADIUS_MILES - MIN_EVENT_RADIUS_MILES)) * 100}%`, backgroundColor: colors.primary }]} />
+                  <View style={[styles.sliderThumb, { left: `${((radius - MIN_EVENT_RADIUS_MILES) / (MAX_EVENT_RADIUS_MILES - MIN_EVENT_RADIUS_MILES)) * 100}%`, backgroundColor: colors.text }]} />
                 </View>
                 <View style={styles.radiusLabels}>
-                  <Text style={[styles.radiusLabelText, { color: colors.textSecondary }]}>0</Text>
+                  <Text style={[styles.radiusLabelText, { color: colors.textSecondary }]}>1</Text>
                   <Text style={[styles.radiusLabelText, { color: colors.textSecondary }]}>200 miles</Text>
                 </View>
               </View>
@@ -496,10 +516,11 @@ export default function FilterModal({
               <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.applyBtn, { backgroundColor: buttonBackground(colors) }, isApplying && styles.disabledBtn]}
+              style={[styles.applyBtn, { backgroundColor: buttonBackground(colors) }, isApplyDisabled && styles.disabledBtn]}
               onPress={handleApply}
               activeOpacity={0.8}
-              disabled={isApplying}
+              disabled={isApplyDisabled}
+              accessibilityState={{ disabled: isApplyDisabled }}
             >
               <Text style={[styles.applyBtnText, { color: buttonForeground(colors) }]}>
                 {isApplying ? 'Applying...' : 'Apply Filters'}
@@ -512,7 +533,12 @@ export default function FilterModal({
 
       <LocationSearchModal
         visible={locationSearchVisible}
-        onClose={() => setLocationSearchVisible(false)}
+        searchContext={locationSearchContext}
+        onClose={() => {
+          searchContextRequestIdRef.current += 1;
+          setLocationSearchVisible(false);
+          setLocationSearchContext(null);
+        }}
         onSelectLocation={handleSelectLocation}
       />
     </Modal>

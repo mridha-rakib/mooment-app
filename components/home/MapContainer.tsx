@@ -1,11 +1,17 @@
 import React from "react";
-import MapScreen, { MapMarkerData } from "@/components/ui/MapScreen";
+import MapScreen, { type MapFilterRecenterIntent, type MapMarkerData } from "@/components/ui/MapScreen";
 import { getMapEventPage, type EventResponse, type EventMapQuery } from "@/lib/events";
-import { createEmptyEventFilters, type SharedEventFilters } from "@/lib/eventFilters";
+import {
+  createEmptyEventFilters,
+  getEventLocationFilterKey,
+  isValidEventLocationFilter,
+  type SharedEventFilters,
+} from "@/lib/eventFilters";
 import {
   buildMapEventRequestParams,
   getMapViewportPageBudget,
   getMapViewportRequestKey,
+  getRadiusAwareMapZoom,
   type EventMapViewport,
 } from "@/lib/mapEventRequests";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -23,6 +29,8 @@ type MapContainerProps = {
   onBack?: () => void;
   logoText?: string;
   eventFilters?: SharedEventFilters;
+  filterRecenterKey?: string | null;
+  onFilterRecenterHandled?: (key: string) => void;
   onCategoryChange?: (category: EventCategory | null) => void;
 };
 
@@ -53,12 +61,10 @@ const getDistanceMiles = (from: [number, number], to: [number, number]) => {
   return distanceKm * 0.621371;
 };
 
-const formatDistance = (userLocation: [number, number] | null, eventLocation: [number, number]) => {
-  if (!userLocation) {
+const formatDistanceFromMiles = (miles: number | null) => {
+  if (miles === null) {
     return "nearby";
   }
-
-  const miles = getDistanceMiles(userLocation, eventLocation);
 
   if (miles < 0.1) {
     return "nearby";
@@ -196,6 +202,7 @@ const toMapMarker = (
 
   const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
   const primaryCategory = categories[0] ?? null;
+  const distanceMiles = userLocation ? getDistanceMiles(userLocation, [longitude, latitude]) : null;
 
   return {
     id: event.id,
@@ -208,7 +215,8 @@ const toMapMarker = (
     categories,
     scheduledAt: event.scheduledAt ?? null,
     hostName: getHostName(event),
-    distance: formatDistance(userLocation, [longitude, latitude]),
+    distance: formatDistanceFromMiles(distanceMiles),
+    distanceMeters: distanceMiles === null ? null : distanceMiles * 1609.344,
     isLive: isLiveEvent(event.scheduledAt),
     eventDate: formatEventDate(event.scheduledAt),
     eventTime: formatEventTime(event.scheduledAt),
@@ -237,7 +245,8 @@ const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
         marker.image === nextMarker.image &&
         marker.label === nextMarker.label &&
         marker.glowColor === nextMarker.glowColor &&
-        marker.distance === nextMarker.distance,
+        marker.distance === nextMarker.distance &&
+        marker.distanceMeters === nextMarker.distanceMeters,
     );
   });
 };
@@ -255,6 +264,8 @@ export default function MapContainer({
   onBack,
   logoText = "Mooment",
   eventFilters = createEmptyEventFilters(),
+  filterRecenterKey = null,
+  onFilterRecenterHandled,
   onCategoryChange,
 }: MapContainerProps) {
   const [markers, setMarkers] = React.useState<MapMarkerData[]>([]);
@@ -293,7 +304,7 @@ export default function MapContainer({
     };
   }, [settledViewport]);
 
-  const requestViewport = eventFilters.nearby ? null : debouncedViewport;
+  const requestViewport = isValidEventLocationFilter(eventFilters.nearby) ? null : debouncedViewport;
   const pageBudget = React.useMemo(
     () => getMapViewportPageBudget(eventFilters, requestViewport),
     [eventFilters, requestViewport],
@@ -303,6 +314,22 @@ export default function MapContainer({
     [eventFilters, requestViewport],
   );
   const mapRequestKey = React.useMemo(() => JSON.stringify(mapRequestParams), [mapRequestParams]);
+  const filterRecenterIntent = React.useMemo<MapFilterRecenterIntent | null>(() => {
+    if (!filterRecenterKey || !isValidEventLocationFilter(eventFilters.nearby)) {
+      return null;
+    }
+
+    const nearbyKey = getEventLocationFilterKey(eventFilters.nearby);
+    if (nearbyKey !== filterRecenterKey) {
+      return null;
+    }
+
+    return {
+      key: filterRecenterKey,
+      coordinate: [eventFilters.nearby.longitude, eventFilters.nearby.latitude],
+      zoomLevel: getRadiusAwareMapZoom(eventFilters.nearby.radiusMiles),
+    };
+  }, [eventFilters.nearby, filterRecenterKey]);
 
   React.useEffect(() => {
     if (!mapRequestParams) {
@@ -312,6 +339,9 @@ export default function MapContainer({
     let isMounted = true;
     const abortController = new AbortController();
     const requestId = ++mapRequestIdRef.current;
+    if (isValidEventLocationFilter(eventFilters.nearby)) {
+      applyMarkersIfChanged(setMarkers, []);
+    }
 
     const loadMapEvents = async () => {
       const markerById = new Map<string, MapMarkerData>();
@@ -331,7 +361,7 @@ export default function MapContainer({
           }
 
           pagesFetched += 1;
-          const distanceReference = eventFilters.nearby
+          const distanceReference = isValidEventLocationFilter(eventFilters.nearby)
             ? [eventFilters.nearby.longitude, eventFilters.nearby.latitude] as [number, number]
             : userLocationRef.current;
 
@@ -381,6 +411,8 @@ export default function MapContainer({
       onBack={onBack}
       onUserLocationChange={handleUserLocationChange}
       onViewportChange={handleViewportChange}
+      filterRecenterIntent={filterRecenterIntent}
+      onFilterRecenterHandled={onFilterRecenterHandled}
       selectedCategory={eventFilters.category ?? null}
       onCategoryChange={onCategoryChange}
     />

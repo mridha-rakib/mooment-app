@@ -5,6 +5,15 @@ import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
 import type { EventMapViewport } from "@/lib/mapEventRequests";
 import {
+  getCarouselIndexByMarkerId,
+  getCoordinateDistanceMeters,
+  getNearestEventSequence,
+  isValidCarouselCoordinate,
+  markerMatchesCategory,
+  resolveCarouselSelection,
+  type MapCarouselMarker,
+} from "@/lib/mapEventCarousel";
+import {
   getBestCurrentDeviceLocation,
   isValidLocationCoordinate,
   toMapboxCoordinate,
@@ -74,14 +83,24 @@ const MAP_GESTURE_SETTINGS = {
 
 type MapViewMode = "traffic" | "satellite";
 type UserLocationSource = "fresh" | "lastKnown" | "stored";
+type CameraMoveSource = UserLocationSource | "filter";
 type PendingCameraMove = {
   coordinate: [number, number];
   animationDuration: number;
-  source: UserLocationSource;
+  source: CameraMoveSource;
   mode: "initial" | "manual";
+  zoomLevel?: number;
+  reason?: "filter";
+  intentKey?: string;
 };
 
-export type MapMarkerData = {
+export type MapFilterRecenterIntent = {
+  key: string;
+  coordinate: [number, number];
+  zoomLevel: number;
+};
+
+export type MapMarkerData = MapCarouselMarker & {
   id: string;
   latitude: number;
   longitude: number;
@@ -93,6 +112,7 @@ export type MapMarkerData = {
   scheduledAt?: string | null;
   hostName?: string | null;
   distance?: string | null;
+  distanceMeters?: number | null;
   isLive?: boolean;
   eventDate?: string | null;
   eventTime?: string | null;
@@ -110,6 +130,8 @@ type MapScreenProps = {
   logoText?: string;
   onUserLocationChange?: (coordinate: [number, number]) => void;
   onViewportChange?: (viewport: EventMapViewport) => void;
+  filterRecenterIntent?: MapFilterRecenterIntent | null;
+  onFilterRecenterHandled?: (key: string) => void;
   selectedCategory?: EventCategory | null;
   onCategoryChange?: (category: EventCategory | null) => void;
 };
@@ -292,8 +314,6 @@ const toLocationPayload = (
 const isValidMapboxCoordinate = (coordinate: [number, number] | null | undefined) =>
   Boolean(coordinate && toLocationPayload(coordinate[0], coordinate[1], Date.now()));
 
-const toRadians = (value: number) => (value * Math.PI) / 180;
-
 const normalizeLongitude = (longitude: number) => {
   const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
 
@@ -362,19 +382,14 @@ const toEventMapViewport = (state: MapState): EventMapViewport | null => {
   };
 };
 
-const getCoordinateDistanceMeters = (from: [number, number], to: [number, number]) => {
-  const earthRadiusMeters = 6371000;
-  const [fromLongitude, fromLatitude] = from;
-  const [toLongitude, toLatitude] = to;
-  const latitudeDelta = toRadians(toLatitude - fromLatitude);
-  const longitudeDelta = toRadians(toLongitude - fromLongitude);
-  const a =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(toRadians(fromLatitude)) *
-      Math.cos(toRadians(toLatitude)) *
-      Math.sin(longitudeDelta / 2) ** 2;
+const getViewportCenterCoordinate = (viewport: EventMapViewport): [number, number] | null => {
+  const latitude = (viewport.north + viewport.south) / 2;
+  const longitude = viewport.west <= viewport.east
+    ? (viewport.west + viewport.east) / 2
+    : normalizeLongitude((viewport.west + viewport.east + 360) / 2);
+  const coordinate: [number, number] = [normalizeLongitude(longitude), latitude];
 
-  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return isValidCarouselCoordinate(coordinate) ? coordinate : null;
 };
 
 const areCoordinatesNear = (
@@ -387,8 +402,29 @@ const areCoordinatesNear = (
       getCoordinateDistanceMeters(from, to) < INITIAL_CAMERA_CORRECTION_THRESHOLD_METERS,
   );
 
-const markerMatchesCategory = (marker: MapMarkerData, category: EventCategory) =>
-  Boolean(marker.categories?.includes(category) || marker.category === category);
+const toCameraCenterCoordinate = (state: MapState): [number, number] | null => {
+  const properties = state.properties as MapState["properties"] & {
+    center?: unknown;
+    centerCoordinate?: unknown;
+  };
+  const rawCenter = properties.centerCoordinate ?? properties.center;
+
+  if (
+    Array.isArray(rawCenter) &&
+    typeof rawCenter[0] === "number" &&
+    typeof rawCenter[1] === "number"
+  ) {
+    const coordinate: [number, number] = [rawCenter[0], rawCenter[1]];
+
+    if (isValidCarouselCoordinate(coordinate)) {
+      return coordinate;
+    }
+  }
+
+  const viewport = toEventMapViewport(state);
+
+  return viewport ? getViewportCenterCoordinate(viewport) : null;
+};
 
 const getMarkerDisplayColor = (
   marker: MapMarkerData,
@@ -403,6 +439,8 @@ export default function MapScreen({
   markers = [],
   onUserLocationChange,
   onViewportChange,
+  filterRecenterIntent = null,
+  onFilterRecenterHandled,
   selectedCategory,
   onCategoryChange,
 }: MapScreenProps) {
@@ -444,10 +482,13 @@ export default function MapScreen({
   const userLocationSourceRef = React.useRef<UserLocationSource | null>(null);
   const pendingCameraMoveRef = React.useRef<PendingCameraMove | null>(null);
   const lastManualRecenterCoordinateRef = React.useRef<[number, number] | null>(null);
+  const handledFilterRecenterKeyRef = React.useRef<string | null>(null);
+  const cameraCenterRef = React.useRef<[number, number] | null>(null);
   const [mapMode, setMapMode] = useState<MapViewMode>("traffic");
-  const [, setUserLocation] = useState<[number, number] | null>(
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(
     null,
   );
+  const [cameraCenter, setCameraCenter] = useState<[number, number] | null>(null);
   const [, setUserLocationSource] = useState<UserLocationSource | null>(null);
   const [canUseStoredFallback, setCanUseStoredFallback] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
@@ -544,24 +585,31 @@ export default function MapScreen({
     }
 
     pendingCameraMoveRef.current = null;
-    currentZoomRef.current = USER_LOCATION_ZOOM_LEVEL;
+    const zoomLevel = move.zoomLevel ?? USER_LOCATION_ZOOM_LEVEL;
+    currentZoomRef.current = zoomLevel;
     cameraRef.current.setCamera({
       centerCoordinate: move.coordinate,
       heading: 0,
       pitch: 0,
-      zoomLevel: USER_LOCATION_ZOOM_LEVEL,
+      zoomLevel,
       animationDuration: move.animationDuration,
     });
 
+    if (move.reason === "filter" && move.intentKey) {
+      handledFilterRecenterKeyRef.current = move.intentKey;
+      onFilterRecenterHandled?.(move.intentKey);
+    }
+
     if (move.mode === "initial") {
+      const initialSource = move.source === "filter" ? "stored" : move.source;
       hasInitialUserLocationCenteredRef.current = true;
-      initialCenteredSourceRef.current = move.source;
+      initialCenteredSourceRef.current = initialSource;
       initialCenteredCoordinateRef.current = move.coordinate;
-      canCorrectInitialCenterRef.current = move.source === "lastKnown";
+      canCorrectInitialCenterRef.current = initialSource === "lastKnown";
     }
 
     return true;
-  }, []);
+  }, [onFilterRecenterHandled]);
 
   const coordinateInitialCameraMove = React.useCallback(
     (
@@ -735,10 +783,13 @@ export default function MapScreen({
   const centerOnManualCoordinate = React.useCallback(
     (
       coordinate: [number, number],
-      source: UserLocationSource,
+      source: CameraMoveSource,
       animationDuration = 1000,
+      zoomLevel = USER_LOCATION_ZOOM_LEVEL,
+      reason?: "filter",
+      intentKey?: string,
     ) => {
-      if (areCoordinatesNear(lastManualRecenterCoordinateRef.current, coordinate)) {
+      if (reason !== "filter" && areCoordinatesNear(lastManualRecenterCoordinateRef.current, coordinate)) {
         return false;
       }
 
@@ -750,6 +801,9 @@ export default function MapScreen({
         animationDuration,
         source,
         mode: "manual",
+        zoomLevel,
+        reason,
+        intentKey,
       });
     },
     [executeCameraMove],
@@ -832,6 +886,28 @@ export default function MapScreen({
   );
 
   React.useEffect(() => {
+    if (!filterRecenterIntent) {
+      if (pendingCameraMoveRef.current?.reason === "filter") {
+        pendingCameraMoveRef.current = null;
+      }
+      return;
+    }
+
+    if (handledFilterRecenterKeyRef.current === filterRecenterIntent.key) {
+      return;
+    }
+
+    centerOnManualCoordinate(
+      filterRecenterIntent.coordinate,
+      "filter",
+      1000,
+      filterRecenterIntent.zoomLevel,
+      "filter",
+      filterRecenterIntent.key,
+    );
+  }, [centerOnManualCoordinate, filterRecenterIntent]);
+
+  React.useEffect(() => {
     isStyleLoadedRef.current = isStyleLoaded;
 
     if (isStyleLoaded) {
@@ -858,13 +934,70 @@ export default function MapScreen({
         : markers.filter((marker) => markerMatchesCategory(marker, activeCategory)),
     [activeCategory, markers],
   );
+  const carouselMarkers = React.useMemo(
+    () => getNearestEventSequence(visibleMarkers, { userLocation, cameraCenter }),
+    [cameraCenter, userLocation, visibleMarkers],
+  );
+
+  const selectMarker = React.useCallback((marker: MapMarkerData) => {
+    const displayColor = getMarkerDisplayColor(marker, activeCategory);
+    const selected = { ...marker, glowColor: displayColor };
+
+    setSelectedMarker(selected);
+    setSelectedThemeColor(displayColor);
+
+    return selected;
+  }, [activeCategory]);
 
   const handleMarkerPress = React.useCallback((marker: MapMarkerData) => {
-    const displayColor = getMarkerDisplayColor(marker, activeCategory);
-    setSelectedMarker({ ...marker, glowColor: displayColor });
-    setSelectedThemeColor(displayColor);
+    selectMarker(marker);
     setModalVisible(true);
-  }, [activeCategory]);
+  }, [selectMarker]);
+
+  React.useEffect(() => {
+    if (!modalVisible) {
+      return;
+    }
+
+    const nextMarker = resolveCarouselSelection(carouselMarkers, selectedMarker?.id);
+
+    if (!nextMarker) {
+      setModalVisible(false);
+      setSelectedMarker(null);
+      return;
+    }
+
+    selectMarker(nextMarker);
+  }, [carouselMarkers, modalVisible, selectedMarker?.id, selectMarker]);
+
+  const previewItems = React.useMemo(
+    () => carouselMarkers.map((marker) => ({
+      id: marker.id,
+      themeColor: getMarkerDisplayColor(marker, activeCategory),
+      eventTitle: marker.label,
+      hostName: marker.hostName ?? undefined,
+      distance: marker.distance ?? undefined,
+      isLive: marker.isLive,
+      eventDate: marker.eventDate ?? undefined,
+      eventTime: marker.eventTime ?? undefined,
+      location: marker.location ?? undefined,
+      attendeesCount: marker.attendeesCount,
+      ageLimit: marker.ageLimit ?? undefined,
+      price: marker.price ?? undefined,
+      ticketsAvailable: marker.ticketsAvailable ?? undefined,
+      ticketSalesEndDate: marker.ticketSalesEndDate ?? undefined,
+    })),
+    [activeCategory, carouselMarkers],
+  );
+
+  const handlePreviewEventChange = React.useCallback((eventId: string) => {
+    const index = getCarouselIndexByMarkerId(carouselMarkers, eventId);
+    const marker = index >= 0 ? carouselMarkers[index] : null;
+
+    if (marker) {
+      selectMarker(marker);
+    }
+  }, [carouselMarkers, selectMarker]);
 
   const handleViewEvent = () => {
     if (!selectedMarker?.id) {
@@ -919,6 +1052,12 @@ export default function MapScreen({
   };
 
   const handleCameraChanged = React.useCallback((state: MapState) => {
+    const nextCameraCenter = toCameraCenterCoordinate(state);
+
+    if (nextCameraCenter) {
+      cameraCenterRef.current = nextCameraCenter;
+    }
+
     if (typeof state.properties.zoom === "number") {
       currentZoomRef.current = state.properties.zoom;
     }
@@ -935,6 +1074,13 @@ export default function MapScreen({
     const viewport = toEventMapViewport(state);
 
     if (viewport) {
+      const nextCameraCenter = getViewportCenterCoordinate(viewport);
+
+      if (nextCameraCenter && !areCoordinatesNear(cameraCenterRef.current, nextCameraCenter)) {
+        cameraCenterRef.current = nextCameraCenter;
+        setCameraCenter(nextCameraCenter);
+      }
+
       onViewportChange?.(viewport);
     }
   }, [onViewportChange]);
@@ -1105,6 +1251,9 @@ export default function MapScreen({
           setModalVisible(false);
           setSelectedMarker(null);
         }}
+        eventItems={previewItems}
+        selectedEventId={selectedMarker?.id ?? null}
+        onVisibleEventChange={handlePreviewEventChange}
         themeColor={selectedMarker?.glowColor ?? selectedThemeColor}
         eventTitle={selectedMarker?.label}
         hostName={selectedMarker?.hostName ?? undefined}
