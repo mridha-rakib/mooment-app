@@ -2644,11 +2644,7 @@ const styles = StyleSheet.create({
     height: 130,
   },
   gradient: {
-    position: "absolute",
-    left: 0,
-    top: 62,
-    width: 440,
-    height: 240,
+    ...StyleSheet.absoluteFillObject,
   },
   overlaidMeta: {
     position: "absolute",

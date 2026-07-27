@@ -156,6 +156,8 @@ export default function UserProfileScreen() {
         accountType: user.accountType,
         isFollowing: typeof user.isFollowing === "boolean" ? user.isFollowing : routeIsFollowing,
         profileAccess: "open",
+        viewerHasBlockedTarget: Boolean(user.viewerHasBlockedTarget),
+        targetHasBlockedViewer: Boolean(user.targetHasBlockedViewer),
         stats: {
           events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
           reviews: stats.reviews,

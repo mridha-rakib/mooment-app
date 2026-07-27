@@ -204,11 +204,6 @@ export default function SettingsScreen() {
             onValueChange={handleDarkModeChange}
             colors={colors}
           />
-        </View>
-
-        {/* PRIVACY & SAFETY Section */}
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>PRIVACY & SAFETY</Text>
-        <View style={styles.sectionGroup}>
           <SettingItem
             icon="slash"
             label="Blocked Accounts"

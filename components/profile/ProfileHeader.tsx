@@ -31,8 +31,12 @@ type ProfileHeaderProps = {
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
   onReport?: () => void;
+  reportDisabled?: boolean;
   onSave?: () => void;
   isSaved?: boolean;
+  onBlock?: () => void;
+  blockLabel?: string;
+  blockDisabled?: boolean;
   onEventsPress?: () => void;
   onAvatarPress?: () => void;
 };
@@ -46,8 +50,12 @@ export default function ProfileHeader({
   isOwnProfile = true,
   onMenuPress,
   onReport,
+  reportDisabled = false,
   onSave,
   isSaved = false,
+  onBlock,
+  blockLabel,
+  blockDisabled = false,
   onEventsPress,
   onAvatarPress,
 }: ProfileHeaderProps) {
@@ -99,8 +107,13 @@ export default function ProfileHeader({
         onClose={() => setShowMore(false)}
         showDelete={false}
         onReport={onReport}
+        reportDisabled={reportDisabled}
+        openReportAfterClose
         onSave={onSave}
         isSaved={isSaved}
+        onBlock={onBlock}
+        blockLabel={blockLabel}
+        blockDisabled={blockDisabled}
         top={110} // Positioned under the header button
       />
 

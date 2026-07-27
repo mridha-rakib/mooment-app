@@ -1,15 +1,19 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
+import { InteractionManager, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 
 type MoreMenuModalProps = {
   visible: boolean;
   onClose: () => void;
   onReport?: () => void;
+  reportDisabled?: boolean;
+  openReportAfterClose?: boolean;
   onSave?: () => void;
   isSaved?: boolean;
   onBlock?: () => void;
+  blockLabel?: string;
+  blockDisabled?: boolean;
   onDelete?: () => void;
   showDelete?: boolean;
   deleteLabel?: string;
@@ -20,15 +24,38 @@ export default function MoreMenuModal({
   visible,
   onClose,
   onReport,
+  reportDisabled = false,
+  openReportAfterClose = false,
   onSave,
   isSaved = false,
   onBlock,
+  blockLabel = "Block",
+  blockDisabled = false,
   onDelete,
   showDelete = false,
   deleteLabel = "Delete",
   top
 }: MoreMenuModalProps) {
   const { colors } = useTheme();
+
+  const handleReportPress = () => {
+    if (reportDisabled) {
+      return;
+    }
+
+    if (!openReportAfterClose) {
+      onReport?.();
+      onClose();
+      return;
+    }
+
+    onClose();
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        onReport?.();
+      });
+    });
+  };
 
   return (
     <Modal
@@ -44,12 +71,11 @@ export default function MoreMenuModal({
               {onReport && (
                 <>
                   <TouchableOpacity 
-                    style={styles.menuItem} 
+                    style={[styles.menuItem, reportDisabled && styles.disabledMenuItem]}
                     activeOpacity={0.7} 
-                    onPress={() => {
-                      onReport?.();
-                      onClose();
-                    }}
+                    onPress={handleReportPress}
+                    disabled={reportDisabled}
+                    accessibilityState={reportDisabled ? { disabled: true } : undefined}
                   >
                     <Feather name="flag" size={20} color={colors.text} style={styles.menuIcon} />
                     <Text style={[styles.menuText, { color: colors.text }]}>Report</Text>
@@ -84,15 +110,17 @@ export default function MoreMenuModal({
               {onBlock && (
                 <>
                   <TouchableOpacity
-                    style={styles.menuItem}
+                    style={[styles.menuItem, blockDisabled && styles.disabledMenuItem]}
                     activeOpacity={0.7}
                     onPress={() => {
                       onBlock?.();
                       onClose();
                     }}
+                    disabled={blockDisabled}
+                    accessibilityState={blockDisabled ? { disabled: true } : undefined}
                   >
                     <Feather name="slash" size={20} color={colors.text} style={styles.menuIcon} />
-                    <Text style={[styles.menuText, { color: colors.text }]}>Block</Text>
+                    <Text style={[styles.menuText, { color: colors.text }]}>{blockLabel}</Text>
                   </TouchableOpacity>
                   {showDelete && onDelete && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
@@ -148,6 +176,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 16,
+  },
+  disabledMenuItem: {
+    opacity: 0.45,
   },
   menuIcon: {
     marginRight: 12,

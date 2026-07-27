@@ -9,7 +9,7 @@ import type {
 import { createReport } from "@/lib/reports";
 import { getUserStories, type Story } from "@/lib/stories";
 import { createStoryViewerSession } from "@/lib/storyViewerSession";
-import { unblockUser } from "@/lib/users";
+import { blockUser, unblockUser } from "@/lib/users";
 import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -140,8 +140,12 @@ export default function ProfileView({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [avatarModalMode, setAvatarModalMode] = useState<ProfileAvatarModalMode>(null);
   const [isUnblockingProfile, setIsUnblockingProfile] = useState(false);
+  const [isProfileBlockMutationPending, setIsProfileBlockMutationPending] = useState(false);
   const [blockedMenuVisible, setBlockedMenuVisible] = useState(false);
   const isBlockedProfile = user.profileAccess === "blocked";
+  const hasProfileBlockRelationship = Boolean(
+    isBlockedProfile || user.viewerHasBlockedTarget || user.targetHasBlockedViewer,
+  );
   const profileStoriesRef = useRef<{
     userId: string;
     stories: Story[];
@@ -150,9 +154,19 @@ export default function ProfileView({
   const profileStoriesRequestRef = useRef<{ userId: string; request: Promise<Story[]> } | null>(null);
   const avatarTapInFlightRef = useRef(false);
   const storyNavigationInFlightRef = useRef(false);
+  const profileBlockMutationPendingRef = useRef(false);
+  const mountedRef = useRef(true);
   const viewedUserIdRef = useRef(user.id);
 
   viewedUserIdRef.current = user.id;
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadProfileStories = useCallback(() => {
     if (isBlockedProfile) {
@@ -336,7 +350,7 @@ export default function ProfileView({
   const isReportSubmittingRef = useRef(false);
 
   const handleReportPress = useCallback(() => {
-    if (isOwnProfile) return;
+    if (isOwnProfile || hasProfileBlockRelationship) return;
 
     if (!MONGO_OBJECT_ID_PATTERN.test(user.id)) {
       Alert.alert(
@@ -347,7 +361,7 @@ export default function ProfileView({
     }
 
     setReportReasonVisible(true);
-  }, [isOwnProfile, user.id]);
+  }, [hasProfileBlockRelationship, isOwnProfile, user.id]);
 
   const handleReportReason = useCallback((reason: string) => {
     setReportReason(reason);
@@ -398,12 +412,92 @@ export default function ProfileView({
     [reportReason, user.id],
   );
 
-  const handleSavePress = useCallback(() => {
+  const runProfileBlockMutation = useCallback(async (action: "block" | "unblock") => {
+    if (profileBlockMutationPendingRef.current || isProfileBlockMutationPending) {
+      return;
+    }
+
+    profileBlockMutationPendingRef.current = true;
+    setIsProfileBlockMutationPending(true);
+
+    try {
+      if (action === "block") {
+        await blockUser(user.id);
+      } else {
+        await unblockUser(user.id);
+      }
+
+      try {
+        await onRefresh?.();
+      } catch (refreshError) {
+        Alert.alert(
+          "Unable to refresh profile",
+          getAuthErrorMessage(refreshError, "Please refresh the profile and try again."),
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        action === "block" ? "Unable to block" : "Unable to unblock",
+        getAuthErrorMessage(error, "Please try again."),
+      );
+    } finally {
+      profileBlockMutationPendingRef.current = false;
+      if (mountedRef.current) {
+        setIsProfileBlockMutationPending(false);
+      }
+    }
+  }, [isProfileBlockMutationPending, onRefresh, user.id]);
+
+  const handleProfileBlockMenuPress = useCallback(() => {
+    if (
+      isOwnProfile ||
+      isProfileBlockMutationPending ||
+      !MONGO_OBJECT_ID_PATTERN.test(user.id) ||
+      user.targetHasBlockedViewer
+    ) {
+      return;
+    }
+
+    if (user.viewerHasBlockedTarget) {
+      Alert.alert(
+        "Unblock this account?",
+        "They may be able to find your profile and interact with you again.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unblock",
+            style: "destructive",
+            onPress: () => {
+              void runProfileBlockMutation("unblock");
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
-      "Save unavailable",
-      "Profile save is not supported by the API yet. No saved state was changed.",
+      "Block User",
+      "You won't see posts from this user in your feed anymore. They won't be notified.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: () => {
+            void runProfileBlockMutation("block");
+          },
+        },
+      ],
     );
-  }, []);
+  }, [
+    isOwnProfile,
+    isProfileBlockMutationPending,
+    runProfileBlockMutation,
+    user.id,
+    user.targetHasBlockedViewer,
+    user.viewerHasBlockedTarget,
+  ]);
 
   const handleUnblockProfile = useCallback(async () => {
     if (!user.viewerHasBlockedTarget || isUnblockingProfile) {
@@ -532,7 +626,11 @@ export default function ProfileView({
           onClose={() => setBlockedMenuVisible(false)}
           showDelete={false}
           onReport={handleReportPress}
-          onSave={handleSavePress}
+          reportDisabled={hasProfileBlockRelationship}
+          openReportAfterClose
+          onBlock={user.viewerHasBlockedTarget ? handleProfileBlockMenuPress : undefined}
+          blockLabel="Unblock"
+          blockDisabled={isProfileBlockMutationPending}
           top={88}
         />
         {reportModals}
@@ -552,7 +650,10 @@ export default function ProfileView({
         onMenuPress={() => setMenuVisible(true)}
         onAvatarPress={() => void handleAvatarPress()}
         onReport={!isOwnProfile ? handleReportPress : undefined}
-        onSave={!isOwnProfile ? handleSavePress : undefined}
+        reportDisabled={hasProfileBlockRelationship}
+        onBlock={!isOwnProfile && !user.targetHasBlockedViewer ? handleProfileBlockMenuPress : undefined}
+        blockLabel={user.viewerHasBlockedTarget ? "Unblock" : "Block"}
+        blockDisabled={isProfileBlockMutationPending}
         onEventsPress={() =>
           router.push({
             pathname: "/profile-screen/all-events" as never,
