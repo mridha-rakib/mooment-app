@@ -33,9 +33,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  cancelTicketPass,
   cancelTicketShare,
+  emitTicketWalletChanged,
   getEventTicketStats,
   shareTicketWithFriend,
+  type TicketCancellation,
   type TicketShare,
   type TicketStatEntry,
   type TicketWalletPass,
@@ -183,6 +186,20 @@ const getWalletRefundStatusLabel = (status: string) => {
   return status ? "Refund processing" : "";
 };
 
+const getTicketCancellationRefundLabel = (cancellation?: TicketCancellation | null) => {
+  if (!cancellation || cancellation.refundStatus === "not_required") return "";
+  if (cancellation.refundStatus === "succeeded") return "Refunded";
+  if (cancellation.status === "needs_attention" || cancellation.refundStatus === "failed_terminal") {
+    return "Refund needs attention";
+  }
+  return "Refund processing";
+};
+
+const getTicketCancellationStatusLabel = (cancellation?: TicketCancellation | null) => {
+  if (!cancellation) return "";
+  return cancellation.status === "needs_attention" ? "Refund needs attention" : "Cancelled";
+};
+
 const TicketDetailScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -238,6 +255,8 @@ const TicketDetailScreen = () => {
   const [friendSearch, setFriendSearch] = useState("");
   const [isFriendsLoading, setIsFriendsLoading] = useState(false);
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
+  const [isCancellingTicket, setIsCancellingTicket] = useState(false);
+  const [walletServerNowTick, setWalletServerNowTick] = useState(() => Date.now());
   const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
 
   const eventId = getValidEventIdParam(params.eventId);
@@ -468,22 +487,68 @@ const TicketDetailScreen = () => {
   ]);
   const [walletTicketPasses, setWalletTicketPasses] = useState<TicketWalletPass[]>(initialWalletTicketPasses);
   const [selectedSharePassIndex, setSelectedSharePassIndex] = useState(() => {
-    const firstUnsharedIndex = initialWalletTicketPasses.findIndex((pass) => !pass.currentShare && pass.status !== "used");
+    const firstUnsharedIndex = initialWalletTicketPasses.findIndex((pass) => !pass.currentShare && pass.status === "active");
     return firstUnsharedIndex >= 0 ? firstUnsharedIndex : 0;
   });
   const walletVisibleTicketPasses = useMemo(
     () => (walletSource === "owned" ? walletTicketPasses.filter((pass) => !pass.currentShare) : walletTicketPasses),
     [walletSource, walletTicketPasses],
   );
-  const walletIsCancelled = walletStatusParam === "cancelled" || Boolean(walletRefundStatus);
-  const walletActiveVisiblePassCount = walletVisibleTicketPasses.filter((pass) => pass.status !== "used").length;
+  const selectedWalletPass = walletVisibleTicketPasses[0] ?? null;
+  const selectedCancellation = selectedWalletPass?.cancellation ?? null;
+  const selectedEligibility = selectedWalletPass?.cancellationEligibility ?? null;
+  const walletPassRefundStatus = getTicketCancellationRefundLabel(selectedCancellation);
+  const walletPassCancellationStatus = getTicketCancellationStatusLabel(selectedCancellation);
+  const serverOffsetMs = useMemo(() => {
+    const serverNowSource = selectedEligibility?.serverNow;
+    if (!serverNowSource) return 0;
+
+    const parsedServerNow = new Date(serverNowSource).getTime();
+    return Number.isFinite(parsedServerNow) ? parsedServerNow - Date.now() : 0;
+  }, [selectedEligibility?.serverNow]);
+  const cancellationCutoffAtMs = useMemo(() => {
+    const cutoffSource = selectedEligibility?.cancellationCutoffAt;
+    if (!cutoffSource) return null;
+
+    const parsedCutoff = new Date(cutoffSource).getTime();
+    return Number.isFinite(parsedCutoff) ? parsedCutoff : null;
+  }, [selectedEligibility?.cancellationCutoffAt]);
+  const clientCutoffReached = Boolean(
+    selectedEligibility?.canCancel &&
+    cancellationCutoffAtMs !== null &&
+    walletServerNowTick + serverOffsetMs >= cancellationCutoffAtMs,
+  );
+  const walletIsCancelled =
+    walletStatusParam === "cancelled" ||
+    selectedWalletPass?.status === "cancelled" ||
+    Boolean(selectedCancellation) ||
+    Boolean(walletRefundStatus);
+  const walletActiveVisiblePassCount = walletVisibleTicketPasses.filter((pass) => pass.status === "active").length;
   const walletCanShare = !walletIsCancelled && walletSource === "owned" && walletActiveVisiblePassCount >= 2;
-  const walletCanShowQr = !walletIsCancelled && walletVisibleTicketPasses.length > 0;
+  const walletCanShowQr = !walletIsCancelled && Boolean(selectedWalletPass?.qrCode) && selectedWalletPass?.status === "active";
   const selectedSharePass = walletTicketPasses[Math.min(selectedSharePassIndex, Math.max(0, walletTicketPasses.length - 1))] ?? null;
   const selectedShare = selectedSharePass?.currentShare ?? null;
   const hasAnySharedPass = walletTicketPasses.some((pass) => Boolean(pass.currentShare));
   const hasAnyUsedPass = walletTicketPasses.some((pass) => pass.status === "used");
-  const walletStatusLabel = hasAnyUsedPass && walletActiveVisiblePassCount === 0 ? "Used" : hasAnySharedPass && !walletCanShowQr ? "Shared" : "Active";
+  const walletStatusLabel = walletIsCancelled
+    ? "Cancelled"
+    : hasAnyUsedPass && walletActiveVisiblePassCount === 0
+      ? "Used"
+      : hasAnySharedPass && !walletCanShowQr
+        ? "Shared"
+        : "Active";
+  const walletCancellationDisabledMessage = clientCutoffReached
+    ? "Ticket cancellation is unavailable within 3 hours of the event start time."
+    : selectedEligibility?.disabledMessage ?? "";
+  const walletCanCancelTicket = Boolean(
+    walletSource === "owned" &&
+    selectedWalletPass &&
+    !selectedCancellation &&
+    selectedWalletPass.status === "active" &&
+    selectedEligibility?.canCancel &&
+    !clientCutoffReached &&
+    !isCancellingTicket,
+  );
   const filteredFriends = useMemo(
     () => friends.filter((friend) => friend.id !== selectedShare?.friend?.id),
     [friends, selectedShare?.friend?.id],
@@ -564,8 +629,20 @@ const TicketDetailScreen = () => {
     },
     [],
   );
+  useEffect(() => {
+    if (!isWalletTicket) {
+      return undefined;
+    }
+
+    const intervalId = setInterval(() => {
+      setWalletServerNowTick(Date.now());
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [isWalletTicket]);
+
   const walletDetails = [
-    { label: "Ticket No", value: walletVisibleTicketPasses[0]?.ticketNo ?? walletTicketNo },
+    { label: "Ticket No", value: selectedWalletPass?.ticketNo || walletTicketNo },
     { label: "Host", value: walletHostName },
     { label: "Event", value: walletEventTitle },
     { label: "Venue", value: walletLocation },
@@ -577,20 +654,41 @@ const TicketDetailScreen = () => {
     { label: "Total Tickets", value: `${walletTicketName} x ${walletPurchaseCount}` },
     { label: "Event start", value: walletEventStartDateTime },
     { label: "Event end", value: walletEventEndDateTime },
-    {
-      label: walletHasShareQr ? "Amount paid" : "Amount Pending",
-      value: walletAmount,
-      isPrice: true,
-    },
-    ...(walletRefundStatus
+    ...(walletSource === "owned"
+      ? [{
+          label: walletHasShareQr ? "Amount paid" : "Amount Pending",
+          value: walletAmount,
+          isPrice: true,
+        }]
+      : []),
+    ...(walletPassCancellationStatus ? [{ label: "Status", value: walletPassCancellationStatus }] : []),
+    ...(walletPassRefundStatus
       ? [
-          { label: "Refund status", value: walletRefundStatus },
-          ...(walletCancellationReason ? [{ label: "Cancellation reason", value: walletCancellationReason }] : []),
-          ...(walletRefundRequestedAmount ? [{ label: "Refund requested", value: walletRefundRequestedAmount, isPrice: true }] : []),
-          ...(walletRefundCompletedAmount ? [{ label: "Refund completed", value: walletRefundCompletedAmount, isPrice: true }] : []),
-          ...(walletRefundUpdatedAt ? [{ label: "Refund updated", value: walletRefundUpdatedAt }] : []),
-          ...(walletRefundCompletedAt ? [{ label: "Refund completed on", value: walletRefundCompletedAt }] : []),
-          ...(walletRefundError ? [{ label: "Refund note", value: walletRefundError }] : []),
+          { label: "Refund status", value: walletPassRefundStatus },
+          ...(selectedCancellation?.requestedAmountMinor
+            ? [{
+                label: "Refund requested",
+                value: formatWalletMinorAmount(String(selectedCancellation.requestedAmountMinor), selectedCancellation.currency),
+                isPrice: true,
+              }]
+            : []),
+          ...(selectedCancellation?.completedAmountMinor
+            ? [{
+                label: "Refund completed",
+                value: formatWalletMinorAmount(String(selectedCancellation.completedAmountMinor), selectedCancellation.currency),
+                isPrice: true,
+              }]
+            : []),
+        ]
+      : walletRefundStatus
+        ? [
+            { label: "Refund status", value: walletRefundStatus },
+            ...(walletCancellationReason ? [{ label: "Cancellation reason", value: walletCancellationReason }] : []),
+            ...(walletRefundRequestedAmount ? [{ label: "Refund requested", value: walletRefundRequestedAmount, isPrice: true }] : []),
+            ...(walletRefundCompletedAmount ? [{ label: "Refund completed", value: walletRefundCompletedAmount, isPrice: true }] : []),
+            ...(walletRefundUpdatedAt ? [{ label: "Refund updated", value: walletRefundUpdatedAt }] : []),
+            ...(walletRefundCompletedAt ? [{ label: "Refund completed on", value: walletRefundCompletedAt }] : []),
+            ...(walletRefundError ? [{ label: "Refund note", value: walletRefundError }] : []),
         ]
       : []),
   ];
@@ -696,6 +794,87 @@ const TicketDetailScreen = () => {
     } finally {
       setIsShareSubmitting(false);
     }
+  };
+
+  const handleCancelTicket = () => {
+    if (!selectedWalletPass || !walletCanCancelTicket) {
+      return;
+    }
+
+    const cancellationEventId = getParamValue(params.eventId, "");
+    const cancellationTicketId = getParamValue(params.ticketId, "");
+    const cancellationOrderId = selectedWalletPass.orderId || getParamValue(params.orderId, "");
+
+    if (!cancellationEventId || !cancellationTicketId || !cancellationOrderId) {
+      Alert.alert("Cancel ticket", "Ticket details are unavailable.");
+      return;
+    }
+
+    const parsedAmount = Number.parseFloat(getParamValue(params.amount, "0"));
+    const isMonetaryTicket = Number.isFinite(parsedAmount) && parsedAmount > 0 && selectedWalletPass.ticketIndex <= walletPaidQuantity;
+
+    Alert.alert(
+      "Cancel this ticket?",
+      isMonetaryTicket
+        ? "Your ticket will be cancelled, the QR code will stop working, and the eligible amount will be refunded to your original payment method."
+        : "Your ticket will be cancelled, the QR code will stop working, and the ticket will be returned to availability.",
+      [
+        { text: "Keep Ticket", style: "cancel" },
+        {
+          text: "Cancel Ticket",
+          style: "destructive",
+          onPress: async () => {
+            setIsCancellingTicket(true);
+
+            try {
+              const cancellation = await cancelTicketPass({
+                eventId: cancellationEventId,
+                ticketId: cancellationTicketId,
+                orderId: cancellationOrderId,
+                ticketIndex: selectedWalletPass.ticketIndex,
+              });
+
+              setWalletTicketPasses((passes) =>
+                passes.map((pass) =>
+                  pass.orderId === cancellation.orderId &&
+                  pass.ticketIndex === cancellation.ticketIndex
+                    ? {
+                        ...pass,
+                        ticketNo: "",
+                        qrCode: "",
+                        status: "cancelled",
+                        currentShare: null,
+                        cancellation,
+                        cancellationEligibility: {
+                          canCancel: false,
+                          cancellationCutoffAt: cancellation.cancellationCutoffAt,
+                          serverNow: new Date().toISOString(),
+                          disabledReason: cancellation.refundStatus === "not_required" ? "already_cancelled" : "refund_processing",
+                          disabledMessage:
+                            cancellation.refundStatus === "not_required"
+                              ? "This ticket has already been cancelled."
+                              : "Your refund is currently being processed.",
+                          cancellationStatus: cancellation.status,
+                          refundStatus: cancellation.refundStatus,
+                          qrAvailable: false,
+                          isOriginalBuyer: true,
+                          isShared: Boolean(cancellation.sharedRecipientUserId),
+                          isRecipientOnly: false,
+                        },
+                      }
+                    : pass,
+                ),
+              );
+              emitTicketWalletChanged();
+            } catch (error) {
+              Alert.alert("Cancel ticket", getAuthErrorMessage(error, "Unable to cancel this ticket."));
+            } finally {
+              setIsCancellingTicket(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (isWalletTicket) {
@@ -834,13 +1013,33 @@ const TicketDetailScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={styles.walletCancelButton}
-              activeOpacity={0.85}
-              onPress={() => Alert.alert("Cancel ticket", "Ticket cancellation is not connected yet.")}
-            >
-              <Text style={styles.walletCancelButtonText}>Cancel ticket</Text>
-            </TouchableOpacity>
+            {selectedCancellation ? (
+              <View style={styles.walletCancellationState}>
+                <Text style={styles.walletCancellationStateText}>Cancelled</Text>
+                {!!walletPassRefundStatus && (
+                  <Text style={styles.walletCancellationSubText}>{walletPassRefundStatus}</Text>
+                )}
+              </View>
+            ) : walletSource === "owned" ? (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.walletCancelButton,
+                    !walletCanCancelTicket && styles.walletActionDisabled,
+                  ]}
+                  activeOpacity={0.85}
+                  disabled={!walletCanCancelTicket}
+                  onPress={handleCancelTicket}
+                >
+                  <Text style={styles.walletCancelButtonText}>
+                    {isCancellingTicket ? "Cancelling..." : "Cancel ticket"}
+                  </Text>
+                </TouchableOpacity>
+                {!!walletCancellationDisabledMessage && !walletCanCancelTicket && (
+                  <Text style={styles.walletCancelDisabledText}>{walletCancellationDisabledMessage}</Text>
+                )}
+              </>
+            ) : null}
           </View>
         </ScrollView>
 
@@ -1622,6 +1821,37 @@ const styles = StyleSheet.create({
     color: "#FF4D4D",
     fontSize: 12,
     fontWeight: "800",
+  },
+  walletCancelDisabledText: {
+    color: "#A6A0AA",
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 16,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  walletCancellationState: {
+    alignItems: "center",
+    backgroundColor: "#1B1821",
+    borderColor: "#36313D",
+    borderRadius: 7,
+    borderWidth: 1,
+    gap: 2,
+    justifyContent: "center",
+    marginTop: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  walletCancellationStateText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  walletCancellationSubText: {
+    color: "#C2B9CB",
+    fontSize: 11,
+    fontWeight: "700",
   },
   shareModalOverlay: {
     backgroundColor: "rgba(0,0,0,0.58)",

@@ -115,7 +115,7 @@ export type CheckoutIntent = {
 
 export type TicketWalletStatus = "active" | "used" | "cancelled";
 export type TicketWalletSource = "owned" | "shared";
-export type TicketPassStatus = "active" | "used";
+export type TicketPassStatus = "active" | "used" | "cancelled";
 export type CancellationRefundStatus =
   | "pending"
   | "processing"
@@ -123,6 +123,74 @@ export type CancellationRefundStatus =
   | "failed_retryable"
   | "failed_terminal"
   | "reconciliation_required";
+export type TicketCancellationRefundStatus =
+  | "not_required"
+  | CancellationRefundStatus;
+export type TicketCancellationStatus = "cancelled" | "needs_attention";
+export type TicketCancellationDisabledReason =
+  | "eligible"
+  | "cutoff_reached"
+  | "already_used"
+  | "already_cancelled"
+  | "refund_processing"
+  | "refund_needs_attention"
+  | "not_original_buyer"
+  | "event_cancelled"
+  | "payment_not_eligible"
+  | "invalid_pass";
+
+export type TicketCancellation = {
+  id: string;
+  sourceType: "user_ticket_cancellation";
+  eventId: string;
+  ticketId: string;
+  orderId: string;
+  ticketIndex: number;
+  buyerUserId: string;
+  hostUserId: string;
+  sharedRecipientUserId?: string | null;
+  eventName?: string | null;
+  ticketName?: string | null;
+  status: TicketCancellationStatus;
+  refundStatus: TicketCancellationRefundStatus;
+  currency: string;
+  stripePaymentIntentId?: string | null;
+  stripeRefundId?: string | null;
+  requestedAmountMinor: number;
+  completedAmountMinor: number;
+  remainingRefundableAmountMinor: number;
+  ticketSubtotalAmountMinor: number;
+  platformFeeAmountMinor: number;
+  taxAmountMinor: number;
+  discountAmountMinor: number;
+  capacityReleaseStatus: "not_required" | "pending" | "completed" | "failed";
+  shareRevocationStatus: "not_required" | "pending" | "completed" | "failed";
+  qrInvalidationStatus: "not_required" | "pending" | "completed" | "failed";
+  attemptCount: number;
+  nextRetryAt?: string | null;
+  lastErrorCode?: string | null;
+  safeLastErrorMessage?: string | null;
+  providerStatus?: string | null;
+  cancellationCutoffAt: string;
+  cancelledAt: string;
+  refundCompletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TicketCancellationEligibility = {
+  canCancel: boolean;
+  cancellationCutoffAt?: string | null;
+  serverNow: string;
+  disabledReason: TicketCancellationDisabledReason;
+  disabledMessage?: string | null;
+  cancellationStatus?: TicketCancellationStatus | null;
+  refundStatus?: TicketCancellationRefundStatus | null;
+  qrAvailable: boolean;
+  isOriginalBuyer: boolean;
+  isShared: boolean;
+  isRecipientOnly: boolean;
+};
 
 export type TicketShare = {
   id: string;
@@ -152,6 +220,8 @@ export type TicketWalletPass = {
   status: TicketPassStatus;
   usedAt?: string | null;
   currentShare?: TicketShare | null;
+  cancellation?: TicketCancellation | null;
+  cancellationEligibility?: TicketCancellationEligibility | null;
 };
 
 export type ScannedTicket = {
@@ -640,6 +710,34 @@ export const cancelTicketShare = async (shareId: string): Promise<TicketShare> =
   emitTicketWalletChanged();
 
   return share;
+};
+
+export const cancelTicketPass = async ({
+  eventId,
+  ticketId,
+  orderId,
+  ticketIndex,
+}: {
+  eventId: string;
+  ticketId: string;
+  orderId: string;
+  ticketIndex: number;
+}): Promise<TicketCancellation> => {
+  const response = await api.post("/payments/ticket-cancellations", {
+    eventId,
+    ticketId,
+    orderId,
+    ticketIndex,
+  });
+  const cancellation = response.data?.data?.cancellation as TicketCancellation | undefined;
+
+  if (!cancellation) {
+    throw new Error("The ticket cancellation response was incomplete.");
+  }
+
+  emitTicketWalletChanged();
+
+  return cancellation;
 };
 
 export type CreatorEarningStatus = "held" | "eligible" | "withdrawn" | "refunded";

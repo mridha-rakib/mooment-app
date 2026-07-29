@@ -98,6 +98,20 @@ const getAddressLabel = (item: TicketWalletItem) =>
   item.event.location?.address || item.event.location?.searchLabel || "Address TBA";
 
 const getRefundStatusLabel = (item: TicketWalletItem): string | null => {
+  const passCancellation = item.ticketPasses?.[0]?.cancellation ?? null;
+  if (passCancellation) {
+    if (passCancellation.refundStatus === "succeeded") return "Refunded";
+    if (
+      passCancellation.status === "needs_attention" ||
+      passCancellation.refundStatus === "failed_terminal" ||
+      passCancellation.refundStatus === "reconciliation_required"
+    ) {
+      return "Refund needs attention";
+    }
+    if (passCancellation.refundStatus !== "not_required") return "Refund processing";
+    return "Canceled";
+  }
+
   if (!item.refund) return null;
   if (item.refund.status === "succeeded") return "Refunded";
   if (item.refund.status === "failed_terminal" || item.refund.status === "reconciliation_required") {
@@ -124,30 +138,43 @@ const getPassesForTab = (item: TicketWalletItem, tab: WalletTab) => {
         return [];
       }
 
-      return passes.filter((pass) => !pass.currentShare && pass.status !== "used");
+      return passes.filter((pass) => !pass.currentShare && pass.status === "active");
     case "Used":
       return passes.filter((pass) => pass.status === "used");
     case "Canceled":
-      return item.walletStatus === "cancelled" ? passes : [];
+      return passes.filter((pass) => pass.status === "cancelled" || item.walletStatus === "cancelled");
     default:
       return [];
   }
 };
 
-const toTabWalletItem = (item: TicketWalletItem, tab: WalletTab): TicketWalletItem | null => {
+const toTabWalletItems = (item: TicketWalletItem, tab: WalletTab): TicketWalletItem[] => {
   const passes = getPassesForTab(item, tab);
 
   if (passes.length === 0) {
-    return null;
+    return [];
   }
 
-  return {
+  return passes.map((pass) => {
+    const paidQuantity = pass.ticketIndex <= (item.paidQuantity ?? item.quantity) ? 1 : 0;
+    const freeQuantity = paidQuantity > 0 ? 0 : 1;
+    const passCancellation = pass.cancellation ?? null;
+
+    return {
     ...item,
-    quantity: passes.length,
-    ticketPasses: passes,
-    currentShare: passes.find((pass) => pass.currentShare)?.currentShare ?? item.currentShare ?? null,
-    walletStatus: tab === "Canceled" ? "cancelled" : tab === "Used" ? "used" : "active",
-  };
+      id: `${item.id}-${pass.orderId}-${pass.ticketIndex}`,
+      ticketNo: pass.ticketNo,
+      quantity: 1,
+      paidQuantity,
+      freeQuantity,
+      totalQuantity: 1,
+      totalAmount: passCancellation ? passCancellation.requestedAmountMinor / 100 : paidQuantity > 0 ? item.unitAmount : 0,
+      ticketPasses: [pass],
+      currentShare: pass.currentShare ?? null,
+      refund: item.source === "shared" ? null : item.refund,
+      walletStatus: pass.status === "cancelled" || tab === "Canceled" ? "cancelled" : pass.status === "used" ? "used" : "active",
+    };
+  });
 };
 
 const getTicketSections = (items: TicketWalletItem[]): WalletSection[] => {
@@ -217,8 +244,7 @@ const TicketWalletScreen = () => {
 
   const tabTickets = useMemo(() => {
     return tickets
-      .map((ticket) => toTabWalletItem(ticket, activeTab))
-      .filter((ticket): ticket is TicketWalletItem => Boolean(ticket));
+      .flatMap((ticket) => toTabWalletItems(ticket, activeTab));
   }, [activeTab, tickets]);
 
   const visibleTickets = useMemo(() => {

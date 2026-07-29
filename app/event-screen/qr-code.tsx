@@ -157,7 +157,9 @@ export default function QRCodeScreen() {
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
   const visibleTicketPasses = useMemo(
-    () => (walletSource === 'owned' ? ticketPasses.filter((pass) => !pass.currentShare) : ticketPasses),
+    () =>
+      (walletSource === 'owned' ? ticketPasses.filter((pass) => !pass.currentShare) : ticketPasses)
+        .filter((pass) => pass.status !== 'cancelled' && !pass.cancellation),
     [ticketPasses, walletSource],
   );
   const selectedPass = visibleTicketPasses[Math.min(selectedPassIndex, Math.max(0, visibleTicketPasses.length - 1))];
@@ -168,14 +170,15 @@ export default function QRCodeScreen() {
     ) + 1,
   );
   const selectedTicketNo = selectedPass?.ticketNo ?? ticketNo;
-  const selectedQrValue = selectedPass?.qrCode || ticketNo || 'INVALID';
+  const selectedQrValue = selectedPass?.qrCode || ticketNo || '';
   const selectedCurrentShare = selectedPass?.currentShare ?? null;
-  const shareablePassCount = visibleTicketPasses.filter((pass) => pass.status !== 'used').length;
+  const shareablePassCount = visibleTicketPasses.filter((pass) => pass.status === 'active').length;
   const canShareSelectedPass = (
     type === 'event' &&
     walletSource === 'owned' &&
     shareablePassCount >= 2 &&
-    selectedPass?.status !== 'used' &&
+    selectedPass?.status === 'active' &&
+    Boolean(selectedPass.qrCode) &&
     Boolean(eventId && ticketId && selectedPass?.orderId)
   );
   const filteredFriends = useMemo(
@@ -564,7 +567,7 @@ export default function QRCodeScreen() {
 
             <View style={styles.qrWrapper}>
               <View style={[styles.qrContainer, { backgroundColor: '#FFFFFF' }]}>
-                {selectedPass ? (
+                {selectedPass && selectedQrValue ? (
                   <QRCode
                     value={selectedQrValue}
                     size={QR_SIZE}
@@ -574,7 +577,7 @@ export default function QRCodeScreen() {
                 ) : (
                   <View style={styles.unavailableQrState}>
                     <Feather name="users" size={28} color="#6E6677" />
-                    <Text style={styles.unavailableQrText}>This ticket is currently shared from another account view.</Text>
+                    <Text style={styles.unavailableQrText}>This ticket QR is no longer available.</Text>
                   </View>
                 )}
               </View>
@@ -583,7 +586,9 @@ export default function QRCodeScreen() {
             <View style={styles.instructionBanner}>
               <Ionicons name="information-circle-outline" size={20} color="#E75737" />
               <Text style={styles.instructionText}>
-                {selectedPass?.status === 'used'
+                {!selectedPass || !selectedQrValue
+                  ? 'This ticket QR is no longer available.'
+                  : selectedPass?.status === 'used'
                   ? 'This ticket has already been scanned and cannot be used again.'
                   : 'Show this QR code to the host at the event to verify your ticket. Keep screen brightness high.'}
               </Text>
