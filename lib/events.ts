@@ -194,6 +194,7 @@ export type EventResponse = {
   isSaved?: boolean;
   canReport?: boolean;
   status: EventStatus;
+  crowdStatus?: CrowdStatus | null;
   name?: string | null;
   description?: string | null;
   bannerImageKey?: string | null;
@@ -234,6 +235,8 @@ export type EventResponse = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type CrowdStatus = "not_busy" | "busy" | "very_busy";
 
 export const ticketAlreadyHasReward = (
   rewards: EventRewardPayload[] | null | undefined,
@@ -675,6 +678,7 @@ const ticketWalletEventToEventResponse = (walletItem: TicketWalletItem): EventRe
         }
       : null,
     status: walletEvent.status as EventStatus,
+    crowdStatus: walletEvent.crowdStatus ?? null,
     name: walletEvent.name ?? null,
     bannerImageKey: walletEvent.bannerImageKey ?? null,
     bannerOriginalImageKey: walletEvent.bannerOriginalImageKey ?? null,

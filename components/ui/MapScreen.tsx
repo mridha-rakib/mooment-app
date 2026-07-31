@@ -114,6 +114,8 @@ export type MapMarkerData = MapCarouselMarker & {
   distance?: string | null;
   distanceMeters?: number | null;
   isLive?: boolean;
+  eventStatus?: string | null;
+  crowdStatus?: import("@/lib/events").CrowdStatus | null;
   eventDate?: string | null;
   eventTime?: string | null;
   location?: string | null;
@@ -978,6 +980,8 @@ export default function MapScreen({
       hostName: marker.hostName ?? undefined,
       distance: marker.distance ?? undefined,
       isLive: marker.isLive,
+      eventStatus: marker.eventStatus,
+      crowdStatus: marker.crowdStatus ?? null,
       eventDate: marker.eventDate ?? undefined,
       eventTime: marker.eventTime ?? undefined,
       location: marker.location ?? undefined,
@@ -1259,6 +1263,8 @@ export default function MapScreen({
         hostName={selectedMarker?.hostName ?? undefined}
         distance={selectedMarker?.distance ?? undefined}
         isLive={selectedMarker?.isLive}
+        eventStatus={selectedMarker?.eventStatus}
+        crowdStatus={selectedMarker?.crowdStatus ?? null}
         eventDate={selectedMarker?.eventDate ?? undefined}
         eventTime={selectedMarker?.eventTime ?? undefined}
         location={selectedMarker?.location ?? undefined}

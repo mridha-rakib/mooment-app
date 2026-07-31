@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type { EventCategory } from "@/constants/eventCategories";
+import type { CrowdStatus } from "@/lib/events";
 import { isAxiosError } from "axios";
 import { DeviceEventEmitter } from "react-native";
 
@@ -287,6 +288,7 @@ export type TicketWalletItem = {
       address?: string | null;
     } | null;
     status: string;
+    crowdStatus?: CrowdStatus | null;
     cancellationDisplayReason?: string | null;
     host?: {
       id: string;

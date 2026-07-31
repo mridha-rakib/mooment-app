@@ -218,6 +218,8 @@ const toMapMarker = (
     distance: formatDistanceFromMiles(distanceMiles),
     distanceMeters: distanceMiles === null ? null : distanceMiles * 1609.344,
     isLive: isLiveEvent(event.scheduledAt),
+    eventStatus: event.status,
+    crowdStatus: event.crowdStatus ?? null,
     eventDate: formatEventDate(event.scheduledAt),
     eventTime: formatEventTime(event.scheduledAt),
     location: formatLocation(event),

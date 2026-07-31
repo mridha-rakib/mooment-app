@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
+import CrowdStatusBadge from '@/components/events/CrowdStatusBadge';
+import type { CrowdStatus } from '@/lib/events';
 
 export type EventPreviewModalItem = {
   id: string;
@@ -22,6 +24,8 @@ export type EventPreviewModalItem = {
   hostName?: string;
   distance?: string;
   isLive?: boolean;
+  eventStatus?: string | null;
+  crowdStatus?: CrowdStatus | null;
   eventDate?: string;
   eventTime?: string;
   location?: string;
@@ -43,6 +47,8 @@ type EventPreviewModalProps = {
   hostName?: string;
   distance?: string;
   isLive?: boolean;
+  eventStatus?: string | null;
+  crowdStatus?: CrowdStatus | null;
   eventDate?: string;
   eventTime?: string;
   location?: string;
@@ -76,6 +82,8 @@ export default function EventPreviewModal({
   hostName = "host",
   distance = "nearby",
   isLive = false,
+  eventStatus = null,
+  crowdStatus = null,
   eventDate = "Date TBA",
   eventTime = "Time TBA",
   location = "Location TBA",
@@ -100,6 +108,8 @@ export default function EventPreviewModal({
     hostName,
     distance,
     isLive,
+    eventStatus,
+    crowdStatus,
     eventDate,
     eventTime,
     location,
@@ -117,6 +127,8 @@ export default function EventPreviewModal({
     eventTitle,
     hostName,
     isLive,
+    eventStatus,
+    crowdStatus,
     location,
     price,
     themeColor,
@@ -189,12 +201,13 @@ export default function EventPreviewModal({
         </View>
 
         {/* Status Badge */}
-        {item.isLive && (
+        {(item.isLive || item.eventStatus === "live") && (
           <View style={styles.statusRow}>
             <View style={[styles.liveBadge, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
               <View style={[styles.liveDot, { backgroundColor: '#22C55E' }]} />
               <Text style={styles.liveText}>Live</Text>
             </View>
+            <CrowdStatusBadge eventStatus={item.eventStatus} crowdStatus={item.crowdStatus} />
           </View>
         )}
 
@@ -361,6 +374,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusRow: {
+    alignItems: 'flex-start',
+    gap: 6,
     marginBottom: 16,
   },
   liveBadge: {

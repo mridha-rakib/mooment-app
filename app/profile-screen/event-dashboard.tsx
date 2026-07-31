@@ -1,5 +1,6 @@
 import BackButton from "@/components/ui/BackButton";
 import UserAvatar from "@/components/ui/UserAvatar";
+import CrowdStatusBadge from "@/components/events/CrowdStatusBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { getEventById, type EventResponse, type EventTicketPayload } from "@/lib/events";
 import {
@@ -186,6 +187,12 @@ export default function EventDashboardScreen() {
           {bannerUri && (
             <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
           )}
+          <View style={styles.eventStatusRow}>
+            <Text style={[styles.eventStatusText, { color: colors.textSecondary }]}>
+              {(event?.status ?? "published").charAt(0).toUpperCase() + (event?.status ?? "published").slice(1)}
+            </Text>
+            <CrowdStatusBadge eventStatus={event?.status} crowdStatus={event?.crowdStatus} />
+          </View>
 
           {/* Earnings Top */}
           <View style={styles.topRow}>
@@ -488,6 +495,16 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   scrollContent: { padding: 20, paddingBottom: 40 },
   bannerImage: { width: "100%", height: 160, borderRadius: 12, marginBottom: 20 },
+  eventStatusRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+  eventStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",

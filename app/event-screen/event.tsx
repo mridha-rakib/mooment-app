@@ -6,6 +6,7 @@ import ChatTab from "@/components/eventTabs/ChatTab";
 import HostEventWindowsTab from "@/components/eventTabs/HostEventWindowsTab";
 import AttendeeEventWindowsTab from "@/components/eventTabs/AttendeeEventWindowsTab";
 import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
+import CrowdStatusBadge, { LiveLifecycleBadge } from "@/components/events/CrowdStatusBadge";
 import BackButton from "@/components/ui/BackButton";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
@@ -1769,6 +1770,10 @@ const EventScreen = () => {
             end={{ x: 0.18, y: 1 }}
             style={styles.gradient}
           />
+          <View style={[styles.heroStatusStack, { top: insets.top + 62 }]} pointerEvents="none">
+            <LiveLifecycleBadge eventStatus={event?.status} />
+            <CrowdStatusBadge eventStatus={event?.status} crowdStatus={event?.crowdStatus} />
+          </View>
 
           <View style={styles.overlaidMeta}>
             <View style={styles.metaTopRow}>
@@ -2645,6 +2650,13 @@ const styles = StyleSheet.create({
   },
   gradient: {
     ...StyleSheet.absoluteFillObject,
+  },
+  heroStatusStack: {
+    alignItems: "flex-end",
+    gap: 6,
+    position: "absolute",
+    right: 20,
+    zIndex: 3,
   },
   overlaidMeta: {
     position: "absolute",

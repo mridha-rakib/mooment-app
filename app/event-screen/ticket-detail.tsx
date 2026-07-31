@@ -1,4 +1,5 @@
 import BackButton from "@/components/ui/BackButton";
+import CrowdStatusBadge, { LiveLifecycleBadge } from "@/components/events/CrowdStatusBadge";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
@@ -213,6 +214,8 @@ const TicketDetailScreen = () => {
     totalQuantity?: string;
     ticketNo?: string;
     orderId?: string;
+    eventStatus?: string;
+    crowdStatus?: string;
     eventTitle?: string;
     ticketName?: string;
     hostName?: string;
@@ -413,6 +416,8 @@ const TicketDetailScreen = () => {
   const walletEventEndDateTime = getParamValue(params.eventEndDateTime, "Date TBA");
   const walletAmount = formatWalletAmount(params.amount, params.currency);
   const walletSource = getParamValue(params.walletSource, "owned");
+  const walletEventStatus = getParamValue(params.eventStatus, "");
+  const walletCrowdStatus = getParamValue(params.crowdStatus, "");
   const walletStatusParam = getParamValue(params.walletStatus, "");
   const walletCancellationReason = getParamValue(params.cancellationReason, "");
   const walletRefundStatus = getWalletRefundStatusLabel(getParamValue(params.refundStatus, ""));
@@ -903,6 +908,10 @@ const TicketDetailScreen = () => {
             </View>
 
             <View style={styles.walletHeroContent}>
+              <View style={styles.walletHeroStatusStack}>
+                <LiveLifecycleBadge eventStatus={walletEventStatus} />
+                <CrowdStatusBadge eventStatus={walletEventStatus} crowdStatus={walletCrowdStatus} />
+              </View>
               <View style={styles.walletCategoryPill}>
                 <Text style={styles.walletCategoryText}>Music Party</Text>
               </View>
@@ -1602,6 +1611,11 @@ const styles = StyleSheet.create({
     left: 20,
     position: "absolute",
     right: 20,
+  },
+  walletHeroStatusStack: {
+    alignItems: "flex-start",
+    gap: 6,
+    marginBottom: 10,
   },
   walletCategoryPill: {
     alignSelf: "flex-start",

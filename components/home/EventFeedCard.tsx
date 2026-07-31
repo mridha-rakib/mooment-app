@@ -20,6 +20,7 @@ import ShareModal from "@/components/post/ShareModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import UserAvatar from "@/components/ui/UserAvatar";
 import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
+import CrowdStatusBadge from "@/components/events/CrowdStatusBadge";
 import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
 
 const timeAgo = (dateStr?: string | Date | null): string => {
@@ -537,33 +538,35 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         {/* dark tint over image */}
         <View style={styles.imageTint} />
 
-        <View
-          style={[
-            styles.statusBadge,
-            eventBadgeStatus === "live" && styles.liveStatusBadge,
-            eventBadgeStatus === "upcoming" && styles.upcomingStatusBadge,
-            eventBadgeStatus === "ended" && styles.endedStatusBadge,
-          ]}
-          pointerEvents="none"
-        >
+        <View style={styles.statusBadgeGroup} pointerEvents="none">
           <View
             style={[
-              styles.statusDot,
-              eventBadgeStatus === "live" && styles.liveStatusDot,
-              eventBadgeStatus === "upcoming" && styles.upcomingStatusDot,
-              eventBadgeStatus === "ended" && styles.endedStatusDot,
-            ]}
-          />
-          <Text
-            style={[
-              styles.statusText,
-              eventBadgeStatus === "live" && styles.liveStatusText,
-              eventBadgeStatus === "upcoming" && styles.upcomingStatusText,
-              eventBadgeStatus === "ended" && styles.endedStatusText,
+              styles.statusBadge,
+              eventBadgeStatus === "live" && styles.liveStatusBadge,
+              eventBadgeStatus === "upcoming" && styles.upcomingStatusBadge,
+              eventBadgeStatus === "ended" && styles.endedStatusBadge,
             ]}
           >
-            {eventBadgeLabel}
-          </Text>
+            <View
+              style={[
+                styles.statusDot,
+                eventBadgeStatus === "live" && styles.liveStatusDot,
+                eventBadgeStatus === "upcoming" && styles.upcomingStatusDot,
+                eventBadgeStatus === "ended" && styles.endedStatusDot,
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusText,
+                eventBadgeStatus === "live" && styles.liveStatusText,
+                eventBadgeStatus === "upcoming" && styles.upcomingStatusText,
+                eventBadgeStatus === "ended" && styles.endedStatusText,
+              ]}
+            >
+              {eventBadgeLabel}
+            </Text>
+          </View>
+          <CrowdStatusBadge eventStatus={event.status} crowdStatus={event.crowdStatus} />
         </View>
 
         {/* info section pinned to image bottom */}
@@ -867,11 +870,15 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(28, 11, 11, 0.55)",
   },
-  statusBadge: {
+  statusBadgeGroup: {
     position: "absolute",
     right: 12,
     top: 12,
     zIndex: 3,
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  statusBadge: {
     minHeight: 22,
     paddingHorizontal: 6,
     paddingVertical: 2,

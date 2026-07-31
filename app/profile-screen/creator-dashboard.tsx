@@ -1,5 +1,5 @@
 import BackButton from "@/components/ui/BackButton";
-import UserAvatar from "@/components/ui/UserAvatar";
+import CrowdStatusBadge from "@/components/events/CrowdStatusBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { getMyEvents, type EventResponse } from "@/lib/events";
@@ -245,6 +245,7 @@ export default function CreatorDashboardScreen() {
                         <Text style={[styles.statusBadge, { color: colors.textSecondary }]}>
                           {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                         </Text>
+                        <CrowdStatusBadge eventStatus={event.status} crowdStatus={event.crowdStatus} />
                         {totalCapacity > 0 && (
                           <Text style={[styles.goingText, { color: colors.textSecondary }]}>
                             {"  •  "}
