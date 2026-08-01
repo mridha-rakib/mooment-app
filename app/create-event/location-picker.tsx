@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -17,7 +17,11 @@ import { Ionicons } from '@expo/vector-icons';
 import Mapbox from '@rnmapbox/maps';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
-import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
+import {
+  getBestCurrentDeviceLocation,
+  isValidLocationCoordinate,
+  type CurrentLocationPayload,
+} from '@/lib/locationSharing';
 import { MAPBOX_PUBLIC_TOKEN } from '@/lib/mapbox';
 import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from '@/lib/mapStyles';
 import {
@@ -26,6 +30,7 @@ import {
   type LocationSearchContext,
   type LocationSearchResult,
 } from '@/lib/locationSearch';
+import type { EventLocation } from '@/lib/events';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -42,16 +47,6 @@ type CameraPreset = {
 const TERRAIN_SOURCE_ID = 'create-event-mapbox-dem';
 const TERRAIN_SOURCE_URL = 'mapbox://mapbox.mapbox-terrain-dem-v1';
 
-const DEFAULT_LOCATION: LocationSearchResult = {
-  address: '',
-  id: 'default-location',
-  isVenue: false,
-  label: '',
-  latitude: 23.764288,
-  longitude: 90.38896,
-  name: '',
-};
-
 const getLocationSelectionKey = (location: LocationSearchResult) =>
   [
     location.providerId ?? location.id,
@@ -61,6 +56,40 @@ const getLocationSelectionKey = (location: LocationSearchResult) =>
 
 const getCoordinateLabel = (latitude: number, longitude: number) =>
   `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+
+const hasValidLocationCoordinates = (
+  location: Pick<LocationSearchResult, 'latitude' | 'longitude'> | null | undefined,
+): location is LocationSearchResult =>
+  Boolean(
+    location &&
+      typeof location.latitude === 'number' &&
+      typeof location.longitude === 'number' &&
+      Number.isFinite(location.latitude) &&
+      Number.isFinite(location.longitude) &&
+      location.latitude >= -90 &&
+      location.latitude <= 90 &&
+      location.longitude >= -180 &&
+      location.longitude <= 180,
+  );
+
+const hasConfirmableLocation = (
+  location: LocationSearchResult | null | undefined,
+): location is LocationSearchResult =>
+  Boolean(
+    hasValidLocationCoordinates(location) &&
+      (location.label.trim() || location.address.trim() || location.name.trim()),
+  );
+
+const getSearchContextFromDeviceLocation = (
+  location: CurrentLocationPayload | null | undefined,
+): LocationSearchContext | null =>
+  isValidLocationCoordinate(location)
+    ? {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        label: 'Device Location',
+      }
+    : null;
 
 const getCoordinateFromFeaturePayload = (payload: unknown): [number, number] | null => {
   const coordinates = (payload as { geometry?: { coordinates?: unknown } })?.geometry?.coordinates;
@@ -108,6 +137,46 @@ const buildDroppedLocation = (
   };
 };
 
+const buildInitialLocationFromDraft = (
+  location: EventLocation,
+): LocationSearchResult | null => {
+  if (
+    typeof location.latitude !== 'number' ||
+    typeof location.longitude !== 'number' ||
+    !Number.isFinite(location.latitude) ||
+    !Number.isFinite(location.longitude)
+  ) {
+    return null;
+  }
+
+  const coordinateLabel = getCoordinateLabel(location.latitude, location.longitude);
+  const label = location.searchLabel || location.address || location.venue || coordinateLabel;
+  const name = location.venue || location.searchLabel || location.address || coordinateLabel;
+
+  return {
+    address: location.address || location.searchLabel || coordinateLabel,
+    formattedAddress: location.formattedAddress ?? undefined,
+    addressLine1: location.addressLine1 ?? undefined,
+    neighborhood: location.neighborhood ?? undefined,
+    district: location.district ?? undefined,
+    city: location.city ?? undefined,
+    region: location.region ?? undefined,
+    regionCode: location.regionCode ?? undefined,
+    postalCode: location.postalCode ?? undefined,
+    country: location.country ?? undefined,
+    countryCode: location.countryCode ?? undefined,
+    id: location.mapboxPlaceId ?? 'draft-location',
+    isVenue: Boolean(location.venue),
+    label,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    mapboxPlaceId: location.mapboxPlaceId ?? undefined,
+    name,
+    providerId: location.mapboxPlaceId ?? undefined,
+    providerResultType: location.providerResultType ?? undefined,
+  };
+};
+
 export default function LocationPickerScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -117,32 +186,15 @@ export default function LocationPickerScreen() {
   const searchRequestId = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
   const dragRequestId = useRef(0);
-  const initialLocation: LocationSearchResult = {
-    ...DEFAULT_LOCATION,
-    address: currentLocation.address || currentLocation.searchLabel || DEFAULT_LOCATION.address,
-    formattedAddress: currentLocation.formattedAddress ?? undefined,
-    addressLine1: currentLocation.addressLine1 ?? undefined,
-    neighborhood: currentLocation.neighborhood ?? undefined,
-    district: currentLocation.district ?? undefined,
-    city: currentLocation.city ?? undefined,
-    region: currentLocation.region ?? undefined,
-    regionCode: currentLocation.regionCode ?? undefined,
-    postalCode: currentLocation.postalCode ?? undefined,
-    country: currentLocation.country ?? undefined,
-    countryCode: currentLocation.countryCode ?? undefined,
-    id: 'draft-location',
-    isVenue: Boolean(currentLocation.venue),
-    label: currentLocation.searchLabel || currentLocation.address || DEFAULT_LOCATION.label,
-    latitude: typeof currentLocation.latitude === 'number' ? currentLocation.latitude : DEFAULT_LOCATION.latitude,
-    longitude: typeof currentLocation.longitude === 'number' ? currentLocation.longitude : DEFAULT_LOCATION.longitude,
-    mapboxPlaceId: currentLocation.mapboxPlaceId ?? undefined,
-    name: currentLocation.venue || currentLocation.searchLabel || currentLocation.address || DEFAULT_LOCATION.name,
-    providerId: currentLocation.mapboxPlaceId ?? undefined,
-    providerResultType: currentLocation.providerResultType ?? undefined,
-  };
-  const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult>(initialLocation);
-  const selectedLocationRef = useRef<LocationSearchResult>(initialLocation);
-  const [query, setQuery] = useState(initialLocation.label);
+  const hasUserInteractedWithLocationRef = useRef(false);
+  const initialLocation = useMemo(
+    () => buildInitialLocationFromDraft(currentLocation),
+    [currentLocation],
+  );
+  const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(initialLocation);
+  const selectedLocationRef = useRef<LocationSearchResult | null>(initialLocation);
+  const [deviceSearchContext, setDeviceSearchContext] = useState<LocationSearchContext | null>(null);
+  const [query, setQuery] = useState(initialLocation?.label ?? '');
   const [results, setResults] = useState<LocationSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isResolvingInitialLocation, setIsResolvingInitialLocation] = useState(false);
@@ -171,22 +223,6 @@ export default function LocationPickerScreen() {
     satellite3d: 'business-outline',
   }[mapMode];
 
-  const getSelectedSearchContext = useCallback((location = selectedLocation): LocationSearchContext | null => {
-    if (!location.label && location.id === 'default-location') {
-      return null;
-    }
-
-    return {
-      city: location.city,
-      country: location.country,
-      countryCode: location.countryCode,
-      label: location.label,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      region: location.region,
-    };
-  }, [selectedLocation]);
-
   useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
   }, []);
@@ -196,36 +232,49 @@ export default function LocationPickerScreen() {
   }, [selectedLocation]);
 
   useEffect(() => {
-    const hasCoordinates = typeof currentLocation.latitude === 'number' && typeof currentLocation.longitude === 'number';
-
-    if (hasCoordinates) {
-      return;
-    }
-
     let isMounted = true;
 
     setIsResolvingInitialLocation(true);
-    getCurrentLocationIfPermissionGranted()
-      .then(async (location) => {
-        if (!location) {
+    getBestCurrentDeviceLocation({
+      requestPermission: false,
+      onTemporaryLocation: (result) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setDeviceSearchContext((current) => current ?? getSearchContextFromDeviceLocation(result.location));
+      },
+    })
+      .then(async (result) => {
+        if (result.status !== 'fresh' && result.status !== 'lastKnown') {
           return null;
         }
 
-        const reverseLocation = await reverseGeocodeLocation(location.latitude, location.longitude).catch(() => null);
+        const searchContext = getSearchContextFromDeviceLocation(result.location);
+
+        if (isMounted && searchContext) {
+          setDeviceSearchContext(searchContext);
+        }
+
+        if (result.status !== 'fresh' || initialLocation) {
+          return null;
+        }
+
+        const reverseLocation = await reverseGeocodeLocation(result.location.latitude, result.location.longitude).catch(() => null);
 
         return {
           address: reverseLocation?.address || reverseLocation?.label || 'Current Location',
           id: 'current-location',
           isVenue: false,
           label: reverseLocation?.label || reverseLocation?.address || 'Current Location',
-          latitude: location.latitude,
-          longitude: location.longitude,
+          latitude: result.location.latitude,
+          longitude: result.location.longitude,
           matchLabel: 'Current location',
           name: reverseLocation?.name || 'Current Location',
         } satisfies LocationSearchResult;
       })
       .then((location) => {
-        if (!isMounted || !location) {
+        if (!isMounted || !location || hasUserInteractedWithLocationRef.current) {
           return;
         }
 
@@ -243,9 +292,13 @@ export default function LocationPickerScreen() {
     return () => {
       isMounted = false;
     };
-  }, [currentLocation.latitude, currentLocation.longitude]);
+  }, [initialLocation]);
 
   useEffect(() => {
+    if (!selectedLocation) {
+      return;
+    }
+
     cameraRef.current?.setCamera({
       animationDuration: cameraPreset.animationDuration,
       animationMode: 'easeTo',
@@ -259,14 +312,15 @@ export default function LocationPickerScreen() {
     cameraPreset.heading,
     cameraPreset.pitch,
     cameraPreset.zoomLevel,
-    selectedLocation.latitude,
-    selectedLocation.longitude,
+    selectedLocation?.latitude,
+    selectedLocation?.longitude,
+    selectedLocation,
   ]);
 
   useEffect(() => {
     const trimmedQuery = query.trim();
 
-    if (trimmedQuery.length < 2 || trimmedQuery === selectedLocation.label) {
+    if (trimmedQuery.length < 2 || trimmedQuery === selectedLocation?.label) {
       setResults([]);
       setIsSearching(false);
       searchAbortRef.current?.abort();
@@ -281,7 +335,7 @@ export default function LocationPickerScreen() {
       searchRequestId.current = requestId;
       setIsSearching(true);
 
-      searchLocations(trimmedQuery, getSelectedSearchContext(), { signal: controller.signal })
+      searchLocations(trimmedQuery, deviceSearchContext, { signal: controller.signal })
         .then((locations) => {
           if (requestId === searchRequestId.current) {
             setResults(locations);
@@ -303,12 +357,18 @@ export default function LocationPickerScreen() {
       clearTimeout(timeoutId);
       searchAbortRef.current?.abort();
     };
-  }, [getSelectedSearchContext, query, selectedLocation.label, selectedLocation.latitude, selectedLocation.longitude]);
+  }, [deviceSearchContext, query, selectedLocation?.label]);
+
+  const handleQueryChange = (value: string) => {
+    hasUserInteractedWithLocationRef.current = true;
+    setQuery(value);
+  };
 
   const handleSelectLocation = (location: LocationSearchResult) => {
     const currentSelection = selectedLocationRef.current;
 
     if (
+      currentSelection &&
       getLocationSelectionKey(currentSelection) === getLocationSelectionKey(location) &&
       query === location.label
     ) {
@@ -317,6 +377,7 @@ export default function LocationPickerScreen() {
 
     searchAbortRef.current?.abort();
     searchRequestId.current += 1;
+    hasUserInteractedWithLocationRef.current = true;
     selectedLocationRef.current = location;
     setSelectedLocation(location);
     setQuery(location.label);
@@ -328,6 +389,7 @@ export default function LocationPickerScreen() {
   const applyDroppedLocation = useCallback((location: LocationSearchResult) => {
     searchAbortRef.current?.abort();
     searchRequestId.current += 1;
+    hasUserInteractedWithLocationRef.current = true;
     selectedLocationRef.current = location;
     setSelectedLocation(location);
     setQuery(location.label);
@@ -365,7 +427,7 @@ export default function LocationPickerScreen() {
     const trimmedQuery = query.trim();
     const currentSelection = selectedLocationRef.current;
 
-    if (trimmedQuery.length < 2 || trimmedQuery === currentSelection.label) {
+    if (!currentSelection || trimmedQuery.length < 2 || trimmedQuery === currentSelection.label) {
       return currentSelection;
     }
 
@@ -377,11 +439,12 @@ export default function LocationPickerScreen() {
     setIsSearching(true);
 
     try {
-      const [location] = await searchLocations(trimmedQuery, getSelectedSearchContext(), {
+      const [location] = await searchLocations(trimmedQuery, deviceSearchContext, {
         signal: controller.signal,
       });
 
       if (requestId === searchRequestId.current && !controller.signal.aborted && location) {
+        hasUserInteractedWithLocationRef.current = true;
         selectedLocationRef.current = location;
         setSelectedLocation(location);
         setQuery(location.label);
@@ -401,11 +464,18 @@ export default function LocationPickerScreen() {
 
   const handleSubmitSearch = async () => {
     const location = await resolveTypedLocation();
-    handleSelectLocation(location);
+
+    if (location) {
+      handleSelectLocation(location);
+    }
   };
 
   const handleConfirm = async () => {
     const location = await resolveTypedLocation();
+
+    if (!hasConfirmableLocation(location)) {
+      return;
+    }
 
     setStepThree({
       location: {
@@ -477,7 +547,7 @@ export default function LocationPickerScreen() {
             returnKeyType="search"
             style={[styles.searchInput, { color: colors.text }]}
             value={query}
-            onChangeText={setQuery}
+            onChangeText={handleQueryChange}
             onSubmitEditing={handleSubmitSearch}
           />
           {isSearching && <ActivityIndicator color={colors.textSecondary} size="small" />}
@@ -571,12 +641,16 @@ export default function LocationPickerScreen() {
           )}
           <Mapbox.Camera
             ref={cameraRef}
-            animationDuration={cameraPreset.animationDuration}
-            animationMode="easeTo"
-            centerCoordinate={[selectedLocation.longitude, selectedLocation.latitude]}
-            heading={cameraPreset.heading}
-            pitch={cameraPreset.pitch}
-            zoomLevel={cameraPreset.zoomLevel}
+            {...(selectedLocation
+              ? {
+                  animationDuration: cameraPreset.animationDuration,
+                  animationMode: 'easeTo' as const,
+                  centerCoordinate: [selectedLocation.longitude, selectedLocation.latitude] as [number, number],
+                  heading: cameraPreset.heading,
+                  pitch: cameraPreset.pitch,
+                  zoomLevel: cameraPreset.zoomLevel,
+                }
+              : {})}
           />
           {is3DMode && (
             <Mapbox.FillExtrusionLayer
@@ -608,20 +682,22 @@ export default function LocationPickerScreen() {
               }}
             />
           )}
-          <Mapbox.PointAnnotation
-            id="create-event-selected-location"
-            coordinate={[selectedLocation.longitude, selectedLocation.latitude]}
-            anchor={{ x: 0.5, y: 0.5 }}
-            draggable
-            onDragEnd={handleMarkerDragEnd}
-          >
-            <View style={styles.markerContainer}>
-              <View style={[styles.markerCircle, { borderColor: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0,0,0,0.2)' }]}>
-                <View style={[styles.markerDot, { backgroundColor: colors.primary }]} />
+          {selectedLocation && (
+            <Mapbox.PointAnnotation
+              id="create-event-selected-location"
+              coordinate={[selectedLocation.longitude, selectedLocation.latitude]}
+              anchor={{ x: 0.5, y: 0.5 }}
+              draggable
+              onDragEnd={handleMarkerDragEnd}
+            >
+              <View style={styles.markerContainer}>
+                <View style={[styles.markerCircle, { borderColor: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0,0,0,0.2)' }]}>
+                  <View style={[styles.markerDot, { backgroundColor: colors.primary }]} />
+                </View>
+                <View style={[styles.markerStem, { backgroundColor: colors.primary }]} />
               </View>
-              <View style={[styles.markerStem, { backgroundColor: colors.primary }]} />
-            </View>
-          </Mapbox.PointAnnotation>
+            </Mapbox.PointAnnotation>
+          )}
         </Mapbox.MapView>
         <TouchableOpacity
           style={[styles.modeButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -648,6 +724,8 @@ export default function LocationPickerScreen() {
         <TouchableOpacity 
           style={[styles.confirmButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={handleConfirm}
+          disabled={!hasConfirmableLocation(selectedLocation)}
+          accessibilityState={{ disabled: !hasConfirmableLocation(selectedLocation) }}
         >
           <Text style={[styles.confirmButtonText, { color: buttonForeground(colors) }]}>Confirm</Text>
         </TouchableOpacity>

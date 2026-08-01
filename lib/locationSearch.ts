@@ -33,9 +33,11 @@ export type LocationSearchResult = {
   distanceKm?: number;
 };
 
+export type LocationSearchPurpose = "general" | "area";
+
 type LocationSearchOptions = {
-  includeCuratedResults?: boolean;
   signal?: AbortSignal;
+  purpose?: LocationSearchPurpose;
 };
 
 type MapboxFeature = {
@@ -100,6 +102,7 @@ type MapboxResponse = {
 
 type MapboxSuggestResponse = {
   suggestions?: {
+    feature_type?: string;
     mapbox_id?: string;
   }[];
 };
@@ -111,28 +114,22 @@ const MAPBOX_SEARCHBOX_RETRIEVE_URL = "https://api.mapbox.com/search/searchbox/v
 const LOCATION_SEARCH_CACHE_LIMIT = 50;
 const LOCATION_SEARCH_TIMEOUT_MS = 8000;
 const REMOTE_RESULT_LIMIT = "10";
+const DEFAULT_LOCATION_SEARCH_PURPOSE: LocationSearchPurpose = "general";
+const AREA_SEARCH_FEATURE_TYPES = [
+  "place",
+  "region",
+  "district",
+  "locality",
+  "neighborhood",
+  "country",
+  "postcode",
+] as const;
+const AREA_SEARCH_TYPES_PARAM = AREA_SEARCH_FEATURE_TYPES.join(",");
+const AREA_SEARCH_TYPE_PRIORITY = new Map<string, number>(
+  AREA_SEARCH_FEATURE_TYPES.map((type, index) => [type, index]),
+);
 
 const locationSearchCache = new Map<string, LocationSearchResult[]>();
-
-const CURATED_VENUES: (LocationSearchResult & { aliases: string[] })[] = [
-  {
-    address: "Bangladesh Air Force Officers' Mess, Old Airport Road, Tejgaon, Dhaka 1215, Bangladesh",
-    aliases: [
-      "baf falcon hall",
-      "b a f falcon hall",
-      "falcon hall dhaka",
-      "falcon hall tejgaon",
-      "baf falcon hall dhaka",
-    ],
-    id: "curated-bd-baf-falcon-hall",
-    isVenue: true,
-    label: "BAF Falcon Hall, Old Airport Road, Tejgaon, Dhaka 1215, Bangladesh",
-    latitude: 23.77195,
-    longitude: 90.39018,
-    matchLabel: "Venue",
-    name: "BAF Falcon Hall",
-  },
-];
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
 
@@ -176,6 +173,16 @@ const cleanDisplayText = (value?: string | null) =>
     .replace(/(?:,\s*){2,}/g, ", ")
     .replace(/^,\s*|\s*,$/g, "")
     .trim();
+
+const normalizeProviderResultType = (value?: string | null) => cleanDisplayText(value).toLowerCase();
+
+const getAreaSearchTypePriority = (value?: string | null) => {
+  const normalizedType = normalizeProviderResultType(value);
+
+  return AREA_SEARCH_TYPE_PRIORITY.get(normalizedType) ?? null;
+};
+
+const isAreaSearchType = (value?: string | null) => getAreaSearchTypePriority(value) !== null;
 
 const dedupeAdjacentAddressSegments = (value: string) => {
   const segments = value
@@ -253,8 +260,8 @@ const isFiniteCoordinate = (latitude: unknown, longitude: unknown) =>
 
 const getSearchCacheKey = (
   query: string,
+  purpose: LocationSearchPurpose,
   context?: LocationSearchContext | null,
-  includeCuratedResults = true,
 ) => {
   const normalizedQuery = normalizeText(query);
   const searchContext = getLocationSearchContext(context);
@@ -266,7 +273,7 @@ const getSearchCacheKey = (
       ].join("|")
     : "global";
 
-  return `worldwide-v3::${includeCuratedResults ? "curated" : "provider"}::${normalizedQuery}::${normalizedContext}`;
+  return `worldwide-v5::${purpose}::provider::${normalizedQuery}::${normalizedContext}`;
 };
 
 const applySearchContextParams = (params: URLSearchParams, context?: LocationSearchContext | null) => {
@@ -281,10 +288,14 @@ const applySearchContextParams = (params: URLSearchParams, context?: LocationSea
   if (proximity) {
     params.set("proximity", proximity);
   }
+};
 
-  if (searchContext.countryCode) {
-    params.set("country", searchContext.countryCode);
+const applySearchPurposeParams = (params: URLSearchParams, purpose: LocationSearchPurpose) => {
+  if (purpose !== "area") {
+    return;
   }
+
+  params.set("types", AREA_SEARCH_TYPES_PARAM);
 };
 
 const storeSearchResults = (key: string, results: LocationSearchResult[]) => {
@@ -484,6 +495,7 @@ const searchBoxForward = async (
     q: query,
   });
 
+  applySearchPurposeParams(params, options.purpose ?? DEFAULT_LOCATION_SEARCH_PURPOSE);
   applySearchContextParams(params, context);
 
   return readLocationResults(
@@ -509,6 +521,8 @@ const searchBoxSuggest = async (
     session_token: sessionToken,
   });
 
+  const purpose = options.purpose ?? DEFAULT_LOCATION_SEARCH_PURPOSE;
+  applySearchPurposeParams(params, purpose);
   applySearchContextParams(params, context);
 
   const response = await fetchWithTimeout(`${MAPBOX_SEARCHBOX_SUGGEST_URL}?${params.toString()}`, options.signal);
@@ -518,7 +532,9 @@ const searchBoxSuggest = async (
   }
 
   const data = (await response.json()) as MapboxSuggestResponse;
-  const suggestions = (data.suggestions ?? []).filter((suggestion) => Boolean(suggestion.mapbox_id));
+  const suggestions = (data.suggestions ?? []).filter(
+    (suggestion) => Boolean(suggestion.mapbox_id) && (purpose !== "area" || isAreaSearchType(suggestion.feature_type)),
+  );
   const retrievedResults = await Promise.allSettled(
     suggestions.map((suggestion, index) => {
       const retrieveParams = new URLSearchParams({
@@ -553,7 +569,10 @@ const geocodeSearch = async (
     fuzzyMatch: "true",
     language: "en",
     limit: REMOTE_RESULT_LIMIT,
-    types: "address,poi,place,locality,neighborhood,district",
+    types:
+      (options.purpose ?? DEFAULT_LOCATION_SEARCH_PURPOSE) === "area"
+        ? AREA_SEARCH_TYPES_PARAM
+        : "address,poi,place,locality,neighborhood,district",
   });
 
   applySearchContextParams(params, context);
@@ -563,28 +582,6 @@ const geocodeSearch = async (
     `geocode-global-${toIdSlug(query)}`,
     options.signal,
   );
-};
-
-const curatedSearch = (query: string, context?: LocationSearchContext | null): LocationSearchResult[] => {
-  const normalizedQuery = normalizeText(query);
-
-  return CURATED_VENUES.filter((venue) => {
-    const aliasMatch = venue.aliases.some((alias) => {
-      const normalizedAlias = normalizeText(alias);
-
-      return normalizedAlias.includes(normalizedQuery) || normalizedQuery.includes(normalizedAlias);
-    });
-
-    if (!aliasMatch) {
-      return false;
-    }
-
-    if (!context) {
-      return true;
-    }
-
-    return distanceInKm(context, venue) < 120 || normalizeText(context.label ?? "").includes("dhaka");
-  }).map(({ aliases: _aliases, ...venue }) => venue);
 };
 
 const dedupeResults = (results: LocationSearchResult[]) => {
@@ -640,6 +637,33 @@ const ensureUniqueResultIds = (results: LocationSearchResult[]) => {
   });
 };
 
+const rankAreaSearchResults = (results: LocationSearchResult[]) =>
+  results
+    .map((result, index) => ({
+      index,
+      priority: getAreaSearchTypePriority(result.providerResultType),
+      result,
+    }))
+    .filter((item): item is { index: number; priority: number; result: LocationSearchResult } => item.priority !== null)
+    .sort((first, second) => {
+      const priorityDelta = first.priority - second.priority;
+
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      const providerOrderDelta =
+        (first.result.providerOrder ?? first.index) - (second.result.providerOrder ?? second.index);
+
+      return providerOrderDelta || first.index - second.index;
+    })
+    .map((item) => item.result);
+
+const rankSearchResults = (
+  results: LocationSearchResult[],
+  purpose: LocationSearchPurpose,
+) => (purpose === "area" ? rankAreaSearchResults(results) : results);
+
 const collectRemoteResults = async (
   searches: Promise<LocationSearchResult[]>[],
   signal?: AbortSignal,
@@ -664,8 +688,8 @@ export const searchLocations = async (
     return [];
   }
 
-  const includeCuratedResults = options.includeCuratedResults ?? true;
-  const cacheKey = getSearchCacheKey(trimmedQuery, context, includeCuratedResults);
+  const purpose = options.purpose ?? DEFAULT_LOCATION_SEARCH_PURPOSE;
+  const cacheKey = getSearchCacheKey(trimmedQuery, purpose, context);
   const cachedResults = locationSearchCache.get(cacheKey);
 
   if (cachedResults) {
@@ -673,7 +697,6 @@ export const searchLocations = async (
   }
 
   const searchContext = getLocationSearchContext(context);
-  const curatedResults = includeCuratedResults ? curatedSearch(trimmedQuery, searchContext) : [];
   const remoteResults = await collectRemoteResults(
     [
       searchBoxSuggest(trimmedQuery, searchContext, options),
@@ -683,7 +706,7 @@ export const searchLocations = async (
     options.signal,
   );
   const finalResults = ensureUniqueResultIds(
-    dedupeResults([...curatedResults, ...remoteResults]).slice(0, 8),
+    rankSearchResults(dedupeResults(remoteResults), purpose).slice(0, 8),
   );
   const finalResultsWithDistance = finalResults.map((result) => ({
     ...result,

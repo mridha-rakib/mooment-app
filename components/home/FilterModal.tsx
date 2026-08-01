@@ -534,6 +534,7 @@ export default function FilterModal({
       <LocationSearchModal
         visible={locationSearchVisible}
         searchContext={locationSearchContext}
+        searchPurpose="area"
         onClose={() => {
           searchContextRequestIdRef.current += 1;
           setLocationSearchVisible(false);

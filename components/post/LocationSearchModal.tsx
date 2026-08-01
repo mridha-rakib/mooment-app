@@ -2,11 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { searchLocations, type LocationSearchContext, type LocationSearchResult } from '@/lib/locationSearch';
+import {
+  searchLocations,
+  type LocationSearchContext,
+  type LocationSearchPurpose,
+  type LocationSearchResult,
+} from '@/lib/locationSearch';
 
 export type LocationSearchModalProps = {
   visible: boolean;
   searchContext?: LocationSearchContext | null;
+  searchPurpose?: LocationSearchPurpose;
   onClose: () => void;
   onSelectLocation: (location: LocationSearchResult) => void;
 };
@@ -14,6 +20,7 @@ export type LocationSearchModalProps = {
 export default function LocationSearchModal({
   visible,
   searchContext = null,
+  searchPurpose = 'general',
   onClose,
   onSelectLocation,
 }: LocationSearchModalProps) {
@@ -42,7 +49,7 @@ export default function LocationSearchModal({
 
     const timer = setTimeout(() => {
       void searchLocations(query, searchContext, {
-        includeCuratedResults: false,
+        purpose: searchPurpose,
         signal: controller.signal,
       })
         .then((results) => {
@@ -61,7 +68,7 @@ export default function LocationSearchModal({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [searchContext, searchQuery, visible]);
+  }, [searchContext, searchPurpose, searchQuery, visible]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
