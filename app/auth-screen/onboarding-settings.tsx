@@ -1,5 +1,9 @@
 import { Feather } from "@expo/vector-icons";
-import { getCurrentLocationForSharing, type CurrentLocationPayload } from "@/lib/locationSharing";
+import {
+  getBestCurrentDeviceLocation,
+  type CurrentLocationPayload,
+  type DeviceLocationResult,
+} from "@/lib/locationSharing";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -14,6 +18,32 @@ type CustomSwitchProps = {
   value: boolean;
   onValueChange: (value: boolean) => void;
   disabled?: boolean;
+};
+
+type OnboardingLocationResolution = {
+  location: CurrentLocationPayload | null;
+  message?: string;
+  status?: DeviceLocationResult["status"];
+};
+
+const getLocationResolutionMessage = (result: DeviceLocationResult) => {
+  if (result.status === "fresh" || result.status === "lastKnown") {
+    return undefined;
+  }
+
+  if ("message" in result && result.message) {
+    return result.message;
+  }
+
+  if (result.status === "servicesDisabled") {
+    return "Turn on Location Services before sharing your current location.";
+  }
+
+  if (result.status === "permissionDenied" || result.status === "permissionBlocked") {
+    return "Allow location access in your device settings before sharing your current location.";
+  }
+
+  return "Unable to read your current location. Check Location Services and try again.";
 };
 
 /* 🔥 Custom Switch */
@@ -88,8 +118,19 @@ export default function OnboardingSettings() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
   const cachedLocationRef = useRef<CurrentLocationPayload | null>(null);
-  const pendingLocationRef = useRef<Promise<CurrentLocationPayload> | null>(null);
+  const pendingLocationRef = useRef<Promise<OnboardingLocationResolution> | null>(null);
+  const isMountedRef = useRef(true);
+  const hasCompletedRef = useRef(false);
   const locationRequestGenerationRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      locationRequestGenerationRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     setLocationEnabled(userLocationSharingEnabled);
@@ -99,16 +140,37 @@ export default function OnboardingSettings() {
     setNotificationsEnabled(userNotificationsEnabled);
   }, [userNotificationsEnabled]);
 
-  const getOnboardingLocation = () => {
+  const getOnboardingLocation = (): Promise<OnboardingLocationResolution> => {
     if (cachedLocationRef.current) {
-      return Promise.resolve(cachedLocationRef.current);
+      return Promise.resolve({ location: cachedLocationRef.current });
     }
 
     if (!pendingLocationRef.current) {
-      pendingLocationRef.current = getCurrentLocationForSharing()
-        .then((location) => {
-          cachedLocationRef.current = location;
-          return location;
+      pendingLocationRef.current = getBestCurrentDeviceLocation()
+        .then((result) => {
+          if (result.status === "fresh" || result.status === "lastKnown") {
+            cachedLocationRef.current = result.location;
+            return {
+              location: result.location,
+              status: result.status,
+            };
+          }
+
+          return {
+            location: null,
+            message: getLocationResolutionMessage(result),
+            status: result.status,
+          };
+        })
+        .catch((error) => {
+          return {
+            location: null,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unable to read your current location. Check Location Services and try again.",
+            status: "failed",
+          } satisfies OnboardingLocationResolution;
         })
         .finally(() => {
           pendingLocationRef.current = null;
@@ -122,8 +184,10 @@ export default function OnboardingSettings() {
     if (!nextValue) {
       locationRequestGenerationRef.current += 1;
       cachedLocationRef.current = null;
-      setLocationEnabled(false);
-      setIsResolvingLocation(false);
+      if (isMountedRef.current) {
+        setLocationEnabled(false);
+        setIsResolvingLocation(false);
+      }
       return;
     }
 
@@ -133,9 +197,22 @@ export default function OnboardingSettings() {
     setIsResolvingLocation(true);
 
     try {
-      await getOnboardingLocation();
+      const resolution = await getOnboardingLocation();
+
+      if (!isMountedRef.current || requestGeneration !== locationRequestGenerationRef.current) {
+        return;
+      }
+
+      if (!resolution.location) {
+        cachedLocationRef.current = null;
+        setLocationEnabled(false);
+
+        if (resolution.message) {
+          Alert.alert("Current Location", resolution.message);
+        }
+      }
     } catch (error) {
-      if (requestGeneration === locationRequestGenerationRef.current) {
+      if (isMountedRef.current && requestGeneration === locationRequestGenerationRef.current) {
         cachedLocationRef.current = null;
         setLocationEnabled(false);
         Alert.alert(
@@ -144,38 +221,61 @@ export default function OnboardingSettings() {
         );
       }
     } finally {
-      if (requestGeneration === locationRequestGenerationRef.current) {
+      if (isMountedRef.current && requestGeneration === locationRequestGenerationRef.current) {
         setIsResolvingLocation(false);
       }
     }
   };
 
   const handleDone = async () => {
+    if (isCompleting || isResolvingLocation || hasCompletedRef.current) {
+      return;
+    }
+
+    hasCompletedRef.current = true;
     setIsCompleting(true);
 
     try {
+      let currentLocation: CurrentLocationPayload | null = null;
+      let shouldEnableLocation = locationEnabled;
+
+      if (locationEnabled) {
+        const resolution = await getOnboardingLocation();
+        currentLocation = resolution.location;
+        shouldEnableLocation = Boolean(currentLocation);
+      }
+
       const shouldPersistProfile =
-        locationEnabled ||
-        locationEnabled !== userLocationSharingEnabled ||
+        shouldEnableLocation ||
+        shouldEnableLocation !== userLocationSharingEnabled ||
         notificationsEnabled !== userNotificationsEnabled;
 
       if (shouldPersistProfile) {
-        const currentLocation = locationEnabled ? await getOnboardingLocation() : null;
         await updateProfile({
-          currentLocationSharingEnabled: locationEnabled,
+          currentLocationSharingEnabled: shouldEnableLocation,
           currentLocation,
           notificationsEnabled,
         });
       }
 
+      if (!isMountedRef.current) {
+        return;
+      }
+
       router.replace('/(tabs)/home?showSuccess=true');
     } catch (error) {
-      Alert.alert(
-        "Current Location",
-        error instanceof Error ? error.message : "Unable to save your location preference.",
-      );
+      hasCompletedRef.current = false;
+
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Current Location",
+          error instanceof Error ? error.message : "Unable to save your location preference.",
+        );
+      }
     } finally {
-      setIsCompleting(false);
+      if (isMountedRef.current) {
+        setIsCompleting(false);
+      }
     }
   };
 

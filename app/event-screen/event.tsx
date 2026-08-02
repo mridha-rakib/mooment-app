@@ -1362,7 +1362,14 @@ const EventScreen = () => {
     const quantity = Math.min(clampTicketQuantity(selectedTicketQuantity, selectedTicket), maxAllowed);
 
     const linkedReward = (event.rewards ?? []).find(
-      (r) => r.rewardType === "ticket" && r.ticketId === ticketId && r.id,
+      (r) => (
+        r.rewardType === "ticket"
+        && r.ticketId === ticketId
+        && r.id
+        && !r.disabledAt
+        && !claimedRewardIds.includes(r.id)
+        && !(r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now())
+      ),
     );
 
     router.push({
@@ -1382,8 +1389,6 @@ const EventScreen = () => {
         ticketPrice: String(selectedTicket.price),
         quantity: String(quantity),
         rewardId: linkedReward?.id ?? "",
-        rewardBuyQuantity: linkedReward ? String(linkedReward.buyQuantity) : "",
-        rewardFreeQuantity: linkedReward ? String(linkedReward.freeQuantity) : "",
       },
     });
   };
@@ -1583,20 +1588,9 @@ const EventScreen = () => {
       return;
     }
 
-    if (reward.rewardType === "ticket" && reward.ticketId) {
-      const linkedTicket = (event.tickets ?? []).find((t) => t.id === reward.ticketId);
-
-      if (linkedTicket && linkedTicket.type !== "free" && linkedTicket.price > 0) {
-        const alreadyPurchased = purchasedTicketCounts[reward.ticketId] ?? 0;
-
-        if (alreadyPurchased === 0) {
-          Alert.alert(
-            "Purchase required",
-            "You need to purchase this ticket first before claiming the reward.",
-          );
-          return;
-        }
-      }
+    if (reward.rewardType === "ticket") {
+      Alert.alert("Apply during checkout", "Ticket offers are applied from the ticket checkout screen.");
+      return;
     }
 
     setClaimingRewardId(rewardId);
@@ -2307,7 +2301,7 @@ const EventScreen = () => {
 
             <View style={[styles.rewardDetailDivider, { backgroundColor: colors.border }]} />
 
-            {(selectedReward?.discountPercent ?? 0) > 0 && (
+            {(selectedReward?.discountEnabled ?? ((selectedReward?.discountPercent ?? 0) > 0)) && (
               <View style={styles.rewardDetailRow}>
                 <Feather name="percent" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
                 <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Discount</Text>
@@ -2317,7 +2311,7 @@ const EventScreen = () => {
               </View>
             )}
 
-            {(selectedReward?.freeQuantity ?? 0) > 0 && (
+            {(selectedReward?.bogoEnabled ?? (Boolean(selectedReward?.buyQuantity) && Boolean(selectedReward?.freeQuantity))) && (
               <View style={styles.rewardDetailRow}>
                 <Feather name="gift" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
                 <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>BOGO</Text>
@@ -2331,7 +2325,9 @@ const EventScreen = () => {
               <Feather name="users" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
               <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Capacity</Text>
               <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
-                {(selectedReward?.capacity ?? 0) === 0 ? "Unlimited" : `${selectedReward?.capacity} available`}
+                {(selectedReward?.capacityLimited ?? ((selectedReward?.capacity ?? 0) > 0))
+                  ? `${Math.max(0, selectedReward?.availableCount ?? selectedReward?.capacity ?? 0)} users left`
+                  : "Unlimited users"}
               </Text>
             </View>
 

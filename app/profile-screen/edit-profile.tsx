@@ -62,7 +62,6 @@ type ProfileField =
   | "email"
   | "gender"
   | "age"
-  | "address"
   | "bio";
 type MeasurableFieldRef = {
   measureInWindow: View["measureInWindow"];
@@ -266,7 +265,6 @@ export default function EditProfileScreen() {
   const usernameInputRef = useRef<TextInput>(null);
   const emailInputRef = useRef<TextInput>(null);
   const ageInputRef = useRef<TextInput>(null);
-  const addressInputRef = useRef<TextInput>(null);
   const bioInputRef = useRef<TextInput>(null);
 
   const [isProfileLoading, setIsProfileLoading] = useState(true);
@@ -305,7 +303,6 @@ export default function EditProfileScreen() {
   const [isGenderDropdownVisible, setIsGenderDropdownVisible] = useState(false);
   const [age, setAge] = useState(user?.age ? String(user.age) : "");
   const [bio, setBio] = useState(user?.bio ?? "");
-  const [address, setAddress] = useState(user?.address ?? "");
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
   // const documentActionRef = useRef<"view" | "download" | null>(null);
@@ -398,7 +395,6 @@ export default function EditProfileScreen() {
           if (field === "username") usernameInputRef.current?.focus();
           if (field === "email") emailInputRef.current?.focus();
           if (field === "age") ageInputRef.current?.focus();
-          if (field === "address") addressInputRef.current?.focus();
           if (field === "bio") bioInputRef.current?.focus();
         });
       });
@@ -411,7 +407,6 @@ export default function EditProfileScreen() {
     usernameInputRef.current?.blur();
     emailInputRef.current?.blur();
     ageInputRef.current?.blur();
-    addressInputRef.current?.blur();
     bioInputRef.current?.blur();
   }, []);
 
@@ -461,16 +456,12 @@ export default function EditProfileScreen() {
       fields.push("username", "email");
     }
 
-    if (isBusiness) {
-      fields.push("address");
-    } else {
-      fields.push("gender", "age");
-    }
+    fields.push("gender", "age");
 
     fields.push("bio");
 
     return fields;
-  }, [isBusiness, isSwitchMode]);
+  }, [isSwitchMode]);
 
   const focusNextField = useCallback(
     (field: ProfileField) => {
@@ -538,7 +529,6 @@ export default function EditProfileScreen() {
     setGender(user.gender ?? "");
     setAge(user.age ? String(user.age) : "");
     setBio(user.bio ?? "");
-    setAddress(user.address ?? "");
     setAvatarKey(user.avatarKey ?? null);
     setPendingAvatar(null);
     setHasImage(Boolean(user.avatarKey));
@@ -746,12 +736,10 @@ export default function EditProfileScreen() {
 
     InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
-        if (!isBusiness) {
-          focusField("age");
-        }
+        focusField("age");
       });
     });
-  }, [focusField, isBusiness]);
+  }, [focusField]);
 
   useEffect(() => {
     if (!isGenderDropdownVisible) {
@@ -850,7 +838,7 @@ export default function EditProfileScreen() {
       return null;
     }
 
-    if (!isBusiness && trimmedAge) {
+    if (trimmedAge) {
       const parsedAge = Number(trimmedAge);
 
       if (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 130) {
@@ -910,13 +898,12 @@ export default function EditProfileScreen() {
 
       await updateProfile({
         accountType: profileType,
-        address: isBusiness ? address.trim() || null : null,
-        age: isBusiness ? null : validatedProfile.age,
+        age: validatedProfile.age,
         avatarKey: finalAvatarKey,
         bio: bio.trim() || null,
         businessDocumentKey: isBusiness ? finalDocumentKey : null,
         email: validatedProfile.email,
-        gender: isBusiness ? null : gender.trim() || null,
+        gender: gender.trim() || null,
         name: validatedProfile.name,
         username: validatedProfile.username,
       });
@@ -1126,27 +1113,6 @@ export default function EditProfileScreen() {
                   value={email}
                 />
 
-                {/* {isBusiness ? ( */}
-
-                <CustomInput
-                  containerRef={setFieldRef("address")}
-                  colors={colors}
-                  editable={!isBusy}
-                  enterKeyHint="next"
-                  icon="map-pin"
-                  inputRef={addressInputRef}
-                  onFocus={() => {
-                    activeFieldRef.current = "address";
-                    ensureFieldVisible("address");
-                  }}
-                  onLayout={handleFieldLayout("address")}
-                  onChangeText={setAddress}
-                  onSubmitEditing={() => focusNextField("address")}
-                  placeholder="Address"
-                  returnKeyType="next"
-                  value={address}
-                />
-                {/* ) : ( */}
                 <TouchableOpacity
                   ref={setFieldRef("gender")}
                   activeOpacity={0.75}
@@ -1185,10 +1151,8 @@ export default function EditProfileScreen() {
                     style={styles.inputRightIcon}
                   />
                 </TouchableOpacity>
-                {/* )} */}
               </View>
 
-              {/* {!isBusiness ? ( */}
               <View style={styles.section}>
                 <Text
                   style={[styles.sectionTitle, { color: colors.textSecondary }]}
@@ -1220,7 +1184,6 @@ export default function EditProfileScreen() {
                   value={age}
                 />
               </View>
-              {/* ) : null} */}
 
               {/* {isBusiness ? (
                 <View style={styles.section}>

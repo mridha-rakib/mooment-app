@@ -51,6 +51,7 @@ export type CheckoutOrder = {
     freeQuantity?: number;
     totalQuantity?: number;
     rewardId?: string | null;
+    rewardSnapshot?: CheckoutRewardSnapshot | null;
     unitAmount: number;
     totalAmount: number;
   }[];
@@ -71,6 +72,8 @@ type CreateTicketCheckoutIntentPayload = {
   eventId: string;
   ticketId: string;
   quantity: number;
+  applyReward?: boolean;
+  rewardId?: string | null;
   anonymous?: boolean;
   acceptedTerms: boolean;
 };
@@ -179,6 +182,29 @@ export type TicketCancellation = {
   updatedAt: string;
 };
 
+export type CheckoutRewardSnapshot = {
+  rewardId: string;
+  rewardType: "ticket";
+  name: string;
+  description?: string | null;
+  discountEnabled: boolean;
+  discountPercent?: number | null;
+  bogoEnabled: boolean;
+  buyQuantity?: number | null;
+  freeQuantity?: number | null;
+  capacityLimited: boolean;
+  originalUnitAmount: number;
+  discountedUnitAmount: number;
+  discountAmount: number;
+  paidQuantity: number;
+  freeQuantityIssued: number;
+  totalQuantityIssued: number;
+  platformFeeAmount: number;
+  finalAmount: number;
+  currency: string;
+  appliedAt: string;
+};
+
 export type TicketCancellationEligibility = {
   canCancel: boolean;
   cancellationCutoffAt?: string | null;
@@ -249,6 +275,7 @@ export type TicketWalletItem = {
   totalQuantity?: number;
   unitAmount: number;
   totalAmount: number;
+  rewardSnapshot?: CheckoutRewardSnapshot | null;
   currency: string;
   paymentStatus: CheckoutPaymentStatus;
   walletStatus: TicketWalletStatus;

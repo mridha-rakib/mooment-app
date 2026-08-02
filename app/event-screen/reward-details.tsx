@@ -74,6 +74,28 @@ const getInitialRewardDate = (reward?: EventRewardPayload | null, event?: EventR
   return fallback;
 };
 
+const parseInteger = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+
+  return Number.isSafeInteger(parsed) ? parsed : null;
+};
+
+const parseDiscount = (value: string) => {
+  const parsed = parseInteger(value);
+
+  if (parsed === null) {
+    return null;
+  }
+
+  return parsed >= 1 && parsed <= 100 ? parsed : null;
+};
+
 const formatDate = (value: Date) =>
   value.toLocaleDateString("en-US", {
     month: "short",
@@ -138,9 +160,12 @@ export default function RewardDetailsScreen() {
   const [offerName, setOfferName] = useState("");
   const [description, setDescription] = useState("");
   const [expiresAt, setExpiresAt] = useState(() => getInitialRewardDate());
+  const [discountEnabled, setDiscountEnabled] = useState(false);
   const [discountPercent, setDiscountPercent] = useState("");
+  const [bogoEnabled, setBogoEnabled] = useState(false);
   const [buyQuantity, setBuyQuantity] = useState("");
   const [freeQuantity, setFreeQuantity] = useState("");
+  const [capacityLimited, setCapacityLimited] = useState(false);
   const [capacity, setCapacity] = useState("");
   const [formErrors, setFormErrors] = useState<RewardFormErrors>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -156,7 +181,6 @@ export default function RewardDetailsScreen() {
   const keyboardTopRef = useRef(windowHeight);
   const footerHeightRef = useRef(0);
 
-  const authUser = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);
 
@@ -339,10 +363,13 @@ export default function RewardDetailsScreen() {
       setOfferName(reward.name);
       setDescription(reward.description ?? "");
       setExpiresAt(getInitialRewardDate(reward, event));
-      setDiscountPercent(String(reward.discountPercent));
-      setBuyQuantity(String(reward.buyQuantity));
-      setFreeQuantity(String(reward.freeQuantity));
-      setCapacity(String(reward.capacity));
+      setDiscountEnabled(reward.discountEnabled ?? ((reward.discountPercent ?? 0) > 0));
+      setDiscountPercent(reward.discountPercent ? String(reward.discountPercent) : "");
+      setBogoEnabled(reward.bogoEnabled ?? (typeof reward.buyQuantity === "number" && typeof reward.freeQuantity === "number"));
+      setBuyQuantity(reward.buyQuantity ? String(reward.buyQuantity) : "");
+      setFreeQuantity(reward.freeQuantity ? String(reward.freeQuantity) : "");
+      setCapacityLimited(reward.capacityLimited ?? ((reward.capacity ?? 0) > 0));
+      setCapacity(reward.capacity ? String(reward.capacity) : "");
       setFormErrors({});
       return;
     }
@@ -351,31 +378,23 @@ export default function RewardDetailsScreen() {
     setOfferName("");
     setDescription("");
     setExpiresAt(getInitialRewardDate(null, event));
+    setDiscountEnabled(false);
+    setDiscountPercent("");
+    setBogoEnabled(isProductReward);
+    setBuyQuantity(isProductReward ? "1" : "");
+    setFreeQuantity(isProductReward ? "1" : "");
+    setCapacityLimited(false);
+    setCapacity("");
     setFormErrors({});
   }, [event, isLoading, isProductReward, reward, selectorItems]);
 
-  const parseWholeNumber = (value: string, fallback: number, minimum: number) => {
-    const parsed = Number.parseInt(value, 10);
-
-    return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
-  };
-
-  const parseDiscount = (value: string) => {
-    const parsed = Number.parseFloat(value);
-
-    if (!Number.isFinite(parsed)) {
-      return 0;
-    }
-
-    return Math.min(100, Math.max(0, parsed));
-  };
-
   const discountedPrice = useMemo(() => {
     if (!selectedTicket || selectedTicket.type === "free") return null;
+    if (!discountEnabled) return null;
     const pct = parseDiscount(discountPercent);
-    if (pct <= 0) return null;
+    if (pct === null) return null;
     return selectedTicket.price * (1 - pct / 100);
-  }, [selectedTicket, discountPercent]);
+  }, [selectedTicket, discountEnabled, discountPercent, parseDiscount]);
 
   const setRewardTicketSalesEndError = useCallback((error: ReturnType<typeof getRewardTicketSalesEndError>) => {
     if (!error) {
@@ -428,6 +447,43 @@ export default function RewardDetailsScreen() {
       return;
     }
 
+    const nextDiscountPercent = discountEnabled ? parseDiscount(discountPercent) : null;
+    const nextBuyQuantity = bogoEnabled ? parseInteger(buyQuantity) : null;
+    const nextFreeQuantity = bogoEnabled ? parseInteger(freeQuantity) : null;
+    const nextCapacity = capacityLimited ? parseInteger(capacity) : null;
+
+    if (!discountEnabled && !bogoEnabled) {
+      Alert.alert("Choose an offer", "Enable Percentage Discount or Buy X Get Y Free.");
+      return;
+    }
+
+    if (discountEnabled && nextDiscountPercent === null) {
+      Alert.alert("Invalid discount", "Enter a whole-number discount from 1 to 100.");
+      return;
+    }
+
+    if (bogoEnabled) {
+      if (nextBuyQuantity === null || nextBuyQuantity < 1 || nextBuyQuantity > 2) {
+        Alert.alert("Invalid buy quantity", "Buy Quantity must be 1 or 2.");
+        return;
+      }
+
+      if (nextFreeQuantity === null || nextFreeQuantity < 1) {
+        Alert.alert("Invalid free quantity", "Free Quantity must be a positive whole number.");
+        return;
+      }
+
+      if (selectedTicket && nextBuyQuantity + nextFreeQuantity > (selectedTicket.availableCount ?? selectedTicket.capacity)) {
+        Alert.alert("Not enough tickets", "Buy X Get Y requires more tickets than are currently available.");
+        return;
+      }
+    }
+
+    if (capacityLimited && (nextCapacity === null || nextCapacity < 1)) {
+      Alert.alert("Invalid user limit", "Limit Users must be a positive whole number.");
+      return;
+    }
+
     setFormErrors({});
     setIsSaving(true);
 
@@ -439,10 +495,13 @@ export default function RewardDetailsScreen() {
         name: offerName.trim() || (isProductReward ? "Product reward" : "Ticket reward"),
         description: description.trim() || null,
         expiresAt: expiresAt.toISOString(),
-        discountPercent: parseDiscount(discountPercent),
-        buyQuantity: parseWholeNumber(buyQuantity, 1, 1),
-        freeQuantity: parseWholeNumber(freeQuantity, 1, 1),
-        capacity: parseWholeNumber(capacity, 0, 0),
+        discountEnabled,
+        discountPercent: nextDiscountPercent,
+        bogoEnabled,
+        buyQuantity: nextBuyQuantity,
+        freeQuantity: nextFreeQuantity,
+        capacityLimited,
+        capacity: nextCapacity,
       };
 
       const isDraftEvent = event?.status === "draft";
@@ -626,6 +685,29 @@ export default function RewardDetailsScreen() {
     </View>
   );
 
+  const renderCheckbox = (
+    label: string,
+    checked: boolean,
+    onPress: () => void,
+  ) => (
+    <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={onPress}>
+      <View
+        style={[
+          styles.checkboxBox,
+          {
+            borderColor: checked ? colors.primary : colors.border,
+            backgroundColor: checked ? colors.primary : "transparent",
+          },
+        ]}
+      >
+        {checked ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+      </View>
+      <Text style={[styles.checkboxLabel, { color: colors.text }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const canConfirm = !isSaving && (discountEnabled || bogoEnabled);
+
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -721,7 +803,7 @@ export default function RewardDetailsScreen() {
                     <Text style={[styles.ticketInfoDot, { color: colors.textSecondary }]}>·</Text>
                     <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
                     <Text style={[styles.ticketInfoText, { color: colors.textSecondary }]}>
-                      {`Sales end ${formatDate(new Date(selectedTicket.salesEndAt))}`}
+                      {`Sales end ${formatDate(new Date(selectedTicket.salesEndAt))} • ${formatTime(new Date(selectedTicket.salesEndAt))}`}
                     </Text>
                   </>
                 )}
@@ -802,17 +884,23 @@ export default function RewardDetailsScreen() {
             />
           )}
 
-          {renderInput("discount", "DISCOUNT (%)", discountPercent, setDiscountPercent, "e.g. 10", "decimal-pad")}
-          {isProductReward && renderInput("buyQuantity", "HOW MANY TO BUY", buyQuantity, setBuyQuantity, "e.g. 2", "number-pad")}
-          {renderInput(
-            "freeQuantity",
-            isProductReward ? "HOW MANY FREE" : "BUY 1 HOW MANY FREE",
-            freeQuantity,
-            setFreeQuantity,
-            "e.g. 1",
-            "number-pad",
-          )}
-          {renderInput("capacity", "CAPACITY (0 = unlimited)", capacity, setCapacity, "e.g. 100", "number-pad")}
+          {renderCheckbox("Percentage Discount", discountEnabled, () => setDiscountEnabled((value) => !value))}
+          {discountEnabled ? renderInput("discount", "DISCOUNT (%)", discountPercent, setDiscountPercent, "e.g. 10", "number-pad") : null}
+
+          {renderCheckbox("Buy X Get Y Free", bogoEnabled, () => setBogoEnabled((value) => !value))}
+          {bogoEnabled ? (
+            <View style={styles.row}>
+              <View style={[styles.inputGroup, styles.rowItemLeft]}>
+                {renderInput("buyQuantity", "BUY QUANTITY", buyQuantity, setBuyQuantity, "e.g. 1", "number-pad")}
+              </View>
+              <View style={[styles.inputGroup, styles.rowItemRight]}>
+                {renderInput("freeQuantity", "FREE QUANTITY", freeQuantity, setFreeQuantity, "e.g. 1", "number-pad")}
+              </View>
+            </View>
+          ) : null}
+
+          {renderCheckbox("Limit Users", capacityLimited, () => setCapacityLimited((value) => !value))}
+          {capacityLimited ? renderInput("capacity", "USER LIMIT", capacity, setCapacity, "e.g. 100", "number-pad") : null}
         </ScrollView>
 
         <View
@@ -832,8 +920,11 @@ export default function RewardDetailsScreen() {
             <Text style={[styles.cancelButtonText, { color: isSaving ? colors.textSecondary : colors.text }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.confirmButton, { backgroundColor: buttonBackground(colors) }]}
-            disabled={isSaving}
+            style={[
+              styles.confirmButton,
+              { backgroundColor: buttonBackground(colors), opacity: canConfirm ? 1 : 0.45 },
+            ]}
+            disabled={!canConfirm}
             onPress={handleConfirm}
           >
             {isSaving ? (
@@ -915,6 +1006,25 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  checkboxBox: {
+    alignItems: "center",
+    borderRadius: 5,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+  },
+  checkboxLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  checkboxRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+    minHeight: 32,
   },
   confirmButton: {
     alignItems: "center",

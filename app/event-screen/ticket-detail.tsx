@@ -228,6 +228,8 @@ const TicketDetailScreen = () => {
     eventEndDateTime?: string;
     amount?: string;
     currency?: string;
+    offerClaimed?: string;
+    offerDetails?: string;
     walletStatus?: string;
     cancellationReason?: string;
     refundStatus?: string;
@@ -415,6 +417,8 @@ const TicketDetailScreen = () => {
   const walletEventStartDateTime = getParamValue(params.eventStartDateTime, walletDateTime);
   const walletEventEndDateTime = getParamValue(params.eventEndDateTime, "Date TBA");
   const walletAmount = formatWalletAmount(params.amount, params.currency);
+  const walletOfferClaimed = getParamValue(params.offerClaimed, "") === "true";
+  const walletOfferDetails = getParamValue(params.offerDetails, "");
   const walletSource = getParamValue(params.walletSource, "owned");
   const walletEventStatus = getParamValue(params.eventStatus, "");
   const walletCrowdStatus = getParamValue(params.crowdStatus, "");
@@ -655,6 +659,12 @@ const TicketDetailScreen = () => {
     { label: "Paid Tickets", value: `${walletTicketName} x ${walletPaidQuantity}` },
     ...(walletFreeQuantity > 0
       ? [{ label: "Rewarded Tickets", value: `${walletTicketName} x ${walletFreeQuantity}` }]
+      : []),
+    ...(walletOfferClaimed
+      ? [
+          { label: "Offer", value: "Offer claimed" },
+          ...(walletOfferDetails ? [{ label: "Offer details", value: walletOfferDetails }] : []),
+        ]
       : []),
     { label: "Total Tickets", value: `${walletTicketName} x ${walletPurchaseCount}` },
     { label: "Event start", value: walletEventStartDateTime },

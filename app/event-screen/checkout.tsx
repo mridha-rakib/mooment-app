@@ -7,6 +7,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -75,17 +76,14 @@ const EventCheckoutScreen = () => {
   const [quote, setQuote] = useState<CheckoutQuote | null>(null);
   const [isQuoteLoading, setIsQuoteLoading] = useState(true);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [applyOffer, setApplyOffer] = useState(false);
 
   const eventId = typeof params.eventId === "string" ? params.eventId : "";
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : "";
   const eventName = getParam(params.eventName, "Event");
   const eventDateTime = getParam(params.eventDateTime, "Date TBA");
-  const eventDateDisplay = getParam(params.eventDateDisplay, eventDateTime);
-  const ticketName = getParam(params.ticketName, "Ticket");
-  const hostName = getParam(params.hostName, "");
-  const venue = getParam(params.venue, "");
-  const address = getParam(params.address, "");
   const quantity = parsePositiveInteger(params.quantity);
+  const rewardId = typeof params.rewardId === "string" ? params.rewardId : null;
   const subtotal = quote ? (quote.subtotalAmount <= 0 ? "Free" : formatCurrency(quote.subtotalAmount, quote.currency)) : "";
   const fee = quote ? formatCurrency(quote.platformFeeAmount, quote.currency) : "";
   const tax = quote ? formatCurrency(quote.taxAmount, quote.currency) : "";
@@ -94,6 +92,19 @@ const EventCheckoutScreen = () => {
     (item) => item.itemType === "ticket" && item.itemId === ticketId,
   );
   const quoteFreeQuantity = ticketLineItem?.freeQuantity ?? 0;
+  const rewardSnapshot = applyOffer ? ticketLineItem?.rewardSnapshot ?? null : null;
+  const rewardSummary = rewardSnapshot
+    ? [
+        rewardSnapshot.discountEnabled && rewardSnapshot.discountPercent
+          ? `${rewardSnapshot.discountPercent}% off`
+          : null,
+        rewardSnapshot.bogoEnabled && rewardSnapshot.buyQuantity && rewardSnapshot.freeQuantity
+          ? `Buy ${rewardSnapshot.buyQuantity} Get ${rewardSnapshot.freeQuantity} Free`
+          : null,
+      ].filter(Boolean).join(" · ")
+    : quoteFreeQuantity > 0
+      ? `${quoteFreeQuantity} free`
+      : "$0";
 
   const orderItems = useMemo(() => {
     if (isQuoteLoading) {
@@ -140,6 +151,8 @@ const EventCheckoutScreen = () => {
           eventId,
           ticketId,
           quantity,
+          applyReward: applyOffer,
+          rewardId: applyOffer ? rewardId : null,
           anonymous: false,
         });
 
@@ -163,7 +176,7 @@ const EventCheckoutScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [eventId, ticketId, quantity]);
+  }, [applyOffer, eventId, rewardId, ticketId, quantity]);
 
   const handleContinue = async () => {
     if (!agreed) {
@@ -193,6 +206,8 @@ const EventCheckoutScreen = () => {
           eventId,
           ticketId,
           quantity,
+          applyReward: applyOffer,
+          rewardId: applyOffer ? rewardId : null,
           anonymous: false,
           acceptedTerms: agreed,
         });
@@ -205,6 +220,8 @@ const EventCheckoutScreen = () => {
             eventId,
             ticketId,
             quantity,
+            applyReward: applyOffer,
+            rewardId: applyOffer ? rewardId : null,
             anonymous: false,
             acceptedTerms: agreed,
           },
@@ -237,13 +254,6 @@ const EventCheckoutScreen = () => {
       if (order.totalAmount <= 0) {
         emitTicketWalletChanged();
       }
-
-      const ticketLineItem = order.lineItems.find(
-        (item) => item.itemType === "ticket" && item.itemId === ticketId,
-      );
-      const paidQuantity = ticketLineItem?.paidQuantity ?? ticketLineItem?.quantity ?? quantity;
-      const freeQuantity = ticketLineItem?.freeQuantity ?? 0;
-      const totalQuantity = Math.max(ticketLineItem?.totalQuantity ?? 0, paidQuantity + freeQuantity);
 
       router.replace({
         pathname: "/event-screen/event",
@@ -283,11 +293,50 @@ const EventCheckoutScreen = () => {
         <OrderSummary
           items={orderItems}
           subtotal={subtotal}
-          reward={quoteFreeQuantity > 0 ? `${quoteFreeQuantity} free` : "$0"}
+          reward={rewardSummary}
           fee={fee}
           tax={tax}
           total={total}
         />
+        {rewardId ? (
+          <TouchableOpacity
+            style={[styles.offerToggle, { borderColor: applyOffer ? colors.primary : colors.border }]}
+            activeOpacity={0.85}
+            onPress={() => setApplyOffer((value) => !value)}
+            disabled={isQuoteLoading || isPaying}
+          >
+            <View
+              style={[
+                styles.offerCheck,
+                {
+                  borderColor: applyOffer ? colors.primary : colors.textSecondary,
+                  backgroundColor: applyOffer ? colors.primary : "transparent",
+                },
+              ]}
+            >
+              {applyOffer ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+            </View>
+            <View style={styles.offerToggleText}>
+              <Text style={[styles.offerTitle, { color: colors.text }]}>Apply Offer</Text>
+              {rewardSnapshot ? (
+                <Text style={[styles.offerSubtitle, { color: colors.textSecondary }]}>
+                  {[
+                    rewardSnapshot.discountEnabled && rewardSnapshot.discountPercent
+                      ? `${rewardSnapshot.discountPercent}% off ${formatCurrency(rewardSnapshot.discountAmount, quote?.currency)}`
+                      : null,
+                    rewardSnapshot.bogoEnabled
+                      ? `${rewardSnapshot.freeQuantityIssued} free · ${rewardSnapshot.totalQuantityIssued} total issued`
+                      : null,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              ) : (
+                <Text style={[styles.offerSubtitle, { color: colors.textSecondary }]}>
+                  {applyOffer ? "Loading offer breakdown" : "Optional ticket offer"}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        ) : null}
         {isQuoteLoading ? (
           <View style={styles.quoteStatus}>
             <ActivityIndicator size="small" color={colors.textSecondary} />
@@ -356,6 +405,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     lineHeight: 18,
+  },
+  offerCheck: {
+    alignItems: "center",
+    borderRadius: 5,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+  },
+  offerSubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  offerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  offerToggle: {
+    alignItems: "center",
+    backgroundColor: "#151515",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+    padding: 14,
+  },
+  offerToggleText: {
+    flex: 1,
   },
   quoteStatus: {
     alignItems: "center",

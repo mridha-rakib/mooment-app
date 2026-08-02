@@ -124,6 +124,25 @@ const getRefundStatusLabel = (item: TicketWalletItem): string | null => {
 const getWalletEventId = (item: TicketWalletItem) =>
   typeof item.event?.id === "string" ? item.event.id.trim() : "";
 
+const getWalletOfferDetails = (item: TicketWalletItem) => {
+  const snapshot = item.rewardSnapshot;
+
+  if (!snapshot) {
+    return "";
+  }
+
+  return [
+    snapshot.discountEnabled && snapshot.discountPercent
+      ? `${snapshot.discountPercent}% off`
+      : null,
+    snapshot.bogoEnabled && snapshot.buyQuantity && snapshot.freeQuantity
+      ? `Buy ${snapshot.buyQuantity} Get ${snapshot.freeQuantity} Free`
+      : null,
+    snapshot.discountAmount > 0 ? `Saved ${snapshot.discountAmount.toFixed(2)} ${snapshot.currency.toUpperCase()}` : null,
+    snapshot.freeQuantityIssued > 0 ? `${snapshot.freeQuantityIssued} free ticket${snapshot.freeQuantityIssued === 1 ? "" : "s"}` : null,
+  ].filter(Boolean).join(" · ");
+};
+
 const getPassesForTab = (item: TicketWalletItem, tab: WalletTab) => {
   const passes = item.ticketPasses ?? [];
 
@@ -509,6 +528,8 @@ const TicketWalletScreen = () => {
                               eventEndDateTime: formatDateTime(item.event.endAt),
                               amount: String(item.totalAmount),
                               currency: item.currency,
+                              offerClaimed: item.rewardSnapshot ? "true" : "",
+                              offerDetails: getWalletOfferDetails(item),
                               refundStatus: item.refund?.status ?? "",
                               refundRequestedAmountMinor: item.refund ? String(item.refund.requestedAmountMinor) : "",
                               refundCompletedAmountMinor: item.refund ? String(item.refund.completedAmountMinor) : "",

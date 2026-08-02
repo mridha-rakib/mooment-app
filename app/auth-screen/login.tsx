@@ -53,6 +53,11 @@ export default function Login() {
     }
   };
 
+  const handleCreateAccountPress = () => {
+    useAuthStore.setState({ error: null, authErrorCode: null });
+    router.push('/auth-screen/signup');
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -143,7 +148,7 @@ export default function Login() {
 
           <View style={styles.footer}>
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>{"Don't have an account? "}</Text>
-            <TouchableOpacity onPress={() => router.push('/auth-screen/signup')}>
+            <TouchableOpacity onPress={handleCreateAccountPress}>
               <Text style={[styles.createOneText, { color: colors.primary }]}>Create One</Text>
             </TouchableOpacity>
           </View>

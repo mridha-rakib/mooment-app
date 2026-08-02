@@ -161,11 +161,38 @@ const getRewardImageUri = (reward: EventRewardPayload) => {
 const getRewardDescription = (reward: EventRewardPayload) => {
   const target = reward.targetName?.trim();
   const base = reward.description?.trim() || reward.name;
-  const buyFree = `Buy ${reward.buyQuantity} get ${reward.freeQuantity} free`;
-  const discount = reward.discountPercent > 0 ? `${reward.discountPercent}% off` : null;
+  const benefitLines = getRewardBenefitLines(reward);
 
-  return [base, target ? `for ${target}` : null, discount ?? buyFree].filter(Boolean).join(" ");
+  return [base, target ? `for ${target}` : null, benefitLines.join(" · ")].filter(Boolean).join(" ");
 };
+
+const isDiscountEnabled = (reward: EventRewardPayload) =>
+  reward.discountEnabled ?? ((reward.discountPercent ?? 0) > 0);
+
+const isBogoEnabled = (reward: EventRewardPayload) =>
+  reward.bogoEnabled ?? (typeof reward.buyQuantity === "number" && typeof reward.freeQuantity === "number");
+
+const isCapacityLimited = (reward: EventRewardPayload) =>
+  reward.capacityLimited ?? ((reward.capacity ?? 0) > 0);
+
+const getRewardBenefitLines = (reward: EventRewardPayload) => [
+  isDiscountEnabled(reward) && reward.discountPercent ? `${reward.discountPercent}% off` : null,
+  isBogoEnabled(reward) && reward.buyQuantity && reward.freeQuantity
+    ? `Buy ${reward.buyQuantity} Get ${reward.freeQuantity} Free`
+    : null,
+].filter((line): line is string => Boolean(line));
+
+const getRewardCapacityLabel = (reward: EventRewardPayload) => {
+  if (!isCapacityLimited(reward)) {
+    return "Unlimited users";
+  }
+
+  const remaining = Math.max(0, reward.availableCount ?? reward.capacity ?? 0);
+  return `${remaining} user${remaining === 1 ? "" : "s"} left`;
+};
+
+const isRewardUnavailableByCapacity = (reward: EventRewardPayload) =>
+  isCapacityLimited(reward) && Math.max(0, reward.availableCount ?? reward.capacity ?? 0) <= 0;
 
 const AccessTab = ({
   tickets = [],
@@ -487,10 +514,11 @@ const AccessTab = ({
             const quantity = isSelected ? Math.min(Math.max(1, selectedTicketQuantity), maxQuantity || 1) : 0;
 
             const linkedReward = rewards.find(
-              (r) => r.rewardType === "ticket" && r.ticketId === ticket.id,
+              (r) => r.rewardType === "ticket" && r.ticketId === ticket.id && !r.disabledAt,
             );
 
             const isRewardClaimed = linkedReward?.id ? claimedRewardIds.includes(linkedReward.id) : false;
+            const rewardBenefitLines = linkedReward ? getRewardBenefitLines(linkedReward) : [];
 
             return (
               <View key={ticketKey}>
@@ -504,26 +532,23 @@ const AccessTab = ({
                     />
                     <View style={styles.rewardRow}>
                       <View style={styles.rewardRowLeft}>
-                        <Text style={styles.rewardAppliedText}>Reward applied</Text>
+                        <Text style={styles.rewardAppliedText}>
+                          {isRewardClaimed ? "Offer claimed" : "Offer available"}
+                        </Text>
                         <Text style={styles.bogoDescText}>
-                          {`Buy ${linkedReward.buyQuantity} get ${linkedReward.freeQuantity} Free`}
+                          {rewardBenefitLines.join(" · ") || linkedReward.name}
+                        </Text>
+                        <Text style={styles.bogoDescText}>
+                          {getRewardCapacityLabel(linkedReward)}
                         </Text>
                       </View>
-                      {!isHostMode && !isLocked && (
+                      {!isHostMode && !isLocked && isRewardClaimed && (
                         isRewardClaimed ? (
                           <View style={styles.claimedRewardBannerBadge}>
                             <Feather name="check" size={12} color="#26C08F" />
-                            <Text style={styles.claimedRewardBannerText}>Claimed</Text>
+                            <Text style={styles.claimedRewardBannerText}>Offer claimed</Text>
                           </View>
-                        ) : (
-                          <TouchableOpacity
-                            style={styles.claimRewardBannerBtn}
-                            onPress={() => onClaimReward?.(linkedReward)}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.claimRewardBannerText}>Claim Reward</Text>
-                          </TouchableOpacity>
-                        )
+                        ) : null
                       )}
                     </View>
 
@@ -829,7 +854,8 @@ const AccessTab = ({
           const isClaimed = Boolean(item.id && claimedRewardIds.includes(item.id));
           const isClaiming = claimingRewardId === item.id || claimingRewardId === rewardKey;
           const isExpired = Boolean(item.expiresAt && new Date() > new Date(item.expiresAt));
-          const isFullyClaimed = item.capacity === 0;
+          const isFullyClaimed = isRewardUnavailableByCapacity(item);
+          const isTicketReward = item.rewardType === "ticket";
 
           return (
             <View key={rewardKey} style={[styles.rewardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -840,7 +866,7 @@ const AccessTab = ({
                       {item.name}
                     </Text>
                     <View style={[styles.countBadge, { backgroundColor: isDark ? "#313036" : colors.backgroundSecondary }]}>
-                      <Text style={[styles.countBadgeText, { color: colors.text }]}>{item.capacity} left</Text>
+                      <Text style={[styles.countBadgeText, { color: colors.text }]}>{getRewardCapacityLabel(item)}</Text>
                     </View>
                   </View>
 
@@ -854,7 +880,14 @@ const AccessTab = ({
                     {isClaimed ? (
                       <View style={styles.claimedBadge}>
                         <Feather name="check-circle" size={13} color={colors.success} />
-                        <Text style={[styles.claimedText, { color: colors.success }]}>Claimed</Text>
+                        <Text style={[styles.claimedText, { color: colors.success }]}>
+                          {isTicketReward ? "Offer claimed" : "Claimed"}
+                        </Text>
+                      </View>
+                    ) : isTicketReward ? (
+                      <View style={styles.claimedBadge}>
+                        <Feather name="shopping-bag" size={13} color={colors.textSecondary} />
+                        <Text style={[styles.claimedText, { color: colors.textSecondary }]}>Apply during checkout</Text>
                       </View>
                     ) : (
                       <TouchableOpacity
@@ -949,7 +982,7 @@ const AccessTab = ({
 
                     {!hasImage && (
                       <View style={styles.creatorRewardCountBadge}>
-                        <Text style={styles.creatorRewardCountText}>{item.capacity} left</Text>
+                        <Text style={styles.creatorRewardCountText}>{getRewardCapacityLabel(item)}</Text>
                       </View>
                     )}
                   </View>
@@ -960,7 +993,7 @@ const AccessTab = ({
 
                   {hasImage && (
                     <View style={styles.creatorRewardCountBadge}>
-                      <Text style={styles.creatorRewardCountText}>{item.capacity} left</Text>
+                      <Text style={styles.creatorRewardCountText}>{getRewardCapacityLabel(item)}</Text>
                     </View>
                   )}
                 </View>
@@ -1367,15 +1400,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   rewardRow: {
+    alignItems: "flex-start",
     flexDirection: "row",
+    gap: 12,
     justifyContent: "space-between",
-    alignItems: "center",
     paddingHorizontal: 20,
-    height: 46,
+    paddingVertical: 12,
   },
   rewardRowLeft: {
     flex: 1,
-    justifyContent: "center",
+    gap: 2,
+    minWidth: 0,
   },
   rewardAppliedText: {
     color: "#FFFFFF",
@@ -1385,6 +1420,7 @@ const styles = StyleSheet.create({
   },
   bogoDescText: {
     color: "#B3B3B3",
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: "400",
     lineHeight: 20,
@@ -1667,10 +1703,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   claimedRewardBannerBadge: {
+    alignSelf: "flex-start",
     backgroundColor: "#142922",
     borderRadius: 8,
     paddingHorizontal: 8,
-    height: 24,
+    minHeight: 24,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
