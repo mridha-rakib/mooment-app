@@ -61,7 +61,7 @@ import { safeBack } from '@/lib/navigation';
 import { createMoment, setPendingNewMoment } from '@/lib/moments';
 import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
 import { startPendingVideoMomentUpload } from '@/lib/pendingMomentUploads';
-import { canUseNativeVideoUpload, getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
+import { canUseNativeVideoUpload, getStorageFileUrl, uploadFileToStorage, uploadMomentVideoFile } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
 
@@ -70,7 +70,8 @@ const { width } = Dimensions.get('window');
 
 const FALLBACK_AUTHOR_NAME = 'Mooment User';
 const MAX_MEDIA_ITEMS = 10;
-const MAX_VIDEO_RECORDING_DURATION_SECONDS = 10 * 60;
+const MAX_VIDEO_RECORDING_DURATION_SECONDS = 60;
+const MAX_VIDEO_DURATION_ERROR = 'Create Post videos can be up to 1 minute. Please record a shorter video.';
 const CREATE_MOMENT_COLORS = {
   background: '#0E0D12',
   text: '#FFFFFF',
@@ -434,6 +435,8 @@ function VideoCameraSheet({
   const pendingCameraFacingRef = useRef<CameraType | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingAutoStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isStoppingRecordingRef = useRef(false);
 
   const hasPermissions = Boolean(cameraPermission?.granted && microphonePermission?.granted);
   const isCameraBusy = isPreparing || isRecording || Boolean(recordingPromiseRef.current);
@@ -442,6 +445,11 @@ function VideoCameraSheet({
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
+    }
+
+    if (recordingAutoStopTimeoutRef.current) {
+      clearTimeout(recordingAutoStopTimeoutRef.current);
+      recordingAutoStopTimeoutRef.current = null;
     }
 
     recordingStartedAtRef.current = null;
@@ -460,6 +468,13 @@ function VideoCameraSheet({
     recordingTimerRef.current = setInterval(() => {
       setRecordingElapsedMs(Date.now() - startedAt);
     }, 250);
+
+    recordingAutoStopTimeoutRef.current = setTimeout(() => {
+      if (!isStoppingRecordingRef.current) {
+        isStoppingRecordingRef.current = true;
+        cameraRef.current?.stopRecording();
+      }
+    }, MAX_VIDEO_RECORDING_DURATION_SECONDS * 1000);
   }, []);
 
   const startCameraSession = useCallback((nextFacing: CameraType, switching: boolean) => {
@@ -562,6 +577,7 @@ function VideoCameraSheet({
         maxFileSize: 250 * 1024 * 1024,
       });
       recordingPromiseRef.current = recordingPromise;
+      isStoppingRecordingRef.current = false;
       setIsRecording(true);
       startRecordingTimer();
 
@@ -580,6 +596,7 @@ function VideoCameraSheet({
         })
         .finally(() => {
           recordingPromiseRef.current = null;
+          isStoppingRecordingRef.current = false;
           clearRecordingTimer();
           setIsRecording(false);
         });
@@ -602,25 +619,33 @@ function VideoCameraSheet({
   };
 
   const stopRecording = async () => {
-    if (!isRecording) {
+    if (!isRecording || isStoppingRecordingRef.current) {
       return;
     }
 
     try {
+      isStoppingRecordingRef.current = true;
       cameraRef.current?.stopRecording();
       await recordingPromiseRef.current;
     } catch (error) {
+      isStoppingRecordingRef.current = false;
       Alert.alert('Video recording failed', getAuthErrorMessage(error, 'Please try stopping the recording again.'));
     }
   };
 
   const closeCamera = async () => {
     if (isRecording) {
+      if (isStoppingRecordingRef.current) {
+        return;
+      }
+
       try {
+        isStoppingRecordingRef.current = true;
         cameraRef.current?.stopRecording();
         await recordingPromiseRef.current;
       } catch {
         recordingPromiseRef.current = null;
+        isStoppingRecordingRef.current = false;
         clearRecordingTimer();
         setIsRecording(false);
       }
@@ -1029,6 +1054,14 @@ const formatRecordingElapsed = (milliseconds: number) => {
   }
 
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const formatVideoDurationSeconds = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0:00';
+  }
+
+  return formatAudioSeconds(seconds);
 };
 
 const formatAudioSeconds = (seconds?: number | null) => {
@@ -1937,6 +1970,12 @@ export default function CreateMomentScreen() {
     name?: string | null,
     durationSeconds?: number | null,
   ) => {
+    if (durationSeconds != null && Number.isFinite(durationSeconds) && durationSeconds > MAX_VIDEO_RECORDING_DURATION_SECONDS) {
+      clearSelectedMedia();
+      Alert.alert('Video too long', MAX_VIDEO_DURATION_ERROR);
+      return;
+    }
+
     stopAudioPreview();
     setSelectedImages([]);
     setSelectedImage(uri);
@@ -2080,6 +2119,7 @@ export default function CreateMomentScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos'],
         allowsMultipleSelection: false,
+        videoMaxDuration: MAX_VIDEO_RECORDING_DURATION_SECONDS,
       });
 
       if (!screenMountedRef.current) {
@@ -2091,14 +2131,25 @@ export default function CreateMomentScreen() {
       }
 
       const video = result.assets[0];
+      const durationSeconds = typeof video.duration === 'number' && Number.isFinite(video.duration)
+        ? video.duration / 1000
+        : null;
+
+      if (durationSeconds != null && durationSeconds > MAX_VIDEO_RECORDING_DURATION_SECONDS) {
+        clearSelectedMedia();
+        Alert.alert(
+          'Video too long',
+          `Create Post videos can be up to 1 minute. Selected video is ${formatVideoDurationSeconds(durationSeconds)}.`,
+        );
+        return;
+      }
+
       handleVideoSelect(
         video.uri,
         'gallery',
         video.mimeType,
         video.fileName,
-        typeof video.duration === 'number' && Number.isFinite(video.duration)
-          ? video.duration / 1000
-          : null,
+        durationSeconds,
       );
       setShowVideoPicker(false);
     } catch (error) {
@@ -2138,12 +2189,13 @@ export default function CreateMomentScreen() {
       };
     }
 
-    const extension = getMediaExtension(contentType);
-    const storageKey = await uploadFileToStorage({
-      uri,
-      key: `moments/${type}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
-      contentType,
-    });
+    const storageKey = type === 'video'
+      ? await uploadMomentVideoFile({ uri, contentType })
+      : await uploadFileToStorage({
+        uri,
+        key: `moments/${type}/${Date.now()}-${Math.random().toString(36).slice(2)}.${getMediaExtension(contentType)}`,
+        contentType,
+      });
 
     return {
       type,

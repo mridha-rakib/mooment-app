@@ -2,7 +2,7 @@ import { Alert } from "react-native";
 import { useSyncExternalStore } from "react";
 
 import { createMoment, type CreateMomentPayload, type Moment, type MomentMediaSource } from "@/lib/moments";
-import { canUseNativeVideoUpload, startStorageFileUpload } from "@/lib/storage";
+import { canUseNativeVideoUpload, startMomentVideoFileUpload } from "@/lib/storage";
 
 type PendingUploadStatus = "uploading" | "creating" | "succeeded" | "failed";
 
@@ -51,18 +51,24 @@ const removeOperation = (id: string) => {
 
 const createPendingSubmissionId = () => `pending-video-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const getVideoExtension = (contentType: string) => {
-  const normalizedContentType = contentType.toLowerCase();
+const createPendingTiming = (id: string) => {
+  const enabled = __DEV__;
+  const startedAt = Date.now();
+  let previousAt = startedAt;
 
-  if (normalizedContentType === "video/quicktime") return "mov";
-  if (normalizedContentType === "video/webm") return "webm";
-  if (normalizedContentType === "video/3gpp") return "3gp";
-  if (normalizedContentType === "video/x-m4v") return "m4v";
-  if (normalizedContentType.startsWith("video/")) {
-    return normalizedContentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "video";
-  }
+  return (phase: string, extra?: Record<string, unknown>) => {
+    if (!enabled) return;
 
-  return "mp4";
+    const now = Date.now();
+    console.log("[MomentVideoUploadTiming] pending-state", {
+      id,
+      phase,
+      stepMs: now - previousAt,
+      totalMs: now - startedAt,
+      ...extra,
+    });
+    previousAt = now;
+  };
 };
 
 const subscribe = (listener: () => void) => {
@@ -77,6 +83,18 @@ const getSnapshot = () => operations;
 
 export const usePendingVideoMomentUploads = () => useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+const getPendingUploadErrorMessage = (error: unknown) => {
+  const responseMessage = typeof error === "object" && error !== null
+    ? (error as { response?: { data?: { message?: unknown } } }).response?.data?.message
+    : null;
+
+  if (typeof responseMessage === "string" && responseMessage.trim()) {
+    return responseMessage;
+  }
+
+  return "Please check your connection and try again.";
+};
+
 export const startPendingVideoMomentUpload = async ({
   uri,
   source,
@@ -89,7 +107,7 @@ export const startPendingVideoMomentUpload = async ({
   }
 
   const id = createPendingSubmissionId();
-  const storageKey = `moments/video/${id}.${getVideoExtension(contentType)}`;
+  const mark = createPendingTiming(id);
 
   if (activeOperationIds.has(id)) {
     throw new Error("This video is already being published.");
@@ -97,20 +115,21 @@ export const startPendingVideoMomentUpload = async ({
 
   activeOperationIds.add(id);
   setOperations([{ id, status: "uploading", createdAt: Date.now() }, ...operations]);
+  mark("upload operation created", { contentType });
 
   try {
-    const upload = await startStorageFileUpload({
+    const upload = await startMomentVideoFileUpload({
       uri,
-      key: storageKey,
       contentType,
-      expiresIn: 60 * 30,
     });
 
     updateOperation(id, { cancel: upload.cancel });
 
     void upload.completion
       .then(async (uploadedStorageKey) => {
+        mark("upload completion resolved");
         updateOperation(id, { status: "creating" });
+        mark("moment creation request start");
         const moment = await createMoment({
           ...payload,
           mediaItems: [{
@@ -124,13 +143,20 @@ export const startPendingVideoMomentUpload = async ({
           }],
         });
 
+        mark("moment creation request complete", { momentId: moment.id });
         updateOperation(id, { status: "succeeded", moment, cancel: undefined });
       })
       .catch((error) => {
+        mark("operation failed", {
+          message: getPendingUploadErrorMessage(error),
+          status: typeof error === "object" && error !== null
+            ? (error as { response?: { status?: unknown } }).response?.status ?? null
+            : null,
+        });
         removeOperation(id);
         Alert.alert(
           "Unable to create moment",
-          error instanceof Error ? "Please check your connection and try again." : "Please check the moment details and try again.",
+          getPendingUploadErrorMessage(error),
         );
       });
 

@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, getConfiguredAccessToken } from "@/lib/api";
 import * as FileSystem from "expo-file-system/legacy";
 
 type UploadFilePayload = {
@@ -16,6 +16,13 @@ type StartedStorageUpload = {
   key: string;
   completion: Promise<string>;
   cancel: () => Promise<void>;
+};
+
+type MomentVideoUpload = {
+  key: string;
+  contentType: string;
+  expiresIn?: number;
+  url?: string;
 };
 
 const createStorageTiming = (key: string) => {
@@ -56,7 +63,13 @@ const getBlobFromUri = (uri: string): Promise<Blob> =>
     request.send(null);
   });
 
-const uploadBlobWithFetch = async (url: string, blob: Blob, contentType: string, timeoutMs: number) => {
+const uploadBlobWithFetch = async (
+  url: string,
+  blob: Blob,
+  contentType: string,
+  timeoutMs: number,
+  extraHeaders: Record<string, string> = {},
+) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let uploadResponse: Response;
@@ -66,6 +79,7 @@ const uploadBlobWithFetch = async (url: string, blob: Blob, contentType: string,
       method: "PUT",
       headers: {
         "Content-Type": contentType,
+        ...extraHeaders,
       },
       body: blob,
       signal: controller.signal,
@@ -92,6 +106,7 @@ const uploadBlobWithProgress = (
   timeoutMs: number,
   onProgress?: (progress: number) => void,
   responseTimeoutAfterUploadMs = 0,
+  extraHeaders: Record<string, string> = {},
 ) =>
   new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -122,6 +137,9 @@ const uploadBlobWithProgress = (
     request.timeout = timeoutMs;
     request.open("PUT", url, true);
     request.setRequestHeader("Content-Type", contentType);
+    Object.entries(extraHeaders).forEach(([header, value]) => {
+      request.setRequestHeader(header, value);
+    });
 
     request.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
@@ -159,6 +177,7 @@ const createNativeFileUpload = (
   contentType: string,
   timeoutMs: number,
   onProgress?: (progress: number) => void,
+  extraHeaders: Record<string, string> = {},
 ): { completion: Promise<void>; cancel: () => Promise<void> } => {
   let task: FileSystem.UploadTask | null = null;
   let latestProgress = -1;
@@ -190,6 +209,7 @@ const createNativeFileUpload = (
         sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
         headers: {
           "Content-Type": contentType,
+          ...extraHeaders,
         },
       },
       (event) => {
@@ -244,9 +264,40 @@ const uploadLocalFileWithNativeTask = async (
   contentType: string,
   timeoutMs: number,
   onProgress?: (progress: number) => void,
+  extraHeaders: Record<string, string> = {},
 ) => {
-  const upload = createNativeFileUpload(url, uri, contentType, timeoutMs, onProgress);
+  const upload = createNativeFileUpload(url, uri, contentType, timeoutMs, onProgress, extraHeaders);
   await upload.completion;
+};
+
+const getUriScheme = (uri: string) => uri.split(":")[0]?.toLowerCase() || "unknown";
+
+const redactStorageKeyForLog = (key?: string | null) => {
+  if (!key) {
+    return null;
+  }
+
+  const parts = key.split("/");
+  const filename = parts.at(-1) ?? "";
+  return `${parts.slice(0, Math.min(parts.length, 3)).join("/")}/...${filename.slice(-8)}`;
+};
+
+const createMomentVideoTiming = (label: string) => {
+  const enabled = __DEV__;
+  const startedAt = Date.now();
+  let previousAt = startedAt;
+
+  return (phase: string, extra?: Record<string, unknown>) => {
+    if (!enabled) return;
+
+    const now = Date.now();
+    console.log(`[MomentVideoUploadTiming] ${label}:${phase}`, {
+      stepMs: now - previousAt,
+      totalMs: now - startedAt,
+      ...extra,
+    });
+    previousAt = now;
+  };
 };
 
 const AUDIO_3GPP_CONTENT_TYPES = new Set(["audio/3gpp", "audio/3gp"]);
@@ -282,6 +333,16 @@ const getStorageUploadUrl = (key: string, contentType: string) => {
   }
 
   return `${baseURL}/storage/upload?key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(contentType)}`;
+};
+
+const getMomentVideoUploadUrl = (key: string, contentType: string) => {
+  const baseURL = api.defaults.baseURL;
+
+  if (!baseURL) {
+    throw new Error("Missing EXPO_PUBLIC_API_BASE_URL.");
+  }
+
+  return `${baseURL}/moments/video-upload?key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(contentType)}`;
 };
 
 const shouldUseApiUploadProxy = (uploadUrl: string) => {
@@ -356,6 +417,169 @@ export const startStorageFileUpload = async ({
       await activeUpload.cancel();
     },
   };
+};
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getConfiguredAccessToken();
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const getMomentVideoUploadFromApi = async (contentType: string): Promise<MomentVideoUpload> => {
+  const response = await api.post("/moments/video-upload-url", { contentType });
+  const data = response.data?.data as MomentVideoUpload | undefined;
+
+  if (!data?.key) {
+    throw new Error("The moment video upload response was incomplete.");
+  }
+
+  return data;
+};
+
+export const startMomentVideoFileUpload = async ({
+  uri,
+  contentType,
+  onProgress,
+}: Omit<StartStorageUploadPayload, "key" | "expiresIn">): Promise<StartedStorageUpload> => {
+  const mark = createMomentVideoTiming("pending");
+  mark("local file metadata start", { uriScheme: getUriScheme(uri), contentType });
+
+  if (!canUseNativeVideoUpload(uri, contentType)) {
+    throw new Error("Native video upload requires a local file URI.");
+  }
+
+  const fileInfo = await FileSystem.getInfoAsync(uri).catch(() => null);
+  mark("local file metadata complete", {
+    exists: fileInfo?.exists ?? null,
+    size: fileInfo?.exists ? fileInfo.size ?? null : null,
+  });
+  mark("upload contract request start");
+  const upload = await getMomentVideoUploadFromApi(contentType);
+  mark("upload contract request complete", {
+    key: redactStorageKeyForLog(upload.key),
+    contentType: upload.contentType || contentType,
+  });
+  const key = upload.key;
+  const directTimeoutMs = 30 * 60 * 1000;
+  const fallbackTimeoutMs = 30 * 60 * 1000;
+  const fallbackUrl = getMomentVideoUploadUrl(key, upload.contentType || contentType);
+  const directUrl = upload.url;
+  const firstUrl = directUrl && !shouldUseApiUploadProxy(directUrl) ? directUrl : fallbackUrl;
+  const firstContentType = firstUrl === fallbackUrl ? "application/octet-stream" : upload.contentType || contentType;
+  mark("binary upload start", { path: firstUrl === fallbackUrl ? "authenticated-fallback" : "presigned" });
+  let activeUpload = createNativeFileUpload(
+    firstUrl,
+    uri,
+    firstContentType,
+    firstUrl === fallbackUrl ? fallbackTimeoutMs : directTimeoutMs,
+    onProgress,
+    firstUrl === fallbackUrl ? getAuthHeaders() : {},
+  );
+
+  const completion = activeUpload.completion
+    .catch(async (error) => {
+      if (firstUrl === fallbackUrl) {
+        throw error;
+      }
+
+      mark("binary upload fallback start");
+      activeUpload = createNativeFileUpload(
+        fallbackUrl,
+        uri,
+        "application/octet-stream",
+        fallbackTimeoutMs,
+        onProgress,
+        getAuthHeaders(),
+      );
+      await activeUpload.completion;
+    })
+    .then(() => {
+      mark("binary upload complete", { key: redactStorageKeyForLog(key) });
+      return key;
+    });
+
+  return {
+    key,
+    completion,
+    cancel: async () => {
+      await activeUpload.cancel();
+    },
+  };
+};
+
+export const uploadMomentVideoFile = async ({
+  uri,
+  contentType,
+  onProgress,
+}: Omit<UploadFilePayload, "key">) => {
+  const mark = createMomentVideoTiming("inline");
+  mark("local file metadata start", { uriScheme: getUriScheme(uri), contentType });
+  const fileInfo = await FileSystem.getInfoAsync(uri).catch(() => null);
+  mark("local file metadata complete", {
+    exists: fileInfo?.exists ?? null,
+    size: fileInfo?.exists ? fileInfo.size ?? null : null,
+  });
+  mark("upload contract request start");
+  const upload = await getMomentVideoUploadFromApi(contentType);
+  mark("upload contract request complete", {
+    key: redactStorageKeyForLog(upload.key),
+    contentType: upload.contentType || contentType,
+  });
+  const key = upload.key;
+  const directTimeoutMs = 30 * 60 * 1000;
+  const fallbackTimeoutMs = 30 * 60 * 1000;
+  const directResponseTimeoutAfterUploadMs = 30 * 1000;
+  const fallbackUrl = getMomentVideoUploadUrl(key, upload.contentType || contentType);
+  const directUrl = upload.url;
+  const useNativeFileUpload = canUseNativeVideoUpload(uri, contentType);
+  let blob: Blob | null = null;
+
+  const uploadCurrentMedia = async (
+    url: string,
+    uploadContentType: string,
+    timeoutMs: number,
+    responseTimeoutAfterUploadMs = 0,
+    extraHeaders: Record<string, string> = {},
+  ) => {
+    if (useNativeFileUpload) {
+      await uploadLocalFileWithNativeTask(url, uri, uploadContentType, timeoutMs, onProgress, extraHeaders);
+      return;
+    }
+
+    if (!blob) {
+      blob = await getBlobFromUri(uri);
+    }
+
+    if (onProgress) {
+      await uploadBlobWithProgress(
+        url,
+        blob,
+        uploadContentType,
+        timeoutMs,
+        onProgress,
+        responseTimeoutAfterUploadMs,
+        extraHeaders,
+      );
+    } else {
+      await uploadBlobWithFetch(url, blob, uploadContentType, timeoutMs, extraHeaders);
+    }
+  };
+
+  try {
+    if (!directUrl || shouldUseApiUploadProxy(directUrl)) {
+      throw new Error("Storage host is not reachable from this device.");
+    }
+
+    mark("binary upload start", { path: "presigned" });
+    await uploadCurrentMedia(directUrl, upload.contentType || contentType, directTimeoutMs, directResponseTimeoutAfterUploadMs);
+    mark("binary upload complete", { key: redactStorageKeyForLog(key) });
+  } catch {
+    mark("binary upload fallback start");
+    await uploadCurrentMedia(fallbackUrl, "application/octet-stream", fallbackTimeoutMs, 0, getAuthHeaders());
+    mark("binary upload complete", { key: redactStorageKeyForLog(key), path: "authenticated-fallback" });
+  }
+
+  return key;
 };
 
 export const uploadFileToStorage = async ({ uri, key, contentType, onProgress }: UploadFilePayload) => {

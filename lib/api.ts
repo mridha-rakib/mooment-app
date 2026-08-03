@@ -122,6 +122,8 @@ let handleUnauthorized = () => {};
 let refreshAccessToken = async () => {};
 let refreshTokenPromise: Promise<void> | null = null;
 
+export const getConfiguredAccessToken = () => getAccessToken();
+
 export const configureApiAuth = ({
   getToken,
   onUnauthorized,

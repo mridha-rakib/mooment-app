@@ -1,15 +1,19 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useEventListener } from 'expo';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView,
   useVideoPlayer } from 'expo-video';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, GestureResponderEvent, Image, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
+import { commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
 import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { blockUser, followUser, unfollowUser } from '@/lib/users';
@@ -25,6 +29,50 @@ import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 // Hardcoded visual waveform for Audio posts
 const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38, 22, 16, 32, 24, 14, 28, 36, 18, 12, 30, 42, 24, 16, 38, 28, 14, 45, 20, 12, 32, 24, 18, 10, 26, 14, 10];
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+const MOMENT_VIDEO_CONTROL_HIDE_MS = 3000;
+const MOMENT_VIDEO_AUTOPLAY_RETRY_LIMIT = 4;
+const momentVideoPositions = new Map<string, number>();
+let momentVideoSessionMuted = true;
+const momentVideoMuteListeners = new Set<(muted: boolean) => void>();
+
+const setMomentVideoSessionMuted = (muted: boolean) => {
+  momentVideoSessionMuted = muted;
+  momentVideoMuteListeners.forEach((listener) => listener(muted));
+};
+
+const formatVideoSeconds = (seconds?: number | null) => {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) {
+    return '00:00';
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+const redactFeedVideoUri = (uri: string) => {
+  let hash = 0;
+
+  for (let index = 0; index < uri.length; index += 1) {
+    hash = ((hash << 5) - hash + uri.charCodeAt(index)) | 0;
+  }
+
+  return `media-${Math.abs(hash).toString(36)}`;
+};
+
+const logFeedVideoDebug = (event: string, uri: string, extra?: Record<string, unknown>) => {
+  if (!__DEV__) {
+    return;
+  }
+
+  console.log('[FeedVideo]', {
+    event,
+    mediaId: redactFeedVideoUri(uri),
+    ...extra,
+  });
+};
 
 export type PostContextNode = {
   text: string;
@@ -114,58 +162,699 @@ export type PostData = {
 };
 
 const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { uri: string; isActive: boolean }) {
+  const isScreenFocused = useIsFocused();
+  const [appState, setAppState] = useState(AppState.currentState);
+  const isPlaybackActive = isActive && isScreenFocused;
   const player = useVideoPlayer(uri, (videoPlayer) => {
     videoPlayer.loop = true;
-    videoPlayer.muted = true;
+    videoPlayer.muted = momentVideoSessionMuted;
+    videoPlayer.timeUpdateEventInterval = 0;
   });
   const wasActiveRef = useRef(false);
-  const didAutoplayInActiveWindowRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressWidthRef = useRef(0);
+  const mediaUriRef = useRef(uri);
+  const mediaGenerationRef = useRef(0);
+  const initialCurrentTime = useRef(momentVideoPositions.get(uri) ?? 0).current;
+  const currentTimeValueRef = useRef(initialCurrentTime);
+  const durationValueRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const isPlaybackActiveRef = useRef(isPlaybackActive);
+  const isScreenFocusedRef = useRef(isScreenFocused);
+  const appStateRef = useRef(appState);
+  const playbackRateRef = useRef(1);
+  const playbackFailureRef = useRef<FeedVideoPlaybackFailure | null>(null);
+  const playAttemptInFlightRef = useRef(false);
+  const recoveryInFlightRef = useRef(false);
+  const lastProgressGestureCommitAtRef = useRef(0);
+  const [isSessionMuted, setIsSessionMuted] = useState(momentVideoSessionMuted);
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [currentTime, setCurrentTime] = useState(initialCurrentTime);
+  const [duration, setDuration] = useState(0);
+  const [status, setStatus] = useState(player.status);
+  const [hasRequestedPlayback, setHasRequestedPlayback] = useState(false);
+  const [playbackFailure, setPlaybackFailureState] = useState<FeedVideoPlaybackFailure | null>(null);
+  const [isRecovering, setIsRecovering] = useState(false);
 
-  useEffect(() => {
-    if (isActive) {
-      if (!wasActiveRef.current) {
-        didAutoplayInActiveWindowRef.current = false;
+  const setPlaybackFailure = useCallback((failure: FeedVideoPlaybackFailure | null) => {
+    playbackFailureRef.current = failure;
+    setPlaybackFailureState(failure);
+  }, []);
+
+  const clearRetry = useCallback(() => {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearHideControls = useCallback(() => {
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current);
+      hideControlsTimeoutRef.current = null;
+    }
+  }, []);
+
+  const isCurrentGeneration = useCallback((generation: number) => (
+    !isStaleFeedVideoGeneration(generation, mediaGenerationRef.current) &&
+    mediaUriRef.current === uri
+  ), [uri]);
+
+  const saveCurrentPosition = useCallback(() => {
+    const nextCurrentTime = Number.isFinite(player.currentTime) && player.currentTime > 0
+      ? player.currentTime
+      : currentTimeValueRef.current;
+
+    if (nextCurrentTime > 0) {
+      momentVideoPositions.set(uri, nextCurrentTime);
+    }
+  }, [player, uri]);
+
+  const applyPlayerSessionState = useCallback(() => {
+    player.loop = true;
+    player.muted = momentVideoSessionMuted;
+    player.playbackRate = playbackRateRef.current;
+    player.timeUpdateEventInterval = shouldRunFeedVideoTimeUpdates(isActive, isScreenFocused, appState) ? 0.25 : 0;
+  }, [appState, isActive, isScreenFocused, player]);
+
+  const tryPlay = useCallback(async (options?: {
+    allowErrorRecovery?: boolean;
+    generation?: number;
+    reason?: string;
+  }) => {
+    const generation = options?.generation ?? mediaGenerationRef.current;
+
+    if (
+      !isCurrentGeneration(generation) ||
+      !isPlaybackActiveRef.current ||
+      appStateRef.current !== 'active' ||
+      (recoveryInFlightRef.current && !options?.allowErrorRecovery) ||
+      playAttemptInFlightRef.current ||
+      (playbackFailureRef.current && !options?.allowErrorRecovery)
+    ) {
+      return;
+    }
+
+    playAttemptInFlightRef.current = true;
+    setHasRequestedPlayback(true);
+
+    try {
+      applyPlayerSessionState();
+
+      if (!momentVideoSessionMuted) {
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldRouteThroughEarpiece: false,
+          interruptionMode: 'doNotMix',
+        });
       }
 
-      if (!didAutoplayInActiveWindowRef.current) {
-        didAutoplayInActiveWindowRef.current = true;
-        try {
-          player.play();
-        } catch {
-          // Playback can fail transiently while a recycled native view is attaching.
+      if (!isCurrentGeneration(generation) || !isPlaybackActiveRef.current || appStateRef.current !== 'active') {
+        return;
+      }
+
+      player.play();
+      retryCountRef.current = 0;
+      logFeedVideoDebug('autoplay.play', uri, { generation, reason: options?.reason ?? 'active' });
+    } catch (error) {
+      if (!isCurrentGeneration(generation)) {
+        return;
+      }
+
+      if (retryCountRef.current >= MOMENT_VIDEO_AUTOPLAY_RETRY_LIMIT) {
+        const failure = classifyFeedVideoPlaybackError(error instanceof Error ? error.message : undefined);
+        setPlaybackFailure(failure);
+        setStatus('error');
+        logFeedVideoDebug('autoplay.failed', uri, { generation, kind: failure.kind });
+        return;
+      }
+
+      retryCountRef.current += 1;
+      clearRetry();
+      retryTimeoutRef.current = setTimeout(() => {
+        if (
+          isCurrentGeneration(generation) &&
+          isPlaybackActiveRef.current &&
+          appStateRef.current === 'active' &&
+          !playbackFailureRef.current
+        ) {
+          void tryPlay({ generation, reason: 'bounded-retry' });
         }
+      }, 300);
+      logFeedVideoDebug('autoplay.retry_scheduled', uri, { generation, retry: retryCountRef.current });
+    } finally {
+      playAttemptInFlightRef.current = false;
+    }
+  }, [applyPlayerSessionState, clearRetry, isCurrentGeneration, player, setPlaybackFailure, uri]);
+
+  const scheduleHideControls = useCallback((options?: { isDragging?: boolean }) => {
+    clearHideControls();
+
+    const dragging = options?.isDragging ?? isDragging;
+
+    if (!controlsVisible || dragging || settingsVisible || isFullscreen) {
+      return;
+    }
+
+    hideControlsTimeoutRef.current = setTimeout(() => {
+      setControlsVisible(false);
+    }, MOMENT_VIDEO_CONTROL_HIDE_MS);
+  }, [clearHideControls, controlsVisible, isDragging, isFullscreen, settingsVisible]);
+
+  const previewSeekPosition = useCallback((locationX: number) => {
+    const width = progressWidthRef.current;
+    const nextTime = getFeedVideoSeekTargetFromLocation(locationX, width, duration);
+
+    if (nextTime == null) {
+      return null;
+    }
+
+    currentTimeValueRef.current = nextTime;
+    setCurrentTime(nextTime);
+    momentVideoPositions.set(uri, nextTime);
+    return nextTime;
+  }, [duration, uri]);
+
+  const commitSeekPosition = useCallback((targetSeconds: number | null) => {
+    if (targetSeconds == null) {
+      return false;
+    }
+
+    const result = commitFeedVideoSeek({
+      player,
+      targetSeconds,
+      durationSeconds: duration,
+      expectedMediaId: uri,
+      currentMediaId: mediaUriRef.current,
+      keepPlaying: isPlaybackActive,
+      onError: (error) => {
+        logFeedVideoDebug('seek.failed', uri, {
+          mediaChanged: mediaUriRef.current !== uri,
+          message: error instanceof Error ? error.message : 'Unknown seek error',
+        });
+      },
+    });
+
+    if (result.ok) {
+      currentTimeValueRef.current = result.targetSeconds;
+      setCurrentTime(result.targetSeconds);
+      momentVideoPositions.set(uri, result.targetSeconds);
+      return true;
+    }
+
+    return false;
+  }, [duration, isPlaybackActive, player, uri]);
+
+  const commitSeekFromLocation = useCallback((locationX: number) => {
+    const nextTime = previewSeekPosition(locationX);
+    return commitSeekPosition(nextTime);
+  }, [commitSeekPosition, previewSeekPosition]);
+
+  const progressPanResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (event) => {
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      clearHideControls();
+      previewSeekPosition(event.nativeEvent.locationX);
+    },
+    onPanResponderMove: (event) => {
+      previewSeekPosition(event.nativeEvent.locationX);
+    },
+    onPanResponderRelease: (event) => {
+      commitSeekFromLocation(event.nativeEvent.locationX);
+      lastProgressGestureCommitAtRef.current = Date.now();
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      scheduleHideControls({ isDragging: false });
+    },
+    onPanResponderTerminate: () => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      scheduleHideControls({ isDragging: false });
+    },
+  }), [clearHideControls, commitSeekFromLocation, previewSeekPosition, scheduleHideControls]);
+
+  const handleManualRetry = useCallback(async () => {
+    const generation = mediaGenerationRef.current;
+
+    clearRetry();
+    retryCountRef.current = 0;
+    setPlaybackFailure(null);
+    setStatus('loading');
+    setIsRecovering(true);
+    recoveryInFlightRef.current = true;
+    saveCurrentPosition();
+    logFeedVideoDebug('retry.start', uri, { generation });
+
+    const restorePosition = currentTimeValueRef.current;
+
+    try {
+      try {
+        player.pause();
+      } catch {
+        // Ignore pause failures during native player teardown.
+      }
+
+      await player.replaceAsync(uri);
+
+      if (!isCurrentGeneration(generation)) {
+        return;
+      }
+
+      applyPlayerSessionState();
+      durationValueRef.current = Number.isFinite(player.duration) && player.duration > 0 ? player.duration : durationValueRef.current;
+      setDuration(durationValueRef.current);
+
+      if (restorePosition > 0) {
+        const result = commitFeedVideoSeek({
+          player,
+          targetSeconds: restorePosition,
+          durationSeconds: durationValueRef.current || restorePosition,
+          expectedMediaId: uri,
+          currentMediaId: mediaUriRef.current,
+          keepPlaying: false,
+        });
+
+        if (result.ok) {
+          currentTimeValueRef.current = result.targetSeconds;
+          setCurrentTime(result.targetSeconds);
+        }
+      }
+
+      setStatus(player.status === 'error' ? 'loading' : player.status);
+      logFeedVideoDebug('retry.source_reloaded', uri, { generation });
+
+      if (isPlaybackActiveRef.current && appStateRef.current === 'active') {
+        await tryPlay({ allowErrorRecovery: true, generation, reason: 'manual-retry' });
+      }
+    } catch (error) {
+      if (isCurrentGeneration(generation)) {
+        const failure = classifyFeedVideoPlaybackError(error instanceof Error ? error.message : undefined);
+        setPlaybackFailure(failure);
+        setStatus('error');
+        logFeedVideoDebug('retry.failed', uri, { generation, kind: failure.kind });
+      }
+    } finally {
+      if (isCurrentGeneration(generation)) {
+        recoveryInFlightRef.current = false;
+        setIsRecovering(false);
+      }
+    }
+  }, [applyPlayerSessionState, clearRetry, isCurrentGeneration, player, saveCurrentPosition, setPlaybackFailure, tryPlay, uri]);
+
+  useEffect(() => {
+    isPlaybackActiveRef.current = isPlaybackActive;
+    isScreenFocusedRef.current = isScreenFocused;
+    appStateRef.current = appState;
+    playbackRateRef.current = playbackRate;
+    isDraggingRef.current = isDragging;
+  }, [appState, isDragging, isPlaybackActive, isScreenFocused, playbackRate]);
+
+  useEffect(() => {
+    applyPlayerSessionState();
+  }, [applyPlayerSessionState]);
+
+  useEventListener(player, 'statusChange', ({ status: nextStatus, error }) => {
+    const generation = mediaGenerationRef.current;
+
+    if (!isCurrentGeneration(generation)) {
+      return;
+    }
+
+    setStatus((current) => (current === nextStatus ? current : nextStatus));
+
+    if (nextStatus === 'error') {
+      const failure = classifyFeedVideoPlaybackError(error?.message);
+      setPlaybackFailure(failure);
+      clearRetry();
+      logFeedVideoDebug('status.error', uri, { generation, kind: failure.kind });
+      return;
+    }
+
+    if (nextStatus === 'readyToPlay') {
+      const nextDuration = Number.isFinite(player.duration) && player.duration > 0 ? player.duration : durationValueRef.current;
+      durationValueRef.current = nextDuration;
+      setDuration((current) => (Math.abs(current - nextDuration) > 0.05 ? nextDuration : current));
+
+      if (hasRequestedPlayback && !playbackFailureRef.current && isPlaybackActiveRef.current && appStateRef.current === 'active') {
+        void tryPlay({ generation, reason: 'ready' });
+      }
+    }
+  });
+
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    logFeedVideoDebug('playing.change', uri, {
+      generation: mediaGenerationRef.current,
+      isPlaying,
+    });
+  });
+
+  useEventListener(player, 'sourceLoad', ({ duration: loadedDuration }) => {
+    const generation = mediaGenerationRef.current;
+
+    if (!isCurrentGeneration(generation)) {
+      return;
+    }
+
+    const nextDuration = Number.isFinite(loadedDuration) && loadedDuration > 0 ? loadedDuration : 0;
+    durationValueRef.current = nextDuration;
+    setDuration(nextDuration);
+    logFeedVideoDebug('source.loaded', uri, { generation, duration: nextDuration });
+
+    if (hasRequestedPlayback && !playbackFailureRef.current && isPlaybackActiveRef.current && appStateRef.current === 'active') {
+      void tryPlay({ generation, reason: 'source-loaded' });
+    }
+  });
+
+  useEventListener(player, 'timeUpdate', ({ currentTime: nextCurrentTime, bufferedPosition }) => {
+    if (!shouldRunFeedVideoTimeUpdates(isActive, isScreenFocusedRef.current, appStateRef.current)) {
+      return;
+    }
+
+    const safeCurrentTime = Number.isFinite(nextCurrentTime) && nextCurrentTime >= 0
+      ? Math.min(nextCurrentTime, durationValueRef.current || nextCurrentTime)
+      : 0;
+
+    if (!isDraggingRef.current && Math.abs(currentTimeValueRef.current - safeCurrentTime) >= 0.05) {
+      currentTimeValueRef.current = safeCurrentTime;
+      setCurrentTime(safeCurrentTime);
+    }
+
+    if (safeCurrentTime > 0) {
+      momentVideoPositions.set(uri, safeCurrentTime);
+    }
+
+    if (bufferedPosition > 0 && Math.abs(durationValueRef.current - player.duration) > 0.05 && Number.isFinite(player.duration)) {
+      const nextDuration = player.duration > 0 ? player.duration : durationValueRef.current;
+      durationValueRef.current = nextDuration;
+      setDuration(nextDuration);
+    }
+  });
+
+  useEffect(() => {
+    const listener = (muted: boolean) => {
+      setIsSessionMuted(muted);
+      player.muted = muted;
+    };
+
+    momentVideoMuteListeners.add(listener);
+    return () => {
+      momentVideoMuteListeners.delete(listener);
+    };
+  }, [player]);
+
+  useEffect(() => {
+    player.playbackRate = playbackRate;
+    playbackRateRef.current = playbackRate;
+  }, [playbackRate, player]);
+
+  useEffect(() => {
+    mediaGenerationRef.current += 1;
+    const generation = mediaGenerationRef.current;
+    mediaUriRef.current = uri;
+    playbackFailureRef.current = null;
+    setPlaybackFailureState(null);
+    clearRetry();
+    retryCountRef.current = 0;
+    playAttemptInFlightRef.current = false;
+    recoveryInFlightRef.current = false;
+    setIsRecovering(false);
+    applyPlayerSessionState();
+
+    const savedPosition = momentVideoPositions.get(uri);
+
+    if (savedPosition && Number.isFinite(savedPosition)) {
+      const restoreDuration = Number.isFinite(player.duration) && player.duration > 0
+        ? player.duration
+        : savedPosition;
+      const result = commitFeedVideoSeek({
+        player,
+        targetSeconds: savedPosition,
+        durationSeconds: restoreDuration,
+        expectedMediaId: uri,
+        currentMediaId: mediaUriRef.current,
+        keepPlaying: false,
+        onError: (error) => {
+          logFeedVideoDebug('restore.failed', uri, {
+            mediaChanged: mediaUriRef.current !== uri,
+            message: error instanceof Error ? error.message : 'Unknown seek error',
+          });
+        },
+      });
+
+      if (result.ok) {
+        currentTimeValueRef.current = result.targetSeconds;
+        setCurrentTime(result.targetSeconds);
+      }
+    } else {
+      currentTimeValueRef.current = 0;
+      setCurrentTime(0);
+    }
+
+    durationValueRef.current = Number.isFinite(player.duration) && player.duration > 0 ? player.duration : 0;
+    setDuration(durationValueRef.current);
+    setStatus(player.status);
+    logFeedVideoDebug('source.attached', uri, { generation });
+  }, [applyPlayerSessionState, clearRetry, player, uri]);
+
+  useEffect(() => {
+    if (isPlaybackActive) {
+      if (!wasActiveRef.current) {
+        retryCountRef.current = 0;
+        logFeedVideoDebug('active.enter', uri, { generation: mediaGenerationRef.current });
+      }
+
+      if (!playbackFailureRef.current) {
+        void tryPlay({ generation: mediaGenerationRef.current, reason: 'active' });
       }
     } else {
       if (wasActiveRef.current) {
+        saveCurrentPosition();
         try {
           player.pause();
         } catch {
           // Ignore pause failures during native player teardown.
         }
+        logFeedVideoDebug('pause.inactive', uri, { generation: mediaGenerationRef.current });
       }
 
-      didAutoplayInActiveWindowRef.current = false;
+      clearRetry();
+      setHasRequestedPlayback(false);
+      setControlsVisible(false);
+      setSettingsVisible(false);
+      setIsFullscreen(false);
     }
 
-    wasActiveRef.current = isActive;
-  }, [isActive, player]);
+    wasActiveRef.current = isPlaybackActive;
+  }, [clearRetry, isPlaybackActive, player, saveCurrentPosition, tryPlay, uri]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      appStateRef.current = nextState;
+      setAppState(nextState);
+
+      if (nextState !== 'active') {
+        clearRetry();
+        saveCurrentPosition();
+        try {
+          player.pause();
+        } catch {
+          // Ignore pause failures during native player teardown.
+        }
+        logFeedVideoDebug('pause.app_state', uri, { appState: nextState, generation: mediaGenerationRef.current });
+        return;
+      }
+
+      if (isPlaybackActiveRef.current && !playbackFailureRef.current) {
+        void tryPlay({ generation: mediaGenerationRef.current, reason: 'app-active' });
+      }
+    });
+
+    return () => subscription.remove();
+  }, [clearRetry, player, saveCurrentPosition, tryPlay, uri]);
+
+  useEffect(() => {
+    scheduleHideControls();
+    return clearHideControls;
+  }, [clearHideControls, scheduleHideControls]);
 
   useEffect(() => () => {
+    mediaGenerationRef.current += 1;
+    clearRetry();
+    clearHideControls();
     try {
+      player.timeUpdateEventInterval = 0;
       player.pause();
     } catch {
       // Ignore cleanup failures during native player teardown.
     }
-  }, [player]);
+    logFeedVideoDebug('unmount', uri, { generation: mediaGenerationRef.current });
+  }, [clearHideControls, clearRetry, player, uri]);
+
+  const handleToggleControls = () => {
+    setControlsVisible((visible) => !visible);
+  };
+
+  const handleToggleMute = async () => {
+    const nextMuted = !momentVideoSessionMuted;
+    setMomentVideoSessionMuted(nextMuted);
+    player.muted = nextMuted;
+
+    if (!nextMuted && isPlaybackActive) {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      });
+      void tryPlay();
+    }
+  };
+
+  const handleProgressPress = (event: GestureResponderEvent) => {
+    if (Date.now() - lastProgressGestureCommitAtRef.current < 100) {
+      return;
+    }
+
+    commitSeekFromLocation(event.nativeEvent.locationX);
+    scheduleHideControls();
+  };
+
+  const renderControls = (fullscreen = false) => {
+    const safeDuration = duration > 0 ? duration : 0;
+    const progress = safeDuration > 0 ? Math.min(1, Math.max(0, currentTime / safeDuration)) : 0;
+
+    return (
+      <>
+        <TouchableOpacity
+          style={[styles.videoMuteButton, !controlsVisible && styles.videoMuteButtonCollapsed]}
+          activeOpacity={0.85}
+          onPress={() => void handleToggleMute()}
+          accessibilityLabel={isSessionMuted ? 'Unmute video' : 'Mute video'}
+        >
+          <Feather name={isSessionMuted ? 'volume-x' : 'volume-2'} size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+        {controlsVisible ? (
+          <View style={[styles.videoControls, fullscreen && styles.videoControlsFullscreen]}>
+            <Pressable
+              style={styles.videoProgressTrack}
+              onPress={handleProgressPress}
+              onLayout={(event) => {
+                progressWidthRef.current = event.nativeEvent.layout.width;
+              }}
+              {...progressPanResponder.panHandlers}
+            >
+              <View style={styles.videoProgressTrackLine} />
+              <View style={[styles.videoProgressFill, { width: `${progress * 100}%` }]} />
+              <View style={[styles.videoProgressThumb, { left: `${progress * 100}%` }]} />
+            </Pressable>
+            <View style={styles.videoControlsRow}>
+              <Text style={styles.videoTimeText}>{formatVideoSeconds(currentTime)}</Text>
+              <Text style={styles.videoTimeText}>{formatVideoSeconds(safeDuration)}</Text>
+              <View style={styles.videoControlActions}>
+                <TouchableOpacity
+                  style={styles.videoIconButton}
+                  activeOpacity={0.85}
+                  onPress={() => setSettingsVisible((visible) => !visible)}
+                  accessibilityLabel="Video playback speed"
+                >
+                  <Feather name="settings" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.videoIconButton}
+                  activeOpacity={0.85}
+                  onPress={() => setIsFullscreen(fullscreen ? false : true)}
+                  accessibilityLabel={fullscreen ? 'Close video fullscreen' : 'Open video fullscreen'}
+                >
+                  <Feather name={fullscreen ? 'minimize' : 'maximize'} size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {settingsVisible ? (
+              <View style={styles.videoSettingsMenu}>
+                {[0.5, 1, 1.5, 2].map((speed) => (
+                  <TouchableOpacity
+                    key={speed}
+                    style={[styles.videoSpeedOption, playbackRate === speed && styles.videoSpeedOptionActive]}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setPlaybackRate(speed);
+                      setSettingsVisible(false);
+                    }}
+                  >
+                    <Text style={styles.videoSpeedText}>{speed}x</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </>
+    );
+  };
+
+  const showRetry = shouldShowFeedVideoRetry(status, playbackFailure);
+  const isLoading = isPlaybackActive && !showRetry && (
+    isRecovering ||
+    status === 'loading' ||
+    (hasRequestedPlayback && status !== 'readyToPlay' && status !== 'error')
+  );
+  const progressUriKey = `${uri}-fullscreen`;
 
   return (
     <View style={styles.videoMediaFrame}>
-      <VideoView
-        player={player}
-        style={styles.postImage}
-        nativeControls={isActive}
-        contentFit="cover"
-      />
+      <TouchableOpacity style={styles.videoTapLayer} activeOpacity={1} onPress={handleToggleControls}>
+        <VideoView
+          player={player}
+          style={styles.postImage}
+          nativeControls={false}
+          contentFit="cover"
+        />
+        {isLoading ? (
+          <View style={styles.videoStateOverlay} pointerEvents="none">
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        ) : null}
+        {showRetry ? (
+          <View style={styles.videoStateOverlay}>
+            <Text style={styles.videoErrorText}>Video could not be played.</Text>
+            <TouchableOpacity style={styles.videoRetryButton} activeOpacity={0.85} onPress={() => void handleManualRetry()}>
+              <Text style={styles.videoRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {renderControls()}
+      </TouchableOpacity>
+      <Modal
+        visible={isFullscreen}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setIsFullscreen(false)}
+      >
+        <View style={styles.videoFullscreenRoot}>
+          <TouchableOpacity style={styles.videoFullscreenClose} activeOpacity={0.85} onPress={() => setIsFullscreen(false)}>
+            <Feather name="x" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity key={progressUriKey} style={styles.videoFullscreenTapLayer} activeOpacity={1} onPress={handleToggleControls}>
+            <VideoView
+              player={player}
+              style={styles.videoFullscreenPlayer}
+              nativeControls={false}
+              contentFit="contain"
+            />
+            {renderControls(true)}
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 });
@@ -1346,6 +2035,167 @@ const styles = StyleSheet.create({
     height: "100%",
     position: "relative",
     backgroundColor: "#000000",
+  },
+  videoTapLayer: {
+    flex: 1,
+    position: "relative",
+  },
+  videoStateOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  videoErrorText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 10,
+  },
+  videoRetryButton: {
+    minHeight: 32,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  videoRetryText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  videoMuteButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.52)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  videoMuteButtonCollapsed: {
+    opacity: 0.72,
+  },
+  videoControls: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.62)",
+  },
+  videoControlsFullscreen: {
+    left: 16,
+    right: 16,
+    bottom: 28,
+  },
+  videoProgressTrack: {
+    height: 20,
+    justifyContent: "center",
+  },
+  videoProgressTrackLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.32)",
+  },
+  videoProgressFill: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#FFFFFF",
+  },
+  videoProgressThumb: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    marginLeft: -5,
+    borderRadius: 5,
+    backgroundColor: "#FFFFFF",
+  },
+  videoControlsRow: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  videoTimeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  videoControlActions: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  videoIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  videoSettingsMenu: {
+    position: "absolute",
+    right: 50,
+    bottom: 48,
+    width: 82,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "rgba(18,18,22,0.96)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  videoSpeedOption: {
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoSpeedOptionActive: {
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  videoSpeedText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  videoFullscreenRoot: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  videoFullscreenClose: {
+    position: "absolute",
+    top: 46,
+    right: 18,
+    zIndex: 2,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  videoFullscreenTapLayer: {
+    flex: 1,
+  },
+  videoFullscreenPlayer: {
+    width: "100%",
+    height: "100%",
   },
   /* Audio Post Styles */
   audioContainer: {

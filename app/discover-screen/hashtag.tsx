@@ -7,9 +7,15 @@ import { getHashtagMoments } from '@/lib/moments';
 import { getStorageFileUrl } from '@/lib/storage';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const HASHTAG_VIDEO_VIEWABILITY_THRESHOLD = 60;
+
+const hasVideoMedia = (post: PostData) => (
+  post.mediaItems?.some((item) => item.type === 'video' && Boolean(item.uri?.trim())) ?? false
+);
 
 export default function HashtagPostsScreen() {
   const router = useRouter();
@@ -19,6 +25,21 @@ export default function HashtagPostsScreen() {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: HASHTAG_VIDEO_VIEWABILITY_THRESHOLD,
+    minimumViewTime: 120,
+  }).current;
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const nextActiveVideoPost = viewableItems
+      .filter((viewToken) => viewToken.isViewable && hasVideoMedia(viewToken.item as PostData))
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))[0];
+    const nextId = (nextActiveVideoPost?.item as PostData | undefined)?.id ?? null;
+
+    setActiveVideoPostId((current) => (current === nextId ? current : nextId));
+  }).current;
 
   const loadPosts = useCallback(async () => {
     if (!tag) {
@@ -62,10 +83,17 @@ export default function HashtagPostsScreen() {
       ) : posts.length === 0 ? (
         <View style={styles.center}><Text style={{ color: colors.textSecondary }}>No posts found for #{tag}.</Text></View>
       ) : (
-        <ScrollView refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.primary} />}>
-          {posts.map((post) => <FeedPost key={post.id} post={post} />)}
-          <View style={styles.bottomSpace} />
-        </ScrollView>
+        <FlatList
+          data={posts}
+          keyExtractor={(post) => post.id}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.primary} />}
+          renderItem={({ item }) => <FeedPost post={item} isActiveVideo={activeVideoPostId === item.id} />}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+          extraData={activeVideoPostId}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={<View style={styles.bottomSpace} />}
+        />
       )}
     </SafeAreaView>
   );

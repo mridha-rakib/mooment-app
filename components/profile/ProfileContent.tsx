@@ -1,5 +1,5 @@
-import React from "react";
-import { ActivityIndicator, FlatList, StyleSheet, View, Text, type RefreshControlProps } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, StyleSheet, View, Text, type RefreshControlProps, type ViewToken } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import type { MomentInteractionSummary, MomentTimelineItem } from "@/lib/moments";
 import type { EventResponse, ProfileEventGroups } from "@/lib/events";
@@ -33,6 +33,16 @@ type ProfileContentProps = {
   isEventsLoadingMore?: boolean;
 };
 
+const PROFILE_VIDEO_VIEWABILITY_THRESHOLD = 60;
+
+const hasVideoMedia = (post: PostData) => (
+  post.mediaItems?.some((item) => item.type === 'video' && Boolean(item.uri?.trim())) ?? false
+);
+
+const hasRepostVideoMedia = (share: MomentTimelineItem) => (
+  share.moment.mediaItems?.some((item) => item.type === 'video' && Boolean((item.url ?? item.storageKey)?.trim())) ?? false
+);
+
 export default function ProfileContent({ 
   activeTab, 
   posts, 
@@ -57,6 +67,7 @@ export default function ProfileContent({
   isEventsLoadingMore = false,
 }: ProfileContentProps) {
   const { colors } = useTheme();
+  const [activeVideoItemId, setActiveVideoItemId] = useState<string | null>(null);
   const feedItems = [
     ...posts.map((post) => ({ type: 'post' as const, id: post.id, createdAt: post.createdAt ?? '', post })),
     ...reposts.map((share) => ({ type: 'repost' as const, id: share.id, createdAt: share.createdAt, share })),
@@ -76,6 +87,34 @@ export default function ProfileContent({
       <View style={styles.afterTabsGap} />
     </>
   ) : undefined;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: PROFILE_VIDEO_VIEWABILITY_THRESHOLD,
+    minimumViewTime: 120,
+  }).current;
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const nextActiveVideoItem = viewableItems
+      .filter((viewToken) => {
+        if (!viewToken.isViewable) {
+          return false;
+        }
+
+        const item = viewToken.item as (typeof feedItems)[number];
+        return (item.type === 'post' && hasVideoMedia(item.post))
+          || (item.type === 'repost' && hasRepostVideoMedia(item.share));
+      })
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))[0];
+
+    const nextId = nextActiveVideoItem ? `${(nextActiveVideoItem.item as (typeof feedItems)[number]).type}-${(nextActiveVideoItem.item as (typeof feedItems)[number]).id}` : null;
+    setActiveVideoItemId((current) => (current === nextId ? current : nextId));
+  }).current;
+
+  useEffect(() => {
+    if (activeTab !== 'feed') {
+      setActiveVideoItemId(null);
+    }
+  }, [activeTab]);
   
   if (activeTab === 'feed') {
     return (
@@ -86,6 +125,9 @@ export default function ProfileContent({
         refreshControl={refreshControl}
         onEndReachedThreshold={0.5}
         onEndReached={onLoadMoreFeed}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        extraData={activeVideoItemId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={(
@@ -105,6 +147,7 @@ export default function ProfileContent({
                   labelOverride={isOwnProfile ? 'Shared by you' : undefined}
                   onRepostSuccess={onRepostSuccess}
                   showLoadingIndicator={item.share.originalItem?.type !== 'event' || item.id === firstEventRepostId}
+                  isActiveVideo={activeVideoItemId === `repost-${item.id}`}
                 />
               );
             }
@@ -115,7 +158,8 @@ export default function ProfileContent({
 
             return (
               <FeedPost key={`post-${item.id}`} post={item.post} onCommentPress={onCommentPress} onSharePress={onSharePress}
-                onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile} />
+                onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile}
+                isActiveVideo={activeVideoItemId === `post-${item.id}`} />
             );
           }}
       />
