@@ -1,11 +1,13 @@
+import { useTheme } from '@/hooks/useTheme';
+import { usePlanStore } from '@/stores/planStore';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+  Alert,
+  StatusBar, StyleSheet, Text, TouchableOpacity, View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
-import { usePlanStore } from '@/stores/planStore';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const firstParam = (value: unknown): string | undefined => {
@@ -75,11 +77,11 @@ export default function MapSelectionScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       {/* Background Map Image */}
-      <Image
+      {/* <Image
         source={isDark ? require('../../assets/images/dark-map.png') : require('../../assets/images/map_bg.png')}
         style={styles.mapBackground}
         resizeMode="cover"
-      />
+      /> */}
 
       <SafeAreaView style={styles.overlay}>
         {/* Header */}

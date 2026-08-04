@@ -30,9 +30,13 @@ const panReleaseSource = progressPanResponderSource.slice(
   progressPanResponderSource.indexOf("onPanResponderRelease"),
   progressPanResponderSource.indexOf("onPanResponderTerminate"),
 );
-const progressPressSource = videoFeedMediaSource.slice(
-  videoFeedMediaSource.indexOf("const handleProgressPress"),
-  videoFeedMediaSource.indexOf("const renderControls"),
+const progressTrackNodeSource = videoFeedMediaSource.slice(
+  videoFeedMediaSource.indexOf("style={styles.videoProgressTrack}"),
+  videoFeedMediaSource.indexOf("videoControlsRow"),
+);
+const timeUpdateSource = videoFeedMediaSource.slice(
+  videoFeedMediaSource.indexOf("useEventListener(player, 'timeUpdate'"),
+  videoFeedMediaSource.indexOf("useEffect(() => {\n    const listener = (muted: boolean) => {"),
 );
 
 test("Feed video uses expo-video currentTime for absolute seeking, not seekTo", () => {
@@ -157,12 +161,29 @@ test("drag previews locally and commits the native seek once on release", () => 
   assert.match(panReleaseSource, /commitSeekFromLocation/);
 });
 
-test("tap and drag restart controls auto-hide without toggling mute or playback", () => {
-  assert.match(progressPressSource, /commitSeekFromLocation/);
-  assert.match(progressPressSource, /scheduleHideControls/);
+test("drag release restarts controls auto-hide without toggling mute or playback", () => {
+  assert.match(panReleaseSource, /commitSeekFromLocation/);
   assert.match(panReleaseSource, /scheduleHideControls\(\{ isDragging: false \}\)/);
-  assert.doesNotMatch(progressPressSource, /handleToggleMute/);
-  assert.doesNotMatch(progressPressSource, /player\.pause\(/);
+  assert.doesNotMatch(panReleaseSource, /handleToggleMute/);
+  assert.doesNotMatch(panReleaseSource, /player\.pause\(/);
+});
+
+test("progress track is a plain View driven only by the PanResponder, not a Pressable", () => {
+  assert.doesNotMatch(feedPostSource, /\bimport\s*\{[^}]*\bPressable\b[^}]*\}\s*from\s*'react-native'/);
+  assert.doesNotMatch(videoFeedMediaSource, /<Pressable\b/);
+  assert.doesNotMatch(videoFeedMediaSource, /\bhandleProgressPress\b/);
+  assert.doesNotMatch(progressTrackNodeSource, /onPress=/);
+  assert.match(progressTrackNodeSource, /\{\.\.\.progressPanResponder\.panHandlers\}/);
+});
+
+test("progress track exposes an adjustable accessibility control using the existing seek helper", () => {
+  assert.match(progressTrackNodeSource, /accessibilityRole="adjustable"/);
+  assert.match(progressTrackNodeSource, /onAccessibilityAction=\{handleProgressAccessibilityAction\}/);
+  assert.match(videoFeedMediaSource, /handleProgressAccessibilityAction[\s\S]*?clampFeedVideoSeekTarget/);
+});
+
+test("incoming time updates do not overwrite an in-progress drag preview", () => {
+  assert.match(timeUpdateSource, /if \(!isDraggingRef\.current && Math\.abs\(currentTimeValueRef\.current - safeCurrentTime\) >= 0\.05\)/);
 });
 
 test("fullscreen reuses the same seek controls and does not create a duplicate player", () => {

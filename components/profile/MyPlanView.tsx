@@ -1,8 +1,8 @@
 import EventPickerModal from '@/components/post/EventPickerModal';
+import { useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
 import {
   Calendar03Icon,
-  CheckmarkCircle02Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
@@ -23,7 +23,6 @@ import {
   StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTheme } from '@/hooks/useTheme';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 /* ─── Constants ─── */
@@ -295,11 +294,11 @@ export default function MyPlanView() {
 
       <Modal visible={isMapModalVisible} transparent animationType="slide" onRequestClose={() => setIsMapModalVisible(false)}>
         <View style={[s.mapContainer, { backgroundColor: colors.background }]}>
-          <Image
+          {/* <Image
             source={isDark ? require('../../assets/images/dark-map.png') : require('../../assets/images/map_bg.png')}
             style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
-          />
+          /> */}
           <SafeAreaView style={{ flex: 1 }}>
             <View style={[s.modalHeader, { paddingHorizontal: 20 }]}>
               <TouchableOpacity onPress={() => setIsMapModalVisible(false)} style={[s.closeBtnCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>

@@ -200,6 +200,12 @@ export type EventResponse = {
   canReport?: boolean;
   status: EventStatus;
   crowdStatus?: CrowdStatus | null;
+  /**
+   * Authoritative raw checked-in ticket/pass count (TicketUsage rows, one per
+   * successfully checked-in pass, not deduped by user). Only populated on the
+   * Map list response; other endpoints may leave this undefined.
+   */
+  checkedInCount?: number;
   name?: string | null;
   description?: string | null;
   bannerImageKey?: string | null;

@@ -8,12 +8,12 @@ import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, GestureResponderEvent, Image, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
-import { commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
+import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
 import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { blockUser, followUser, unfollowUser } from '@/lib/users';
@@ -188,7 +188,6 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
   const playbackFailureRef = useRef<FeedVideoPlaybackFailure | null>(null);
   const playAttemptInFlightRef = useRef(false);
   const recoveryInFlightRef = useRef(false);
-  const lastProgressGestureCommitAtRef = useRef(0);
   const [isSessionMuted, setIsSessionMuted] = useState(momentVideoSessionMuted);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -391,7 +390,6 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
     },
     onPanResponderRelease: (event) => {
       commitSeekFromLocation(event.nativeEvent.locationX);
-      lastProgressGestureCommitAtRef.current = Date.now();
       isDraggingRef.current = false;
       setIsDragging(false);
       scheduleHideControls({ isDragging: false });
@@ -720,12 +718,20 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
     }
   };
 
-  const handleProgressPress = (event: GestureResponderEvent) => {
-    if (Date.now() - lastProgressGestureCommitAtRef.current < 100) {
+  const handleProgressAccessibilityAction = (event: { nativeEvent: { actionName: string } }) => {
+    const step = 5;
+    const base = currentTimeValueRef.current;
+    const target = event.nativeEvent.actionName === 'increment'
+      ? base + step
+      : event.nativeEvent.actionName === 'decrement'
+        ? base - step
+        : null;
+
+    if (target == null) {
       return;
     }
 
-    commitSeekFromLocation(event.nativeEvent.locationX);
+    commitSeekPosition(clampFeedVideoSeekTarget(target, duration));
     scheduleHideControls();
   };
 
@@ -745,18 +751,29 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
         </TouchableOpacity>
         {controlsVisible ? (
           <View style={[styles.videoControls, fullscreen && styles.videoControlsFullscreen]}>
-            <Pressable
+            <View
               style={styles.videoProgressTrack}
-              onPress={handleProgressPress}
+              hitSlop={{ top: 12, bottom: 12, left: 4, right: 4 }}
               onLayout={(event) => {
                 progressWidthRef.current = event.nativeEvent.layout.width;
               }}
+              accessible
+              accessibilityRole="adjustable"
+              accessibilityLabel="Video progress"
+              accessibilityValue={{
+                min: 0,
+                max: Math.round(safeDuration),
+                now: Math.round(currentTime),
+                text: `${formatVideoSeconds(currentTime)} of ${formatVideoSeconds(safeDuration)}`,
+              }}
+              accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+              onAccessibilityAction={handleProgressAccessibilityAction}
               {...progressPanResponder.panHandlers}
             >
               <View style={styles.videoProgressTrackLine} />
               <View style={[styles.videoProgressFill, { width: `${progress * 100}%` }]} />
               <View style={[styles.videoProgressThumb, { left: `${progress * 100}%` }]} />
-            </Pressable>
+            </View>
             <View style={styles.videoControlsRow}>
               <Text style={styles.videoTimeText}>{formatVideoSeconds(currentTime)}</Text>
               <Text style={styles.videoTimeText}>{formatVideoSeconds(safeDuration)}</Text>

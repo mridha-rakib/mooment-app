@@ -1,4 +1,5 @@
 import React from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import MapScreen, { type MapFilterRecenterIntent, type MapMarkerData } from "@/components/ui/MapScreen";
 import { getMapEventPage, type EventResponse, type EventMapQuery } from "@/lib/events";
 import {
@@ -21,7 +22,6 @@ import { isValidLocationCoordinate } from "@/lib/locationSharing";
 
 const EVENT_MAP_LIMIT = 100;
 const VIEWPORT_REQUEST_DEBOUNCE_MS = 500;
-const ACTIVE_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
 const FALLBACK_EVENT_IMAGE =
   "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop";
 
@@ -174,17 +174,6 @@ const formatTicketSalesEndDate = (event: EventResponse) => {
   return `Buy by ${formattedDate}`;
 };
 
-const isLiveEvent = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
-    return false;
-  }
-
-  const scheduledTime = new Date(scheduledAt).getTime();
-  const now = Date.now();
-
-  return Number.isFinite(scheduledTime) && scheduledTime <= now && now - scheduledTime <= ACTIVE_EVENT_WINDOW_MS;
-};
-
 const getHostName = (event: EventResponse) =>
   (event.host?.username || event.host?.name || `user-${event.userId.slice(-4)}`).replace(/^@/, "");
 
@@ -217,9 +206,10 @@ const toMapMarker = (
     hostName: getHostName(event),
     distance: formatDistanceFromMiles(distanceMiles),
     distanceMeters: distanceMiles === null ? null : distanceMiles * 1609.344,
-    isLive: isLiveEvent(event.scheduledAt),
+    isLive: event.status === "live",
     eventStatus: event.status,
     crowdStatus: event.crowdStatus ?? null,
+    checkedInCount: typeof event.checkedInCount === "number" ? event.checkedInCount : 0,
     eventDate: formatEventDate(event.scheduledAt),
     eventTime: formatEventTime(event.scheduledAt),
     location: formatLocation(event),
@@ -248,7 +238,9 @@ const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
         marker.label === nextMarker.label &&
         marker.glowColor === nextMarker.glowColor &&
         marker.distance === nextMarker.distance &&
-        marker.distanceMeters === nextMarker.distanceMeters,
+        marker.distanceMeters === nextMarker.distanceMeters &&
+        marker.checkedInCount === nextMarker.checkedInCount &&
+        marker.isLive === nextMarker.isLive,
     );
   });
 };
@@ -276,6 +268,25 @@ export default function MapContainer({
   const [debouncedViewport, setDebouncedViewport] = React.useState<EventMapViewport | null>(null);
   const mapRequestIdRef = React.useRef(0);
   const debouncedViewportKeyRef = React.useRef<string | null>(null);
+  const lastNearbyClearKeyRef = React.useRef<string | null>(null);
+  const didMountFocusRefreshRef = React.useRef(false);
+  const [focusRefreshKey, setFocusRefreshKey] = React.useState(0);
+
+  // Refresh Map event data (checked-in counts, live status, etc.) whenever
+  // this screen regains focus (e.g. returning from an event detail screen),
+  // reusing the exact same fetch effect below. Skip the very first focus
+  // callback, which fires on initial mount right alongside the effect's own
+  // initial fetch, to avoid firing two identical requests at once.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!didMountFocusRefreshRef.current) {
+        didMountFocusRefreshRef.current = true;
+        return;
+      }
+
+      setFocusRefreshKey((key) => key + 1);
+    }, []),
+  );
 
   // Keep a ref so the async fetch always reads the latest location without
   // being listed as an effect dependency (which would re-trigger fetches on
@@ -341,9 +352,17 @@ export default function MapContainer({
     let isMounted = true;
     const abortController = new AbortController();
     const requestId = ++mapRequestIdRef.current;
-    if (isValidEventLocationFilter(eventFilters.nearby)) {
+    // Only clear already-rendered markers when the nearby filter's actual
+    // value changed (a genuine filter change). A silent focus refresh reuses
+    // the same nearby key, so it must not flash markers to empty while the
+    // refreshed page loads.
+    const nearbyClearKey = isValidEventLocationFilter(eventFilters.nearby)
+      ? getEventLocationFilterKey(eventFilters.nearby)
+      : null;
+    if (nearbyClearKey && nearbyClearKey !== lastNearbyClearKeyRef.current) {
       applyMarkersIfChanged(setMarkers, []);
     }
+    lastNearbyClearKeyRef.current = nearbyClearKey;
 
     const loadMapEvents = async () => {
       const markerById = new Map<string, MapMarkerData>();
@@ -394,7 +413,7 @@ export default function MapContainer({
       isMounted = false;
       abortController.abort();
     };
-  }, [eventFilters.category, eventFilters.nearby, mapRequestKey, mapRequestParams, pageBudget]);
+  }, [eventFilters.category, eventFilters.nearby, focusRefreshKey, mapRequestKey, mapRequestParams, pageBudget]);
 
   const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
     if (isValidMapboxCoordinate(coordinate)) {

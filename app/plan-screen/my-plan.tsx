@@ -465,11 +465,11 @@ export default function MyPlanScreen() {
       {/* Map Selection Modal */}
       <Modal visible={isMapModalVisible} transparent animationType="slide" onRequestClose={() => setIsMapModalVisible(false)}>
         <View style={[s.mapContainer, { backgroundColor: colors.background }]}>
-          <Image
+          {/* <Image
             source={isDark ? require('../../assets/images/dark-map.png') : require('../../assets/images/map_bg.png')}
             style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
-          />
+          /> */}
           <SafeAreaView style={{ flex: 1 }}>
             <View style={[s.modalHeader, { paddingHorizontal: 20, marginTop: Platform.OS === 'android' ? 20 : 0 }]}>
               <TouchableOpacity onPress={() => setIsMapModalVisible(false)} style={[s.closeBtnCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>

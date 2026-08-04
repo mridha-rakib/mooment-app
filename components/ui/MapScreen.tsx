@@ -46,12 +46,28 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  Easing,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import Svg, {
   Defs,
   Stop,
   Circle as SvgCircle,
   RadialGradient as SvgRadialGradient,
 } from "react-native-svg";
+import {
+  MAP_MARKER_GLOW_CONFIG,
+  getLivePulsePeakOpacity,
+  getMarkerGlowBaseOpacity,
+} from "@/constants/mapMarkerGlow";
 import CinematicButton from "./CinematicButton";
 import EventPreviewModal from "./EventPreviewModal";
 
@@ -66,6 +82,12 @@ const MAP_SCALE_BAR_OFFSET = {
   top: CATEGORY_RAIL_TOP + CATEGORY_RAIL_HEIGHT + 10,
   left: 16,
 };
+// Existing base glow opacities, unchanged from before check-in brightness/live
+// pulse existed — kept as named constants so the same value drives both the
+// visual default and the brightness/pulse calculation from one place.
+const TRAFFIC_GLOW_BASE_OPACITY = 0.5;
+const SATELLITE_IMAGE_GLOW_BASE_OPACITY = 0.7;
+const SATELLITE_ANCHOR_GLOW_BASE_OPACITY = 0.4;
 const MAP_GESTURE_SETTINGS = {
   doubleTapToZoomInEnabled: true,
   doubleTouchToZoomOutEnabled: true,
@@ -116,6 +138,7 @@ export type MapMarkerData = MapCarouselMarker & {
   isLive?: boolean;
   eventStatus?: string | null;
   crowdStatus?: import("@/lib/events").CrowdStatus | null;
+  checkedInCount?: number;
   eventDate?: string | null;
   eventTime?: string | null;
   location?: string | null;
@@ -145,6 +168,9 @@ type MapMarkerProps = {
   glowColor: string;
   onPress: () => void;
   isSatellite: boolean;
+  checkedInCount?: number;
+  isLive?: boolean;
+  livePulseProgress: SharedValue<number>;
 };
 
 const MapMarker = React.memo(({
@@ -154,8 +180,61 @@ const MapMarker = React.memo(({
   glowColor = "#D4B0EB",
   onPress,
   isSatellite,
+  checkedInCount,
+  isLive = false,
+  livePulseProgress,
 }: MapMarkerProps) => {
   const { colors } = useTheme();
+
+  const trafficGlowBaseOpacity = getMarkerGlowBaseOpacity(TRAFFIC_GLOW_BASE_OPACITY, checkedInCount);
+  const satImageGlowBaseOpacity = getMarkerGlowBaseOpacity(SATELLITE_IMAGE_GLOW_BASE_OPACITY, checkedInCount);
+  const satAnchorGlowBaseOpacity = getMarkerGlowBaseOpacity(SATELLITE_ANCHOR_GLOW_BASE_OPACITY, checkedInCount);
+
+  // Only live markers read livePulseProgress.value — Reanimated's automatic
+  // dependency tracking means a marker whose worklet never touches .value in
+  // its executed branch does not re-run when the shared pulse value changes,
+  // so non-live markers stay fully static without any extra subscription.
+  const animatedTrafficGlowStyle = useAnimatedStyle(() => {
+    if (!isLive) {
+      return { opacity: trafficGlowBaseOpacity };
+    }
+
+    return {
+      opacity: interpolate(
+        livePulseProgress.value,
+        [0, 1],
+        [trafficGlowBaseOpacity, getLivePulsePeakOpacity(trafficGlowBaseOpacity)],
+      ),
+    };
+  }, [isLive, trafficGlowBaseOpacity]);
+
+  const animatedSatImageGlowStyle = useAnimatedStyle(() => {
+    if (!isLive) {
+      return { opacity: satImageGlowBaseOpacity };
+    }
+
+    return {
+      opacity: interpolate(
+        livePulseProgress.value,
+        [0, 1],
+        [satImageGlowBaseOpacity, getLivePulsePeakOpacity(satImageGlowBaseOpacity)],
+      ),
+    };
+  }, [isLive, satImageGlowBaseOpacity]);
+
+  const animatedSatAnchorGlowStyle = useAnimatedStyle(() => {
+    if (!isLive) {
+      return { opacity: satAnchorGlowBaseOpacity };
+    }
+
+    return {
+      opacity: interpolate(
+        livePulseProgress.value,
+        [0, 1],
+        [satAnchorGlowBaseOpacity, getLivePulsePeakOpacity(satAnchorGlowBaseOpacity)],
+      ),
+    };
+  }, [isLive, satAnchorGlowBaseOpacity]);
 
   if (isSatellite) {
     return (
@@ -166,7 +245,7 @@ const MapMarker = React.memo(({
           activeOpacity={0.9}
         >
           {/* Image Radial Glow - Moved behind the bubble */}
-          <View pointerEvents="none" style={styles.satImageGlow}>
+          <Animated.View pointerEvents="none" style={[styles.satImageGlow, animatedSatImageGlowStyle]}>
             <Svg height="60" width="60" viewBox="0 0 60 60">
               <Defs>
                 <SvgRadialGradient
@@ -182,10 +261,10 @@ const MapMarker = React.memo(({
               </Defs>
               <SvgCircle cx="30" cy="30" r="30" fill="url(#satImageGrad)" />
             </Svg>
-          </View>
+          </Animated.View>
 
           {/* Anchor Radial Glow - Moved behind the bubble */}
-          <View pointerEvents="none" style={styles.satAnchorGlow}>
+          <Animated.View pointerEvents="none" style={[styles.satAnchorGlow, animatedSatAnchorGlowStyle]}>
             <Svg height="20" width="20" viewBox="0 0 20 20">
               <Defs>
                 <SvgRadialGradient
@@ -201,7 +280,7 @@ const MapMarker = React.memo(({
               </Defs>
               <SvgCircle cx="10" cy="10" r="10" fill="url(#satAnchorGrad)" />
             </Svg>
-          </View>
+          </Animated.View>
 
           <BlurView pointerEvents="none" intensity={80} tint="dark" style={styles.satBubble}>
             <LinearGradient
@@ -255,11 +334,12 @@ const MapMarker = React.memo(({
         activeOpacity={0.8}
       >
         {/* Soft Radial Glow Layer */}
-        <View
+        <Animated.View
           pointerEvents="none"
           style={[
             styles.glowLayer,
-            { transform: [{ scale: 2.5 }], opacity: 0.5 },
+            { transform: [{ scale: 2.5 }] },
+            animatedTrafficGlowStyle,
           ]}
         >
           <Svg height="56" width="56" viewBox="0 0 56 56">
@@ -277,7 +357,7 @@ const MapMarker = React.memo(({
             </Defs>
             <SvgCircle cx="28" cy="28" r="28" fill="url(#mainGlow)" />
           </Svg>
-        </View>
+        </Animated.View>
 
         <View
           style={[
@@ -329,11 +409,13 @@ const EventMapMarker = React.memo(({
   glowColor,
   isSatellite,
   onMarkerPress,
+  livePulseProgress,
 }: {
   marker: MapMarkerData;
   glowColor: string;
   isSatellite: boolean;
   onMarkerPress: (marker: MapMarkerData) => void;
+  livePulseProgress: SharedValue<number>;
 }) => {
   const handlePress = React.useCallback(() => {
     onMarkerPress(marker);
@@ -347,6 +429,9 @@ const EventMapMarker = React.memo(({
       glowColor={glowColor}
       onPress={handlePress}
       isSatellite={isSatellite}
+      checkedInCount={marker.checkedInCount}
+      isLive={marker.isLive}
+      livePulseProgress={livePulseProgress}
     />
   );
 });
@@ -941,6 +1026,42 @@ export default function MapScreen({
     [cameraCenter, userLocation, visibleMarkers],
   );
 
+  // One shared UI-thread pulse driver for every live marker, instead of an
+  // animation loop per marker. It only runs while a visible marker is
+  // authoritatively live, and is cancelled/reset otherwise.
+  const livePulseProgress = useSharedValue(0);
+  const hasLiveVisibleMarkers = React.useMemo(
+    () => visibleMarkers.some((marker) => marker.isLive === true),
+    [visibleMarkers],
+  );
+
+  React.useEffect(() => {
+    if (!hasLiveVisibleMarkers) {
+      cancelAnimation(livePulseProgress);
+      livePulseProgress.value = 0;
+      return;
+    }
+
+    livePulseProgress.value = withRepeat(
+      withSequence(
+        withTiming(1, {
+          duration: MAP_MARKER_GLOW_CONFIG.livePulseBrightenDurationMs,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        withTiming(0, {
+          duration: MAP_MARKER_GLOW_CONFIG.livePulseDimDurationMs,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ),
+      -1,
+      false,
+    );
+
+    return () => {
+      cancelAnimation(livePulseProgress);
+    };
+  }, [hasLiveVisibleMarkers, livePulseProgress]);
+
   const selectMarker = React.useCallback((marker: MapMarkerData) => {
     const displayColor = getMarkerDisplayColor(marker, activeCategory);
     const selected = { ...marker, glowColor: displayColor };
@@ -1202,6 +1323,7 @@ export default function MapScreen({
                 glowColor={markerGlowColor}
                 onMarkerPress={handleMarkerPress}
                 isSatellite={isSatellite}
+                livePulseProgress={livePulseProgress}
               />
             );
           })}
@@ -1344,7 +1466,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    opacity: 0.7,
+    opacity: SATELLITE_IMAGE_GLOW_BASE_OPACITY,
     transform: [{ scale: 2.2 }],
   },
   satImageWrapper: {
@@ -1395,7 +1517,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    opacity: 0.4,
+    opacity: SATELLITE_ANCHOR_GLOW_BASE_OPACITY,
     transform: [{ scale: 3.5 }],
   },
   satAnchorPoint: {
