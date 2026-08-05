@@ -82,12 +82,36 @@ function FullScreenVideo({ uri, headers, isActive }: { uri: string; headers?: Re
   const player = useVideoPlayer(source, (videoPlayer) => {
     videoPlayer.loop = false;
   });
+  // useVideoPlayer loads (and starts buffering) `source` the instant the
+  // player is created, regardless of `isActive`. This FlatList has no
+  // windowing config, so every page of a multi-media post is mounted at
+  // once — without releasing the source for inactive pages, every video in
+  // the post would buffer concurrently. Mirrors the same
+  // release-when-inactive/reload-when-active pattern used by the Feed's
+  // VideoFeedMedia (components/post/FeedPost.tsx).
+  const sourceLoadedRef = useRef(true);
 
   useEffect(() => {
     if (!isActive) {
       player.pause();
+
+      if (sourceLoadedRef.current) {
+        sourceLoadedRef.current = false;
+        void player.replaceAsync(null).catch(() => {
+          // Ignore release failures during native player teardown.
+        });
+      }
+
+      return;
     }
-  }, [isActive, player]);
+
+    if (!sourceLoadedRef.current) {
+      sourceLoadedRef.current = true;
+      void player.replaceAsync(source).catch(() => {
+        // Ignore reload failures during native player teardown.
+      });
+    }
+  }, [isActive, player, source]);
 
   return (
     <VideoView

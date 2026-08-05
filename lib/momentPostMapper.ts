@@ -110,8 +110,15 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     .map((mediaItem) => ({
       uri: resolveMediaUri(mediaItem, options.storageUrlResolver),
       type: mediaItem.type as "image" | "video",
+      processingStatus: mediaItem.processingStatus ?? null,
+      processingErrorCode: mediaItem.processingErrorCode ?? null,
     }))
-    .filter((mediaItem): mediaItem is { uri: string; type: "image" | "video" } => Boolean(mediaItem.uri));
+    .filter((mediaItem): mediaItem is {
+      uri: string;
+      type: "image" | "video";
+      processingStatus: Exclude<MomentMediaItem["processingStatus"], undefined>;
+      processingErrorCode: Exclude<MomentMediaItem["processingErrorCode"], undefined>;
+    } => Boolean(mediaItem.uri));
   const audioMedia = momentMediaItems.find(isAudioMediaItem);
   const audioUri = audioMedia ? resolveMediaUri(audioMedia, options.storageUrlResolver) : undefined;
   const taggedPeople = moment.taggedPeople ?? [];

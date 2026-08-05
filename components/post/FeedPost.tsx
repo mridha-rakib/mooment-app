@@ -2,7 +2,8 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useEventListener } from 'expo';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView,
-  useVideoPlayer } from 'expo-video';
+  useVideoPlayer,
+  type VideoSourceObject } from 'expo-video';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -14,7 +15,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
 import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
-import { toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
+import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { blockUser, followUser, unfollowUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
@@ -122,11 +123,26 @@ export type MediaDisplayCrop = {
   imageHeight?: number | null;
 };
 
+// Mirrors the backend's momentMediaProcessingStatuses / *ErrorCodes (see
+// xenog-api src/modules/moments/moment.interface.ts). Absent (undefined) on
+// legacy video media items and on non-video media — always optional, never
+// assumed present, so legacy posts keep their exact current behavior.
+export type PostMediaProcessingStatus = 'queued' | 'processing' | 'ready' | 'failed';
+export type PostMediaProcessingErrorCode =
+  | 'source_invalid'
+  | 'source_too_large'
+  | 'encode_failed'
+  | 'storage_failed'
+  | 'timeout'
+  | 'unknown';
+
 export type PostMediaItem = {
   uri: string;
   fullUri?: string | null;
   type: 'image' | 'video';
   displayCrop?: MediaDisplayCrop | null;
+  processingStatus?: PostMediaProcessingStatus | null;
+  processingErrorCode?: PostMediaProcessingErrorCode | null;
 };
 
 export type PostData = {
@@ -165,12 +181,26 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
   const isScreenFocused = useIsFocused();
   const [appState, setAppState] = useState(AppState.currentState);
   const isPlaybackActive = isActive && isScreenFocused;
-  const player = useVideoPlayer(uri, (videoPlayer) => {
+  const videoSource = useMemo<VideoSourceObject>(() => ({
+    uri,
+    useCaching: true,
+  }), [uri]);
+  const player = useVideoPlayer(videoSource, (videoPlayer) => {
     videoPlayer.loop = true;
     videoPlayer.muted = momentVideoSessionMuted;
     videoPlayer.timeUpdateEventInterval = 0;
   });
   const wasActiveRef = useRef(false);
+  // `useVideoPlayer` loads (and starts buffering) the source the instant the
+  // player is created, regardless of `isActive` — an off-screen/inactive
+  // card left mounted (FlatList windowing keeps several around) would
+  // otherwise keep a live ExoPlayer buffering forever. This ref tracks
+  // whether the native player currently holds a loaded source, so the
+  // isPlaybackActive effect below can release it (replace the source with
+  // null) the moment a card goes inactive — including immediately after an
+  // off-screen mount — and reload it only once the card is actually active
+  // again, reusing the exact same reload+seek-restore path as manual retry.
+  const sourceLoadedRef = useRef(true);
   const retryCountRef = useRef(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -422,7 +452,8 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
         // Ignore pause failures during native player teardown.
       }
 
-      await player.replaceAsync(uri);
+      await player.replaceAsync(videoSource);
+      sourceLoadedRef.current = true;
 
       if (!isCurrentGeneration(generation)) {
         return;
@@ -467,7 +498,7 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
         setIsRecovering(false);
       }
     }
-  }, [applyPlayerSessionState, clearRetry, isCurrentGeneration, player, saveCurrentPosition, setPlaybackFailure, tryPlay, uri]);
+  }, [applyPlayerSessionState, clearRetry, isCurrentGeneration, player, saveCurrentPosition, setPlaybackFailure, tryPlay, uri, videoSource]);
 
   useEffect(() => {
     isPlaybackActiveRef.current = isPlaybackActive;
@@ -632,7 +663,15 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
       }
 
       if (!playbackFailureRef.current) {
-        void tryPlay({ generation: mediaGenerationRef.current, reason: 'active' });
+        if (sourceLoadedRef.current) {
+          void tryPlay({ generation: mediaGenerationRef.current, reason: 'active' });
+        } else {
+          // The source was released while this card was off-screen (see the
+          // else-branch below) — reload it via the exact same
+          // reload+seek-restore+resume path manual retry already uses, then
+          // let it resume play once loaded.
+          void handleManualRetry();
+        }
       }
     } else {
       if (wasActiveRef.current) {
@@ -645,6 +684,19 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
         logFeedVideoDebug('pause.inactive', uri, { generation: mediaGenerationRef.current });
       }
 
+      // Not gated on wasActiveRef: a card can mount already off-screen
+      // (FlatList renders a window of items around the viewport), and its
+      // player has already started loading/buffering the instant
+      // useVideoPlayer created it — that must be released too, not just a
+      // card that was previously playing and became inactive.
+      if (sourceLoadedRef.current) {
+        sourceLoadedRef.current = false;
+        void player.replaceAsync(null).catch(() => {
+          // Ignore release failures during native player teardown.
+        });
+        logFeedVideoDebug('source.released', uri, { generation: mediaGenerationRef.current });
+      }
+
       clearRetry();
       setHasRequestedPlayback(false);
       setControlsVisible(false);
@@ -653,7 +705,7 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
     }
 
     wasActiveRef.current = isPlaybackActive;
-  }, [clearRetry, isPlaybackActive, player, saveCurrentPosition, tryPlay, uri]);
+  }, [clearRetry, handleManualRetry, isPlaybackActive, player, saveCurrentPosition, tryPlay, uri]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -872,6 +924,60 @@ const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { u
           </TouchableOpacity>
         </View>
       </Modal>
+    </View>
+  );
+});
+
+// Renders inside the exact same `videoMediaFrame` layout the real video
+// player uses (same size, same placement), so the surrounding card never
+// resizes or shifts when a video is not yet playable. Never mounts
+// VideoView/useVideoPlayer — no video initialization or playback is
+// attempted for queued/processing/failed media.
+const VideoProcessingPlaceholder = React.memo(function VideoProcessingPlaceholder({
+  status,
+  canRetry,
+  isRetrying,
+  onRetry,
+}: {
+  status: 'queued' | 'processing' | 'failed';
+  canRetry: boolean;
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <View style={styles.videoMediaFrame}>
+      <View style={styles.videoStateOverlay}>
+        {status === 'queued' ? (
+          <>
+            <Feather name="clock" size={22} color="#FFFFFF" style={styles.videoProcessingIcon} />
+            <Text style={styles.videoErrorText}>Video queued for processing</Text>
+          </>
+        ) : null}
+        {status === 'processing' ? (
+          <>
+            <ActivityIndicator color="#FFFFFF" />
+            <Text style={[styles.videoErrorText, styles.videoProcessingTextSpacing]}>Processing video</Text>
+          </>
+        ) : null}
+        {status === 'failed' ? (
+          <>
+            <Feather name="alert-circle" size={22} color="#FFFFFF" style={styles.videoProcessingIcon} />
+            <Text style={styles.videoErrorText}>This video couldn&apos;t be processed.</Text>
+            {canRetry ? (
+              <TouchableOpacity
+                style={styles.videoRetryButton}
+                activeOpacity={0.85}
+                disabled={isRetrying}
+                onPress={onRetry}
+                accessibilityRole="button"
+                accessibilityLabel="Retry video processing"
+              >
+                <Text style={styles.videoRetryText}>{isRetrying ? 'Retrying…' : 'Retry'}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        ) : null}
+      </View>
     </View>
   );
 });
@@ -1181,6 +1287,37 @@ export default function FeedPost({
     uri: item.fullUri?.trim() || item.uri.trim(),
     type: item.type,
   })), [mediaItems]);
+  // Local, per-instance overrides only — mirrors the existing isLiked/isSaved
+  // pattern (no second post cache, no global polling). An index is only ever
+  // added after its own Retry call succeeds, and the override only takes
+  // effect while the incoming prop still says "failed" (stale data); once
+  // the post's own next natural refresh (existing Feed/Profile mechanism)
+  // brings a newer status, the real prop value is used and the override is
+  // simply ignored.
+  const [locallyRetriedIndexes, setLocallyRetriedIndexes] = useState<Set<number>>(new Set());
+  const [retryPendingIndexes, setRetryPendingIndexes] = useState<Set<number>>(new Set());
+  const handleRetryVideoProcessing = useCallback((index: number) => {
+    if (retryPendingIndexes.has(index)) {
+      return;
+    }
+
+    setRetryPendingIndexes((prev) => new Set(prev).add(index));
+
+    void (async () => {
+      try {
+        await retryMomentVideoProcessing(post.id);
+        setLocallyRetriedIndexes((prev) => new Set(prev).add(index));
+      } catch (error) {
+        Alert.alert('Unable to retry video', getAuthErrorMessage(error, 'Please try again.'));
+      } finally {
+        setRetryPendingIndexes((prev) => {
+          const next = new Set(prev);
+          next.delete(index);
+          return next;
+        });
+      }
+    })();
+  }, [post.id, retryPendingIndexes]);
   const resolvedEventId = useMemo(() => {
     const explicitEventId = post.eventId?.trim();
 
@@ -1591,23 +1728,47 @@ export default function FeedPost({
               onScrollEndDrag={handleScroll}
               scrollEventThrottle={16}
             >
-              {mediaItems.map((item, index) => (
-                <View key={`${item.uri}-${index}`} style={[styles.mediaSlide, { width: mediaFrameWidth }]}>
-                  {item.type === 'video' ? (
-                    <VideoFeedMedia uri={item.uri} isActive={Boolean(isActiveVideo && currentMediaIndex === index && !showFullScreenMedia)} />
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.mediaImageButton}
-                      activeOpacity={0.92}
-                      onPress={() => handleMediaPress(index)}
-                      accessibilityRole="imagebutton"
-                      accessibilityLabel={`Open image ${index + 1} of ${mediaItems.length} full screen`}
-                    >
-                      <CroppedFeedImage item={item} frameWidth={mediaFrameWidth} frameHeight={isNormalPost ? mediaFrameWidth : 340} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
+              {mediaItems.map((item, index) => {
+                // Legacy video with no processingStatus, or processingStatus
+                // "ready" (or any other/future value), falls straight
+                // through to the existing VideoFeedMedia path unchanged —
+                // only the three known blocking states ever render the
+                // placeholder instead.
+                const rawProcessingStatus = item.type === 'video' ? item.processingStatus : undefined;
+                const effectiveProcessingStatus = rawProcessingStatus === 'failed' && locallyRetriedIndexes.has(index)
+                  ? 'queued'
+                  : rawProcessingStatus;
+                const isVideoNotYetPlayable = item.type === 'video' && (
+                  effectiveProcessingStatus === 'queued'
+                  || effectiveProcessingStatus === 'processing'
+                  || effectiveProcessingStatus === 'failed'
+                );
+
+                return (
+                  <View key={`${item.uri}-${index}`} style={[styles.mediaSlide, { width: mediaFrameWidth }]}>
+                    {isVideoNotYetPlayable ? (
+                      <VideoProcessingPlaceholder
+                        status={effectiveProcessingStatus as 'queued' | 'processing' | 'failed'}
+                        canRetry={effectiveProcessingStatus === 'failed' && isPostByCurrentUser}
+                        isRetrying={retryPendingIndexes.has(index)}
+                        onRetry={() => handleRetryVideoProcessing(index)}
+                      />
+                    ) : item.type === 'video' ? (
+                      <VideoFeedMedia uri={item.uri} isActive={Boolean(isActiveVideo && currentMediaIndex === index && !showFullScreenMedia)} />
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.mediaImageButton}
+                        activeOpacity={0.92}
+                        onPress={() => handleMediaPress(index)}
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel={`Open image ${index + 1} of ${mediaItems.length} full screen`}
+                      >
+                        <CroppedFeedImage item={item} frameWidth={mediaFrameWidth} frameHeight={isNormalPost ? mediaFrameWidth : 340} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
             </ScrollView>
 
             {/* Conditional Layout: Event Details Overlay */}
@@ -2068,6 +2229,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 10,
+  },
+  videoProcessingIcon: {
+    marginBottom: 8,
+  },
+  videoProcessingTextSpacing: {
+    marginTop: 10,
   },
   videoRetryButton: {
     minHeight: 32,

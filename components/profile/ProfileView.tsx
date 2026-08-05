@@ -142,6 +142,7 @@ export default function ProfileView({
   const [isUnblockingProfile, setIsUnblockingProfile] = useState(false);
   const [isProfileBlockMutationPending, setIsProfileBlockMutationPending] = useState(false);
   const [blockedMenuVisible, setBlockedMenuVisible] = useState(false);
+  const [hasActiveStory, setHasActiveStory] = useState(false);
   const isBlockedProfile = user.profileAccess === "blocked";
   const hasProfileBlockRelationship = Boolean(
     isBlockedProfile || user.viewerHasBlockedTarget || user.targetHasBlockedViewer,
@@ -170,6 +171,9 @@ export default function ProfileView({
 
   const loadProfileStories = useCallback(() => {
     if (isBlockedProfile) {
+      if (mountedRef.current) {
+        setHasActiveStory(false);
+      }
       return Promise.resolve([] as Story[]);
     }
 
@@ -178,7 +182,11 @@ export default function ProfileView({
       cached?.userId === user.id &&
       Date.now() - cached.fetchedAt < PROFILE_STORY_CACHE_TTL_MS
     ) {
-      return Promise.resolve(getActiveStories(cached.stories));
+      const stories = getActiveStories(cached.stories);
+      if (mountedRef.current && viewedUserIdRef.current === user.id) {
+        setHasActiveStory(stories.length > 0);
+      }
+      return Promise.resolve(stories);
     }
 
     const pending = profileStoriesRequestRef.current;
@@ -197,6 +205,9 @@ export default function ProfileView({
             stories,
             fetchedAt: Date.now(),
           };
+          if (mountedRef.current) {
+            setHasActiveStory(stories.length > 0);
+          }
         }
         return stories;
       })
@@ -212,6 +223,7 @@ export default function ProfileView({
 
   useEffect(() => {
     setAvatarModalMode(null);
+    setHasActiveStory(false);
     avatarTapInFlightRef.current = false;
     storyNavigationInFlightRef.current = false;
     void loadProfileStories();
@@ -646,6 +658,7 @@ export default function ProfileView({
         avatar={user.avatar}
         stats={user.stats}
         accountType={user.accountType}
+        hasActiveStory={hasActiveStory}
         isOwnProfile={isOwnProfile}
         onMenuPress={() => setMenuVisible(true)}
         onAvatarPress={() => void handleAvatarPress()}

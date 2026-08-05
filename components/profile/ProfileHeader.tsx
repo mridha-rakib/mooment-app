@@ -20,7 +20,7 @@ export type ProfileStats = {
   following: number;
 };
 
-const BUSINESS_RING_COLOR = "#FFD700";
+const STORY_RING_COLOR = "#AC86D4";
 
 type ProfileHeaderProps = {
   userId: string;
@@ -28,6 +28,7 @@ type ProfileHeaderProps = {
   avatar?: string | null;
   stats: ProfileStats;
   accountType?: "personal" | "business";
+  hasActiveStory?: boolean;
   isOwnProfile?: boolean;
   onMenuPress?: () => void;
   onReport?: () => void;
@@ -46,7 +47,7 @@ export default function ProfileHeader({
   name,
   avatar,
   stats,
-  accountType,
+  hasActiveStory = false,
   isOwnProfile = true,
   onMenuPress,
   onReport,
@@ -129,10 +130,7 @@ export default function ProfileHeader({
             style={[
               styles.avatarBorder,
               {
-                borderColor:
-                  accountType === "business"
-                    ? BUSINESS_RING_COLOR
-                    : colors.primary,
+                borderColor: hasActiveStory ? STORY_RING_COLOR : "transparent",
               },
             ]}
           >

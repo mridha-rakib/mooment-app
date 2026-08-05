@@ -7,14 +7,13 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { getMapEvents, type EventResponse } from '@/lib/events';
-import { getMyProducts, type Product } from '@/lib/products';
 import { getStorageFileUrl } from '@/lib/storage';
 import { getSuggestedUsers } from '@/lib/users';
 import { normalizeHashtag } from '@/lib/hashtags';
 import { safeBack } from '@/lib/navigation';
 import UserAvatar from '@/components/ui/UserAvatar';
 
-type SearchFilter = 'All' | 'People' | 'Events' | 'Products' | 'Hashtags';
+type SearchFilter = 'All' | 'People' | 'Events' | 'Hashtags';
 type SearchSection = {
   filter: Exclude<SearchFilter, 'All'>;
   resultCount: number;
@@ -32,14 +31,8 @@ type SearchEvent = {
   subtitle: string;
   imageUrl?: string | null;
 };
-type SearchProduct = {
-  id: string;
-  title: string;
-  subtitle: string;
-  imageUrl?: string | null;
-};
 
-const FILTERS: SearchFilter[] = ['All', 'People', 'Events', 'Products', 'Hashtags'];
+const FILTERS: SearchFilter[] = ['All', 'People', 'Events', 'Hashtags'];
 const SEARCH_RESULT_LIMIT = 50;
 
 const resolveStorageUrl = (key?: string | null) => {
@@ -53,12 +46,6 @@ const resolveStorageUrl = (key?: string | null) => {
     return null;
   }
 };
-
-const formatMoney = (value: number) =>
-  `$${value.toLocaleString("en-US", {
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`;
 
 const formatEventSchedule = (scheduledAt?: string | null) => {
   if (!scheduledAt) {
@@ -90,27 +77,11 @@ const getEventSubtitle = (event: EventResponse) => {
   return [host, formatEventSchedule(event.scheduledAt), location].filter(Boolean).join(" • ");
 };
 
-const getProductSubtitle = (product: Product) => {
-  const discountedPrice = product.discountPercent > 0
-    ? product.priceUsd * (1 - product.discountPercent / 100)
-    : product.priceUsd;
-  const stockLabel = product.totalProduct > 0 ? "In Stock" : "Out of Stock";
-
-  return `${formatMoney(discountedPrice)} • ${stockLabel}`;
-};
-
 const toSearchEvent = (event: EventResponse): SearchEvent => ({
   id: event.id,
   title: event.name || "Untitled Event",
   subtitle: getEventSubtitle(event),
   imageUrl: resolveStorageUrl(event.bannerImageKey),
-});
-
-const toSearchProduct = (product: Product): SearchProduct => ({
-  id: product.id,
-  title: product.name,
-  subtitle: getProductSubtitle(product),
-  imageUrl: resolveStorageUrl(product.imageKeys[0]),
 });
 
 export default function SearchScreen() {
@@ -120,7 +91,6 @@ export default function SearchScreen() {
   const [activeFilter, setActiveFilter] = useState<SearchFilter>('All');
   const [people, setPeople] = useState<SearchPerson[]>([]);
   const [events, setEvents] = useState<SearchEvent[]>([]);
-  const [products, setProducts] = useState<SearchProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const query = searchQuery.toLowerCase().trim();
@@ -129,10 +99,9 @@ export default function SearchScreen() {
   const loadSearchData = useCallback(async (isMounted: () => boolean) => {
     setIsLoading(true);
 
-    const [peopleResult, eventsResult, productsResult] = await Promise.allSettled([
+    const [peopleResult, eventsResult] = await Promise.allSettled([
       getSuggestedUsers(SEARCH_RESULT_LIMIT),
       getMapEvents({ limit: SEARCH_RESULT_LIMIT }),
-      getMyProducts(),
     ]);
 
     if (!isMounted()) {
@@ -148,7 +117,6 @@ export default function SearchScreen() {
         }))
       : []);
     setEvents(eventsResult.status === 'fulfilled' ? eventsResult.value.map(toSearchEvent) : []);
-    setProducts(productsResult.status === 'fulfilled' ? productsResult.value.map(toSearchProduct) : []);
     setIsLoading(false);
   }, []);
 
@@ -176,13 +144,6 @@ export default function SearchScreen() {
     ),
     [events, query],
   );
-  const filteredProducts = useMemo(
-    () => products.filter(
-      p => p.title.toLowerCase().includes(query) || p.subtitle.toLowerCase().includes(query)
-    ),
-    [products, query],
-  );
-
   const searchSections = useMemo<SearchSection[]>(() => [
     {
       filter: 'Hashtags',
@@ -266,38 +227,7 @@ export default function SearchScreen() {
         </View>
       ),
     },
-    {
-      filter: 'Products',
-      resultCount: filteredProducts.length,
-      render: () => (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Products</Text>
-          {filteredProducts.map((product) => (
-            <TouchableOpacity 
-              key={product.id} 
-              style={styles.listItem}
-              onPress={() => router.push({
-                pathname: '/profile-screen/product-details',
-                params: { productId: product.id },
-              })}
-            >
-              {product.imageUrl ? (
-                <Image source={{ uri: product.imageUrl }} style={[styles.squareImage, { borderColor: colors.border }]} />
-              ) : (
-                <View style={[styles.squareImage, styles.squareImagePlaceholder, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                  <Feather name="shopping-bag" size={20} color={colors.textSecondary} />
-                </View>
-              )}
-              <View style={styles.listTextContainer}>
-                <Text style={[styles.listTitle, { color: colors.text }]}>{product.title}</Text>
-                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{product.subtitle}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ),
-    },
-  ], [colors.border, colors.card, colors.primary, colors.text, colors.textSecondary, filteredEvents, filteredPeople, filteredProducts, hashtagQuery, router]);
+  ], [colors.border, colors.card, colors.primary, colors.text, colors.textSecondary, filteredEvents, filteredPeople, hashtagQuery, router]);
 
   const visibleSections = searchSections.filter(
     section => activeFilter === 'All' || section.filter === activeFilter,

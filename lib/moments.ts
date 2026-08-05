@@ -5,6 +5,19 @@ export type MomentAudience = "public" | "friends" | "only_me";
 export type FeedAudience = "discover" | "friends";
 export type MomentMediaType = "image" | "video" | "audio";
 export type MomentMediaSource = "gallery" | "camera" | "upload" | "external";
+// Mirrors the backend's momentMediaProcessingStatuses (see xenog-api
+// src/modules/moments/moment.interface.ts). Absent on legacy media items and
+// on non-video media — always optional, never assumed present.
+export type MomentMediaProcessingStatus = "queued" | "processing" | "ready" | "failed";
+// Mirrors the backend's momentMediaProcessingErrorCodes — a safe, coarse
+// classification only. Never a raw FFmpeg/S3 error, job id, or storage key.
+export type MomentMediaProcessingErrorCode =
+  | "source_invalid"
+  | "source_too_large"
+  | "encode_failed"
+  | "storage_failed"
+  | "timeout"
+  | "unknown";
 
 export type MomentMediaItem = {
   type: MomentMediaType;
@@ -13,6 +26,8 @@ export type MomentMediaItem = {
   storageKey?: string | null;
   contentType?: string | null;
   durationSeconds?: number | null;
+  processingStatus?: MomentMediaProcessingStatus | null;
+  processingErrorCode?: MomentMediaProcessingErrorCode | null;
 };
 
 export type MomentAuthor = {
@@ -205,6 +220,21 @@ export const getFeedReposts = async (limit = 50, audience?: FeedAudience): Promi
 
 export const deleteMoment = async (momentId: string): Promise<void> => {
   await api.delete(`/moments/${encodeURIComponent(momentId)}`);
+};
+
+// Owner-only manual retry for a Moment's failed video processing. The
+// backend identifies the eligible failed video server-side — this never
+// sends a job id, storage key, or user id; the Moment id (already trusted,
+// already the post's own id) is the only input.
+export const retryMomentVideoProcessing = async (momentId: string): Promise<Moment> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/retry-video-processing`);
+  const moment = response.data?.data?.moment as Moment | undefined;
+
+  if (!moment) {
+    throw new Error("The retry response was incomplete.");
+  }
+
+  return moment;
 };
 
 export const toggleMomentReaction = async (momentId: string): Promise<MomentInteractionSummary> => {

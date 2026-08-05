@@ -22,6 +22,14 @@ const retrySource = videoFeedMediaSource.slice(
   videoFeedMediaSource.indexOf("const handleManualRetry"),
   videoFeedMediaSource.indexOf("useEffect(() => {"),
 );
+const videoSourceDeclarationSource = videoFeedMediaSource.slice(
+  videoFeedMediaSource.indexOf("const videoSource = useMemo"),
+  videoFeedMediaSource.indexOf("const player = useVideoPlayer"),
+);
+const playerSetupSource = videoFeedMediaSource.slice(
+  videoFeedMediaSource.indexOf("const player = useVideoPlayer"),
+  videoFeedMediaSource.indexOf("const wasActiveRef"),
+);
 
 test("Feed video classifies safe internal playback error categories", () => {
   assert.equal(classifyFeedVideoPlaybackError("HTTP response code 403").kind, "http");
@@ -61,12 +69,60 @@ test("Feed video uses expo-video events instead of inactive 250ms polling", () =
   assert.match(videoFeedMediaSource, /shouldRunFeedVideoTimeUpdates\(isActive, isScreenFocused, appState\) \? 0\.25 : 0/);
 });
 
-test("Feed video retry reloads the current source and does not recreate content", () => {
-  assert.match(retrySource, /player\.replaceAsync\(uri\)/);
+test("Feed video retry reloads the current cached source and does not recreate content", () => {
+  assert.match(retrySource, /player\.replaceAsync\(videoSource\)/);
   assert.match(retrySource, /commitFeedVideoSeek/);
   assert.match(retrySource, /applyPlayerSessionState\(\)/);
   assert.doesNotMatch(retrySource, /upload/i);
   assert.doesNotMatch(retrySource, /createMoment/i);
+});
+
+test("Feed video passes a memoized cached source object instead of a raw URI string", () => {
+  assert.doesNotMatch(videoFeedMediaSource, /useVideoPlayer\(uri,/);
+  assert.match(videoFeedMediaSource, /useVideoPlayer\(videoSource,/);
+  assert.match(videoSourceDeclarationSource, /useMemo<VideoSourceObject>/);
+  assert.match(videoSourceDeclarationSource, /uri,/);
+  assert.match(videoSourceDeclarationSource, /useCaching: true,/);
+  assert.match(videoSourceDeclarationSource, /\}\), \[uri\]\)/);
+  assert.doesNotMatch(videoSourceDeclarationSource, /Date\.now\(\)|Math\.random\(\)|timestamp|nonce|cacheBust|cache-bust/i);
+});
+
+test("Cached video source keeps loop, mute, and time-update interval setup unchanged", () => {
+  assert.match(playerSetupSource, /videoPlayer\.loop = true/);
+  assert.match(playerSetupSource, /videoPlayer\.muted = momentVideoSessionMuted/);
+  assert.match(playerSetupSource, /videoPlayer\.timeUpdateEventInterval = 0/);
+});
+
+test("replaceAsync is only ever invoked to reload the source (retry/resume) or to release it (inactive)", () => {
+  const replaceAsyncCallSites = videoFeedMediaSource.match(/\.replaceAsync\(/g) ?? [];
+
+  // One reload call site, shared by the manual-retry path and the
+  // resume-after-release path (both call handleManualRetry), plus one
+  // release call site (replaceAsync(null)) in the isPlaybackActive effect
+  // that stops an inactive/off-screen card from buffering.
+  assert.equal(replaceAsyncCallSites.length, 2);
+  assert.match(videoFeedMediaSource, /player\.replaceAsync\(videoSource\)/);
+  assert.match(videoFeedMediaSource, /player\.replaceAsync\(null\)/);
+});
+
+test("an inactive/off-screen card releases its loaded source instead of continuing to buffer", () => {
+  const isPlaybackActiveEffectSource = videoFeedMediaSource.slice(
+    videoFeedMediaSource.indexOf("useEffect(() => {\n    if (isPlaybackActive) {"),
+    videoFeedMediaSource.indexOf("wasActiveRef.current = isPlaybackActive;"),
+  );
+
+  assert.match(isPlaybackActiveEffectSource, /player\.replaceAsync\(null\)/);
+  assert.match(isPlaybackActiveEffectSource, /sourceLoadedRef\.current = false/);
+});
+
+test("reactivating a released card reloads the source via the retry/resume path, not a raw tryPlay", () => {
+  const isPlaybackActiveEffectSource = videoFeedMediaSource.slice(
+    videoFeedMediaSource.indexOf("useEffect(() => {\n    if (isPlaybackActive) {"),
+    videoFeedMediaSource.indexOf("wasActiveRef.current = isPlaybackActive;"),
+  );
+
+  assert.match(isPlaybackActiveEffectSource, /if \(sourceLoadedRef\.current\) \{\s*void tryPlay\(/);
+  assert.match(isPlaybackActiveEffectSource, /\} else \{[\s\S]*?void handleManualRetry\(\);/);
 });
 
 test("Feed video stale guards protect autoplay and recovery callbacks", () => {

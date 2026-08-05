@@ -778,7 +778,6 @@ export default function AddStoryScreen() {
         });
 
         setPublishStage('Uploading media...');
-        const thumbnailPromise = generateStoryThumbnail(processed.uri);
         const extension = getVideoExtension(processed.contentType);
         mark('storage upload start');
         const storageKey = await uploadFileToStorage({
@@ -804,17 +803,25 @@ export default function AddStoryScreen() {
         });
         mark('create story API complete');
 
-        void thumbnailPromise
-          .then((thumbnail) => {
-            if (thumbnail) setCachedStoryThumbnail(story.id, thumbnail);
-          })
-          .catch(() => undefined);
-
         didSucceed = true;
         setPublishStage('Posted');
         await new Promise((resolve) => setTimeout(resolve, 150));
         resetDraft();
         router.replace('/(tabs)/home');
+
+        // Started only after the preview player and camera session have both
+        // torn down. Starting this second decoder while the draft's video
+        // preview was still playing (and the just-finished camera recording
+        // session was still winding down) exhausted this device's ~384MB
+        // Dalvik heap: java.lang.OutOfMemoryError while allocating a
+        // MediaCodec.BufferInfo, escalating to a JNI fatal abort that killed
+        // the app immediately after tapping Post.
+        void generateStoryThumbnail(processed.uri)
+          .then((thumbnail) => {
+            if (thumbnail) setCachedStoryThumbnail(story.id, thumbnail);
+          })
+          .catch(() => undefined);
+
         return;
       }
 
