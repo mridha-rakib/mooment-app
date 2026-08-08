@@ -5,6 +5,7 @@ import {
   Modal,
   PanResponder,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -21,12 +22,26 @@ import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 interface ReportDetailsModalProps {
   visible: boolean;
   onClose: () => void;
-  onDone: (details: string) => Promise<void> | void;
+  onDone: (details: string, alsoBlock: boolean) => Promise<void> | void;
   isSubmitting?: boolean;
+  // Opt-in only — Post/Event report flows pass this; Profile (User) report
+  // does not, so existing Profile report behavior is unchanged by default.
+  showBlockToggle?: boolean;
+  blockToggleLabel?: string;
 }
 
-export default function ReportDetailsModal({ visible, onClose, onDone, isSubmitting = false }: ReportDetailsModalProps) {
+export default function ReportDetailsModal({
+  visible,
+  onClose,
+  onDone,
+  isSubmitting = false,
+  showBlockToggle = false,
+  blockToggleLabel = 'Also block this user',
+}: ReportDetailsModalProps) {
   const [details, setDetails] = useState('');
+  // OFF by default and reset every time the sheet opens (handleModalShow) —
+  // never inherited from a previous report flow.
+  const [alsoBlock, setAlsoBlock] = useState(false);
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -145,6 +160,7 @@ export default function ReportDetailsModal({ visible, onClose, onDone, isSubmitt
   const handleModalShow = useCallback(() => {
     translateY.setValue(0);
     keyboardInset.setValue(0);
+    setAlsoBlock(false);
     if (focusTimerRef.current) {
       clearTimeout(focusTimerRef.current);
     }
@@ -182,8 +198,9 @@ export default function ReportDetailsModal({ visible, onClose, onDone, isSubmitt
     }
 
     try {
-      await onDone(details);
+      await onDone(details, alsoBlock);
       setDetails('');
+      setAlsoBlock(false);
       onClose();
     } catch {
       // The caller owns user-facing error feedback and may keep the sheet open.
@@ -234,6 +251,20 @@ export default function ReportDetailsModal({ visible, onClose, onDone, isSubmitt
                 editable={!isSubmitting}
               />
             </View>
+
+            {showBlockToggle ? (
+              <View style={styles.blockToggleRow}>
+                <Text style={[styles.blockToggleLabel, { color: colors.text }]}>{blockToggleLabel}</Text>
+                <Switch
+                  value={alsoBlock}
+                  onValueChange={setAlsoBlock}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={alsoBlock ? (isDark ? '#FFFFFF' : colors.background) : '#FFFFFF'}
+                  ios_backgroundColor={colors.border}
+                  disabled={isSubmitting}
+                />
+              </View>
+            ) : null}
 
             <View style={styles.footer}>
               <TouchableOpacity
@@ -312,6 +343,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlignVertical: 'top',
     height: '100%',
+  },
+  blockToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    gap: 12,
+  },
+  blockToggleLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    flexShrink: 1,
   },
   footer: {
     flexDirection: 'row',

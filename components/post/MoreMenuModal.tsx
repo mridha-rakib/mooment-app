@@ -8,6 +8,12 @@ type MoreMenuModalProps = {
   onClose: () => void;
   onReport?: () => void;
   reportDisabled?: boolean;
+  // Already-reported state: forces the row disabled regardless of
+  // reportDisabled, swaps to a filled flag icon, and relabels to "Reported"
+  // — distinct from reportDisabled, which just greys out the existing
+  // outline "Report" row (e.g. a blocked profile) without implying the
+  // content was ever reported.
+  reported?: boolean;
   openReportAfterClose?: boolean;
   onSave?: () => void;
   isSaved?: boolean;
@@ -25,6 +31,7 @@ export default function MoreMenuModal({
   onClose,
   onReport,
   reportDisabled = false,
+  reported = false,
   openReportAfterClose = false,
   onSave,
   isSaved = false,
@@ -39,7 +46,7 @@ export default function MoreMenuModal({
   const { colors } = useTheme();
 
   const handleReportPress = () => {
-    if (reportDisabled) {
+    if (reportDisabled || reported) {
       return;
     }
 
@@ -70,15 +77,21 @@ export default function MoreMenuModal({
             <View style={[styles.menuContent, { backgroundColor: colors.card }]}>
               {onReport && (
                 <>
-                  <TouchableOpacity 
-                    style={[styles.menuItem, reportDisabled && styles.disabledMenuItem]}
-                    activeOpacity={0.7} 
+                  <TouchableOpacity
+                    style={[styles.menuItem, (reportDisabled || reported) && styles.disabledMenuItem]}
+                    activeOpacity={0.7}
                     onPress={handleReportPress}
-                    disabled={reportDisabled}
-                    accessibilityState={reportDisabled ? { disabled: true } : undefined}
+                    disabled={reportDisabled || reported}
+                    accessibilityState={(reportDisabled || reported) ? { disabled: true } : undefined}
                   >
-                    <Feather name="flag" size={20} color={colors.text} style={styles.menuIcon} />
-                    <Text style={[styles.menuText, { color: colors.text }]}>Report</Text>
+                    {reported ? (
+                      <Ionicons name="flag" size={20} color={colors.primary} style={styles.menuIcon} />
+                    ) : (
+                      <Feather name="flag" size={20} color={colors.text} style={styles.menuIcon} />
+                    )}
+                    <Text style={[styles.menuText, { color: reported ? colors.primary : colors.text }]}>
+                      {reported ? "Reported" : "Report"}
+                    </Text>
                   </TouchableOpacity>
                   {(onSave || onBlock || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>

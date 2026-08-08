@@ -58,6 +58,8 @@ export type Moment = {
   sharesCount: number;
   isLiked: boolean;
   isSaved: boolean;
+  // Current viewer only — backend-authoritative, survives refresh/app restart.
+  hasReported?: boolean;
   createdAt: string;
   updatedAt: string;
 };

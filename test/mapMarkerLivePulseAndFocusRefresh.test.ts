@@ -12,6 +12,10 @@ const mapContainerSource = readFileSync(
   join(process.cwd(), "components/home/MapContainer.tsx"),
   "utf8",
 );
+const mapMarkerGlowSource = readFileSync(
+  join(process.cwd(), "constants/mapMarkerGlow.ts"),
+  "utf8",
+);
 
 const countOccurrences = (source: string, pattern: RegExp) => (source.match(pattern) ?? []).length;
 
@@ -96,6 +100,13 @@ test("live markers combine their own base opacity with the shared pulse progress
   assert.match(
     mapScreenSource,
     /interpolate\(\s*livePulseProgress\.value,\s*\[0,\s*1\],\s*\[trafficGlowBaseOpacity,\s*getLivePulsePeakOpacity\(trafficGlowBaseOpacity\)\]/,
+  );
+});
+
+test("the live pulse peak opacity helper is workletized before being called on the UI thread", () => {
+  assert.match(
+    mapMarkerGlowSource,
+    /getLivePulsePeakOpacity\s*=\s*\([^)]*\)\s*:\s*number\s*=>\s*\{\s*["']worklet["'];/,
   );
 });
 

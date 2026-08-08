@@ -10,11 +10,14 @@ import { cancelEvent, type EventResponse } from "@/lib/events";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
+import { retryBlockOnly, submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
+import { submitReport } from "@/lib/reports";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import MoreMenuModal from "@/components/post/MoreMenuModal";
 import ReportModal from "@/components/modals/ReportModal";
 import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
+import ReportedContentCard, { type ReportedContentOutcome } from "@/components/post/ReportedContentCard";
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
@@ -118,6 +121,8 @@ const isSameId = (left?: string | null, right?: string | null) => {
   return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
 };
 
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
 type Props = {
   event: EventResponse;
   headerLabel?: string;
@@ -126,10 +131,14 @@ type Props = {
   onRepostSuccess?: () => void;
   onEventCancelled?: (eventId: string) => void;
   onSaveChange?: (interactionMomentId: string, isSaved: boolean) => void;
+  // Fired once a Report+Block flow's block step actually succeeds — lets the
+  // Feed screen drop this host's *other* already-rendered items from the
+  // currently mounted list. This card's own slot is handled locally below.
+  onHostBlocked?: (ownerId: string) => void;
   embedded?: boolean;
 };
 
-export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, embedded = false }: Props) {
+export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, embedded = false }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [bannerFailed, setBannerFailed] = useState(false);
 
@@ -202,10 +211,25 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
+  const isReportSubmittingRef = useRef(false);
+  const [hasReported, setHasReported] = useState(Boolean(event.hasReported));
+  const [reportOutcome, setReportOutcome] = useState<ReportedContentOutcome | null>(null);
+  const [reportedOwnerId, setReportedOwnerId] = useState<string | null>(null);
+  const [isReportedContentRevealed, setIsReportedContentRevealed] = useState(false);
+  const [isBlockRetrying, setIsBlockRetrying] = useState(false);
+  const isBlockRetryingRef = useRef(false);
   const [menuTop, setMenuTop] = useState(0);
   const [isSaved, setIsSaved] = useState(Boolean(event.isSaved));
   const [isSavePending, setIsSavePending] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    if (event.hasReported) {
+      setHasReported(true);
+    }
+  }, [event.hasReported]);
   const [isLiked, setIsLiked] = useState(Boolean(event.isLiked));
   const [likesCount, setLikesCount] = useState(event.likesCount ?? 0);
   const [commentsCount, setCommentsCount] = useState(event.commentsCount ?? 0);
@@ -408,6 +432,107 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     );
   };
 
+  const handleOpenReport = () => {
+    if (hasReported) {
+      return;
+    }
+
+    if (!event.id || !event.userId || !MONGO_OBJECT_ID_PATTERN.test(event.id) || !MONGO_OBJECT_ID_PATTERN.test(event.userId)) {
+      Alert.alert('Unable to report event', 'This event can’t be reported right now.');
+      return;
+    }
+
+    setShowReportModal(true);
+  };
+
+  const handleReportReasonSelected = (reason: string) => {
+    setReportReason(reason);
+    setShowReportModal(false);
+    setTimeout(() => setShowReportDetailsModal(true), 300);
+  };
+
+  const handleReportDetailsClose = () => {
+    if (isReportSubmitting) {
+      return;
+    }
+
+    setShowReportDetailsModal(false);
+    setReportReason(null);
+  };
+
+  const handleSubmitReport = async (details: string, alsoBlock: boolean) => {
+    if (isReportSubmittingRef.current || !reportReason || !event.userId) {
+      return;
+    }
+
+    isReportSubmittingRef.current = true;
+    setIsReportSubmitting(true);
+
+    try {
+      const outcome = await submitReportWithOptionalBlock({
+        payload: {
+          reportedUserId: event.userId,
+          targetType: 'event',
+          targetId: event.id,
+          reason: reportReason,
+          details: details.trim() || null,
+        },
+        alsoBlock,
+        submitReportFn: submitReport,
+        blockUserFn: blockUser,
+      });
+
+      setShowReportDetailsModal(false);
+      setReportReason(null);
+      setHasReported(true);
+
+      if (outcome.kind === 'already_reported') {
+        Alert.alert('Already reported', 'You have already reported this event.');
+        return;
+      }
+
+      setReportedOwnerId(event.userId);
+      setIsReportedContentRevealed(false);
+      setReportOutcome(outcome.kind);
+
+      if (outcome.kind === 'report_block_success') {
+        onHostBlocked?.(event.userId);
+      }
+    } catch (error) {
+      Alert.alert('Unable to submit report', getAuthErrorMessage(error, 'Please try again.'));
+      throw error;
+    } finally {
+      isReportSubmittingRef.current = false;
+      setIsReportSubmitting(false);
+    }
+  };
+
+  const handleShowReportedContent = () => {
+    setIsReportedContentRevealed(true);
+  };
+
+  const handleRetryBlockOwner = async () => {
+    if (isBlockRetryingRef.current || !reportedOwnerId) {
+      return;
+    }
+
+    isBlockRetryingRef.current = true;
+    setIsBlockRetrying(true);
+
+    try {
+      const result = await retryBlockOnly({ ownerId: reportedOwnerId, blockUserFn: blockUser });
+
+      if (result === 'blocked') {
+        setReportOutcome('report_block_success');
+        setIsReportedContentRevealed(false);
+        onHostBlocked?.(reportedOwnerId);
+      }
+    } finally {
+      isBlockRetryingRef.current = false;
+      setIsBlockRetrying(false);
+    }
+  };
+
   const goToEvent = () =>
     router.push({ pathname: "/event-screen/event", params: { eventId: event.id, source: "feed" } });
 
@@ -456,6 +581,18 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
       },
     });
   };
+
+  if (reportOutcome && !isReportedContentRevealed) {
+    return (
+      <ReportedContentCard
+        contentLabel="event"
+        outcome={reportOutcome}
+        onShow={handleShowReportedContent}
+        onRetryBlock={handleRetryBlockOwner}
+        isRetryingBlock={isBlockRetrying}
+      />
+    );
+  }
 
   if (isHidden) {
     return null;
@@ -701,7 +838,8 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         onClose={() => setShowMoreMenu(false)}
         showDelete={isOwnEvent}
         deleteLabel="Cancel Event"
-        onReport={!isOwnEvent ? () => setShowReportModal(true) : undefined}
+        onReport={!isOwnEvent ? handleOpenReport : undefined}
+        reported={hasReported}
         onSave={!isOwnEvent ? handleSave : undefined}
         isSaved={!isOwnEvent ? isSaved : undefined}
         onBlock={!isOwnEvent && Boolean(hostId) ? handleBlock : undefined}
@@ -721,18 +859,15 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
       <ReportModal
         visible={showReportModal}
         onClose={() => setShowReportModal(false)}
-        onReport={(_reason) => {
-          setShowReportModal(false);
-          setTimeout(() => setShowReportDetailsModal(true), 300);
-        }}
+        onReport={handleReportReasonSelected}
       />
 
       <ReportDetailsModal
         visible={showReportDetailsModal}
-        onClose={() => setShowReportDetailsModal(false)}
-        onDone={(_details) => {
-          setShowReportDetailsModal(false);
-        }}
+        onClose={handleReportDetailsClose}
+        onDone={handleSubmitReport}
+        isSubmitting={isReportSubmitting}
+        showBlockToggle
       />
     </View>
   );

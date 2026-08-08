@@ -31,6 +31,7 @@ export default function CreateEventStep4() {
   const [isDeletingTicket, setIsDeletingTicket] = React.useState(false);
   const [ticketToDeleteId, setTicketToDeleteId] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isSavingAndExiting, setIsSavingAndExiting] = React.useState(false);
   const [savedLabel, setSavedLabel] = React.useState(false);
   const isMountedRef = React.useRef(true);
   const isAdvancingRef = React.useRef(false);
@@ -130,8 +131,27 @@ export default function CreateEventStep4() {
     Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
   };
 
+  const handleSaveAndExit = async () => {
+    if (isSaving || isSavingAndExiting) return;
+    setIsSavingAndExiting(true);
+
+    try {
+      const event = await saveDraft();
+      if (isMountedRef.current) {
+        router.replace({ pathname: '/event-screen/event', params: { eventId: event.id, mode: 'host' } });
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert('Unable to save changes', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSavingAndExiting(false);
+      }
+    }
+  };
+
   const handleNext = async () => {
-    if (isSaving || isAdvancingRef.current) return;
+    if (isSaving || isSavingAndExiting || isAdvancingRef.current) return;
 
     if (!isEditingPublished) {
       isAdvancingRef.current = true;
@@ -171,7 +191,11 @@ export default function CreateEventStep4() {
         <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-3')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
-          <View style={{ width: 60 }} />
+          <TouchableOpacity onPress={handleSaveAndExit} disabled={isSaving || isSavingAndExiting}>
+            <Text style={[styles.saveDraft, { color: colors.primary, opacity: (isSaving || isSavingAndExiting) ? 0.5 : 1 }]}>
+              {isSavingAndExiting ? 'Saving…' : 'Save & Exit'}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
             <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
@@ -287,7 +311,7 @@ export default function CreateEventStep4() {
         <TouchableOpacity 
           style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
           onPress={handleNext}
-          disabled={isSaving}
+          disabled={isSaving || isSavingAndExiting}
         >
           <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
         </TouchableOpacity>

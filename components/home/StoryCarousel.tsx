@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2245C",
   },
   storyRingStandard: {
-    backgroundColor: "#42B0D5",
+    backgroundColor: "#AC86D4",
   },
   storyRingMuted: {
     backgroundColor: "transparent",
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#23232D",
   },
-  activeTab: { backgroundColor: "#42B0D5" },
+  activeTab: { backgroundColor: "#AC86D4" },
   tabText: { color: "#9B9BA8", fontSize: 12, fontWeight: "700" },
   activeTabText: { color: "#FFFFFF" },
   textThumbnail: {

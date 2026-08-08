@@ -37,6 +37,7 @@ import {
   usePendingVideoMomentUploads,
   type PendingVideoMomentUpload,
 } from "@/lib/pendingMomentUploads";
+import { usePendingVideoMomentSync, type VideoMomentSyncOutcome } from "@/lib/pendingVideoMomentSync";
 import { getDiscoverStories, getFeedStories, getFriendStories } from "@/lib/stories";
 import type { Story } from "@/lib/stories";
 import { getSeenStoryIds } from "@/lib/storySeen";
@@ -130,10 +131,23 @@ const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<strin
 
 type FeedItem =
   | { type: 'pending_video_upload'; id: string; data: PendingVideoMomentUpload }
+  | { type: 'video_processing'; id: string; data: PostData }
   | { type: 'post'; id: string; data: PostData }
   | { type: 'event'; id: string; data: EventResponse }
   | { type: 'repost'; id: string; data: MomentTimelineItem }
   | { type: 'suggested_users'; id: string; data: SuggestedUser[] };
+
+// A server Moment whose video is still `queued`/`processing` renders the
+// same skeleton as a local pending upload instead of FeedPost's own black
+// "Video queued for processing" / "Processing video" placeholder — that
+// placeholder remains reserved for cases the user can act on (a `failed`
+// post with its Retry button), never for a state that resolves on its own.
+const isUnresolvedVideoPost = (post: PostData) => (
+  post.mediaItems?.some((item) => (
+    item.type === 'video' &&
+    (item.processingStatus === 'queued' || item.processingStatus === 'processing')
+  )) ?? false
+);
 
 const buildFeedItems = (
   posts: PostData[],
@@ -179,7 +193,11 @@ const buildFeedItems = (
 
   for (const item of contentItems) {
     if (item.type === 'post') {
-      items.push({ type: 'post', id: item.id, data: item.data });
+      items.push(
+        isUnresolvedVideoPost(item.data)
+          ? { type: 'video_processing', id: item.id, data: item.data }
+          : { type: 'post', id: item.id, data: item.data },
+      );
     } else if (item.type === 'event') {
       items.push({ type: 'event', id: item.id, data: item.data });
     } else {
@@ -750,6 +768,21 @@ export default function HomeFeed() {
     )));
   }, []);
 
+  // Immediate local reflection of a Report+Block flow's block step
+  // succeeding — the reported item itself already shows its own
+  // Report+Block success placeholder (handled inside FeedPost/EventFeedCard,
+  // not here), so this only needs to drop the newly-blocked owner's *other*
+  // already-rendered content from the currently mounted Feed. The backend's
+  // existing excludeUserIds filtering remains authoritative on the next
+  // natural refetch — this is not a second persistent filtering system.
+  const handleUserBlockedFromReport = useCallback((blockedOwnerId: string) => {
+    setFeedMomentPosts((currentPosts) => currentPosts.filter((post) => post.authorId !== blockedOwnerId));
+    setFeedEvents((currentEvents) => currentEvents.filter((event) => event.userId !== blockedOwnerId));
+    setFeedReposts((currentReposts) => currentReposts.filter((share) => (
+      share.moment.userId !== blockedOwnerId && share.sharedBy?.id !== blockedOwnerId
+    )));
+  }, []);
+
   const handleDeletePost = useCallback((post: PostData) => {
     Alert.alert(
       'Delete post',
@@ -797,6 +830,49 @@ export default function HomeFeed() {
       acknowledgePendingVideoMomentUpload(upload.id);
     });
   }, [pendingVideoUploads]);
+
+  // Targeted background sync for the specific Feed video posts still stuck
+  // at queued/processing (freshly published, or picked up from a normal
+  // Feed load) — never a full Feed refetch, never a global poll.
+  const unresolvedVideoMomentIds = useMemo(
+    () => feedMomentPosts.filter(isUnresolvedVideoPost).map((post) => post.id),
+    [feedMomentPosts],
+  );
+
+  const handleVideoMomentResolved = useCallback((momentId: string, outcome: VideoMomentSyncOutcome) => {
+    if (outcome.type === 'not_found') {
+      setFeedMomentPosts((current) => current.filter((post) => post.id !== momentId));
+      return;
+    }
+
+    if (outcome.type === 'error_exhausted') {
+      // Surface the existing failed/retry placeholder instead of polling
+      // forever on a permanently broken status request.
+      setFeedMomentPosts((current) => current.map((post) => (
+        post.id === momentId
+          ? {
+              ...post,
+              mediaItems: post.mediaItems?.map((item) => (
+                item.type === 'video' && (item.processingStatus === 'queued' || item.processingStatus === 'processing')
+                  ? { ...item, processingStatus: 'failed' as const }
+                  : item
+              )),
+            }
+          : post
+      )));
+      return;
+    }
+
+    const mappedPost = mapMomentToPost(outcome.moment, { storageUrlResolver: getStorageFileUrl });
+
+    setFeedMomentPosts((current) => (
+      mappedPost
+        ? current.map((post) => (post.id === momentId ? mappedPost : post))
+        : current.filter((post) => post.id !== momentId)
+    ));
+  }, []);
+
+  usePendingVideoMomentSync(unresolvedVideoMomentIds, handleVideoMomentResolved);
 
   const hasAppliedEventFilters = useMemo(
     () => hasActiveEventFilters(appliedEventFilters),
@@ -928,15 +1004,22 @@ export default function HomeFeed() {
                     onAuthorFollowChange={handleAuthorFollowChange}
                     onInteractionChange={applyInteractionSummary}
                     onDeletePress={handleDeletePost}
+                    onAuthorBlocked={handleUserBlockedFromReport}
                     isActiveVideo={activeFeedVideoItemId === item.id}
                   />
                 );
               }
-              if (item.type === 'pending_video_upload') {
+              if (item.type === 'pending_video_upload' || item.type === 'video_processing') {
                 return <PendingVideoPostSkeleton />;
               }
               if (item.type === 'event') {
-                return <EventFeedCard event={item.data} onRepostSuccess={refreshFeedAfterRepost} />;
+                return (
+                  <EventFeedCard
+                    event={item.data}
+                    onRepostSuccess={refreshFeedAfterRepost}
+                    onHostBlocked={handleUserBlockedFromReport}
+                  />
+                );
               }
               if (item.type === 'repost') {
                 return (

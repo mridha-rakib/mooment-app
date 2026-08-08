@@ -2,9 +2,10 @@ import {
   Feather } from '@expo/vector-icons';
 import { CameraView,
   useCameraPermissions } from 'expo-camera';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React,
-  { useEffect, useRef, useState } from 'react';
+  { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,8 +26,14 @@ import CinematicButton from '@/components/ui/CinematicButton';
 import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-icons";
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { scanTicketQrCode } from '@/lib/payments';
-import { getMyProfileEvents, type EventResponse } from '@/lib/events';
+import { getMyProfileEvents } from '@/lib/events';
 import { safeBack } from '@/lib/navigation';
+import {
+  createInitialHostedEventsSnapshot,
+  resolveHostedEventsSnapshot,
+  takePendingScannerHostedEvents,
+  toScannerHostedEvents,
+} from '@/lib/scanQrHostedEvents';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const { width, height } = Dimensions.get('window');
@@ -41,32 +48,83 @@ export default function ScanQRScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [manualTicketNo, setManualTicketNo] = useState('');
-  const [hostEvents, setHostEvents] = useState<EventResponse[]>([]);
-  const [selectedEventId, setSelectedEventId] = useState('');
-  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
   const submitLockRef = useRef(false);
 
-  useEffect(() => {
-    let mounted = true;
+  const [initialHandoff] = useState(() => takePendingScannerHostedEvents());
+  const hasValidHandoff = Boolean(initialHandoff && initialHandoff.length > 0);
+  const [hostEventsSnapshot, setHostEventsSnapshot] = useState(() =>
+    createInitialHostedEventsSnapshot(initialHandoff));
 
-    void getMyProfileEvents()
-      .then(({ active }) => {
-        if (!mounted) return;
-        setHostEvents(active);
-        setSelectedEventId((current) => current || active[0]?.id || '');
-      })
-      .catch(() => {
-        if (mounted) setHostEvents([]);
-      })
-      .finally(() => {
-        if (mounted) setIsLoadingEvents(false);
+  const { status: hostEventsStatus, events: hostEvents, selectedEventId } = hostEventsSnapshot;
+
+  const isMountedRef = useRef(true);
+  const hasLoadedOnceRef = useRef(hasValidHandoff);
+  const activeFetchRef = useRef(false);
+  const fetchIdRef = useRef(0);
+  const isInitialFocusRef = useRef(true);
+
+  const fetchHostedEvents = useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
+    if (activeFetchRef.current) return;
+
+    activeFetchRef.current = true;
+    const fetchId = ++fetchIdRef.current;
+
+    if (showLoading) {
+      setHostEventsSnapshot((prev) => ({ ...prev, status: 'loading' }));
+    }
+
+    const outcome = await getMyProfileEvents()
+      .then(({ active }) => ({ ok: true as const, events: toScannerHostedEvents(active) }))
+      .catch(() => ({ ok: false as const }));
+
+    activeFetchRef.current = false;
+
+    if (!isMountedRef.current || fetchId !== fetchIdRef.current) {
+      return;
+    }
+
+    setHostEventsSnapshot((prev) => {
+      const next = resolveHostedEventsSnapshot(outcome, {
+        events: prev.events,
+        selectedEventId: prev.selectedEventId,
+        hasLoadedOnce: hasLoadedOnceRef.current,
       });
 
-    return () => {
-      mounted = false;
-    };
+      if (outcome.ok) {
+        hasLoadedOnceRef.current = true;
+      }
+
+      return next;
+    });
   }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    if (!hasValidHandoff) {
+      void fetchHostedEvents({ showLoading: true });
+    }
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [fetchHostedEvents, hasValidHandoff]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialFocusRef.current) {
+        isInitialFocusRef.current = false;
+        return;
+      }
+
+      void fetchHostedEvents({ showLoading: false });
+    }, [fetchHostedEvents]),
+  );
+
+  const handleRetryHostedEvents = useCallback(() => {
+    void fetchHostedEvents({ showLoading: true });
+  }, [fetchHostedEvents]);
 
   const checkInTicket = async (checkInCode: string, eventId?: string, manual = false) => {
     if (submitLockRef.current) return;
@@ -116,8 +174,15 @@ export default function ScanQRScreen() {
   const manualPanel = (
     <View style={[styles.manualPanel, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <Text style={styles.manualTitle}>Manual Ticket No</Text>
-      {isLoadingEvents ? (
+      {hostEventsStatus === 'loading' ? (
         <ActivityIndicator size="small" color="#FFFFFF" style={styles.eventLoader} />
+      ) : hostEventsStatus === 'error' ? (
+        <View style={styles.eventErrorRow}>
+          <Text style={styles.eventErrorText}>Couldn&apos;t load your hosted events.</Text>
+          <TouchableOpacity onPress={handleRetryHostedEvents} activeOpacity={0.8}>
+            <Text style={styles.eventRetryText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       ) : hostEvents.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventList}>
           {hostEvents.map((event) => {
@@ -126,7 +191,7 @@ export default function ScanQRScreen() {
               <TouchableOpacity
                 key={event.id}
                 style={[styles.eventChip, selected && styles.eventChipSelected]}
-                onPress={() => setSelectedEventId(event.id)}
+                onPress={() => setHostEventsSnapshot((prev) => ({ ...prev, selectedEventId: event.id }))}
                 disabled={isManualSubmitting}
                 activeOpacity={0.8}
               >
@@ -387,6 +452,9 @@ const styles = StyleSheet.create({
   eventChipText: { color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '600' },
   eventChipTextSelected: { color: '#111111' },
   noEventsText: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 10 },
+  eventErrorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  eventErrorText: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
+  eventRetryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
   manualInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   manualInput: {
     flex: 1,

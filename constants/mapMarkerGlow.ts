@@ -67,5 +67,8 @@ export const getMarkerGlowBaseOpacity = (existingBaseOpacity: number, checkedInC
  * The peak opacity a live marker's pulse brightens to, from a given base
  * opacity, capped at maxOpacity.
  */
-export const getLivePulsePeakOpacity = (baseOpacity: number): number =>
-  Math.min(baseOpacity * MAP_MARKER_GLOW_CONFIG.livePulsePeakMultiplier, MAP_MARKER_GLOW_CONFIG.maxOpacity);
+export const getLivePulsePeakOpacity = (baseOpacity: number): number => {
+  "worklet";
+
+  return Math.min(baseOpacity * MAP_MARKER_GLOW_CONFIG.livePulsePeakMultiplier, MAP_MARKER_GLOW_CONFIG.maxOpacity);
+};

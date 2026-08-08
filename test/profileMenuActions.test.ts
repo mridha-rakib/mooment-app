@@ -40,5 +40,14 @@ test("profile report handoff closes the menu before opening report", () => {
 test("shared more menu preserves existing default block label", () => {
   assert.match(moreMenuSource, /blockLabel = "Block"/);
   assert.match(moreMenuSource, /\{blockLabel\}/);
-  assert.match(moreMenuSource, /accessibilityState=\{reportDisabled \? \{ disabled: true \} : undefined\}/);
+  // reportDisabled (e.g. blocked-profile gating) and reported (already-reported
+  // state) both disable the row — see ReportedContentCard/MoreMenuModal "Reported" support.
+  assert.match(moreMenuSource, /accessibilityState=\{\(reportDisabled \|\| reported\) \? \{ disabled: true \} : undefined\}/);
+});
+
+test("more menu supports an already-reported filled-flag state distinct from reportDisabled", () => {
+  assert.match(moreMenuSource, /reported\?:\s*boolean;/);
+  assert.match(moreMenuSource, /reported = false/);
+  assert.match(moreMenuSource, /if \(reportDisabled \|\| reported\)/);
+  assert.match(moreMenuSource, /\{reported \? "Reported" : "Report"\}/);
 });

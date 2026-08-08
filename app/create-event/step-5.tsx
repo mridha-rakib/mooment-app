@@ -129,7 +129,11 @@ export default function CreateEventStep5() {
         <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-4')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
-          <View style={{ width: 60 }} />
+          <TouchableOpacity onPress={handlePrimaryAction} disabled={isPreviewing}>
+            <Text style={[styles.saveDraft, { color: colors.primary, opacity: isPreviewing ? 0.5 : 1 }]}>
+              {isPreviewing ? 'Saving…' : 'Save & Exit'}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
             <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>

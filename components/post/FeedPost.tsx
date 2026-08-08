@@ -17,6 +17,8 @@ import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFe
 import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
 import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
+import { retryBlockOnly, submitReportWithOptionalBlock } from '@/lib/reportBlockFlow';
+import { submitReport } from '@/lib/reports';
 import { blockUser, followUser, unfollowUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
@@ -24,6 +26,7 @@ import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
 import UserAvatar from '../ui/UserAvatar';
 import MoreMenuModal from "./MoreMenuModal";
+import ReportedContentCard, { type ReportedContentOutcome } from './ReportedContentCard';
 import HashtagText from './HashtagText';
 import PostInteractionBar from './PostInteractionBar';
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -175,6 +178,8 @@ export type PostData = {
   isExpandable?: boolean;
   isLiked?: boolean;
   isSaved?: boolean;
+  // Current viewer only — backend-authoritative, survives refresh/app restart.
+  hasReported?: boolean;
 };
 
 const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { uri: string; isActive: boolean }) {
@@ -1230,6 +1235,7 @@ export default function FeedPost({
   onInteractionChange,
   onSaveChange,
   onDeletePress,
+  onAuthorBlocked,
   isOwnPost = false,
   embedded = false,
   isActiveVideo = false,
@@ -1242,6 +1248,10 @@ export default function FeedPost({
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   onSaveChange?: (postId: string, isSaved: boolean) => void;
   onDeletePress?: (post: PostData) => void;
+  // Fired once a Report+Block flow's block step actually succeeds — lets the
+  // Feed screen drop this author's *other* already-rendered items from the
+  // currently mounted list. This card's own slot is handled locally below.
+  onAuthorBlocked?: (authorId: string) => void;
   isOwnPost?: boolean;
   embedded?: boolean;
   isActiveVideo?: boolean;
@@ -1253,11 +1263,26 @@ export default function FeedPost({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
+  const isReportSubmittingRef = useRef(false);
+  const [hasReported, setHasReported] = useState(Boolean(post.hasReported));
+  const [reportOutcome, setReportOutcome] = useState<ReportedContentOutcome | null>(null);
+  const [reportedOwnerId, setReportedOwnerId] = useState<string | null>(null);
+  const [isReportedContentRevealed, setIsReportedContentRevealed] = useState(false);
+  const [isBlockRetrying, setIsBlockRetrying] = useState(false);
+  const isBlockRetryingRef = useRef(false);
   const [showFullScreenMedia, setShowFullScreenMedia] = useState(false);
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(Boolean(post.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    if (post.hasReported) {
+      setHasReported(true);
+    }
+  }, [post.hasReported]);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const moreBtnRef = useRef<View>(null);
   const mediaScrollRef = useRef<ScrollView>(null);
@@ -1540,6 +1565,111 @@ export default function FeedPost({
     );
   };
 
+  const handleOpenReport = () => {
+    if (hasReported) {
+      return;
+    }
+
+    const authorId = post.authorId;
+
+    if (!authorId || !MONGO_OBJECT_ID_PATTERN.test(authorId) || !MONGO_OBJECT_ID_PATTERN.test(post.id)) {
+      Alert.alert('Unable to report post', 'This post can’t be reported right now.');
+      return;
+    }
+
+    setShowReportModal(true);
+  };
+
+  const handleReportReasonSelected = (reason: string) => {
+    setReportReason(reason);
+    setShowReportModal(false);
+    setTimeout(() => setShowReportDetailsModal(true), 300);
+  };
+
+  const handleReportDetailsClose = () => {
+    if (isReportSubmitting) {
+      return;
+    }
+
+    setShowReportDetailsModal(false);
+    setReportReason(null);
+  };
+
+  const handleSubmitReport = async (details: string, alsoBlock: boolean) => {
+    const authorId = post.authorId;
+
+    if (isReportSubmittingRef.current || !reportReason || !authorId) {
+      return;
+    }
+
+    isReportSubmittingRef.current = true;
+    setIsReportSubmitting(true);
+
+    try {
+      const outcome = await submitReportWithOptionalBlock({
+        payload: {
+          reportedUserId: authorId,
+          targetType: 'post',
+          targetId: post.id,
+          reason: reportReason,
+          details: details.trim() || null,
+        },
+        alsoBlock,
+        submitReportFn: submitReport,
+        blockUserFn: blockUser,
+      });
+
+      setShowReportDetailsModal(false);
+      setReportReason(null);
+      setHasReported(true);
+
+      if (outcome.kind === 'already_reported') {
+        Alert.alert('Already reported', 'You have already reported this post.');
+        return;
+      }
+
+      setReportedOwnerId(authorId);
+      setIsReportedContentRevealed(false);
+      setReportOutcome(outcome.kind);
+
+      if (outcome.kind === 'report_block_success') {
+        onAuthorBlocked?.(authorId);
+      }
+    } catch (error) {
+      Alert.alert('Unable to submit report', getAuthErrorMessage(error, 'Please try again.'));
+      throw error;
+    } finally {
+      isReportSubmittingRef.current = false;
+      setIsReportSubmitting(false);
+    }
+  };
+
+  const handleShowReportedContent = () => {
+    setIsReportedContentRevealed(true);
+  };
+
+  const handleRetryBlockOwner = async () => {
+    if (isBlockRetryingRef.current || !reportedOwnerId) {
+      return;
+    }
+
+    isBlockRetryingRef.current = true;
+    setIsBlockRetrying(true);
+
+    try {
+      const result = await retryBlockOnly({ ownerId: reportedOwnerId, blockUserFn: blockUser });
+
+      if (result === 'blocked') {
+        setReportOutcome('report_block_success');
+        setIsReportedContentRevealed(false);
+        onAuthorBlocked?.(reportedOwnerId);
+      }
+    } finally {
+      isBlockRetryingRef.current = false;
+      setIsBlockRetrying(false);
+    }
+  };
+
   const handleEventPress = (eventId = resolvedEventId) => {
     const targetEventId = eventId?.trim();
 
@@ -1575,6 +1705,18 @@ export default function FeedPost({
   const handleTaggedEventPress = (taggedEvent: NonNullable<PostContextNode['taggedEvent']>) => {
     handleEventPress(taggedEvent.id ?? null);
   };
+
+  if (reportOutcome && !isReportedContentRevealed) {
+    return (
+      <ReportedContentCard
+        contentLabel="post"
+        outcome={reportOutcome}
+        onShow={handleShowReportedContent}
+        onRetryBlock={handleRetryBlockOwner}
+        isRetryingBlock={isBlockRetrying}
+      />
+    );
+  }
 
   if (isHidden) {
     return null;
@@ -1919,7 +2061,8 @@ export default function FeedPost({
           onClose={() => setShowMoreMenu(false)}
           showDelete={canDeletePost}
           deleteLabel={post.postType === 'event' ? 'Cancel Event' : 'Delete'}
-          onReport={!isPostByCurrentUser ? () => setShowReportModal(true) : undefined}
+          onReport={!isPostByCurrentUser ? handleOpenReport : undefined}
+          reported={hasReported}
           onSave={!isPostByCurrentUser ? handleSave : undefined}
           isSaved={!isPostByCurrentUser ? isSaved : undefined}
           onBlock={!isPostByCurrentUser && Boolean(post.authorId) ? handleBlock : undefined}
@@ -1930,21 +2073,15 @@ export default function FeedPost({
         <ReportModal
           visible={showReportModal}
           onClose={() => setShowReportModal(false)}
-          onReport={(reason) => {
-            console.log('Reported for:', reason);
-            setShowReportModal(false);
-            // Small delay to ensure the first modal closes before opening the second
-            setTimeout(() => setShowReportDetailsModal(true), 300);
-          }}
+          onReport={handleReportReasonSelected}
         />
 
         <ReportDetailsModal
           visible={showReportDetailsModal}
-          onClose={() => setShowReportDetailsModal(false)}
-          onDone={(details) => {
-            console.log('Report details:', details);
-            // Final submission logic here
-          }}
+          onClose={handleReportDetailsClose}
+          onDone={handleSubmitReport}
+          isSubmitting={isReportSubmitting}
+          showBlockToggle
         />
 
         <FullScreenMediaModal

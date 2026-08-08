@@ -40,7 +40,7 @@ import {
 import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
-import { followUser, unfollowUser } from "@/lib/users";
+import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { toggleMomentReaction, toggleMomentSave, shareMoment, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import CommentsModal from "@/components/post/CommentsModal";
 import ShareModal from "@/components/post/ShareModal";
@@ -49,7 +49,8 @@ import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
-import { createReport } from "@/lib/reports";
+import { submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
+import { submitReport } from "@/lib/reports";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import type { EventCategory } from "@/constants/eventCategories";
@@ -551,6 +552,7 @@ const EventScreen = () => {
   const [pendingCategoryDestination, setPendingCategoryDestination] = useState<EventCategory | null>(null);
   const [isCategoryDestinationNavigating, setIsCategoryDestinationNavigating] = useState(false);
   const [localIsSaved, setLocalIsSaved] = useState(false);
+  const [hasReportedEvent, setHasReportedEvent] = useState(false);
   const [isSavePending, setIsSavePending] = useState(false);
   const [footerHeight, setFooterHeight] = useState(0);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
@@ -953,6 +955,9 @@ const EventScreen = () => {
     setLocalSharesCount(eventStats?.sharesCount ?? 0);
     setLocalIsLiked(Boolean(eventStats?.isLiked));
     setLocalIsSaved(Boolean(eventStats?.isSaved));
+    if (eventStats?.hasReported) {
+      setHasReportedEvent(true);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event]);
 
@@ -1022,7 +1027,7 @@ const EventScreen = () => {
   const handleReportPress = () => {
     setMenuVisible(false);
 
-    if (!event || isDraftPreview || !canReportEvent) {
+    if (!event || isDraftPreview || !canReportEvent || hasReportedEvent) {
       return;
     }
 
@@ -1046,7 +1051,7 @@ const EventScreen = () => {
     setReportReason(null);
   };
 
-  const handleSubmitEventReport = async (details: string) => {
+  const handleSubmitEventReport = async (details: string, alsoBlock: boolean) => {
     if (isReportSubmittingRef.current || !reportReason || !event) {
       return;
     }
@@ -1055,15 +1060,44 @@ const EventScreen = () => {
     setIsReportSubmitting(true);
 
     try {
-      await createReport({
-        reportedUserId: event.userId,
-        targetType: "event",
-        targetId: event.id,
-        reason: reportReason,
-        details: details.trim() || null,
+      const outcome = await submitReportWithOptionalBlock({
+        payload: {
+          reportedUserId: event.userId,
+          targetType: "event",
+          targetId: event.id,
+          reason: reportReason,
+          details: details.trim() || null,
+        },
+        alsoBlock,
+        submitReportFn: submitReport,
+        blockUserFn: blockUser,
       });
+
       setReportDetailsVisible(false);
       setReportReason(null);
+      setHasReportedEvent(true);
+
+      if (outcome.kind === "already_reported") {
+        Alert.alert("Already reported", "You have already reported this event.");
+        return;
+      }
+
+      if (outcome.kind === "report_block_success") {
+        Alert.alert(
+          "Report submitted",
+          "Thanks for letting us know. We've also blocked this user for you.",
+        );
+        return;
+      }
+
+      if (outcome.kind === "report_block_failed") {
+        Alert.alert(
+          "Report submitted",
+          "Thanks for letting us know, but we couldn't block this user. You can block them from their profile.",
+        );
+        return;
+      }
+
       Alert.alert(
         "Report submitted",
         "Thanks for letting us know. Our team will review this event.",
@@ -2222,15 +2256,19 @@ const EventScreen = () => {
               </>
             ) : (
               <>
-                {canReportEvent && (
+                {(canReportEvent || hasReportedEvent) && (
                   <>
                     <TouchableOpacity
                       style={styles.menuItem}
                       onPress={handleReportPress}
                       activeOpacity={0.7}
+                      disabled={hasReportedEvent}
+                      accessibilityState={hasReportedEvent ? { disabled: true } : undefined}
                     >
-                      <HugeiconsIcon icon={Flag01Icon} size={20} color="#FFF" />
-                      <Text style={[styles.menuItemText, { color: "#FFF" }]}>Report</Text>
+                      <HugeiconsIcon icon={Flag01Icon} size={20} color={hasReportedEvent ? colors.primary : "#FFF"} />
+                      <Text style={[styles.menuItemText, { color: hasReportedEvent ? colors.primary : "#FFF" }]}>
+                        {hasReportedEvent ? "Reported" : "Report"}
+                      </Text>
                     </TouchableOpacity>
 
                     <View style={styles.menuSeparator} />
@@ -2582,6 +2620,7 @@ const EventScreen = () => {
         onClose={handleReportDetailsClose}
         onDone={handleSubmitEventReport}
         isSubmitting={isReportSubmitting}
+        showBlockToggle
       />
 
       <ShareModal

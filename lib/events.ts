@@ -198,6 +198,8 @@ export type EventResponse = {
   isLiked?: boolean;
   isSaved?: boolean;
   canReport?: boolean;
+  // Current viewer only — backend-authoritative, survives refresh/app restart.
+  hasReported?: boolean;
   status: EventStatus;
   crowdStatus?: CrowdStatus | null;
   /**

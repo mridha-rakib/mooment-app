@@ -58,14 +58,16 @@ export default function HomeHeader({
         </View>
 
         <View style={styles.headerIcons}>
-          <CinematicButton
-            icon={Search01Icon}
-            onPress={() => router.push('/discover-screen/search')}
-            style={styles.iconBtn}
-            width={38}
-            height={38}
-            borderRadius={19}
-          />
+          {selectedType !== 'Map' && (
+            <CinematicButton
+              icon={Search01Icon}
+              onPress={() => router.push('/discover-screen/search')}
+              style={styles.iconBtn}
+              width={38}
+              height={38}
+              borderRadius={19}
+            />
+          )}
           <CinematicButton
             icon={FilterHorizontalIcon}
             onPress={() => setFilterVisible(true)}

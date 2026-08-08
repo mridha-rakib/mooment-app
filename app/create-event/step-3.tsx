@@ -65,6 +65,7 @@ export default function CreateEventStep3() {
         ? '#F59E0B'
         : colors.textSecondary;
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingAndExiting, setIsSavingAndExiting] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
   const isAdvancingRef = useRef(false);
@@ -182,8 +183,49 @@ export default function CreateEventStep3() {
     Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
   };
 
+  const handleSaveAndExit = async () => {
+    if (isSaving || isSavingAndExiting) return;
+
+    const result = createEventStepThreeSchema.safeParse(
+      buildStepThreeValidationLocation(draftLocation, venue, address),
+    );
+
+    const nextErrors: CreateEventStepThreeErrors = {};
+
+    if (!result.success) {
+      nextErrors.location = result.error.errors[0]?.message;
+    }
+
+    if (additionalInfo.length > ADDITIONAL_INFO_MAX) {
+      nextErrors.additionalInfo = `Additional info cannot exceed ${ADDITIONAL_INFO_MAX} characters`;
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    setErrors({});
+    persistStepThree();
+    setIsSavingAndExiting(true);
+
+    try {
+      const event = await saveDraft();
+      if (isMountedRef.current) {
+        router.replace({ pathname: '/event-screen/event', params: { eventId: event.id, mode: 'host' } });
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert('Unable to save changes', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSavingAndExiting(false);
+      }
+    }
+  };
+
   const handleNext = async () => {
-    if (isSaving || isAdvancingRef.current) return;
+    if (isSaving || isSavingAndExiting || isAdvancingRef.current) return;
 
     const result = createEventStepThreeSchema.safeParse(
       buildStepThreeValidationLocation(draftLocation, venue, address),
@@ -251,7 +293,11 @@ export default function CreateEventStep3() {
         <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event/step-2')} />
         <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
         {isEditingPublished ? (
-          <View style={{ width: 60 }} />
+          <TouchableOpacity onPress={handleSaveAndExit} disabled={isSaving || isSavingAndExiting}>
+            <Text style={[styles.saveDraft, { color: colors.primary, opacity: (isSaving || isSavingAndExiting) ? 0.5 : 1 }]}>
+              {isSavingAndExiting ? 'Saving…' : 'Save & Exit'}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
             <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
@@ -366,7 +412,7 @@ export default function CreateEventStep3() {
           <TouchableOpacity
             style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
             onPress={handleNext}
-            disabled={isSaving}
+            disabled={isSaving || isSavingAndExiting}
           >
             <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
           </TouchableOpacity>
