@@ -157,9 +157,21 @@ const buildFeedItems = (
   pendingVideoUploads: PendingVideoMomentUpload[],
 ): FeedItem[] => {
   type ContentItem =
-    | { type: 'post'; id: string; data: PostData; sortTime: number }
-    | { type: 'event'; id: string; data: EventResponse; sortTime: number }
-    | { type: 'repost'; id: string; data: MomentTimelineItem; sortTime: number };
+    | { type: 'post'; id: string; data: PostData; sortTime: number; smartFeedScore?: number }
+    | { type: 'event'; id: string; data: EventResponse; sortTime: number; smartFeedScore?: number }
+    | { type: 'repost'; id: string; data: MomentTimelineItem; sortTime: number; smartFeedScore?: number };
+
+  const compareContentItems = (left: ContentItem, right: ContentItem) => {
+    if (typeof left.smartFeedScore === 'number' && typeof right.smartFeedScore === 'number') {
+      const scoreDelta = right.smartFeedScore - left.smartFeedScore;
+
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+    }
+
+    return right.sortTime - left.sortTime;
+  };
 
   const contentItems: ContentItem[] = [
     ...posts.map((post) => ({
@@ -167,20 +179,23 @@ const buildFeedItems = (
       id: `moment-${post.id}`,
       data: post,
       sortTime: post.createdAt ? new Date(post.createdAt).getTime() : 0,
+      smartFeedScore: post.smartFeedScore,
     })),
     ...events.map((event) => ({
       type: 'event' as const,
       id: `event-${event.id}`,
       data: event,
       sortTime: new Date(event.createdAt).getTime(),
+      smartFeedScore: event.smartFeedScore,
     })),
     ...reposts.map((share) => ({
       type: 'repost' as const,
       id: `repost-${share.id}`,
       data: share,
       sortTime: new Date(share.createdAt).getTime(),
+      smartFeedScore: share.smartFeedScore,
     })),
-  ].sort((a, b) => b.sortTime - a.sortTime);
+  ].sort(compareContentItems);
 
   const items: FeedItem[] = pendingVideoUploads
     .filter((upload) => upload.status !== 'succeeded')
@@ -534,9 +549,16 @@ export default function HomeFeed() {
     setIsFeedLoading(true);
     try {
       const eventFilters = appliedEventFiltersRef.current;
+      const eventRequestParams = buildEventFilterRequestParams(eventFilters, { limit: 100, audience });
       const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
-        getFeedMoments({ hashtags: eventFilters.hashtags, audience }),
-        getFeedEvents(buildEventFilterRequestParams(eventFilters, { limit: 100, audience })),
+        getFeedMoments({
+          hashtags: eventFilters.hashtags,
+          audience,
+          latitude: eventRequestParams.latitude,
+          longitude: eventRequestParams.longitude,
+          radiusKm: eventRequestParams.radiusKm,
+        }),
+        getFeedEvents(eventRequestParams),
         getFeedReposts(50, audience),
       ]);
 

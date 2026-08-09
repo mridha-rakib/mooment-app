@@ -129,6 +129,23 @@ export type EventHost = {
   isFollowing?: boolean;
 };
 
+export type SmartFeedSocialContext = {
+  previewUsers: {
+    id: string;
+    name: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  }[];
+  totalMutualReactions: number;
+};
+
+export type SmartFeedMetadata = {
+  nearbyScore: number;
+  freshnessScore: number;
+  socialScore: number;
+  finalScore: number;
+};
+
 export type EventMemberResponse = {
   id: string;
   name: string;
@@ -238,6 +255,9 @@ export type EventResponse = {
       avatarKey?: string | null;
     }[];
   };
+  socialContext?: SmartFeedSocialContext;
+  smartFeed?: SmartFeedMetadata;
+  smartFeedScore?: number;
   publishedAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;

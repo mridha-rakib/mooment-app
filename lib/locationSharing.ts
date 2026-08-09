@@ -344,15 +344,24 @@ export const getCurrentLocationForSharing = async (): Promise<CurrentLocationPay
   const Location = await loadLocationModule();
   await requestLocationSharingPermissionForModule(Location);
 
-  try {
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+  let position: LocationPosition | "timeout";
 
-    return toCurrentLocationPayload(position);
+  try {
+    position = await withTimeout(
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }),
+      FRESH_LOCATION_TIMEOUT_MS,
+    );
   } catch {
     throw new Error("Unable to read your current location. Check Location Services and try again.");
   }
+
+  if (position === "timeout") {
+    throw new Error("Unable to read your current location. Check Location Services and try again.");
+  }
+
+  return toCurrentLocationPayload(position);
 };
 
 export const getCurrentLocationIfPermissionGranted = async (): Promise<CurrentLocationPayload | null> => {

@@ -6,7 +6,7 @@ import {
 } from '@/hooks/useTheme';
 import type { DirectMessageConversationResponse, GroupConversationResponse } from '@/lib/chat';
 import { getDirectMessageConversations, getGroupConversations } from '@/lib/chat';
-import { createRealtimeSocket } from '@/lib/realtime';
+import { subscribe as subscribeRealtime } from '@/lib/socketClient';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatUnreadStore } from '@/stores/chatUnreadStore';
 import {
@@ -22,7 +22,6 @@ import React, {
 } from 'react';
 import {
     ActivityIndicator,
-    AppState,
     Dimensions,
     FlatList,
     RefreshControl,
@@ -148,7 +147,6 @@ export default function MessagesScreen() {
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
   const currentUserIdRef = useRef<string | undefined>(currentUser?.id);
   const activeDirectConversationIdRef = useRef<string | null>(null);
   const activeDirectConversationId = useChatUnreadStore((state) => state.activeDirectConversationId);
@@ -189,36 +187,40 @@ export default function MessagesScreen() {
     }, [setDirectUnreadCountsFromConversations]),
   );
 
+  const isGroupsMountedRef = useRef(true);
+
   useEffect(() => {
-    let isMounted = true;
-
-    const loadGroups = async () => {
-      setIsGroupsLoading(true);
-      setGroupsError(null);
-
-      try {
-        const groups = await getGroupConversations();
-
-        if (isMounted) {
-          setGroupConversations(groups.map(toGroupConversationData));
-        }
-      } catch {
-        if (isMounted) {
-          setGroupsError('Unable to load groups.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsGroupsLoading(false);
-        }
-      }
-    };
-
-    void loadGroups();
-
+    isGroupsMountedRef.current = true;
     return () => {
-      isMounted = false;
+      isGroupsMountedRef.current = false;
     };
   }, []);
+
+  const loadGroups = useCallback(async () => {
+    setIsGroupsLoading(true);
+    setGroupsError(null);
+
+    try {
+      const groups = await getGroupConversations();
+      if (isGroupsMountedRef.current) {
+        setGroupConversations(groups.map(toGroupConversationData));
+      }
+    } catch {
+      if (isGroupsMountedRef.current) {
+        setGroupsError('Unable to load groups.');
+      }
+    } finally {
+      if (isGroupsMountedRef.current) {
+        setIsGroupsLoading(false);
+      }
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadGroups();
+    }, [loadGroups]),
+  );
 
   useEffect(() => {
     currentUserIdRef.current = currentUser?.id;
@@ -231,8 +233,7 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!accessToken) return;
 
-    const socket = createRealtimeSocket({
-      accessToken,
+    const unsubscribe = subscribeRealtime({
       onUserOnline: (userId) => {
         setDmConversations((prev) =>
           prev.map((c) => (c.id === userId ? { ...c, isOnline: true } : c)),
@@ -265,24 +266,28 @@ export default function MessagesScreen() {
           return [conv, ...updated];
         });
       },
-    });
+      onGroupMessage: (message) => {
+        setGroupConversations((prev) => {
+          const idx = prev.findIndex((c) => c.id === message.groupId);
+          if (idx === -1) return prev;
 
-    socketRef.current = socket;
+          const updated = [...prev];
+          const conv = { ...updated[idx] };
+          conv.lastMessage = formatLastMessage(message.text);
+          conv.time = formatConversationTime(message.createdAt);
+          updated.splice(idx, 1);
+          return [conv, ...updated];
+        });
+      },
+      onReconnected: () => {
+        void loadGroups();
+      },
+    });
 
     return () => {
-      socket.close();
-      socketRef.current = null;
+      unsubscribe();
     };
-  }, [accessToken]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && socketRef.current) {
-        socketRef.current.reconnect();
-      }
-    });
-    return () => subscription.remove();
-  }, []);
+  }, [accessToken, loadGroups]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);

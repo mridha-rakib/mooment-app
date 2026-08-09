@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { create } from "zustand";
 import { api, configureApiAuth } from "@/lib/api";
 import { getAuthErrorDetails, getAuthErrorMessage } from "@/lib/authErrors";
+import { removeFcmToken } from "@/lib/notifications";
 
 const AUTH_TOKEN_KEY = "xenog.mobile.accessToken";
 const AUTH_REFRESH_TOKEN_KEY = "xenog.mobile.refreshToken";
@@ -583,6 +584,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       if (get().accessToken) {
+        // Best-effort: stop this device from receiving push for the account
+        // being logged out. Must happen before /auth/logout clears the
+        // session below (the endpoint requires auth), and must never block
+        // or fail logout — no permission granted, no token ever registered,
+        // and network errors are all expected, common cases here.
+        try {
+          const Notifications = await import("expo-notifications");
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          const token = tokenData.data as string | undefined;
+          if (token) {
+            await removeFcmToken(token);
+          }
+        } catch {
+          // Ignore — see comment above.
+        }
+
         await api.post("/auth/logout", null, {
           skipAuthRedirect: true,
           skipAuthRefresh: true,

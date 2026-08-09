@@ -1,5 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/stores/authStore";
-import { createRealtimeSocket } from "@/lib/realtime";
+import { subscribe as subscribeRealtime } from "@/lib/socketClient";
 import {
   getNotifications,
   markAllNotificationsRead,
@@ -71,8 +71,6 @@ export default function Explore() {
   const decrementUnread = useNotificationStore((state) => state.decrementUnread);
   const clearUnread = useNotificationStore((state) => state.clearUnread);
 
-  const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
-
   const loadNotifications = useCallback(async () => {
     try {
       const data = await getNotifications();
@@ -94,12 +92,12 @@ export default function Explore() {
     loadNotifications().finally(() => setIsLoading(false));
   }, [loadNotifications]);
 
-  // Real-time WebSocket connection
+  // Subscribes to the single shared Socket.IO connection (app/lib/socketClient.ts)
+  // instead of opening its own — the connection itself lives at the app root.
   useEffect(() => {
     if (!accessToken) return;
 
-    const socket = createRealtimeSocket({
-      accessToken,
+    const unsubscribe = subscribeRealtime({
       onNotification: (notification) => {
         setNotifications((prev) => [notification, ...prev]);
       },
@@ -115,15 +113,15 @@ export default function Explore() {
         setNotifications((prev) => prev.map((notification) => ({ ...notification, isRead: true })));
         setUnreadCount(unreadCount);
       },
+      onReconnected: () => {
+        void loadNotifications();
+      },
     });
 
-    socketRef.current = socket;
-
     return () => {
-      socket.close();
-      socketRef.current = null;
+      unsubscribe();
     };
-  }, [accessToken, setUnreadCount]);
+  }, [accessToken, loadNotifications, setUnreadCount]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);

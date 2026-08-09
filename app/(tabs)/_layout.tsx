@@ -1,6 +1,6 @@
 import { getDirectMessageConversations } from "@/lib/chat";
 import { getUnreadNotificationCount } from "@/lib/notifications";
-import { createRealtimeSocket } from "@/lib/realtime";
+import { subscribe as subscribeRealtime } from "@/lib/socketClient";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatUnreadStore } from "@/stores/chatUnreadStore";
@@ -37,7 +37,6 @@ export default function TabLayout() {
   const clearAllDirectUnread = useChatUnreadStore((state) => state.clearAllDirectUnread);
   const incrementDirectUnread = useChatUnreadStore((state) => state.incrementDirectUnread);
   const setDirectUnreadCountsFromConversations = useChatUnreadStore((state) => state.setDirectUnreadCountsFromConversations);
-  const socketRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -48,28 +47,36 @@ export default function TabLayout() {
 
     let isMounted = true;
 
-    getUnreadNotificationCount()
-      .then((count) => {
-        if (isMounted) {
-          setUnreadCount(count);
-        }
-      })
-      .catch(() => {
-        // Keep the current badge value if the count request fails.
-      });
+    const refreshBadgeState = () => {
+      getUnreadNotificationCount()
+        .then((count) => {
+          if (isMounted) {
+            setUnreadCount(count);
+          }
+        })
+        .catch(() => {
+          // Keep the current badge value if the count request fails.
+        });
 
-    getDirectMessageConversations()
-      .then((conversations) => {
-        if (isMounted) {
-          setDirectUnreadCountsFromConversations(conversations);
-        }
-      })
-      .catch(() => {
-        // Keep the current chat badge value if the conversation request fails.
-      });
+      getDirectMessageConversations()
+        .then((conversations) => {
+          if (isMounted) {
+            setDirectUnreadCountsFromConversations(conversations);
+          }
+        })
+        .catch(() => {
+          // Keep the current chat badge value if the conversation request fails.
+        });
+    };
 
-    const socket = createRealtimeSocket({
-      accessToken,
+    refreshBadgeState();
+
+    // Global subscription on the single shared connection — this fires
+    // regardless of which screen is currently open, so the DM badge stays
+    // accurate even while browsing Explore/Live/etc. Group messages don't
+    // have an unread-badge concept yet, but a reconnect still triggers a
+    // fresh REST fetch below so nothing is silently missed.
+    const unsubscribe = subscribeRealtime({
       onDirectMessage: (message) => {
         const currentUserId = useAuthStore.getState().user?.id;
 
@@ -88,16 +95,12 @@ export default function TabLayout() {
       onNotificationsReadAll: ({ unreadCount: nextUnreadCount }) => {
         setUnreadCount(nextUnreadCount);
       },
+      onReconnected: refreshBadgeState,
     });
-
-    socketRef.current = socket;
 
     return () => {
       isMounted = false;
-      socket.close();
-      if (socketRef.current === socket) {
-        socketRef.current = null;
-      }
+      unsubscribe();
     };
   }, [
     accessToken,

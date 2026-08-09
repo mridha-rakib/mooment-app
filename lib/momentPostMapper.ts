@@ -75,6 +75,22 @@ const hasText = (value?: string | null) => Boolean(value?.trim());
 const getAuthorDisplayName = (author: MomentAuthor) =>
   author.name?.trim() || author.username?.trim() || "Mooment user";
 
+const formatLikedByContext = (moment: Moment) => {
+  const previewNames = (moment.socialContext?.previewUsers ?? [])
+    .map((user) => user.name?.trim())
+    .filter((name): name is string => Boolean(name));
+  const total = moment.socialContext?.totalMutualReactions ?? 0;
+
+  if (previewNames.length === 0 || total <= 0) {
+    return undefined;
+  }
+
+  const remaining = Math.max(0, total - previewNames.length);
+  const names = previewNames.join(", ");
+
+  return remaining > 0 ? `${names}... +${remaining} more` : names;
+};
+
 const resolveAuthorAvatar = (
   author?: MomentAuthor | null,
   storageUrlResolver?: (storageKey: string, contentType?: string | null) => string,
@@ -183,6 +199,8 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     isLiked: moment.isLiked,
     isSaved: moment.isSaved,
     hasReported: moment.hasReported,
+    likedBy: formatLikedByContext(moment),
+    smartFeedScore: moment.smartFeedScore,
   };
 
   if (audioMedia && visualMedia.length === 0) {

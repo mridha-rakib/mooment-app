@@ -39,6 +39,23 @@ export type MomentAuthor = {
   isFollowing?: boolean;
 };
 
+export type SmartFeedSocialContext = {
+  previewUsers: {
+    id: string;
+    name: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  }[];
+  totalMutualReactions: number;
+};
+
+export type SmartFeedMetadata = {
+  nearbyScore: number;
+  freshnessScore: number;
+  socialScore: number;
+  finalScore: number;
+};
+
 export type Moment = {
   id: string;
   userId: string;
@@ -60,6 +77,9 @@ export type Moment = {
   isSaved: boolean;
   // Current viewer only — backend-authoritative, survives refresh/app restart.
   hasReported?: boolean;
+  socialContext?: SmartFeedSocialContext;
+  smartFeed?: SmartFeedMetadata;
+  smartFeedScore?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +94,7 @@ export type MomentTimelineItem = {
   taggedFriends?: MomentAuthor[];
   sharedBy?: MomentAuthor | null;
   originalItem?: { type: "post" | "event"; id: string };
+  smartFeedScore?: number;
 };
 
 export type RepostPayload = {
@@ -158,12 +179,22 @@ export const getMyMoments = async (): Promise<Moment[]> => {
   return (response.data?.data?.moments ?? []) as Moment[];
 };
 
-export const getFeedMoments = async (options: { hashtags?: string[]; limit?: number; audience?: FeedAudience } = {}): Promise<Moment[]> => {
+export const getFeedMoments = async (options: {
+  hashtags?: string[];
+  limit?: number;
+  audience?: FeedAudience;
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+} = {}): Promise<Moment[]> => {
   const response = await api.get("/moments", {
     params: {
       ...(options.hashtags?.length ? { hashtags: options.hashtags.join(',') } : {}),
       ...(options.limit ? { limit: options.limit } : {}),
       ...(options.audience ? { audience: options.audience } : {}),
+      ...(typeof options.latitude === "number" ? { latitude: options.latitude } : {}),
+      ...(typeof options.longitude === "number" ? { longitude: options.longitude } : {}),
+      ...(typeof options.radiusKm === "number" ? { radiusKm: options.radiusKm } : {}),
     },
   });
 

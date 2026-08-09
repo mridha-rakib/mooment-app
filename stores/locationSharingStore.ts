@@ -60,6 +60,10 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
   error: null,
 
   enableSharing: async () => {
+    if (get().isSyncing) {
+      return;
+    }
+
     const generation = sharingGeneration + 1;
     sharingGeneration = generation;
     set({ error: null, isSyncing: true });
@@ -73,7 +77,11 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
         },
         generation,
       );
-      set({ error: null, isSyncing: false });
+
+      if (generation === sharingGeneration) {
+        set({ error: null, isSyncing: false });
+      }
+
       void get().startWatching({ syncImmediately: false }).catch(() => undefined);
     } catch (error) {
       if (generation === sharingGeneration) {
@@ -88,21 +96,41 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
   },
 
   disableSharing: async () => {
-    sharingGeneration += 1;
+    if (get().isSyncing) {
+      return;
+    }
+
+    const generation = sharingGeneration + 1;
+    sharingGeneration = generation;
     removeLocationSubscription();
     set({ error: null, isSyncing: true, isWatching: false });
 
     try {
-      await persistSharedLocation({
-        currentLocationSharingEnabled: false,
-        currentLocation: null,
-      });
-      set({ error: null, isSyncing: false });
+      await persistSharedLocation(
+        {
+          currentLocationSharingEnabled: false,
+          currentLocation: null,
+        },
+        generation,
+      );
+
+      if (generation === sharingGeneration) {
+        set({ error: null, isSyncing: false });
+      }
     } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : "Unable to stop sharing your current location.",
-        isSyncing: false,
-      });
+      if (generation === sharingGeneration) {
+        set({
+          error: error instanceof Error ? error.message : "Unable to stop sharing your current location.",
+          isSyncing: false,
+        });
+
+        // Persistence failed, so the persisted state is still ON — the watcher we
+        // removed above must not stay silently dead while sharing remains enabled.
+        if (useAuthStore.getState().user?.currentLocationSharingEnabled) {
+          void get().startWatching({ syncImmediately: false }).catch(() => undefined);
+        }
+      }
+
       throw error;
     }
   },
@@ -168,6 +196,10 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
     set({ isWatching: false });
   },
 
+  // Background position pings from the watch subscription intentionally do not
+  // touch `isSyncing` — that flag is the shared pending-state Settings/Filter use
+  // to lock the toggle UI, and it must only reflect explicit enable/disable calls,
+  // not routine periodic syncs (otherwise the toggle would flicker every ~15s).
   syncLocation: async (location) => {
     const generation = sharingGeneration;
     const user = useAuthStore.getState().user;
@@ -175,8 +207,6 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
     if (!user?.currentLocationSharingEnabled) {
       return;
     }
-
-    set({ isSyncing: true });
 
     try {
       await persistSharedLocation(
@@ -188,13 +218,12 @@ export const useLocationSharingStore = create<LocationSharingState>((set, get) =
       );
 
       if (generation === sharingGeneration) {
-        set({ error: null, isSyncing: false });
+        set({ error: null });
       }
     } catch (error) {
       if (generation === sharingGeneration) {
         set({
           error: error instanceof Error ? error.message : "Unable to update your live location.",
-          isSyncing: false,
         });
       }
 

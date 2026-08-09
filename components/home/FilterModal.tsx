@@ -1,6 +1,9 @@
 import LocationSearchModal from '@/components/post/LocationSearchModal';
 import { getCurrentLocationForSharing, getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import type { LocationSearchContext, LocationSearchResult } from '@/lib/locationSearch';
+import { useAuthStore } from '@/stores/authStore';
+import { useLocationSharingStore } from '@/stores/locationSharingStore';
+import { Spinner } from '@/components/ui/spinner';
 import {
   useTheme } from '@/hooks/useTheme';
 import { Feather } from '@expo/vector-icons';
@@ -136,7 +139,18 @@ export default function FilterModal({
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [hashtags, setHashtags] = useState('');
-  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+
+  const user = useAuthStore((state) => state.user);
+  const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
+  const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
+  const isLocationSyncing = useLocationSharingStore((state) => state.isSyncing);
+  // Authoritative persisted value — Apply/filter-resolution logic must always use this,
+  // never the transient optimistic value below, so filter semantics stay unchanged.
+  const locationSharingEnabled = Boolean(user?.currentLocationSharingEnabled);
+  // Transient, display-only value: lets the Switch move the instant the user taps it
+  // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
+  const [pendingLocationValue, setPendingLocationValue] = useState<boolean | null>(null);
+  const useCurrentLocation = pendingLocationValue !== null ? pendingLocationValue : locationSharingEnabled;
 
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
   const [locationSearchContext, setLocationSearchContext] = useState<LocationSearchContext | null>(null);
@@ -168,12 +182,10 @@ export default function FilterModal({
     if (isValidEventLocationFilter(activeFilters.nearby)) {
       setRadius(normalizeEventRadiusMiles(activeFilters.nearby.radiusMiles));
       if (activeFilters.nearby.source === 'current') {
-        setUseCurrentLocation(true);
         setSelectedLocation('');
         setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
         setSelectedLocationResult(null);
       } else {
-        setUseCurrentLocation(false);
         setSelectedLocation(activeFilters.nearby.label);
         setSelectedLocationCoords({
           latitude: activeFilters.nearby.latitude,
@@ -183,7 +195,6 @@ export default function FilterModal({
       }
     } else {
       setRadius(DEFAULT_EVENT_RADIUS_MILES);
-      setUseCurrentLocation(false);
       setSelectedLocation('');
       setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
       setSelectedLocationResult(null);
@@ -216,12 +227,31 @@ export default function FilterModal({
     setSelectedLocationResult(null);
   }, []);
 
-  const handleToggleCurrentLocation = useCallback((value: boolean) => {
-    setUseCurrentLocation(value);
-    if (value) {
-      clearSelectedLocationDraft();
+  const handleToggleCurrentLocation = useCallback(async (value: boolean) => {
+    if (isLocationSyncing) {
+      return;
     }
-  }, [clearSelectedLocationDraft]);
+
+    setPendingLocationValue(value);
+
+    try {
+      if (value) {
+        await enableLocationSharing();
+        clearSelectedLocationDraft();
+      } else {
+        await disableLocationSharing();
+      }
+      // enableSharing()/disableSharing() only resolve after authStore.user has
+      // already been updated, so it's safe to drop the transient value now.
+      setPendingLocationValue(null);
+    } catch (error) {
+      setPendingLocationValue(null);
+      Alert.alert(
+        'Current Location',
+        error instanceof Error ? error.message : 'Unable to update current location sharing.',
+      );
+    }
+  }, [isLocationSyncing, enableLocationSharing, disableLocationSharing, clearSelectedLocationDraft]);
 
   const resolveSearchProximityContext = useCallback(async (requestId: number) => {
     try {
@@ -266,7 +296,6 @@ export default function FilterModal({
     setActiveTime(null);
     setSelectedDate(null);
     setHashtags('');
-    setUseCurrentLocation(false);
     clearSelectedLocationDraft();
     setRadius(DEFAULT_EVENT_RADIUS_MILES);
   };
@@ -279,9 +308,16 @@ export default function FilterModal({
       const parsedHashtags = parseHashtagFilterInput(hashtags);
       const committedRadius = normalizeEventRadiusMiles(radius);
       const timePeriod = activeTime ? TIME_OPTION_TO_VALUE[activeTime] : undefined;
-      const nearby = useCurrentLocation
-        ? await resolveCurrentLocationFilter(committedRadius)
-        : resolveSelectedLocationFilter(committedRadius);
+      // A manually searched location always takes priority: since the switch now mirrors the
+      // global sharing preference, it can stay ON after the user picks a specific place.
+      // Uses the authoritative persisted value (not the transient display value) so Apply
+      // never resolves "current location" based on an operation that hasn't confirmed yet.
+      const hasManualLocationSelection = Boolean(selectedLocation.trim() || selectedLocationResult);
+      const nearby = hasManualLocationSelection
+        ? resolveSelectedLocationFilter(committedRadius)
+        : locationSharingEnabled
+          ? await resolveCurrentLocationFilter(committedRadius)
+          : null;
 
       onApply(confirmVisibleEventFilters(
         activeFilters,
@@ -351,11 +387,10 @@ export default function FilterModal({
       longitude: location.longitude,
     });
     setSelectedLocationResult(location);
-    setUseCurrentLocation(false);
   };
 
   const canApplyCurrentDraft = canApplyEventFilters({
-    useCurrentLocation,
+    useCurrentLocation: locationSharingEnabled,
     selectedLocationLabel: selectedLocation,
     selectedLatitude: selectedLocationCoords.latitude,
     selectedLongitude: selectedLocationCoords.longitude,
@@ -478,12 +513,16 @@ export default function FilterModal({
                   <Feather name="target" size={16} color={colors.textSecondary} style={styles.inputIcon} />
                   <Text style={[styles.inputText, { color: colors.text }]}>Current Location</Text>
                 </View>
-                <Switch
-                  value={useCurrentLocation}
-                  onValueChange={handleToggleCurrentLocation}
-                  trackColor={{ false: isDark ? '#3A3A44' : '#E0E0E0', true: colors.primary }}
-                  thumbColor="#FFFFFF"
-                />
+                <View style={styles.currentLocationToggleGroup}>
+                  {isLocationSyncing && <Spinner size="small" color={colors.textSecondary} />}
+                  <Switch
+                    value={useCurrentLocation}
+                    onValueChange={handleToggleCurrentLocation}
+                    trackColor={{ false: isDark ? '#3A3A44' : '#E0E0E0', true: colors.primary }}
+                    thumbColor="#FFFFFF"
+                    disabled={isLocationSyncing}
+                  />
+                </View>
               </View>
 
               {/* Radius Slider */}
@@ -631,13 +670,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 12,
-    paddingHorizontal: 50,
+    paddingHorizontal: 16,
     height: 56,
     marginTop: 12,
+    width: '100%',
   },
   currentLocationLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+  },
+  currentLocationToggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
   },
   radiusContainer: {
     borderWidth: 1,

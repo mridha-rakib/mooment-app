@@ -9,7 +9,8 @@ import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useLocalSearchParams,
   useRouter } from 'expo-router';
 import React,
-  { useEffect,
+  { useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState } from 'react';
@@ -38,16 +39,16 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Camera } from 'expo-camera';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from '@/constants/Colors';
 import EventPickerModal from '@/components/post/EventPickerModal';
 import { deleteConversation, getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
 import { safeBack } from '@/lib/navigation';
 import type { ChatFileAttachment, ChatLocationAttachment, ChatMessageAttachment, ChatMessageType, DirectChatMessageResponse, GroupMessageResponse } from '@/lib/chat';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { createRealtimeSocket } from '@/lib/realtime';
 import type { DirectRealtimeMessage, GroupRealtimeMessage } from '@/lib/realtime';
+import * as realtimeSocket from '@/lib/socketClient';
 import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
 import { blockUser, unblockUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
@@ -57,6 +58,29 @@ import { getStoryDetails } from '@/lib/stories';
 import { createStoryViewerSession } from '@/lib/storyViewerSession';
 
 const { width } = Dimensions.get('window');
+
+// Shared chat design tokens.
+// One sender/receiver color language reused by every message type (text, audio,
+// location, event, post, story) so the chat UI reads as a single consistent system.
+// Sender uses a clean deep-purple accent (not pink/mauve/magenta/washed-out lavender),
+// receiver uses one neutral dark surface, and destructive/error states reuse the
+// project's existing semantic danger color (Colors.dark.danger) instead of an
+// arbitrary red.
+const CHAT_COLORS = {
+  screenBackground: '#0e0d12',
+  senderAccent: '#5B3FD6',
+  senderAccentSoft: '#9B8AFB',
+  senderText: '#FFFFFF',
+  receiverSurface: '#15151A',
+  receiverBorder: 'rgba(255,255,255,0.08)',
+  receiverText: '#FFFFFF',
+  metadataText: 'rgba(255,255,255,0.55)',
+  metadataTextOnAccent: 'rgba(255,255,255,0.78)',
+  neutralIcon: '#8E8E9B',
+  semanticError: Colors.dark.danger,
+  semanticErrorSurface: 'rgba(255,59,48,0.14)',
+  subtleSurface: 'rgba(255,255,255,0.06)',
+} as const;
 
 const validateReadableAudioFile = async (uri: string) => {
   const fileInfo = await FileSystem.getInfoAsync(uri);
@@ -125,16 +149,57 @@ type PendingAttachment = {
 };
 
 type SharedPostPreview = {
-  mediaType: 'image' | 'video' | null;
+  mediaType: 'image' | 'video' | 'audio' | null;
   mediaUri?: string | null;
   preview?: string | null;
   authorName?: string | null;
+  // Only set when mediaType === 'audio'. The moment model has no waveform
+  // data (neither this screen's own AudioBubble nor the feed's AudioFeedPlayer
+  // have real waveform data either — both render a static bar pattern driven
+  // by playback progress), so duration is all that's needed to reuse that
+  // same pattern here.
+  audioDurationSeconds?: number | null;
 };
 
 const sharedPostPreviewCache = new Map<string, SharedPostPreview>();
 const sharedPostPreviewRequests = new Map<string, Promise<SharedPostPreview>>();
 
 const WAVEFORM_HEIGHTS = [8, 14, 20, 12, 28, 16, 24, 10, 18, 22, 14, 26, 8, 20, 16, 12, 24, 18, 10, 14];
+
+// Ensures only one chat audio player (a regular AudioBubble message, or a
+// shared-post's inline audio player) plays at a time, and lets a single
+// AppState listener in the main screen pause whichever one is currently
+// active without every player needing its own AppState subscription. Kept
+// as a small module-level coordinator (same pattern as sharedPostPreviewCache
+// above) rather than a new global audio architecture.
+const activeChatAudio: { id: string | null; pause: (() => void) | null } = { id: null, pause: null };
+
+const setActiveChatAudio = (id: string, pause: () => void) => {
+  if (activeChatAudio.id && activeChatAudio.id !== id) {
+    try {
+      activeChatAudio.pause?.();
+    } catch {
+      // Ignore — the previously active player may already be torn down.
+    }
+  }
+  activeChatAudio.id = id;
+  activeChatAudio.pause = pause;
+};
+
+const clearActiveChatAudio = (id: string) => {
+  if (activeChatAudio.id === id) {
+    activeChatAudio.id = null;
+    activeChatAudio.pause = null;
+  }
+};
+
+const pauseActiveChatAudio = () => {
+  try {
+    activeChatAudio.pause?.();
+  } catch {
+    // Ignore — the underlying player may already be torn down.
+  }
+};
 
 const COMMON_EMOJIS = [
   '😀','😂','🥹','😊','😍','🥰','😘','😎','😅','🙏',
@@ -250,12 +315,15 @@ const loadSharedPostPreview = (postId: string) => {
 
   const request = getMoment(postId)
     .then((moment): SharedPostPreview => {
-      const mediaItem = moment.mediaItems?.find((item) => item.type === 'image' || item.type === 'video') ?? null;
+      const mediaItem = moment.mediaItems?.find(
+        (item) => item.type === 'image' || item.type === 'video' || item.type === 'audio',
+      ) ?? null;
       const preview: SharedPostPreview = {
-        mediaType: mediaItem?.type === 'image' || mediaItem?.type === 'video' ? mediaItem.type : null,
+        mediaType: mediaItem?.type ?? null,
         mediaUri: mediaItem ? getSharedPostMediaUri(mediaItem) : null,
         preview: moment.caption?.trim() || null,
         authorName: moment.author?.name ?? null,
+        audioDurationSeconds: mediaItem?.type === 'audio' ? mediaItem.durationSeconds ?? null : null,
       };
 
       sharedPostPreviewCache.set(postId, preview);
@@ -432,7 +500,7 @@ function TextBubble({ msg }: { msg: Message }) {
             }
           }}
         >
-          <View style={styles.locationIconWrap}>
+          <View style={[styles.locationIconWrap, msg.fromMe && styles.locationIconWrapMe]}>
             <Feather name="map-pin" size={16} color="#FFFFFF" />
           </View>
           <View>
@@ -442,7 +510,9 @@ function TextBubble({ msg }: { msg: Message }) {
         </TouchableOpacity>
       )}
 
-      <View style={[styles.bubbleMeta, !msg.fromMe && { justifyContent: 'flex-start' }]}>
+      {/* One shared bottom-right metadata row for timestamp/edited/delivered state,
+          reused by text, audio, event, post, and story cards. */}
+      <View style={styles.bubbleMeta}>
         {msg.editedAt ? <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>Edited • </Text> : null}
         <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>
           {msg.time}
@@ -473,25 +543,19 @@ function ImageBubble({ msg }: { msg: Message }) {
 }
 
 function VideoBubble({ msg }: { msg: Message }) {
-  const player = useVideoPlayer(msg.mediaUri || '', (videoPlayer) => {
-    videoPlayer.loop = false;
-    videoPlayer.muted = false;
-  });
-
+  // VIDEO MESSAGE PLAYBACK UI TEMPORARILY HIDDEN
+  // The interactive expo-video player (VideoView/useVideoPlayer/nativeControls) has been
+  // replaced with a static, non-interactive placeholder — no player is mounted and there
+  // is no play button. This is a frontend-only rendering change: the 'video' message type,
+  // Message/ChatMessageType support, and backend/API acceptance of video messages are all
+  // untouched, so existing video messages keep their row/timestamp/grouping behavior and
+  // can regain a real player again later by restoring this component's previous body.
   return (
     <View style={[styles.imageBubble, msg.fromMe ? styles.imageBubbleMe : styles.imageBubbleThem]}>
-      {msg.mediaUri ? (
-        <VideoView
-          player={player}
-          style={styles.bubbleImage}
-          nativeControls
-          contentFit="cover"
-        />
-      ) : (
-        <View style={[styles.bubbleImage, styles.mediaFallback]}>
-          <Feather name="video" size={30} color="#8E8E9B" />
-        </View>
-      )}
+      <View style={[styles.bubbleImage, styles.mediaFallback]}>
+        <Feather name="video-off" size={28} color={CHAT_COLORS.neutralIcon} />
+        <Text style={styles.videoPlaceholderText}>Video unavailable</Text>
+      </View>
       <View style={styles.imageTimeBadge}>
         <Text style={styles.imageTimeText}>{msg.time}</Text>
       </View>
@@ -510,13 +574,20 @@ function AudioBubble({ msg }: { msg: Message }) {
   const progress = duration > 0 ? currentTime / duration : 0;
   const activeBars = Math.round(progress * WAVEFORM_HEIGHTS.length);
 
+  useEffect(() => {
+    if (!status.playing) {
+      clearActiveChatAudio(msg.id);
+    }
+  }, [msg.id, status.playing]);
+
   useEffect(() => () => {
+    clearActiveChatAudio(msg.id);
     try {
       player.pause();
     } catch {
       // Ignore cleanup failures during native player teardown.
     }
-  }, [player]);
+  }, [msg.id, player]);
 
   const handleTogglePlayback = async () => {
     if (!msg.mediaUri) return;
@@ -525,6 +596,7 @@ function AudioBubble({ msg }: { msg: Message }) {
     const playbackPromise = (async () => {
       if (status.playing) {
         player.pause();
+        clearActiveChatAudio(msg.id);
         return;
       }
 
@@ -542,6 +614,7 @@ function AudioBubble({ msg }: { msg: Message }) {
       if (player.volume <= 0) {
         player.volume = 1;
       }
+      setActiveChatAudio(msg.id, () => player.pause());
       player.play();
     })();
 
@@ -550,6 +623,7 @@ function AudioBubble({ msg }: { msg: Message }) {
     try {
       await playbackPromise;
     } catch (error) {
+      clearActiveChatAudio(msg.id);
       setLoadFailed(true);
       Alert.alert('Unable to play audio', getAuthErrorMessage(error, 'Please try again.'));
     } finally {
@@ -566,9 +640,9 @@ function AudioBubble({ msg }: { msg: Message }) {
         disabled={!msg.mediaUri}
       >
         {loadFailed ? (
-          <Feather name="alert-circle" size={16} color={msg.fromMe ? '#D4B0EB' : '#FFFFFF'} />
+          <Feather name="alert-circle" size={16} color={CHAT_COLORS.senderText} />
         ) : (
-          <Ionicons name={status.playing ? 'pause' : 'play'} size={16} color={msg.fromMe ? '#D4B0EB' : '#FFFFFF'} style={{ marginLeft: status.playing ? 0 : 2 }} />
+          <Ionicons name={status.playing ? 'pause' : 'play'} size={16} color={CHAT_COLORS.senderText} style={{ marginLeft: status.playing ? 0 : 2 }} />
         )}
       </TouchableOpacity>
       <View style={styles.waveformRow}>
@@ -579,8 +653,8 @@ function AudioBubble({ msg }: { msg: Message }) {
               styles.waveBar,
               { height: h },
               i < activeBars
-                ? (msg.fromMe ? { backgroundColor: '#D4B0EB' } : { backgroundColor: '#FFFFFF' })
-                : { backgroundColor: msg.fromMe ? 'rgba(212,176,235,0.35)' : 'rgba(255,255,255,0.3)' },
+                ? { backgroundColor: CHAT_COLORS.senderText }
+                : { backgroundColor: 'rgba(255,255,255,0.32)' },
             ]}
           />
         ))}
@@ -607,7 +681,7 @@ function EventBubble({ msg }: { msg: Message }) {
       <View style={styles.eventBubbleGlow} />
       <View style={styles.eventBubbleInfo}>
         <View style={styles.eventBubbleTag}>
-          <Ionicons name="calendar-outline" size={11} color="#F0D8FF" />
+          <Ionicons name="calendar-outline" size={11} color={CHAT_COLORS.senderText} />
           <Text style={styles.eventBubbleTagText}>Event</Text>
         </View>
         <Text style={styles.eventBubbleTitle} numberOfLines={2}>{msg.eventTitle}</Text>
@@ -638,6 +712,127 @@ function EventBubble({ msg }: { msg: Message }) {
       <View style={styles.eventBubbleTimeWrap}>
         <Text style={styles.eventBubbleTime}>{msg.time}</Text>
       </View>
+    </View>
+  );
+}
+
+// Inline audio player for a shared POST whose underlying moment is an audio
+// recording. Mirrors AudioBubble's playback logic (same expo-audio hooks,
+// same restart-from-beginning-on-completion behavior, same waveform/duration
+// styling) rather than a separate audio engine. Rendered only when the
+// resolved shared post is actually an audio post with a real URI — never
+// mounted for image/video/text shared posts, so it never allocates a player
+// for the common case.
+function SharedPostAudioPlayer({
+  playerId,
+  uri,
+  durationSeconds,
+  fromMe,
+}: {
+  playerId: string;
+  uri: string;
+  durationSeconds?: number | null;
+  fromMe: boolean;
+}) {
+  const [loadFailed, setLoadFailed] = useState(false);
+  const playbackPromiseRef = useRef<Promise<void> | null>(null);
+  const audioSource = useMemo(() => ({ uri }), [uri]);
+  const player = useAudioPlayer(audioSource, { downloadFirst: false, updateInterval: 250 });
+  const status = useAudioPlayerStatus(player);
+  const duration = status.duration > 0 ? status.duration : durationSeconds ?? 0;
+  const currentTime = duration > 0 ? Math.min(status.currentTime, duration) : status.currentTime;
+  const progress = duration > 0 ? currentTime / duration : 0;
+  const activeBars = Math.round(progress * WAVEFORM_HEIGHTS.length);
+
+  useEffect(() => {
+    if (!status.playing) {
+      clearActiveChatAudio(playerId);
+    }
+  }, [playerId, status.playing]);
+
+  useEffect(() => () => {
+    clearActiveChatAudio(playerId);
+    try {
+      player.pause();
+    } catch {
+      // Ignore cleanup failures during native player teardown.
+    }
+  }, [playerId, player]);
+
+  const handleTogglePlayback = async () => {
+    if (playbackPromiseRef.current) return;
+
+    const playbackPromise = (async () => {
+      if (status.playing) {
+        player.pause();
+        clearActiveChatAudio(playerId);
+        return;
+      }
+
+      setLoadFailed(false);
+      if (duration > 0 && currentTime >= duration - 0.25) {
+        await player.seekTo(0);
+      }
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'doNotMix',
+      });
+      player.muted = false;
+      if (player.volume <= 0) {
+        player.volume = 1;
+      }
+      setActiveChatAudio(playerId, () => player.pause());
+      player.play();
+    })();
+
+    playbackPromiseRef.current = playbackPromise;
+
+    try {
+      await playbackPromise;
+    } catch (error) {
+      clearActiveChatAudio(playerId);
+      setLoadFailed(true);
+      Alert.alert('Unable to play audio', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      playbackPromiseRef.current = null;
+    }
+  };
+
+  return (
+    <View style={styles.sharedPostAudioFrame}>
+      <TouchableOpacity
+        style={[styles.audioPlayBtn, fromMe && styles.audioPlayBtnMe]}
+        onPress={handleTogglePlayback}
+        activeOpacity={0.8}
+      >
+        {loadFailed ? (
+          <Feather name="alert-circle" size={16} color={CHAT_COLORS.senderText} />
+        ) : (
+          <Ionicons
+            name={status.playing ? 'pause' : 'play'}
+            size={16}
+            color={CHAT_COLORS.senderText}
+            style={{ marginLeft: status.playing ? 0 : 2 }}
+          />
+        )}
+      </TouchableOpacity>
+      <View style={styles.waveformRow}>
+        {WAVEFORM_HEIGHTS.map((h, i) => (
+          <View
+            key={i}
+            style={[
+              styles.waveBar,
+              { height: h },
+              i < activeBars
+                ? { backgroundColor: CHAT_COLORS.senderText }
+                : { backgroundColor: 'rgba(255,255,255,0.32)' },
+            ]}
+          />
+        ))}
+      </View>
+      <Text style={[styles.audioDuration, fromMe && styles.audioDurationMe]}>{formatSeconds(duration)}</Text>
     </View>
   );
 }
@@ -675,9 +870,12 @@ function PostBubble({ msg }: { msg: Message }) {
 
   const mediaUri = msg.postImage ?? resolvedPreview?.mediaUri ?? null;
   const isVideoPost = resolvedPreview?.mediaType === 'video';
-  const postLabel = isVideoPost ? 'Shared video post' : 'POST';
+  const isAudioPost = resolvedPreview?.mediaType === 'audio';
+  const canPlayAudio = isAudioPost && Boolean(mediaUri);
+  const postLabel = isVideoPost ? 'Shared video post' : isAudioPost ? 'Shared audio post' : 'POST';
   const postAuthor = resolvedPreview?.authorName || msg.postAuthor;
-  const postPreview = resolvedPreview?.preview || msg.postPreview || (isVideoPost ? 'Shared video post' : 'Shared post');
+  const postPreview = resolvedPreview?.preview || msg.postPreview
+    || (isVideoPost ? 'Shared video post' : isAudioPost ? 'Shared audio post' : 'Shared post');
 
   return (
     <TouchableOpacity
@@ -686,11 +884,18 @@ function PostBubble({ msg }: { msg: Message }) {
       onPress={() => postId && router.push({ pathname: '/post-screen/view-post', params: { postId } } as any)}
     >
       <View style={styles.sharedPostMediaFrame}>
-        {mediaUri ? (
+        {canPlayAudio ? (
+          <SharedPostAudioPlayer
+            playerId={msg.id}
+            uri={mediaUri as string}
+            durationSeconds={resolvedPreview?.audioDurationSeconds}
+            fromMe={msg.fromMe}
+          />
+        ) : mediaUri ? (
           <Image source={{ uri: mediaUri }} style={styles.sharedPostImage} resizeMode="cover" />
         ) : (
           <View style={[styles.sharedPostImage, styles.mediaFallback]}>
-            <Feather name={isVideoPost ? 'play-circle' : 'file-text'} size={28} color="#8E8E9B" />
+            <Feather name={isVideoPost ? 'play-circle' : isAudioPost ? 'music' : 'file-text'} size={28} color="#8E8E9B" />
           </View>
         )}
         {isVideoPost ? (
@@ -889,7 +1094,7 @@ function PendingAttachmentTray({
             </View>
           ) : (
             <View style={styles.pendingThumb}>
-              <Feather name="calendar" size={22} color="#D4B0EB" />
+              <Feather name="calendar" size={22} color={CHAT_COLORS.senderAccentSoft} />
             </View>
           )}
 
@@ -1199,7 +1404,6 @@ export default function ChatDetailScreen() {
   const setActiveDirectConversationId = useChatUnreadStore((state) => state.setActiveDirectConversationId);
   const listRef = useRef<FlatList>(null);
   const moreMenuBtnRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
-  const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
   const ownTypingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const friendTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSendingTypingRef = useRef(false);
@@ -1207,6 +1411,25 @@ export default function ChatDetailScreen() {
   const isAudioPickerOpeningRef = useRef(false);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Chat audio (AudioBubble and shared-post audio) must never keep playing
+  // once this screen isn't the active, foregrounded surface — no background
+  // playback is allowed for this feature. Pausing here (rather than per
+  // player) covers backgrounding, leaving this screen, and unmount in one
+  // place via the shared coordinator. Foreground does NOT auto-resume —
+  // that's intentional, the user must press Play again.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        pauseActiveChatAudio();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      pauseActiveChatAudio();
+    };
+  }, []);
 
   const toggleEmojiPicker = () => {
     const next = !showEmojiPicker;
@@ -1248,6 +1471,17 @@ export default function ChatDetailScreen() {
     height?: number | null;
     durationSeconds?: number | null;
   }) => {
+    // VIDEO MESSAGING TEMPORARILY DISABLED
+    // Frontend creation/upload is intentionally hidden.
+    // Backend/API/video rendering support is preserved for future re-enablement.
+    // This is the single client-side choke point for all attachment creation (camera,
+    // gallery, retry), so gating 'video' here blocks every frontend path from creating
+    // a new video attachment without touching the 'image'/'audio' branches.
+    if (file.type === 'video') {
+      Alert.alert('Video unavailable', 'Sending videos is temporarily unavailable.');
+      return;
+    }
+
     if (!currentUser?.id || !isObjectId(friendId)) {
       Alert.alert('Chat unavailable', 'Open a valid conversation before sending attachments.');
       return;
@@ -1331,7 +1565,12 @@ export default function ChatDetailScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
-      mediaTypes: ['images', 'videos'],
+      // VIDEO MESSAGING TEMPORARILY DISABLED
+      // Frontend creation/upload is intentionally hidden: the gallery picker is restricted
+      // to images only ('videos' removed from mediaTypes below) so users can no longer
+      // select a video from their library. videoExportPreset is left in place (unused while
+      // mediaTypes excludes videos) so video support is trivial to restore later.
+      mediaTypes: ['images'],
       quality: 0.85,
       selectionLimit: 10,
       videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
@@ -1355,6 +1594,10 @@ export default function ChatDetailScreen() {
     }
   };
 
+  // VIDEO MESSAGING TEMPORARILY DISABLED
+  // Frontend creation/upload is intentionally hidden. This function's 'video' branch is
+  // preserved for future re-enablement, but handleCamera below no longer offers a "Video"
+  // option, so in practice this is only ever invoked with type: 'image' today.
   const launchCameraForType = async (type: 'image' | 'video') => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
 
@@ -1395,10 +1638,13 @@ export default function ChatDetailScreen() {
     });
   };
 
+  // VIDEO MESSAGING TEMPORARILY DISABLED
+  // Frontend creation/upload is intentionally hidden: the "Video" chooser option has been
+  // removed below so the camera can only capture photos.
+  // Backend/API/video rendering support is preserved for future re-enablement.
   const handleCamera = () => {
-    Alert.alert('Camera', 'Capture a photo or video.', [
+    Alert.alert('Camera', 'Capture a photo.', [
       { text: 'Photo', onPress: () => void launchCameraForType('image') },
-      { text: 'Video', onPress: () => void launchCameraForType('video') },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
@@ -1528,18 +1774,8 @@ export default function ChatDetailScreen() {
       return;
     }
 
-    const realtime = realtimeRef.current;
-
-    if (!realtime) {
-      if (!nextIsTyping) {
-        isSendingTypingRef.current = false;
-      }
-
-      return;
-    }
-
     isSendingTypingRef.current = nextIsTyping;
-    realtime.sendDirectTyping(friendId, nextIsTyping);
+    realtimeSocket.sendDirectTyping(friendId, nextIsTyping);
   };
 
   const stopOwnTyping = () => {
@@ -1665,13 +1901,37 @@ export default function ChatDetailScreen() {
     };
   }, [currentUser?.id, friendId, isGroup, isSelfDirectConversation, router]);
 
+  // Best-effort catch-up refresh after a *re*connect — Socket.IO reconnecting
+  // does not replay events missed while disconnected, so re-fetch the open
+  // thread's latest page. Deliberately silent (no alert/spinner): this is a
+  // background reconciliation, not the initial load, which already has its
+  // own error handling above.
+  const refetchOpenThreadOnReconnect = useCallback(async () => {
+    if (!isObjectId(friendId) || isSelfDirectConversation) return;
+
+    try {
+      if (isGroup) {
+        const history = await getGroupMessages(friendId);
+        setMessages(history.map((message) => toGroupApiTextMessage(message, currentUser?.id)));
+      } else {
+        const history = await getDirectMessageHistory(friendId);
+        setMessages(history.map((message) => toApiTextMessage(message, currentUser?.id)));
+      }
+    } catch {
+      // Leave the current in-memory state as-is; the next successful
+      // reconnect or manual re-entry into the chat will retry.
+    }
+  }, [currentUser?.id, friendId, isGroup, isSelfDirectConversation]);
+
   useEffect(() => {
     if (!accessToken || !isObjectId(friendId)) {
       return;
     }
 
-    const realtime = createRealtimeSocket({
-      accessToken,
+    const unsubscribe = realtimeSocket.subscribe({
+      onReconnected: () => {
+        void refetchOpenThreadOnReconnect();
+      },
       onDirectMessage: isGroup
         ? undefined
         : (realtimeMessage) => {
@@ -1820,21 +2080,17 @@ export default function ChatDetailScreen() {
             setEditingMessage((current) => current?.id === messageId ? null : current);
           }
         : undefined,
+      // Every server-side error for message creation is also reported via
+      // the send ack (see sendRealtimeMessage below), which marks the exact
+      // clientMessageId as failed instead of sweeping every "sending"
+      // message. Edit/delete failures are likewise handled at their call
+      // sites via the ack. This handler is kept for forward compatibility
+      // with any future server-emitted error that has no ack counterpart,
+      // but intentionally does not duplicate the alert/sweep those paths
+      // already do.
       onError: (error) => {
         if (error.code === 'MESSAGE_EDIT_FAILED' || error.code === 'MESSAGE_DELETE_FAILED') {
-          Alert.alert('Unable to update message', error.message);
           return;
-        }
-
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.fromMe && message.deliveryState === 'sending'
-              ? { ...message, deliveryState: 'failed', delivered: false }
-              : message,
-          ),
-        );
-        if (error.message) {
-          Alert.alert('Message failed', error.message);
         }
       },
       onUserOnline: isGroup
@@ -1849,29 +2105,52 @@ export default function ChatDetailScreen() {
           },
     });
 
-    realtimeRef.current = realtime;
-
     return () => {
       clearOwnTypingStopTimer();
       if (!isGroup && isObjectId(friendId) && isSendingTypingRef.current) {
-        realtime.sendDirectTyping(friendId, false);
+        realtimeSocket.sendDirectTyping(friendId, false);
         isSendingTypingRef.current = false;
       }
-      realtime.close();
-      if (realtimeRef.current === realtime) {
-        realtimeRef.current = null;
+      unsubscribe();
+    };
+  }, [accessToken, clearDirectUnread, currentUser?.id, friendId, isGroup, refetchOpenThreadOnReconnect]);
+
+  // Ack is used only to detect FAILURE quickly (instead of waiting on the
+  // generic onError side-channel, or indefinitely if the socket never
+  // recovers). Success reconciliation is intentionally left to the existing
+  // onDirectMessage/onGroupMessage broadcast-echo handler above, which
+  // already replaces the optimistic entry with the fully-detailed realtime
+  // payload (senderName, etc.) that the ack response does not carry.
+  const sendRealtimeMessage = (
+    clientMessageId: string,
+    text: string,
+    options?: { type?: ChatMessageType; attachment?: ChatMessageAttachment },
+  ) => {
+    const ackPromise = isGroup
+      ? realtimeSocket.sendGroupMessage(friendId, text, clientMessageId, options)
+      : realtimeSocket.sendDirectMessage(friendId, text, clientMessageId, options);
+
+    const markFailed = (errorMessage?: string) => {
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.clientMessageId === clientMessageId && item.deliveryState === 'sending'
+            ? { ...item, deliveryState: 'failed', delivered: false }
+            : item,
+        ),
+      );
+      if (errorMessage) {
+        Alert.alert('Message failed', errorMessage);
       }
     };
-  }, [accessToken, clearDirectUnread, currentUser?.id, friendId, isGroup]);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && realtimeRef.current) {
-        realtimeRef.current.reconnect();
-      }
-    });
-    return () => subscription.remove();
-  }, []);
+    ackPromise
+      .then((ack) => {
+        if (!ack.ok) {
+          markFailed(ack.message);
+        }
+      })
+      .catch(() => markFailed());
+  };
 
   const sendMessage = () => {
     if (isDirectChatUnavailable) {
@@ -1919,12 +2198,12 @@ export default function ChatDetailScreen() {
 
       if (isGroup) {
         if (isObjectId(friendId)) {
-          realtimeRef.current?.sendGroupMessage(friendId, text, clientMessageId);
+          sendRealtimeMessage(clientMessageId, text);
         }
       } else {
         stopOwnTyping();
         if (isObjectId(friendId)) {
-          realtimeRef.current?.sendDirectMessage(friendId, text, clientMessageId);
+          sendRealtimeMessage(clientMessageId, text);
         }
       }
     } else {
@@ -1957,20 +2236,8 @@ export default function ChatDetailScreen() {
 
         newMessages.push(optimistic);
 
-        if (isGroup) {
-          if (isObjectId(friendId)) {
-            realtimeRef.current?.sendGroupMessage(friendId, messageText, clientMessageId, {
-              type: attachment.type,
-              attachment,
-            });
-          }
-        } else {
-          if (isObjectId(friendId)) {
-            realtimeRef.current?.sendDirectMessage(friendId, messageText, clientMessageId, {
-              type: attachment.type,
-              attachment,
-            });
-          }
+        if (isObjectId(friendId)) {
+          sendRealtimeMessage(clientMessageId, messageText, { type: attachment.type, attachment });
         }
       });
 
@@ -1997,22 +2264,9 @@ export default function ChatDetailScreen() {
       ),
     );
 
-    if (isGroup) {
-      realtimeRef.current?.sendGroupMessage(
-        friendId,
-        message.text ?? '',
-        clientMessageId,
-        message.type === 'text'
-          ? undefined
-          : { type: message.type, attachment: message.attachment ?? undefined },
-      );
-      return;
-    }
-
-    realtimeRef.current?.sendDirectMessage(
-      friendId,
-      message.text ?? '',
+    sendRealtimeMessage(
       clientMessageId,
+      message.text ?? '',
       message.type === 'text'
         ? undefined
         : { type: message.type, attachment: message.attachment ?? undefined },
@@ -2045,11 +2299,19 @@ export default function ChatDetailScreen() {
       return;
     }
 
-    if (isGroup) {
-      realtimeRef.current?.editGroupMessage(editingMessage.id, text);
-    } else {
-      realtimeRef.current?.editDirectMessage(editingMessage.id, text);
-    }
+    // Awaited (rather than fire-and-forget) so a failed edit still surfaces
+    // the same "Unable to update message" alert the old onError side-channel
+    // used to show — the Socket.IO edit/delete handlers only report failure
+    // via the ack, not a separate error event.
+    const editAckPromise = isGroup
+      ? realtimeSocket.editGroupMessage(editingMessage.id, text)
+      : realtimeSocket.editDirectMessage(editingMessage.id, text);
+
+    editAckPromise.then((ack) => {
+      if (!ack.ok) {
+        Alert.alert('Unable to update message', ack.message);
+      }
+    });
     setEditingMessage(null);
   };
 
@@ -2065,11 +2327,15 @@ export default function ChatDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            if (isGroup) {
-              realtimeRef.current?.deleteGroupMessage(message.id);
-            } else {
-              realtimeRef.current?.deleteDirectMessage(message.id);
-            }
+            const deleteAckPromise = isGroup
+              ? realtimeSocket.deleteGroupMessage(message.id)
+              : realtimeSocket.deleteDirectMessage(message.id);
+
+            deleteAckPromise.then((ack) => {
+              if (!ack.ok) {
+                Alert.alert('Unable to update message', ack.message);
+              }
+            });
           },
         },
       ],
@@ -2213,7 +2479,7 @@ export default function ChatDetailScreen() {
                         activeOpacity={0.8}
                         onPress={() => retryMessage(item)}
                       >
-                        <Feather name="refresh-cw" size={12} color="#F2245C" />
+                        <Feather name="refresh-cw" size={12} color={CHAT_COLORS.semanticError} />
                         <Text style={styles.failedRetryText}>Retry</Text>
                       </TouchableOpacity>
                     )}
@@ -2240,11 +2506,11 @@ export default function ChatDetailScreen() {
         {showAttach && (
           <View style={styles.attachPanel}>
             {[
-              { icon: 'image', label: 'Gallery', color: '#8E54E9', onPress: handlePickGallery, loading: false },
+              { icon: 'image', label: 'Gallery', color: CHAT_COLORS.senderAccentSoft, onPress: handlePickGallery, loading: false },
               { icon: 'camera', label: 'Camera', color: '#3B82F6', onPress: handleCamera, loading: false },
-              { icon: 'music', label: 'Audio', color: '#F2245C', onPress: () => setIsAudioPickerVisible(true), loading: false },
+              { icon: 'music', label: 'Audio', color: CHAT_COLORS.senderAccentSoft, onPress: () => setIsAudioPickerVisible(true), loading: false },
               { icon: 'map-pin', label: 'Location', color: '#16D869', onPress: handleShareLocation, loading: isLocationLoading },
-              { icon: 'calendar', label: 'Event', color: '#D4B0EB', onPress: () => setIsEventPickerVisible(true), loading: false },
+              { icon: 'calendar', label: 'Event', color: CHAT_COLORS.senderAccentSoft, onPress: () => setIsEventPickerVisible(true), loading: false },
             ].map(a => (
               <TouchableOpacity
                 key={a.label}
@@ -2369,7 +2635,7 @@ export default function ChatDetailScreen() {
               onPress={() => messageActionTarget && confirmDeleteMessage(messageActionTarget)}
             >
               <View style={[styles.messageActionIcon, styles.messageDeleteIcon]}>
-                <Feather name="trash-2" size={18} color="#F2245C" />
+                <Feather name="trash-2" size={18} color={CHAT_COLORS.semanticError} />
               </View>
               <Text style={styles.messageDeleteText}>Delete Message</Text>
             </TouchableOpacity>
@@ -2496,11 +2762,11 @@ export default function ChatDetailScreen() {
                 }}
               >
                 {isDeleteLoading ? (
-                  <Spinner size="small" color="#F2245C" style={styles.moreMenuIcon} />
+                  <Spinner size="small" color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
                 ) : (
-                  <Feather name="trash-2" size={18} color="#F2245C" style={styles.moreMenuIcon} />
+                  <Feather name="trash-2" size={18} color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
                 )}
-                <Text style={[styles.moreMenuText, { color: '#F2245C' }]}>Delete Conversation</Text>
+                <Text style={[styles.moreMenuText, { color: CHAT_COLORS.semanticError }]}>Delete Conversation</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2536,7 +2802,7 @@ export default function ChatDetailScreen() {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12' },
+  safe: { flex: 1, backgroundColor: CHAT_COLORS.screenBackground },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   /* Header */
@@ -2574,56 +2840,62 @@ const styles = StyleSheet.create({
   msgRowThem: { justifyContent: 'flex-start' },
   messageColumn: { maxWidth: '84%' },
 
-  /* Text Bubble */
-  bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' },
-  bubbleMe: { backgroundColor: '#B2ABBA', borderBottomRightRadius: 2 },
-  bubbleThem: { backgroundColor: '#111111', borderTopLeftRadius: 2, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
-  bubbleHost: { backgroundColor: '#191136', borderTopLeftRadius: 2 },
+  /* Text Bubble — one shared radius (16, with a small 2px sender/receiver tail) and
+     padding system reused by the audio bubble below. */
+  bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, maxWidth: '100%' },
+  bubbleMe: { backgroundColor: CHAT_COLORS.senderAccent, borderBottomRightRadius: 2 },
+  bubbleThem: { backgroundColor: CHAT_COLORS.receiverSurface, borderTopLeftRadius: 2, borderWidth: 1, borderColor: CHAT_COLORS.receiverBorder },
+  bubbleHost: { backgroundColor: CHAT_COLORS.receiverSurface, borderTopLeftRadius: 2, borderWidth: 1, borderColor: CHAT_COLORS.receiverBorder },
   bubbleSenderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   bubbleSenderName: { color: '#8E8E9B', fontSize: 12, fontWeight: '600' },
-  bubbleHostTag: { color: '#D4B0EB', fontSize: 10, fontWeight: '400' },
+  bubbleHostTag: { color: CHAT_COLORS.senderAccentSoft, fontSize: 10, fontWeight: '400' },
   bubbleText: { fontSize: 14, lineHeight: 20 },
-  bubbleTextMe: { color: '#0e0d12' },
-  bubbleTextThem: { color: '#FFFFFF' },
-  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 8 },
-  bubbleTime: { color: '#8E8E9B', fontSize: 11 },
-  bubbleTimeMe: { color: '#FFFFFF' },
+  bubbleTextMe: { color: CHAT_COLORS.senderText },
+  bubbleTextThem: { color: CHAT_COLORS.receiverText },
+  // Shared bottom-right metadata row (timestamp/edited/delivered) for text/audio/event/post/story.
+  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8 },
+  bubbleTime: { color: CHAT_COLORS.metadataText, fontSize: 11 },
+  bubbleTimeMe: { color: CHAT_COLORS.metadataTextOnAccent },
 
-  /* Location Box */
+  /* Location Box — belongs to the same sender/receiver system as the text bubble that hosts it. */
   locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginTop: 12, marginBottom: 4, minWidth: 200 },
-  locationIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#5D35B0', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  locationIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#2A2A3A', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  locationIconWrapMe: { backgroundColor: CHAT_COLORS.senderAccent },
   locationTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
   locationDesc: { color: '#FFFFFF', fontSize: 11 },
 
-  /* Image Bubble */
+  /* Image Bubble — same 16 radius as every other card; VideoBubble reuses these too. */
   imageBubble: { borderRadius: 16, overflow: 'hidden', position: 'relative' },
   imageBubbleMe: { alignSelf: 'flex-end' },
   imageBubbleThem: { alignSelf: 'flex-start' },
   bubbleImage: { width: width * 0.6, height: width * 0.6, borderRadius: 16 },
   mediaFallback: { backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center' },
+  videoPlaceholderText: { color: CHAT_COLORS.neutralIcon, fontSize: 12, fontWeight: '600', marginTop: 6 },
   failedOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   imageTimeBadge: { position: 'absolute', bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
-  imageTimeText: { color: '#FFF', fontSize: 10 },
+  imageTimeText: { color: '#FFF', fontSize: 11 },
 
-  /* Audio Bubble */
-  audioBubble: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
+  /* Audio Bubble — outer shell reuses `bubble`/`bubbleMe`/`bubbleThem` so its background
+     always matches the text bubble's sender/receiver color exactly. */
+  audioBubble: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
   audioPlayBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  audioPlayBtnMe: { backgroundColor: 'rgba(212,176,235,0.2)' },
+  audioPlayBtnMe: { backgroundColor: 'rgba(255,255,255,0.22)' },
   waveformRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   waveBar: { width: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
-  audioDuration: { color: '#8E8E9B', fontSize: 11 },
-  audioDurationMe: { color: 'rgba(212,176,235,0.7)' },
+  audioDuration: { color: CHAT_COLORS.metadataText, fontSize: 11 },
+  audioDurationMe: { color: CHAT_COLORS.metadataTextOnAccent },
 
-  /* Event Bubble */
-  eventBubble: { borderRadius: 16, overflow: 'hidden', width: Math.min(width * 0.74, 310), minHeight: 190, position: 'relative', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  eventBubbleMe: { backgroundColor: '#2A1741', alignSelf: 'flex-end' },
-  eventBubbleThem: { backgroundColor: '#151520', alignSelf: 'flex-start' },
+  /* Event Bubble — eventBubbleMe/eventBubbleThem are reused as-is by PostBubble/StoryBubble
+     below so all three card types share one sender/receiver background. */
+  eventBubble: { borderRadius: 16, overflow: 'hidden', width: Math.min(width * 0.74, 310), minHeight: 190, position: 'relative' },
+  eventBubbleMe: { backgroundColor: '#241B4D', alignSelf: 'flex-end' },
+  eventBubbleThem: { backgroundColor: CHAT_COLORS.receiverSurface, alignSelf: 'flex-start', borderWidth: 1, borderColor: CHAT_COLORS.receiverBorder },
   eventBubbleBackground: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.72 },
   eventBubbleScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,8,16,0.68)' },
-  eventBubbleGlow: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96, backgroundColor: 'rgba(92,53,176,0.36)' },
+  eventBubbleGlow: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96, backgroundColor: 'rgba(91,63,214,0.35)' },
   eventBubbleInfo: { padding: 14, paddingBottom: 44, minHeight: 170, justifyContent: 'flex-end' },
   eventBubbleTag: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
-  eventBubbleTagText: { color: '#F0D8FF', fontSize: 11, fontWeight: '700' },
+  eventBubbleTagText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   eventBubbleTitle: { color: '#FFFFFF', fontWeight: '800', fontSize: 16, lineHeight: 21, marginBottom: 8 },
   eventBubbleMetaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 5 },
   eventBubbleDate: { flex: 1, color: 'rgba(255,255,255,0.82)', fontSize: 12, lineHeight: 16 },
@@ -2631,12 +2903,13 @@ const styles = StyleSheet.create({
   eventBubbleBtn: { alignSelf: 'flex-start', backgroundColor: '#FFFFFF', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 11, alignItems: 'center', marginTop: 8 },
   eventBubbleBtnText: { color: '#180F22', fontWeight: '800', fontSize: 13 },
   eventBubbleTimeWrap: { position: 'absolute', left: 14, right: 14, bottom: 12 },
-  eventBubbleTime: { color: 'rgba(255,255,255,0.72)', fontSize: 11 },
-  sharedPostBubble: { width: Math.min(width * 0.74, 310), borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  eventBubbleTime: { color: CHAT_COLORS.metadataText, fontSize: 11, textAlign: 'right' },
+  sharedPostBubble: { width: Math.min(width * 0.74, 310), borderRadius: 16, overflow: 'hidden' },
   sharedPostMediaFrame: { width: '100%', height: 132, backgroundColor: '#19191F', position: 'relative' },
   sharedPostImage: { width: '100%', height: '100%', backgroundColor: '#19191F' },
+  sharedPostAudioFrame: { width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, backgroundColor: '#1A1A2E' },
   sharedPostPlayBadge: { position: 'absolute', left: '50%', top: '50%', width: 42, height: 42, marginLeft: -21, marginTop: -21, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.58)', alignItems: 'center', justifyContent: 'center' },
-  sharedPostInfo: { padding: 12, gap: 4 },
+  sharedPostInfo: { padding: 14, gap: 4 },
   sharedPostAuthor: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   sharedPostPreview: { color: 'rgba(255,255,255,0.78)', fontSize: 13, lineHeight: 18, marginBottom: 4 },
 
@@ -2647,8 +2920,8 @@ const styles = StyleSheet.create({
   reactionPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2E', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3, gap: 3, borderWidth: 1, borderColor: '#2A2A3A' },
   reactionEmoji: { fontSize: 13 },
   reactionCount: { color: '#8E8E9B', fontSize: 11, fontWeight: '600' },
-  failedRetryRow: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(242,36,92,0.12)' },
-  failedRetryText: { color: '#F2245C', fontSize: 11, fontWeight: '600' },
+  failedRetryRow: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: CHAT_COLORS.semanticErrorSurface },
+  failedRetryText: { color: CHAT_COLORS.semanticError, fontSize: 11, fontWeight: '600' },
 
   /* Typing */
   typingRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, marginTop: 8, marginBottom: 4 },
@@ -2668,9 +2941,9 @@ const styles = StyleSheet.create({
   pendingInfo: { flex: 1, minWidth: 0 },
   pendingTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   pendingMeta: { color: '#8E8E9B', fontSize: 11, marginTop: 2 },
-  pendingMetaError: { color: '#F2245C' },
+  pendingMetaError: { color: CHAT_COLORS.semanticError },
   progressTrack: { height: 3, backgroundColor: '#2A2A3A', borderRadius: 2, marginTop: 6, overflow: 'hidden' },
-  progressFill: { height: 3, backgroundColor: '#D4B0EB', borderRadius: 2 },
+  progressFill: { height: 3, backgroundColor: CHAT_COLORS.senderAccent, borderRadius: 2 },
   pendingIconBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#24242C', alignItems: 'center', justifyContent: 'center' },
 
   /* Emoji Picker */
@@ -2703,9 +2976,9 @@ const styles = StyleSheet.create({
   messageSheetTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginBottom: 12 },
   messageActionRow: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 14, paddingHorizontal: 10 },
   messageActionIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  messageDeleteIcon: { backgroundColor: 'rgba(242,36,92,0.12)' },
+  messageDeleteIcon: { backgroundColor: CHAT_COLORS.semanticErrorSurface },
   messageActionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  messageDeleteText: { color: '#F2245C', fontSize: 15, fontWeight: '600' },
+  messageDeleteText: { color: CHAT_COLORS.semanticError, fontSize: 15, fontWeight: '600' },
   editMessageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   editMessageClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center', marginTop: -8 },
   editMessageInput: { minHeight: 92, maxHeight: 180, color: '#FFFFFF', fontSize: 15, lineHeight: 21, textAlignVertical: 'top', backgroundColor: '#161616', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: 14 },
@@ -2723,12 +2996,12 @@ const styles = StyleSheet.create({
   audioSheetClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center' },
   recordCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#161616', borderRadius: 14, padding: 12, marginBottom: 12, gap: 10 },
   recordDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#454555' },
-  recordDotActive: { backgroundColor: '#F2245C' },
+  recordDotActive: { backgroundColor: CHAT_COLORS.semanticError },
   recordInfo: { flex: 1 },
   recordTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   recordTime: { color: '#8E8E9B', fontSize: 12, marginTop: 2 },
   recordButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, gap: 6 },
-  stopButton: { backgroundColor: '#F6A6BC' },
+  stopButton: { backgroundColor: CHAT_COLORS.semanticError },
   recordButtonText: { color: '#111111', fontSize: 13, fontWeight: '700' },
   pickAudioButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A1A2E', borderRadius: 12, paddingVertical: 13, gap: 8 },
   pickAudioButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },

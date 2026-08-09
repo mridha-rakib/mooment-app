@@ -19,12 +19,13 @@ type SettingItemProps = {
   onValueChange?: (val: boolean) => void;
   onPress?: () => void;
   disabled?: boolean;
+  loading?: boolean;
 };
 
-const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, disabled, colors }: SettingItemProps & { colors: any }) => (
-  <TouchableOpacity 
+const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, disabled, loading, colors }: SettingItemProps & { colors: any }) => (
+  <TouchableOpacity
     style={[styles.settingItem, { backgroundColor: colors.card, borderColor: colors.border }, disabled && styles.settingItemDisabled]}
-    onPress={onPress} 
+    onPress={onPress}
     disabled={disabled}
     activeOpacity={type === 'toggle' ? 1 : 0.7}
   >
@@ -34,15 +35,18 @@ const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPres
     </View>
     <View style={styles.settingItemRight}>
       {type === 'toggle' && (
-        <Switch
-          value={value}
-          onValueChange={onValueChange}
-          trackColor={{ false: colors.border, true: colors.primary }}
-          thumbColor={value ? (colors.isDark ? '#FFFFFF' : colors.background) : '#FFFFFF'}
-          ios_backgroundColor={colors.border}
-          disabled={disabled}
-          style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-        />
+        <View style={styles.toggleGroup}>
+          {loading && <Spinner size="small" color={colors.textSecondary} />}
+          <Switch
+            value={value}
+            onValueChange={onValueChange}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor={value ? (colors.isDark ? '#FFFFFF' : colors.background) : '#FFFFFF'}
+            ios_backgroundColor={colors.border}
+            disabled={disabled}
+            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+          />
+        </View>
       )}
       {type === 'arrow' && <Feather name="chevron-right" size={18} color={colors.textSecondary} />}
       {type === 'dropdown' && <Feather name="chevron-down" size={18} color={colors.textSecondary} />}
@@ -60,20 +64,25 @@ export default function SettingsScreen() {
   const deleteAccount = useAuthStore((state) => state.deleteAccount);
   const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
   const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
+  const isLocationSyncing = useLocationSharingStore((state) => state.isSyncing);
 
   // Settings states
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
-  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const locationEnabled = Boolean(user?.currentLocationSharingEnabled);
+  // Transient, display-only value: lets the Switch move the instant the user taps it
+  // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
+  const [pendingLocationValue, setPendingLocationValue] = useState<boolean | null>(null);
+  const locationEnabled = pendingLocationValue !== null
+    ? pendingLocationValue
+    : Boolean(user?.currentLocationSharingEnabled);
   const notificationEnabled = user?.notificationsEnabled ?? true;
 
   const handleLocationSharingChange = async (nextValue: boolean) => {
-    if (isUpdatingLocation) {
+    if (isLocationSyncing) {
       return;
     }
 
-    setIsUpdatingLocation(true);
+    setPendingLocationValue(nextValue);
 
     try {
       if (nextValue) {
@@ -81,13 +90,15 @@ export default function SettingsScreen() {
       } else {
         await disableLocationSharing();
       }
+      // enableSharing()/disableSharing() only resolve after authStore.user has
+      // already been updated, so it's safe to drop the transient value now.
+      setPendingLocationValue(null);
     } catch (error) {
+      setPendingLocationValue(null);
       Alert.alert(
         "Current Location",
         error instanceof Error ? error.message : "Unable to update current location sharing.",
       );
-    } finally {
-      setIsUpdatingLocation(false);
     }
   };
 
@@ -178,13 +189,14 @@ export default function SettingsScreen() {
         {/* ESSENTIALS Section */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ESSENTIALS</Text>
         <View style={styles.sectionGroup}>
-          <SettingItem 
-            icon="map-pin" 
-            label="Current Location" 
-            type="toggle" 
+          <SettingItem
+            icon="map-pin"
+            label="Current Location"
+            type="toggle"
             value={locationEnabled}
             onValueChange={handleLocationSharingChange}
-            disabled={isUpdatingLocation}
+            disabled={isLocationSyncing}
+            loading={isLocationSyncing}
             colors={colors}
           />
           <SettingItem 
@@ -335,6 +347,11 @@ const styles = StyleSheet.create({
   settingItemRight: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  toggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   deleteAccountBtn: {
     marginTop: 20,

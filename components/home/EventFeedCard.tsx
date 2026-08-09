@@ -39,6 +39,22 @@ const timeAgo = (dateStr?: string | Date | null): string => {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(dateStr as string));
 };
 
+const formatLikedByContext = (event: EventResponse) => {
+  const previewNames = (event.socialContext?.previewUsers ?? [])
+    .map((user) => user.name?.trim())
+    .filter((name): name is string => Boolean(name));
+  const total = event.socialContext?.totalMutualReactions ?? 0;
+
+  if (previewNames.length === 0 || total <= 0) {
+    return null;
+  }
+
+  const remaining = Math.max(0, total - previewNames.length);
+  const names = previewNames.join(", ");
+
+  return remaining > 0 ? `${names}... +${remaining} more` : names;
+};
+
 const formatDate = (scheduledAt?: string | Date | null): string => {
   if (!scheduledAt) return "";
   const d = new Date(scheduledAt as string);
@@ -183,6 +199,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const eventTime = formatTime(event.scheduledAt);
   const location = getLocation(event);
   const timestamp = timeAgo(event.publishedAt ?? event.createdAt);
+  const likedByContext = useMemo(() => formatLikedByContext(event), [event]);
   const isPublic = event.privacy === "public";
   const isOwnEvent = Boolean(currentUserId && currentUserId === event.userId);
   const eventId = event.id?.trim() || null;
@@ -607,6 +624,12 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
           {taggedFriendNames.length > 0 ? <Text style={styles.repostTags}>with {taggedFriendNames.join(", ")}</Text> : null}
         </View>
       ) : null}
+      {likedByContext ? (
+        <Text style={styles.socialContextText}>
+          <Text style={styles.socialContextMuted}>liked by </Text>
+          {likedByContext}
+        </Text>
+      ) : null}
       {/* ── Header ──────────────────────────────────────────────── */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.hostRow} activeOpacity={0.7} onPress={goToHostProfile}>
@@ -891,6 +914,18 @@ const styles = StyleSheet.create({
   repostLabel: { color: "#AFAFB8", fontSize: 12, fontWeight: "700" },
   repostCaption: { color: "#FFFFFF", fontSize: 14, lineHeight: 19 },
   repostTags: { color: "#AFAFB8", fontSize: 12 },
+  socialContextText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  socialContextMuted: {
+    color: "#AFAFB8",
+    fontWeight: "400",
+  },
 
   // ── Header
   header: {

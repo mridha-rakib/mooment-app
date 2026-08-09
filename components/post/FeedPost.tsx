@@ -172,6 +172,7 @@ export type PostData = {
   likesCount?: number;
   commentsCount?: number;
   sharesCount?: number;
+  smartFeedScore?: number;
   eventDetails?: EventDetails;
   audioDetails?: AudioDetails;
   productDetails?: ProductDetails;

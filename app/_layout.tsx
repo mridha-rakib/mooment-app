@@ -1,6 +1,7 @@
 import TicketWalletShortcut from "@/components/ticket/TicketWalletShortcut";
 import { installLogBoxStackGuard } from "@/lib/installLogBoxStackGuard";
 import { registerFcmToken } from "@/lib/notifications";
+import { connect as connectRealtimeSocket, disconnect as disconnectRealtimeSocket } from "@/lib/socketClient";
 import { readThemePreference } from "@/lib/themePreference";
 import { setTheme } from "@/redux/slice/preference";
 import { useAuthStore } from "@/stores/authStore";
@@ -305,6 +306,45 @@ function PushNotificationGate() {
   return null;
 }
 
+/**
+ * Owns the single shared Socket.IO connection (app/lib/socketClient.ts) for
+ * the whole authenticated session — chat, presence, and notifications.
+ * Screens never call `connect`/`disconnect` themselves; they only
+ * `subscribe(...)` to this already-connected socket. This replaces the
+ * previous pattern of each screen opening its own realtime connection.
+ *
+ * The live-room/event-chat feature is intentionally NOT part of this —
+ * it still uses `app/lib/realtime.ts` (raw WebSocket) directly per-screen,
+ * unchanged by this migration.
+ */
+function RealtimeConnectionGate() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasRestored = useAuthStore((state) => state.hasRestored);
+  const accessToken = useAuthStore((state) => state.accessToken);
+
+  // Separate from the disconnect effect below on purpose: connectRealtimeSocket
+  // already handles a rotated token by re-authenticating the existing socket
+  // in place (without dropping subscribed screens' handlers), so this effect
+  // must not disconnect on every token refresh — only on logout.
+  useEffect(() => {
+    if (!isAuthenticated || !hasRestored || !accessToken) {
+      return;
+    }
+
+    connectRealtimeSocket(accessToken);
+  }, [isAuthenticated, hasRestored, accessToken]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      return;
+    }
+
+    disconnectRealtimeSocket();
+  }, [isAuthenticated]);
+
+  return null;
+}
+
 export default function RootLayout() {
   useFonts({
     "OleoScript-Regular": OleoScript_400Regular,
@@ -352,6 +392,7 @@ export default function RootLayout() {
       <AuthSessionGate />
       <LocationSharingGate />
       <PushNotificationGate />
+      <RealtimeConnectionGate />
       <StatusBar style="auto" />
     </Provider>
   );
