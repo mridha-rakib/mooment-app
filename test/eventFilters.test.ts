@@ -201,6 +201,51 @@ test("location and radius alone omit every optional request constraint", () => {
   assert.equal(mapParams?.hashtags, undefined);
 });
 
+test("manual location filter keeps the shortLabel as client-only presentation metadata", () => {
+  const barisalFilters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      // Barisal's coordinates — a viewer physically in Dhaka must never have
+      // Dhaka's coordinates substituted or merged in here.
+      latitude: 22.701,
+      longitude: 90.3535,
+      radiusMiles: 140,
+      label: "Barisal, Barisal District, Bangladesh",
+      source: "selected",
+      shortLabel: "Barisal",
+    },
+  };
+
+  const params = buildEventFilterRequestParams(barisalFilters);
+
+  assert.equal(params.latitude, 22.701);
+  assert.equal(params.longitude, 90.3535);
+  assert.ok(Math.abs((params.radiusKm ?? 0) - 225.30816) < 0.0000001);
+  assert.equal("shortLabel" in params, false);
+  assert.equal("source" in params, false);
+  assert.equal("label" in params, false);
+  assert.equal("city" in params, false);
+});
+
+test("current-location filters remain unaffected by the shortLabel addition", () => {
+  const currentLocationFilters: SharedEventFilters = {
+    ...createEmptyEventFilters(),
+    nearby: {
+      latitude: 23.8103,
+      longitude: 90.4125,
+      radiusMiles: 50,
+      label: "Current Location",
+      source: "current",
+    },
+  };
+
+  const params = buildEventFilterRequestParams(currentLocationFilters);
+
+  assert.equal(params.latitude, 23.8103);
+  assert.equal(params.longitude, 90.4125);
+  assert.equal("shortLabel" in params, false);
+});
+
 test("home filter draft apply eligibility requires a location source", () => {
   const noLocation = {
     useCurrentLocation: false,

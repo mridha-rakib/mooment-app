@@ -17,6 +17,18 @@ export type StoryTextOverlay = {
   color: string;
   fontWeight?: "normal" | "600" | "700" | "bold";
   textAlign?: "left" | "center" | "right";
+  /** Degrees. Optional/nullable so legacy overlays without it still typecheck. */
+  rotation?: number;
+};
+
+// Normalized Story image placement — see lib/storyTransform.ts for the
+// coordinate convention (x/y = image center as a fraction of the Story
+// canvas, 0.5/0.5 = today's legacy centered full-bleed cover).
+export type StoryImageTransform = {
+  x: number;
+  y: number;
+  scale: number;
+  rotation?: number;
 };
 
 export type StoryAuthor = {
@@ -41,6 +53,7 @@ export type Story = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  imageTransform?: StoryImageTransform | null;
   audience: "connections";
   viewsCount: number;
   reactionsCount: number;
@@ -83,6 +96,7 @@ export type CreateStoryPayload = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  imageTransform?: StoryImageTransform | null;
 };
 
 export const createStory = async (payload: CreateStoryPayload): Promise<Story> => {

@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { cancelEvent, type EventResponse } from "@/lib/events";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -14,6 +15,7 @@ import { retryBlockOnly, submitReportWithOptionalBlock } from "@/lib/reportBlock
 import { submitReport } from "@/lib/reports";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
+import { useEventDraftStore } from "@/stores/eventDraftStore";
 import MoreMenuModal from "@/components/post/MoreMenuModal";
 import ReportModal from "@/components/modals/ReportModal";
 import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
@@ -156,6 +158,10 @@ type Props = {
 
 export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, embedded = false }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const currentUser = useAuthStore((s) => s.user);
+  const completedProfileTypes = useAuthStore((s) => s.completedProfileTypes);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const loadEventForEdit = useEventDraftStore((s) => s.loadFromEvent);
   const [bannerFailed, setBannerFailed] = useState(false);
 
   const bannerUri = useMemo(() => {
@@ -390,6 +396,31 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const handleCancelEvent = () => {
     setShowMoreMenu(false);
     setCancelReasonVisible(true);
+  };
+
+  // Reuses the exact same guard + loadFromEvent(event) + navigate sequence as
+  // event-screen/event.tsx's own handleEdit — no new Event edit backend/UI is
+  // introduced here, only this Feed entry point into the existing flow.
+  // Skipping loadFromEvent() before navigating risks stale Zustand draft
+  // state causing a duplicate draft to be created instead of editing this
+  // Event (see eventDraftStore's isEditingPublishedEvent/draftId).
+  const handleEditEvent = () => {
+    setShowMoreMenu(false);
+
+    if (eventStatus === "completed" || eventStatus === "cancelled") {
+      return;
+    }
+
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        loadEventForEdit(event);
+        router.push("/create-event");
+      },
+    });
   };
 
   const submitEventCancellation = async (payload: Parameters<typeof cancelEvent>[1]) => {
@@ -861,6 +892,8 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         onClose={() => setShowMoreMenu(false)}
         showDelete={isOwnEvent}
         deleteLabel="Cancel Event"
+        showEdit={isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled"}
+        onEdit={isOwnEvent ? handleEditEvent : undefined}
         onReport={!isOwnEvent ? handleOpenReport : undefined}
         reported={hasReported}
         onSave={!isOwnEvent ? handleSave : undefined}

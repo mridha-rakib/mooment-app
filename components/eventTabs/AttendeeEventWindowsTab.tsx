@@ -57,6 +57,12 @@ type SelectedMedia = {
   durationSeconds?: number | null;
 };
 
+// Event-window video posting is temporarily disabled (resource-constrained deploy).
+const EVENT_WINDOW_VIDEO_ENABLED = false;
+
+const postableContentTypes = (types: EventWindowContentType[]): EventWindowContentType[] =>
+  EVENT_WINDOW_VIDEO_ENABLED ? types : types.filter((type) => type !== "video");
+
 const CONTENT_LABELS: Record<EventWindowContentType, string> = {
   text: "Text",
   image: "Image",
@@ -136,6 +142,18 @@ const getWindowMessage = (window: EventWindow, eventEnded: boolean) => {
   if (window.remainingSlots === 0) return "This window is full.";
   return "This window is closed.";
 };
+
+// Event-window gallery video playback is temporarily disabled
+// (resource-constrained deploy). Static, non-interactive placeholder — never
+// mounts VideoView/useVideoPlayer, so no video initialization or fetch is
+// attempted. This component is left fully intact below to restore later.
+function GalleryVideoDisabled() {
+  return (
+    <View style={[styles.galleryMedia, styles.galleryMediaFallback]}>
+      <Feather name="video-off" size={22} color="#8E8E9B" />
+    </View>
+  );
+}
 
 function GalleryVideo({ uri, headers }: { uri: string; headers?: Record<string, string> }) {
   const source = useMemo(() => ({ uri, headers }), [headers, uri]);
@@ -290,7 +308,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     }
     if (!window.canPost) return;
     setSelectedWindow(window);
-    setSelectedType(window.allowedContentTypes[0] ?? "text");
+    setSelectedType(postableContentTypes(window.allowedContentTypes)[0] ?? "text");
     setText("");
     setSelectedMedia(null);
     setPostError(null);
@@ -324,6 +342,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       }
 
       if (selectedType !== "image" && selectedType !== "video") return;
+      if (selectedType === "video" && !EVENT_WINDOW_VIDEO_ENABLED) return;
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert("Gallery access needed", "Allow photo library access to choose media.");
@@ -397,6 +416,12 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       setPostError(`Choose ${CONTENT_LABELS[selectedType].toLowerCase()} to post.`);
       return;
     }
+    if (selectedType === "video" && !EVENT_WINDOW_VIDEO_ENABLED) {
+      // Safety net: the type selector no longer offers "video", so this
+      // should be unreachable.
+      setPostError("Video posts are temporarily unavailable.");
+      return;
+    }
 
     Keyboard.dismiss();
     setIsSubmitting(true);
@@ -456,7 +481,11 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       {post.mediaItems.map((media, index) => {
         if (!media.url) return null;
         if (media.type === "image") return <Image key={`${post.id}-${index}`} source={{ uri: media.url, headers: mediaRequestHeaders }} style={styles.galleryMedia} contentFit="cover" />;
-        if (media.type === "video") return <GalleryVideo key={`${post.id}-${index}`} uri={media.url} headers={mediaRequestHeaders} />;
+        if (media.type === "video") {
+          return EVENT_WINDOW_VIDEO_ENABLED
+            ? <GalleryVideo key={`${post.id}-${index}`} uri={media.url} headers={mediaRequestHeaders} />
+            : <GalleryVideoDisabled key={`${post.id}-${index}`} />;
+        }
         return <GalleryAudio key={`${post.id}-${index}`} uri={media.url} headers={mediaRequestHeaders} durationSeconds={media.durationSeconds} />;
       })}
     </View>
@@ -594,7 +623,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
               <Text style={[styles.formWindowTitle, { color: colors.text }]}>{selectedWindow?.title?.trim() || "Event window"}</Text>
               <Text style={[styles.formLabel, { color: colors.textSecondary }]}>POST TYPE</Text>
               <View style={styles.typeSelector}>
-                {selectedWindow?.allowedContentTypes.map((type) => {
+                {postableContentTypes(selectedWindow?.allowedContentTypes ?? []).map((type) => {
                   const selected = selectedType === type;
                   return (
                     <TouchableOpacity key={type} style={[styles.typeOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}22` : colors.card }]} onPress={() => selectType(type)}>
@@ -696,6 +725,7 @@ const styles = StyleSheet.create({
   postedAt: { fontSize: 11, marginTop: 2 },
   postText: { fontSize: 14, lineHeight: 20, marginBottom: 10 },
   galleryMedia: { width: "100%", aspectRatio: 1.25, borderRadius: 6, overflow: "hidden", backgroundColor: "#111111", marginTop: 4 },
+  galleryMediaFallback: { alignItems: "center", justifyContent: "center" },
   audioPlayer: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, borderRadius: 6, backgroundColor: "#202024", marginTop: 4 },
   audioPlayButton: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "#6B4E71" },
   audioTrack: { flex: 1, height: 3, borderRadius: 2, overflow: "hidden", backgroundColor: "#50505A" },

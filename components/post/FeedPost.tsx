@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
 import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
-import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary } from '@/lib/moments';
+import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type Moment, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { retryBlockOnly, submitReportWithOptionalBlock } from '@/lib/reportBlockFlow';
 import { submitReport } from '@/lib/reports';
@@ -25,6 +25,7 @@ import FullScreenMediaModal from '../modals/FullScreenMediaModal';
 import ReportDetailsModal from '../modals/ReportDetailsModal';
 import ReportModal from '../modals/ReportModal';
 import UserAvatar from '../ui/UserAvatar';
+import EditPostModal from './EditPostModal';
 import MoreMenuModal from "./MoreMenuModal";
 import ReportedContentCard, { type ReportedContentOutcome } from './ReportedContentCard';
 import HashtagText from './HashtagText';
@@ -115,6 +116,13 @@ export type ProductDetails = {
   buttonText: string;
 };
 
+// Feed video playback is temporarily disabled (resource-constrained deploy) —
+// see VideoFeedMedia below. Mirrors the VideoBubble treatment in
+// chat-detail.tsx. This is a static module-level constant (not a prop/state),
+// so gating on it inside VideoFeedMedia never changes hook call order between
+// renders.
+const VIDEO_PLAYBACK_ENABLED = false;
+
 export type MediaDisplayCrop = {
   crop?: {
     x: number;
@@ -182,6 +190,23 @@ export type PostData = {
   // Current viewer only — backend-authoritative, survives refresh/app restart.
   hasReported?: boolean;
 };
+
+// VIDEO PLAYBACK TEMPORARILY DISABLED. Static, non-interactive placeholder in
+// the same videoMediaFrame layout the real player uses (no card resize/shift)
+// — never mounts VideoView/useVideoPlayer, so no video initialization or
+// fetch is attempted. The call site below renders this instead of
+// VideoFeedMedia while VIDEO_PLAYBACK_ENABLED is false; VideoFeedMedia itself
+// is left fully intact to restore later.
+const DisabledVideoFeedMedia = React.memo(function DisabledVideoFeedMedia() {
+  return (
+    <View style={styles.videoMediaFrame}>
+      <View style={styles.videoStateOverlay}>
+        <Feather name="video-off" size={22} color="#FFFFFF" style={styles.videoProcessingIcon} />
+        <Text style={styles.videoErrorText}>Video unavailable</Text>
+      </View>
+    </View>
+  );
+});
 
 const VideoFeedMedia = React.memo(function VideoFeedMedia({ uri, isActive }: { uri: string; isActive: boolean }) {
   const isScreenFocused = useIsFocused();
@@ -1236,6 +1261,7 @@ export default function FeedPost({
   onInteractionChange,
   onSaveChange,
   onDeletePress,
+  onPostUpdated,
   onAuthorBlocked,
   isOwnPost = false,
   embedded = false,
@@ -1249,6 +1275,10 @@ export default function FeedPost({
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   onSaveChange?: (postId: string, isSaved: boolean) => void;
   onDeletePress?: (post: PostData) => void;
+  // Fired after a successful caption-only edit of this user's own Post —
+  // lets the Feed screen patch its local list by id. Edit is only offered
+  // (see canEditPost below) when this is wired, mirroring onDeletePress.
+  onPostUpdated?: (updatedMoment: Moment) => void;
   // Fired once a Report+Block flow's block step actually succeeds — lets the
   // Feed screen drop this author's *other* already-rendered items from the
   // currently mounted list. This card's own slot is handled locally below.
@@ -1291,7 +1321,9 @@ export default function FeedPost({
   const canCompareAuthorId = Boolean(post.authorId && currentUserId);
   const isPostByCurrentUser = canCompareAuthorId ? post.authorId === currentUserId : isOwnPost;
   const canDeletePost = isPostByCurrentUser && Boolean(onDeletePress);
-  const hasMoreMenuActions = !isPostByCurrentUser || canDeletePost;
+  const canEditPost = isPostByCurrentUser && Boolean(onPostUpdated);
+  const hasMoreMenuActions = !isPostByCurrentUser || canDeletePost || canEditPost;
+  const [showEditModal, setShowEditModal] = useState(false);
   const isNormalPost = post.postType === 'standard';
 
   // Dynamic Interaction State
@@ -1323,6 +1355,7 @@ export default function FeedPost({
   const [locallyRetriedIndexes, setLocallyRetriedIndexes] = useState<Set<number>>(new Set());
   const [retryPendingIndexes, setRetryPendingIndexes] = useState<Set<number>>(new Set());
   const handleRetryVideoProcessing = useCallback((index: number) => {
+    if (!VIDEO_PLAYBACK_ENABLED) return;
     if (retryPendingIndexes.has(index)) {
       return;
     }
@@ -1892,12 +1925,16 @@ export default function FeedPost({
                     {isVideoNotYetPlayable ? (
                       <VideoProcessingPlaceholder
                         status={effectiveProcessingStatus as 'queued' | 'processing' | 'failed'}
-                        canRetry={effectiveProcessingStatus === 'failed' && isPostByCurrentUser}
+                        canRetry={effectiveProcessingStatus === 'failed' && isPostByCurrentUser && VIDEO_PLAYBACK_ENABLED}
                         isRetrying={retryPendingIndexes.has(index)}
                         onRetry={() => handleRetryVideoProcessing(index)}
                       />
                     ) : item.type === 'video' ? (
-                      <VideoFeedMedia uri={item.uri} isActive={Boolean(isActiveVideo && currentMediaIndex === index && !showFullScreenMedia)} />
+                      VIDEO_PLAYBACK_ENABLED ? (
+                        <VideoFeedMedia uri={item.uri} isActive={Boolean(isActiveVideo && currentMediaIndex === index && !showFullScreenMedia)} />
+                      ) : (
+                        <DisabledVideoFeedMedia />
+                      )
                     ) : (
                       <TouchableOpacity
                         style={styles.mediaImageButton}
@@ -2067,8 +2104,18 @@ export default function FeedPost({
           onSave={!isPostByCurrentUser ? handleSave : undefined}
           isSaved={!isPostByCurrentUser ? isSaved : undefined}
           onBlock={!isPostByCurrentUser && Boolean(post.authorId) ? handleBlock : undefined}
+          showEdit={canEditPost}
+          onEdit={canEditPost ? () => setShowEditModal(true) : undefined}
           onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
           top={menuTop}
+        />
+
+        <EditPostModal
+          visible={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          postId={post.id}
+          initialCaption={post.caption}
+          onSaved={(updated) => onPostUpdated?.(updated)}
         />
 
         <ReportModal
@@ -2304,9 +2351,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   normalPostCaption: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "400",
-    lineHeight: 22,
+    lineHeight: 20,
     letterSpacing: 0,
     marginBottom: 12,
     paddingHorizontal: 12,

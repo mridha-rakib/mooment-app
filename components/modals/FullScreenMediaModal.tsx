@@ -77,6 +77,23 @@ function FullScreenImage({ uri, headers }: { uri: string; headers?: Record<strin
   );
 }
 
+// Full-screen video playback is temporarily disabled (resource-constrained
+// deploy). Static, non-interactive placeholder — never mounts
+// VideoView/useVideoPlayer, so no video initialization or fetch is
+// attempted. FullScreenVideo below is left fully intact to restore later.
+const VIDEO_PLAYBACK_ENABLED = false;
+
+function FullScreenVideoDisabled() {
+  return (
+    <View style={styles.fullMedia}>
+      <View style={styles.errorState}>
+        <Feather name="video-off" size={34} color="#8E8E9B" />
+        <Text style={styles.errorText}>Video unavailable</Text>
+      </View>
+    </View>
+  );
+}
+
 function FullScreenVideo({ uri, headers, isActive }: { uri: string; headers?: Record<string, string>; isActive: boolean }) {
   const source = useMemo(() => (headers ? { uri, headers } : uri), [headers, uri]);
   const player = useVideoPlayer(source, (videoPlayer) => {
@@ -202,7 +219,11 @@ export default function FullScreenMediaModal({
           renderItem={({ item, index }) => (
             <View style={[styles.slide, { width, height }]}>
               {item.type === 'video' ? (
-                <FullScreenVideo uri={item.uri} headers={item.headers} isActive={visible && index === currentIndex} />
+                VIDEO_PLAYBACK_ENABLED ? (
+                  <FullScreenVideo uri={item.uri} headers={item.headers} isActive={visible && index === currentIndex} />
+                ) : (
+                  <FullScreenVideoDisabled />
+                )
               ) : (
                 <FullScreenImage uri={item.uri} headers={item.headers} />
               )}

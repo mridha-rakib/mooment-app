@@ -72,6 +72,9 @@ const FALLBACK_AUTHOR_NAME = 'Mooment User';
 const MAX_MEDIA_ITEMS = 10;
 const MAX_VIDEO_RECORDING_DURATION_SECONDS = 60;
 const MAX_VIDEO_DURATION_ERROR = 'Create Post videos can be up to 1 minute. Please record a shorter video.';
+// Video Moment/Post creation is temporarily disabled (resource-constrained deploy).
+// This gates every video entry point in this screen; flip back to re-enable.
+const VIDEO_MOMENT_CREATION_ENABLED = false;
 const CREATE_MOMENT_COLORS = {
   background: '#0E0D12',
   text: '#FFFFFF',
@@ -1970,6 +1973,7 @@ export default function CreateMomentScreen() {
     name?: string | null,
     durationSeconds?: number | null,
   ) => {
+    if (!VIDEO_MOMENT_CREATION_ENABLED) return;
     if (durationSeconds != null && Number.isFinite(durationSeconds) && durationSeconds > MAX_VIDEO_RECORDING_DURATION_SECONDS) {
       clearSelectedMedia();
       Alert.alert('Video too long', MAX_VIDEO_DURATION_ERROR);
@@ -2098,6 +2102,7 @@ export default function CreateMomentScreen() {
   };
 
   const handlePickVideo = async () => {
+    if (!VIDEO_MOMENT_CREATION_ENABLED) return;
     if (isVideoPickerOpeningRef.current) {
       return;
     }
@@ -2187,6 +2192,13 @@ export default function CreateMomentScreen() {
         contentType,
         durationSeconds: mediaDurationSeconds,
       };
+    }
+
+    if (type === 'video' && !VIDEO_MOMENT_CREATION_ENABLED) {
+      // Safety net: video Moment creation is disabled at every UI entry point
+      // above, so this should be unreachable. If a stale draft somehow gets
+      // here, refuse the upload instead of silently sending video bytes.
+      throw new Error('Video posts are temporarily unavailable.');
     }
 
     const storageKey = type === 'video'
@@ -2280,6 +2292,7 @@ export default function CreateMomentScreen() {
         : null;
 
       if (
+        VIDEO_MOMENT_CREATION_ENABLED &&
         selectedImage &&
         selectedMediaType === 'video' &&
         selectedVideoContentType &&
@@ -2514,13 +2527,15 @@ export default function CreateMomentScreen() {
             <Text style={styles.toolbarLabel}>Camera</Text>
           </TouchableOpacity>
 
-          {/* Video */}
-          <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowVideoPicker(true)} activeOpacity={0.8}>
-            <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'video' && styles.toolbarIconBoxActive]}>
-              <HugeiconsIcon icon={Video02Icon} size={24} color={selectedMediaType === 'video' ? screenColors.primary : screenColors.bodyText} />
-            </BlurView>
-            <Text style={[styles.toolbarLabel, selectedMediaType === 'video' && styles.toolbarLabelActive]}>Video</Text>
-          </TouchableOpacity>
+          {/* Video — temporarily disabled, see VIDEO_MOMENT_CREATION_ENABLED */}
+          {VIDEO_MOMENT_CREATION_ENABLED ? (
+            <TouchableOpacity style={styles.toolbarItem} onPress={() => setShowVideoPicker(true)} activeOpacity={0.8}>
+              <BlurView intensity={20} tint="dark" style={[styles.toolbarIconBox, selectedMediaType === 'video' && styles.toolbarIconBoxActive]}>
+                <HugeiconsIcon icon={Video02Icon} size={24} color={selectedMediaType === 'video' ? screenColors.primary : screenColors.bodyText} />
+              </BlurView>
+              <Text style={[styles.toolbarLabel, selectedMediaType === 'video' && styles.toolbarLabelActive]}>Video</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Audio */}
           <TouchableOpacity
@@ -2550,7 +2565,7 @@ export default function CreateMomentScreen() {
         ])}
       />
       <VideoPickerSheet
-        visible={showVideoPicker}
+        visible={VIDEO_MOMENT_CREATION_ENABLED && showVideoPicker}
         onClose={() => setShowVideoPicker(false)}
         onRecordVideo={() => {
           setShowVideoPicker(false);
@@ -2559,7 +2574,7 @@ export default function CreateMomentScreen() {
         onPickVideo={handlePickVideo}
       />
       <VideoCameraSheet
-        visible={showVideoCamera}
+        visible={VIDEO_MOMENT_CREATION_ENABLED && showVideoCamera}
         onClose={() => setShowVideoCamera(false)}
         onRecorded={(uri, contentType, name, durationSeconds) => handleVideoSelect(uri, 'camera', contentType, name, durationSeconds)}
       />

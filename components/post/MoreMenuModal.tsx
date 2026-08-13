@@ -20,6 +20,9 @@ type MoreMenuModalProps = {
   onBlock?: () => void;
   blockLabel?: string;
   blockDisabled?: boolean;
+  onEdit?: () => void;
+  showEdit?: boolean;
+  editLabel?: string;
   onDelete?: () => void;
   showDelete?: boolean;
   deleteLabel?: string;
@@ -38,6 +41,9 @@ export default function MoreMenuModal({
   onBlock,
   blockLabel = "Block",
   blockDisabled = false,
+  onEdit,
+  showEdit = false,
+  editLabel = "Edit",
   onDelete,
   showDelete = false,
   deleteLabel = "Delete",
@@ -93,7 +99,7 @@ export default function MoreMenuModal({
                       {reported ? "Reported" : "Report"}
                     </Text>
                   </TouchableOpacity>
-                  {(onSave || onBlock || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                  {(onSave || onBlock || (showEdit && onEdit) || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
               )}
 
@@ -116,7 +122,7 @@ export default function MoreMenuModal({
                       {isSaved ? "Saved" : "Save"}
                     </Text>
                   </TouchableOpacity>
-                  {(onBlock || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                  {(onBlock || (showEdit && onEdit) || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>
               )}
 
@@ -134,6 +140,23 @@ export default function MoreMenuModal({
                   >
                     <Feather name="slash" size={20} color={colors.text} style={styles.menuIcon} />
                     <Text style={[styles.menuText, { color: colors.text }]}>{blockLabel}</Text>
+                  </TouchableOpacity>
+                  {((showEdit && onEdit) || (showDelete && onDelete)) && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                </>
+              )}
+
+              {showEdit && onEdit && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      onEdit?.();
+                      onClose();
+                    }}
+                  >
+                    <Feather name="edit-2" size={20} color={colors.text} style={styles.menuIcon} />
+                    <Text style={[styles.menuText, { color: colors.text }]}>{editLabel}</Text>
                   </TouchableOpacity>
                   {showDelete && onDelete && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 </>

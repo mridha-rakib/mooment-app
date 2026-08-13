@@ -21,6 +21,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Provider, useDispatch } from "react-redux";
 import { store } from "../redux/store";
 
@@ -375,25 +376,31 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Provider store={store}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="post-screen/add-story"
-          options={{
-            animation: "fade",
-            contentStyle: { backgroundColor: "#000000" },
-            gestureEnabled: false,
-            presentation: "fullScreenModal",
-          }}
-        />
-      </Stack>
-      <TicketWalletShortcut />
-      <ThemePreferenceGate />
-      <AuthSessionGate />
-      <LocationSharingGate />
-      <PushNotificationGate />
-      <RealtimeConnectionGate />
-      <StatusBar style="auto" />
-    </Provider>
+    // Non-visual wrapper required by react-native-gesture-handler's
+    // GestureDetector (used by the Story image/text transform editor). It
+    // must sit above every screen that may host a GestureDetector, so it
+    // wraps the whole app rather than just the Story screens.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Provider store={store}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen
+            name="post-screen/add-story"
+            options={{
+              animation: "fade",
+              contentStyle: { backgroundColor: "#000000" },
+              gestureEnabled: false,
+              presentation: "fullScreenModal",
+            }}
+          />
+        </Stack>
+        <TicketWalletShortcut />
+        <ThemePreferenceGate />
+        <AuthSessionGate />
+        <LocationSharingGate />
+        <PushNotificationGate />
+        <RealtimeConnectionGate />
+        <StatusBar style="auto" />
+      </Provider>
+    </GestureHandlerRootView>
   );
 }

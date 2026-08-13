@@ -10,13 +10,15 @@ import {
   recordStoryView,
   shareStoryToFeed,
   toggleStoryReaction,
-  type Story,
+  type StoryImageTransform,
   type StoryMediaType,
   type StoryTextBackground,
   type StoryTextOverlay,
 } from "@/lib/stories";
+import { groupStoriesByAuthor } from "@/lib/storyRow";
 import { markStoriesSeen } from "@/lib/storySeen";
 import { getCachedStoryThumbnail } from "@/lib/storyThumbnails";
+import { hasValidStoryImageTransform } from "@/lib/storyTransform";
 import {
   clampStoryGroupDrag,
   clampStoryGroupPagerDrag,
@@ -54,6 +56,7 @@ import {
   Animated,
   AppState,
   BackHandler,
+  Dimensions,
   Easing,
   PanResponder,
   Platform,
@@ -77,6 +80,7 @@ type StorySequenceItem = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  imageTransform?: StoryImageTransform | null;
   createdAt?: string;
   expiresAt?: string;
   viewsCount?: number;
@@ -160,54 +164,23 @@ const normalizeGroups = (groups?: ViewerGroup[]): StoryGroup[] =>
       stories: group.stories as StorySequenceItem[],
     })) ?? [];
 
-const isActiveStory = (story: Pick<StorySequenceItem, "expiresAt">) =>
-  !story.expiresAt || new Date(story.expiresAt).getTime() > Date.now();
-
-const groupStoriesByAuthor = (stories: Story[]): StoryGroup[] => {
-  const grouped = new Map<string, Story[]>();
-
-  stories.filter(isActiveStory).forEach((story) => {
-    const authorId = story.author?.id ?? story.userId;
-    grouped.set(authorId, [...(grouped.get(authorId) ?? []), story]);
-  });
-
-  return Array.from(grouped.entries()).map(([authorId, authorStories]) => {
-    const sortedStories = [...authorStories].sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    const latestStory = sortedStories[sortedStories.length - 1];
-    const title = latestStory.author?.name ?? "Story";
-    const authorAvatar = latestStory.author?.avatarUrl ?? null;
-
-    return {
-      title,
-      authorId,
-      authorAvatar,
-      stories: sortedStories.map((story) => ({
-        id: story.id,
-        mediaType: story.mediaType,
-        mediaUri: story.mediaUrl,
-        contentType: story.contentType,
-        durationSeconds: story.durationSeconds || 15,
-        caption: story.caption,
-        textContent: story.textContent,
-        textBackground: story.textBackground,
-        textOverlay: story.textOverlay,
-        createdAt: story.createdAt,
-        expiresAt: story.expiresAt,
-        viewsCount: story.viewsCount,
-        reactionsCount: story.reactionsCount,
-        commentsCount: story.commentsCount,
-        isReacted: story.isReacted,
-        isOwner: story.isOwner,
-        authorId,
-        authorName: title,
-        authorAvatar,
-      })),
-    };
-  });
-};
+// Reshapes the shared lib/storyRow.ts groupStoriesByAuthor()'s StoryData[]
+// (the same canonical Story->StorySequenceItem mapping the home feed/
+// StoryCarousel session data is built from) into this screen's lighter
+// StoryGroup container shape. This is a field-selection adapter only — it
+// must never re-derive any per-Story field itself, or the two mappers can
+// drift out of sync again the way they previously did for imageTransform.
+const toStoryGroups = (
+  dataGroups: ReturnType<typeof groupStoriesByAuthor>,
+): StoryGroup[] =>
+  dataGroups
+    .filter((group) => Boolean(group.storyItems?.length))
+    .map((group) => ({
+      title: group.title ?? group.authorName ?? "Story",
+      authorId: group.authorId,
+      authorAvatar: group.authorAvatar,
+      stories: group.storyItems ?? [],
+    }));
 
 const removeStoryFromGroupList = (groups: StoryGroup[], storyId: string) =>
   groups
@@ -265,7 +238,28 @@ function StoryBackground({
 export default function ViewStoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Window dimensions are still used for the vertical swipe-between-groups
+  // navigation animation below (an unrelated, purely navigational concern)
+  // — but NOT for reconstructing Story content transforms. The editor
+  // measures its own rendered canvas via onLayout rather than trusting the
+  // OS window size, since the two screens have different navigation
+  // presentation/status-bar configuration and window size is not
+  // guaranteed to equal the actual rendered Story surface. `canvasSize`
+  // below is the viewer's equivalent measurement, attached to the same
+  // View (`storySurface`) that both the transformed image and the text
+  // overlay are rendered against — the common containing block for both.
   const { height: viewportHeight } = useWindowDimensions();
+  // Bootstrapped from the device's own window size (not a hardcoded
+  // screenshot value) so the very first frame already has a sane
+  // fallback before onLayout fires; corrected to the real measured
+  // storySurface size the instant it mounts, mirroring add-story.tsx's
+  // identical canvasSize pattern.
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>(() => {
+    const { width, height } = Dimensions.get("window");
+    return { width, height };
+  });
+  const canvasWidth = canvasSize.width;
+  const canvasHeight = canvasSize.height;
   const currentUserId = useAuthStore((state) => state.user?.id);
   const {
     mediaUri,
@@ -527,11 +521,11 @@ export default function ViewStoryScreen() {
       setStoryGroupsByTab((current) => ({
         discover:
           discoverResult.status === "fulfilled"
-            ? groupStoriesByAuthor(discoverResult.value)
+            ? toStoryGroups(groupStoriesByAuthor(discoverResult.value))
             : current.discover,
         friends:
           friendsResult.status === "fulfilled"
-            ? groupStoriesByAuthor(friendsResult.value)
+            ? toStoryGroups(groupStoriesByAuthor(friendsResult.value))
             : current.friends,
       }));
       setResolvedStoryTabs((current) => ({
@@ -1614,12 +1608,16 @@ export default function ViewStoryScreen() {
         style={[
           styles.overlayTextWrap,
           {
-            left: `${overlay.x * 100}%`,
-            top: `${overlay.y * 100}%`,
+            // Same formula, same measured-canvas dimension source, and the
+            // same static left/top:'50%' anchor (baked into
+            // overlayTextWrap below) as the editor's DraggableStoryText —
+            // not a percentage-based reconstruction, so there is no
+            // separate mechanism that could drift from the editor's.
             transform: [
-              { translateX: -140 },
-              { translateY: -30 },
+              { translateX: (overlay.x - 0.5) * canvasWidth - 140 },
+              { translateY: (overlay.y - 0.5) * canvasHeight - 30 },
               { scale: overlay.scale },
+              { rotate: `${overlay.rotation ?? 0}deg` },
             ],
           },
         ]}
@@ -1636,6 +1634,59 @@ export default function ViewStoryScreen() {
         >
           {overlay.text}
         </Text>
+      </View>
+    );
+  };
+
+  // Viewer-side counterpart to the editor's DraggableStoryImage — renders
+  // the same normalized transform, but as a one-time static style (no
+  // gesture, no reanimated shared values: the creator already committed
+  // the composition, viewers only see it). Legacy Stories (no
+  // imageTransform) fall through to the exact pre-existing `cover` render
+  // untouched.
+  const renderStoryImage = (
+    uri: string,
+    imageTransform: StoryImageTransform | null | undefined,
+    imageStyle: typeof styles.media,
+  ) => {
+    // Only a fully-valid transform (finite x/y/scale, optional finite
+    // rotation) may use the transformed branch. null/undefined (legacy)
+    // AND any truthy-but-malformed/partial shape both fall back to the
+    // exact pre-existing cover render — never a partial repair here.
+    if (!hasValidStoryImageTransform(imageTransform)) {
+      return (
+        <Image
+          source={{ uri }}
+          style={imageStyle}
+          contentFit="cover"
+          contentPosition="center"
+          cachePolicy="memory-disk"
+        />
+      );
+    }
+
+    return (
+      <View style={imageStyle} pointerEvents="none">
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              transform: [
+                { translateX: (imageTransform.x - 0.5) * canvasWidth },
+                { translateY: (imageTransform.y - 0.5) * canvasHeight },
+                { scale: imageTransform.scale },
+                { rotate: `${imageTransform.rotation ?? 0}deg` },
+              ],
+            },
+          ]}
+        >
+          <Image
+            source={{ uri }}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        </View>
       </View>
     );
   };
@@ -1927,15 +1978,7 @@ export default function ViewStoryScreen() {
     }
 
     if (mediaType === "image" && story.mediaUri) {
-      return (
-        <Image
-          source={{ uri: story.mediaUri }}
-          style={styles.media}
-          contentFit="cover"
-          contentPosition="center"
-          cachePolicy="memory-disk"
-        />
-      );
+      return renderStoryImage(story.mediaUri, story.imageTransform, styles.media);
     }
 
     const thumbnailSource = story.mediaUri
@@ -1980,6 +2023,81 @@ export default function ViewStoryScreen() {
     );
   };
 
+  const renderCurrentStoryImage = () => {
+    if (!currentStory?.mediaUri) return null;
+
+    const imageLoadHandlers = {
+      onLoadStart: () => {
+        if (__DEV__)
+          console.log("[StoryPlaybackTiming] image-request-start", {
+            storyId: currentStory.id,
+            sinceOpenMs: Date.now() - openedAt,
+          });
+      },
+      onLoad: () => {
+        if (__DEV__)
+          console.log("[StoryPlaybackTiming] image-loaded", {
+            storyId: currentStory.id,
+            sinceOpenMs: Date.now() - openedAt,
+          });
+      },
+      onDisplay: () => {
+        if (__DEV__)
+          console.log("[StoryPlaybackTiming] image-displayed", {
+            storyId: currentStory.id,
+            sinceOpenMs: Date.now() - openedAt,
+          });
+      },
+    };
+
+    // Only a fully-valid transform (finite x/y/scale, optional finite
+    // rotation) may use the transformed branch. null/undefined (legacy)
+    // AND any truthy-but-malformed/partial shape both fall back to the
+    // exact pre-existing cover render — never a partial repair here.
+    if (!hasValidStoryImageTransform(currentStory.imageTransform)) {
+      return (
+        <Image
+          source={{ uri: currentStory.mediaUri }}
+          style={styles.media}
+          contentFit="cover"
+          contentPosition="center"
+          transition={100}
+          cachePolicy="memory-disk"
+          {...imageLoadHandlers}
+        />
+      );
+    }
+
+    const { imageTransform } = currentStory;
+
+    return (
+      <View style={styles.media} pointerEvents="none">
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              transform: [
+                { translateX: (imageTransform.x - 0.5) * canvasWidth },
+                { translateY: (imageTransform.y - 0.5) * canvasHeight },
+                { scale: imageTransform.scale },
+                { rotate: `${imageTransform.rotation ?? 0}deg` },
+              ],
+            },
+          ]}
+        >
+          <Image
+            source={{ uri: currentStory.mediaUri }}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            transition={100}
+            cachePolicy="memory-disk"
+            {...imageLoadHandlers}
+          />
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {renderAdjacentStoryLayer()}
@@ -1988,6 +2106,16 @@ export default function ViewStoryScreen() {
           styles.storySurface,
           { transform: [{ translateY: verticalSurfaceTranslateY }] },
         ]}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (width > 0 && height > 0) {
+            setCanvasSize((current) =>
+              current.width === width && current.height === height
+                ? current
+                : { width, height },
+            );
+          }
+        }}
       >
         <StatusBar style="light" translucent />
         {isCurrentVideo && currentStory?.mediaUri && !loadFailed ? (
@@ -2020,35 +2148,7 @@ export default function ViewStoryScreen() {
             }}
           />
         ) : isCurrentImage && currentStory?.mediaUri && !loadFailed ? (
-          <Image
-            source={{ uri: currentStory.mediaUri }}
-            style={styles.media}
-            contentFit="cover"
-            contentPosition="center"
-            transition={100}
-            cachePolicy="memory-disk"
-            onLoadStart={() => {
-              if (__DEV__)
-                console.log("[StoryPlaybackTiming] image-request-start", {
-                  storyId: currentStory.id,
-                  sinceOpenMs: Date.now() - openedAt,
-                });
-            }}
-            onLoad={() => {
-              if (__DEV__)
-                console.log("[StoryPlaybackTiming] image-loaded", {
-                  storyId: currentStory.id,
-                  sinceOpenMs: Date.now() - openedAt,
-                });
-            }}
-            onDisplay={() => {
-              if (__DEV__)
-                console.log("[StoryPlaybackTiming] image-displayed", {
-                  storyId: currentStory.id,
-                  sinceOpenMs: Date.now() - openedAt,
-                });
-            }}
-          />
+          renderCurrentStoryImage()
         ) : isCurrentText && currentStory && !loadFailed ? (
           <StoryBackground background={currentStory.textBackground}>
             <Text style={styles.textStoryText}>{currentStory.textContent}</Text>
@@ -2347,10 +2447,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 5,
   },
+  // Kept byte-identical to DraggableStoryText.tsx's overlayTextWrap (same
+  // position/left/top anchor, same width, same alignItems, same
+  // paddingVertical) — this is the base geometry the `-140`/`-30`
+  // compensating offsets in renderTextOverlay above were calibrated
+  // against, so it must match the editor exactly for text to land in the
+  // same relative spot the creator saw before publishing.
   overlayTextWrap: {
-    alignItems: "center",
     position: "absolute",
+    left: "50%",
+    top: "50%",
     width: 280,
+    alignItems: "center",
+    paddingVertical: 10,
   },
   overlayText: {
     fontSize: 30,

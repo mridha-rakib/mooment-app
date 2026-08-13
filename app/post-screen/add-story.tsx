@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Dimensions,
   Keyboard,
   Linking,
   Platform,
@@ -18,13 +19,19 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons';
 import { Camera, CameraView, type CameraType } from 'expo-camera';
 import type { PermissionResponse } from 'expo-modules-core';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import BackButton from '@/components/ui/BackButton';
+import DraggableStoryImage from '@/components/story/DraggableStoryImage';
+import DraggableStoryText from '@/components/story/DraggableStoryText';
 import { useTheme } from '@/hooks/useTheme';
 import { createStory, type StoryMediaSource, type StoryMediaType, type StoryTextBackground, type StoryTextOverlay } from '@/lib/stories';
+import {
+  DEFAULT_IMAGE_TRANSFORM,
+  isDefaultStoryTransform,
+  type StoryTransform,
+} from '@/lib/storyTransform';
 import { generateStoryThumbnail, setCachedStoryThumbnail } from '@/lib/storyThumbnails';
 import { uploadFileToStorage } from '@/lib/storage';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -37,6 +44,9 @@ const STORY_IMAGE_QUALITY = 0.82;
 // 720p at 2 Mbps keeps a 15-second camera story near 4 MB while preserving
 // enough headroom for audio and MP4 container overhead.
 const STORY_VIDEO_BITRATE = 2_000_000;
+// Video Story creation is temporarily disabled (resource-constrained deploy).
+// This gates every video entry point in this screen; flip back to re-enable.
+const VIDEO_STORY_CREATION_ENABLED = false;
 
 type CameraMode = 'image' | 'video';
 type StoryDraft = {
@@ -61,16 +71,12 @@ const TEXT_BACKGROUNDS: StoryTextBackground[] = [
 ];
 
 const TEXT_COLORS = ['#FFFFFF', '#FDE68A', '#C7D2FE', '#FBCFE8'];
-const OVERLAY_POSITIONS = [
-  { label: 'Top', y: 0.24 },
-  { label: 'Middle', y: 0.5 },
-  { label: 'Bottom', y: 0.76 },
-];
-const OVERLAY_SCALES = [
-  { label: 'S', value: 0.85 },
-  { label: 'M', value: 1 },
-  { label: 'L', value: 1.2 },
-];
+// The existing canonical/default Story text scale — previously the "M"
+// (middle) option in the removed S/M/L size picker and already the state's
+// own default before any user interaction. New Story text always uses this;
+// legacy Stories keep rendering whatever scale they were published with
+// (see StoryTextOverlay.scale in lib/stories.ts, unchanged).
+const STANDARD_TEXT_SCALE = 1;
 
 const createStoryTiming = (flow: string) => {
   const startedAt = Date.now();
@@ -156,21 +162,24 @@ const getImageExtension = (contentType: string) => {
 
 const buildOverlay = (
   text: string,
+  positionX: number,
   positionY: number,
   color: string,
   scale: number,
+  rotation: number,
 ): StoryTextOverlay | null => {
   const trimmedText = text.trim();
   if (!trimmedText) return null;
 
   return {
     text: trimmedText,
-    x: 0.5,
+    x: positionX,
     y: positionY,
     scale,
     color,
     fontWeight: '700',
     textAlign: 'center',
+    rotation,
   };
 };
 
@@ -200,9 +209,29 @@ export default function AddStoryScreen() {
   const [storyText, setStoryText] = useState('');
   const [overlayText, setOverlayText] = useState('');
   const [overlayColor, setOverlayColor] = useState(TEXT_COLORS[0]);
+  const [overlayX, setOverlayX] = useState(0.5);
   const [overlayY, setOverlayY] = useState(0.5);
-  const [overlayScale, setOverlayScale] = useState(1);
+  const [overlayRotation, setOverlayRotation] = useState(0);
+  // Whether the single on-canvas Story text object is currently showing
+  // its editable TextInput (true) vs. its draggable/rotatable preview
+  // (false). The object itself never duplicates — this only switches which
+  // child DraggableStoryText renders internally.
+  const [isEditingOverlayText, setIsEditingOverlayText] = useState(false);
   const [textBackground, setTextBackground] = useState<StoryTextBackground>(TEXT_BACKGROUNDS[0]);
+  const [imageTransform, setImageTransform] = useState<StoryTransform>(DEFAULT_IMAGE_TRANSFORM);
+  // Bootstrapped from the device's own window size (not a hardcoded
+  // screenshot value) so the very first frame already has a sane
+  // translate/scale reference; onLayout below corrects it to the actual
+  // measured preview container the instant it mounts.
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>(() => {
+    const { width, height } = Dimensions.get('window');
+    return { width, height };
+  });
+  // Bumped whenever a new draft is staged/reset so the draggable image and
+  // text layers remount (and thus reset their gesture shared values) —
+  // this is what guarantees a transform never leaks from one image/draft
+  // to the next (Part 13).
+  const [draftKey, setDraftKey] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -219,16 +248,36 @@ export default function AddStoryScreen() {
   const [microphonePermission, setMicrophonePermission] = useState<PermissionResponse | null>(null);
   const hasRequestedCameraPermission = useRef(false);
   const cameraRecoveryAttemptedRef = useRef(false);
+  const pictureSizeRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
   const publishInFlightRef = useRef(false);
   const uploadProgressRef = useRef(0);
   const uploadProgressEventCountRef = useRef(0);
   const lastUploadProgressUpdateAtRef = useRef(0);
 
   const currentOverlay = useMemo(
-    () => buildOverlay(overlayText, overlayY, overlayColor, overlayScale),
-    [overlayColor, overlayScale, overlayText, overlayY],
+    () => buildOverlay(overlayText, overlayX, overlayY, overlayColor, STANDARD_TEXT_SCALE, overlayRotation),
+    [overlayColor, overlayText, overlayX, overlayY, overlayRotation],
   );
   const isPreviewing = Boolean(draft);
+
+  // Entry point for both the toolbar's "Add text"/"Edit text" button and
+  // re-tapping the existing on-canvas text object — the same handler either
+  // way, since it's the same object. Only a genuinely fresh (currently
+  // empty) text object gets centered; re-entering edit mode on existing
+  // text must never move it.
+  const handleStartEditingOverlayText = useCallback(() => {
+    if (!overlayText.trim()) {
+      setOverlayX(0.5);
+      setOverlayY(0.5);
+      setOverlayRotation(0);
+    }
+    setIsEditingOverlayText(true);
+  }, [overlayText]);
+
+  const handleFinishEditingOverlayText = useCallback(() => {
+    setIsEditingOverlayText(false);
+  }, []);
 
   const updateUploadProgress = useCallback((progress: number) => {
     const normalizedProgress = Math.max(uploadProgressRef.current, Math.min(1, Math.max(0, progress)));
@@ -293,6 +342,7 @@ export default function AddStoryScreen() {
 
   const handleCameraModeChange = useCallback(async (mode: CameraMode) => {
     if (isRecording || isSwitchingCameraMode || cameraMode === mode) return;
+    if (mode === 'video' && !VIDEO_STORY_CREATION_ENABLED) return;
 
     if (mode === 'video') {
       const microphoneGranted = await requestMicrophonePermission();
@@ -339,6 +389,7 @@ export default function AddStoryScreen() {
   }, [cameraPermission]);
 
   useEffect(() => () => {
+    isMountedRef.current = false;
     cameraRef.current?.stopRecording();
     if (cameraSwitchTimeoutRef.current) {
       clearTimeout(cameraSwitchTimeoutRef.current);
@@ -401,9 +452,13 @@ export default function AddStoryScreen() {
     setStoryText('');
     setOverlayText('');
     setOverlayColor(TEXT_COLORS[0]);
+    setOverlayX(0.5);
     setOverlayY(0.5);
-    setOverlayScale(1);
+    setOverlayRotation(0);
+    setIsEditingOverlayText(false);
     setTextBackground(TEXT_BACKGROUNDS[0]);
+    setImageTransform(DEFAULT_IMAGE_TRANSFORM);
+    setDraftKey((key) => key + 1);
     setIsPublishing(false);
     uploadProgressRef.current = 0;
     uploadProgressEventCountRef.current = 0;
@@ -438,9 +493,15 @@ export default function AddStoryScreen() {
     setStoryText(nextDraft.textContent ?? '');
     setOverlayText(nextDraft.textOverlay?.text ?? '');
     setOverlayColor(nextDraft.textOverlay?.color ?? TEXT_COLORS[0]);
+    setOverlayX(nextDraft.textOverlay?.x ?? 0.5);
     setOverlayY(nextDraft.textOverlay?.y ?? 0.5);
-    setOverlayScale(nextDraft.textOverlay?.scale ?? 1);
+    setOverlayRotation(nextDraft.textOverlay?.rotation ?? 0);
+    setIsEditingOverlayText(false);
     setTextBackground(nextDraft.textBackground ?? TEXT_BACKGROUNDS[0]);
+    // A newly captured/picked image never carries a prior transform — always
+    // start from the legacy full-cover default (Part 13: no leaking).
+    setImageTransform(DEFAULT_IMAGE_TRANSFORM);
+    setDraftKey((key) => key + 1);
   };
 
   const goBack = useCallback(() => {
@@ -540,6 +601,7 @@ export default function AddStoryScreen() {
   };
 
   const handleRecordVideo = async () => {
+    if (!VIDEO_STORY_CREATION_ENABLED) return;
     if (isPublishing) return;
     const mark = createStoryTiming('record-video');
     if (isRecording) {
@@ -646,6 +708,7 @@ export default function AddStoryScreen() {
   };
 
   const handlePickVideo = async () => {
+    if (!VIDEO_STORY_CREATION_ENABLED) return;
     if (isPublishing || isRecording) return;
     const mark = createStoryTiming('pick-video');
     mark('start');
@@ -756,6 +819,16 @@ export default function AddStoryScreen() {
       }
 
       if (draft.mediaType === 'video') {
+        if (!VIDEO_STORY_CREATION_ENABLED) {
+          // Video Story creation is temporarily disabled; a draft should never
+          // reach this state (handleRecordVideo/handlePickVideo are gated
+          // above), but this is the safety net if one somehow does.
+          publishInFlightRef.current = false;
+          setIsPublishing(false);
+          setPublishStage('');
+          Alert.alert('Video unavailable', 'Video stories are temporarily unavailable.');
+          return;
+        }
         if (draft.durationSeconds > MAX_STORY_SECONDS) {
           publishInFlightRef.current = false;
           setIsPublishing(false);
@@ -878,6 +951,10 @@ export default function AddStoryScreen() {
         contentType: imageContentType,
         durationSeconds: draft.durationSeconds,
         textOverlay: finalOverlay,
+        // Omitted (not sent as the default identity transform) when the
+        // user never touched the image, so an untouched image Story keeps
+        // publishing exactly the same payload it always has.
+        imageTransform: isDefaultStoryTransform(imageTransform) ? undefined : imageTransform,
       });
       mark('create story API complete');
 
@@ -900,37 +977,6 @@ export default function AddStoryScreen() {
         setUploadProgress(0);
       }
     }
-  };
-
-  const renderTextOverlay = (overlay: StoryTextOverlay | null | undefined) => {
-    if (!overlay?.text) return null;
-
-    return (
-      <View
-        pointerEvents="none"
-        style={[
-          styles.overlayTextWrap,
-          {
-            left: `${overlay.x * 100}%`,
-            top: `${overlay.y * 100}%`,
-            transform: [{ translateX: -140 }, { translateY: -30 }, { scale: overlay.scale }],
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.overlayText,
-            {
-              color: overlay.color,
-              fontWeight: overlay.fontWeight ?? '700',
-              textAlign: overlay.textAlign ?? 'center',
-            },
-          ]}
-        >
-          {overlay.text}
-        </Text>
-      </View>
-    );
   };
 
   if (!cameraPermission && !draft) {
@@ -963,13 +1009,40 @@ export default function AddStoryScreen() {
   }
 
   if (draft) {
-    const previewOverlay = draft.mediaType === 'text' ? null : currentOverlay;
+    // The single on-canvas text object is visible whenever it's actively
+    // being edited (even before any character is typed, so the user can
+    // type directly into it) OR once it holds real content. It's never
+    // gated on `currentOverlay` here — that memo (still used at publish
+    // time below) intentionally returns null for empty text, which would
+    // prevent ever mounting a fresh, still-empty editable object.
+    const showOverlayTextObject =
+      draft.mediaType !== 'text' && (isEditingOverlayText || overlayText.trim().length > 0);
 
     return (
-      <View style={styles.container}>
+      <View
+        style={styles.container}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (width > 0 && height > 0) {
+            setCanvasSize((current) =>
+              current.width === width && current.height === height
+                ? current
+                : { width, height },
+            );
+          }
+        }}
+      >
         <StatusBar barStyle="light-content" hidden />
         {draft.mediaType === 'image' && draft.uri ? (
-          <Image source={{ uri: draft.uri }} style={styles.previewMedia} contentFit="cover" />
+          <DraggableStoryImage
+            key={`image-${draftKey}`}
+            uri={draft.uri}
+            initialTransform={imageTransform}
+            canvasWidth={canvasSize.width}
+            canvasHeight={canvasSize.height}
+            onTransformEnd={setImageTransform}
+            style={styles.previewMedia}
+          />
         ) : draft.mediaType === 'video' && draft.uri ? (
           <StoryVideoPreview key={draft.uri} uri={draft.uri} />
         ) : (
@@ -987,7 +1060,28 @@ export default function AddStoryScreen() {
           </View>
         )}
 
-        {renderTextOverlay(previewOverlay)}
+        {showOverlayTextObject ? (
+          <DraggableStoryText
+            key={`text-${draftKey}`}
+            text={overlayText}
+            onChangeText={setOverlayText}
+            color={overlayColor}
+            x={overlayX}
+            y={overlayY}
+            rotation={overlayRotation}
+            scale={STANDARD_TEXT_SCALE}
+            canvasWidth={canvasSize.width}
+            canvasHeight={canvasSize.height}
+            isEditing={isEditingOverlayText}
+            onStartEditing={handleStartEditingOverlayText}
+            onFinishEditing={handleFinishEditingOverlayText}
+            onTransformEnd={(transform) => {
+              setOverlayX(transform.x);
+              setOverlayY(transform.y);
+              setOverlayRotation(transform.rotation);
+            }}
+          />
+        ) : null}
 
         <SafeAreaView
           edges={['left', 'right']}
@@ -997,7 +1091,7 @@ export default function AddStoryScreen() {
           ]}
           pointerEvents="box-none"
         >
-          <View style={styles.previewHeader}>
+          <View style={styles.previewHeader} pointerEvents="box-none">
             <TouchableOpacity style={styles.iconBtn} onPress={handleLeaveStory} disabled={isPublishing}>
               <Feather name="arrow-left" size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -1020,42 +1114,18 @@ export default function AddStoryScreen() {
           </View>
 
           {draft.mediaType !== 'text' ? (
-            <View style={styles.overlayEditor}>
-              <TextInput
-                value={overlayText}
-                onChangeText={setOverlayText}
-                placeholder="Add text"
-                placeholderTextColor="rgba(255,255,255,0.65)"
-                maxLength={160}
-                style={styles.overlayInput}
-              />
+            <View style={styles.overlayEditor} pointerEvents="box-none">
               <View style={styles.editorRow}>
+                <TouchableOpacity style={styles.addTextBtn} onPress={handleStartEditingOverlayText}>
+                  <Feather name="type" size={16} color="#FFFFFF" />
+                  <Text style={styles.addTextBtnText}>{overlayText.trim() ? 'Edit text' : 'Add text'}</Text>
+                </TouchableOpacity>
                 {TEXT_COLORS.map((color) => (
                   <TouchableOpacity
                     key={color}
                     style={[styles.colorDot, { backgroundColor: color }, overlayColor === color && styles.selectedDot]}
                     onPress={() => setOverlayColor(color)}
                   />
-                ))}
-              </View>
-              <View style={styles.editorRow}>
-                {OVERLAY_POSITIONS.map((position) => (
-                  <TouchableOpacity
-                    key={position.label}
-                    style={[styles.optionPill, overlayY === position.y && styles.selectedPill]}
-                    onPress={() => setOverlayY(position.y)}
-                  >
-                    <Text style={styles.optionPillText}>{position.label}</Text>
-                  </TouchableOpacity>
-                ))}
-                {OVERLAY_SCALES.map((scale) => (
-                  <TouchableOpacity
-                    key={scale.label}
-                    style={[styles.optionPill, overlayScale === scale.value && styles.selectedPill]}
-                    onPress={() => setOverlayScale(scale.value)}
-                  >
-                    <Text style={styles.optionPillText}>{scale.label}</Text>
-                  </TouchableOpacity>
                 ))}
               </View>
             </View>
@@ -1077,7 +1147,7 @@ export default function AddStoryScreen() {
             </View>
           )}
 
-          <View style={styles.publishStatus}>
+          <View style={styles.publishStatus} pointerEvents="box-none">
             {isPublishing ? (
               <Text style={styles.publishStatusText}>
                 {publishStage || 'Publishing story...'}{uploadProgress > 0 && uploadProgress < 1 ? ` ${Math.round(uploadProgress * 100)}%` : ''}
@@ -1140,22 +1210,30 @@ export default function AddStoryScreen() {
           onCameraReady={() => {
             cameraRecoveryAttemptedRef.current = false;
             setCameraError(null);
+            setIsCameraReady(true);
+
             if (cameraMode === 'image' && !cameraPictureSize) {
+              // Picture-size discovery is a secondary native round-trip and must not
+              // gate camera-ready UI. The request id invalidates stale results if the
+              // camera instance changes (facing/mode switch, recovery remount) before
+              // this promise settles, since every such change triggers a fresh
+              // onCameraReady call that bumps the ref.
+              const requestId = ++pictureSizeRequestIdRef.current;
               const mark = createStoryTiming('camera-picture-size');
               void cameraRef.current?.getAvailablePictureSizesAsync()
                 .then((sizes) => {
+                  if (!isMountedRef.current || pictureSizeRequestIdRef.current !== requestId) return;
                   const selectedSize = selectStoryPictureSize(sizes);
                   mark('available sizes', { count: sizes.length, selectedSize });
                   if (selectedSize) {
                     setCameraPictureSize(selectedSize);
                   }
                 })
-                .catch((error) => mark('available sizes failed', { message: getAuthErrorMessage(error, 'Unable to read sizes.') }))
-                .finally(() => setIsCameraReady(true));
-              return;
+                .catch((error) => {
+                  if (!isMountedRef.current || pictureSizeRequestIdRef.current !== requestId) return;
+                  mark('available sizes failed', { message: getAuthErrorMessage(error, 'Unable to read sizes.') });
+                });
             }
-
-            setIsCameraReady(true);
           }}
           onMountError={({ message }) => {
             setIsCameraReady(false);
@@ -1229,9 +1307,11 @@ export default function AddStoryScreen() {
           <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handlePickImage} disabled={isPublishing || isRecording}>
             <Feather name="image" size={23} color="#FFFFFF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handlePickVideo} disabled={isPublishing || isRecording}>
-            <Feather name="film" size={23} color="#FFFFFF" />
-          </TouchableOpacity>
+          {VIDEO_STORY_CREATION_ENABLED ? (
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handlePickVideo} disabled={isPublishing || isRecording}>
+              <Feather name="film" size={23} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handleCreateTextDraft} disabled={isPublishing || isRecording}>
             <Feather name="type" size={23} color="#FFFFFF" />
           </TouchableOpacity>
@@ -1239,7 +1319,7 @@ export default function AddStoryScreen() {
 
         <View style={[styles.bottomControls, { bottom: Math.max(insets.bottom + 20, 32) }]}>
           <View style={styles.modeRow}>
-            {(['image', 'video'] as CameraMode[]).map((mode) => (
+            {((VIDEO_STORY_CREATION_ENABLED ? ['image', 'video'] : ['image']) as CameraMode[]).map((mode) => (
               <TouchableOpacity
                 key={mode}
                 style={[styles.modePill, cameraMode === mode && styles.modePillActive]}
@@ -1404,28 +1484,30 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
   },
+  // Content-sized (not full-width) now that it only holds the compact
+  // "Add/Edit text" button + color/background swatches — the on-canvas
+  // text object is the actual editor, so this no longer needs to be a
+  // large editing field spanning the Story canvas.
   overlayEditor: {
-    alignSelf: 'stretch',
+    alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.45)',
     borderRadius: 8,
-    marginHorizontal: 16,
     marginBottom: 34,
     padding: 12,
   },
-  overlayInput: {
-    color: '#FFFFFF',
-    borderBottomColor: 'rgba(255,255,255,0.25)',
-    borderBottomWidth: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    minHeight: 38,
+  editorRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  addTextBtn: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 13,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  editorRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  addTextBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   colorDot: { borderRadius: 14, height: 28, width: 28, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' },
   selectedDot: { borderColor: '#FFFFFF' },
-  optionPill: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 13, paddingHorizontal: 10, paddingVertical: 6 },
-  selectedPill: { backgroundColor: 'rgba(255,255,255,0.34)' },
-  optionPillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   backgroundSwatch: { height: 32, width: 54, borderRadius: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' },
   selectedSwatch: { borderColor: '#FFFFFF' },
   textStoryInput: {

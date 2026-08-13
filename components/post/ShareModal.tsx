@@ -44,12 +44,22 @@ const feedback = (message: string) => {
   else Alert.alert('', message);
 };
 
-export default function ShareModal({ visible, onClose, onRepost, shareUrl, item }: {
+export type EditingShare = {
+  shareId: string;
+  caption: string | null;
+};
+
+export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption, shareUrl, item, editing }: {
   visible: boolean;
   onClose: () => void;
   onRepost?: (payload: RepostPayload) => Promise<void> | void;
+  // Edit mode only: updates ONLY the authenticated user's own repost
+  // commentary via PATCH /moments/shares/:shareId — never calls onRepost/the
+  // create endpoint, never touches tagged friends or the original content.
+  onUpdateCaption?: (shareId: string, caption: string | null) => Promise<void> | void;
   shareUrl?: string;
   item?: ShareItem;
+  editing?: EditingShare | null;
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -101,6 +111,7 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
   const repostSubmittingRef = useRef(false);
   const itemId = item?.id;
   const itemType = item?.type;
+  const isEditMode = Boolean(editing);
 
   const loadFriends = useCallback(() => {
     setIsLoadingFriends(true);
@@ -118,13 +129,20 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
     if (!visible) return;
     setQuery('');
     setTagQuery('');
-    setRepostCaption('');
+    setRepostCaption(editing?.caption ?? '');
     setTaggedFriendIds(new Set());
-    setShowRepostComposer(false);
+    setShowRepostComposer(Boolean(editing));
     setSentFriendIds(new Set());
+    // Edit mode never creates a new repost, so no create-time idempotency key
+    // is needed — and the share-sheet/friends list is never shown, so there's
+    // no need to load it either.
+    if (editing) {
+      repostRequestId.current = null;
+      return;
+    }
     repostRequestId.current = itemId && itemType ? `repost:${itemType}:${itemId}:${Date.now()}` : null;
     loadFriends();
-  }, [itemId, itemType, loadFriends, visible]);
+  }, [editing, itemId, itemType, loadFriends, visible]);
 
   const filteredFriends = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -191,7 +209,29 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
   };
 
   const submitRepost = async () => {
-    if (!onRepost || repostSubmittingRef.current) return;
+    if (repostSubmittingRef.current) return;
+
+    // Edit mode branches to the update-caption path (PATCH /moments/shares/:shareId)
+    // and NEVER calls onRepost/the create endpoint — editing an existing repost
+    // must never create a second one.
+    if (isEditMode) {
+      if (!editing || !onUpdateCaption) return;
+      repostSubmittingRef.current = true;
+      setIsReposting(true);
+      try {
+        await onUpdateCaption(editing.shareId, repostCaption.trim() || null);
+        feedback('Repost updated');
+        onClose();
+      } catch (error) {
+        feedback(getAuthErrorMessage(error, 'Unable to update repost'));
+      } finally {
+        repostSubmittingRef.current = false;
+        setIsReposting(false);
+      }
+      return;
+    }
+
+    if (!onRepost) return;
     repostSubmittingRef.current = true;
     setIsReposting(true);
     try {
@@ -284,7 +324,7 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
         <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: sheetBottomPadding + keyboardHeight }]}>
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />
-          <Text style={[styles.title, { color: colors.text }]}>{showRepostComposer ? 'Repost' : 'Share to...'}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{isEditMode ? 'Edit Repost' : showRepostComposer ? 'Repost' : 'Share to...'}</Text>
           {showRepostComposer ? (
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.composer, { paddingBottom: composerBottomPadding }]}>
               <TextInput
@@ -309,34 +349,38 @@ export default function ShareModal({ visible, onClose, onRepost, shareUrl, item 
                   {!!item?.categoryLabels?.length && <Text style={[styles.previewMeta, { color: colors.textSecondary }]} numberOfLines={1}>{item.categoryLabels.join(' · ')}</Text>}
                 </View>
               </View>
-              <Text style={[styles.tagTitle, { color: colors.text }]}>Tag friends</Text>
-              <View style={[styles.search, styles.tagSearch, { borderColor: colors.border }]}>
-                <Feather name="search" size={18} color={colors.textSecondary} />
-                <TextInput value={tagQuery} onChangeText={setTagQuery} style={[styles.searchInput, { color: colors.text }]}
-                  placeholder="Search friends" placeholderTextColor={colors.textSecondary} />
-              </View>
-              {isLoadingFriends ? <ActivityIndicator color={colors.primary} /> : friendsError ? (
-                <TouchableOpacity onPress={loadFriends}><Text style={[styles.empty, { color: colors.primary }]}>Unable to load friends. Tap to retry.</Text></TouchableOpacity>
-              ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow}>
-                  {filteredTagFriends.map((friend) => {
-                    const selected = taggedFriendIds.has(friend.friendId);
-                    return (
-                      <TouchableOpacity key={friend.friendId} style={[styles.tagChip, { borderColor: selected ? colors.primary : colors.border }]} onPress={() => toggleTaggedFriend(friend.friendId)}>
-                        <UserAvatar uri={friend.avatarUrl} name={friend.name} size={26} />
-                        <Text style={[styles.tagChipText, { color: colors.text }]} numberOfLines={1}>{friend.username || friend.name}</Text>
-                        {selected && <Feather name="check" size={14} color={colors.primary} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+              {!isEditMode && (
+                <>
+                  <Text style={[styles.tagTitle, { color: colors.text }]}>Tag friends</Text>
+                  <View style={[styles.search, styles.tagSearch, { borderColor: colors.border }]}>
+                    <Feather name="search" size={18} color={colors.textSecondary} />
+                    <TextInput value={tagQuery} onChangeText={setTagQuery} style={[styles.searchInput, { color: colors.text }]}
+                      placeholder="Search friends" placeholderTextColor={colors.textSecondary} />
+                  </View>
+                  {isLoadingFriends ? <ActivityIndicator color={colors.primary} /> : friendsError ? (
+                    <TouchableOpacity onPress={loadFriends}><Text style={[styles.empty, { color: colors.primary }]}>Unable to load friends. Tap to retry.</Text></TouchableOpacity>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow}>
+                      {filteredTagFriends.map((friend) => {
+                        const selected = taggedFriendIds.has(friend.friendId);
+                        return (
+                          <TouchableOpacity key={friend.friendId} style={[styles.tagChip, { borderColor: selected ? colors.primary : colors.border }]} onPress={() => toggleTaggedFriend(friend.friendId)}>
+                            <UserAvatar uri={friend.avatarUrl} name={friend.name} size={26} />
+                            <Text style={[styles.tagChipText, { color: colors.text }]} numberOfLines={1}>{friend.username || friend.name}</Text>
+                            {selected && <Feather name="check" size={14} color={colors.primary} />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                </>
               )}
               <View style={styles.composerActions}>
-                <TouchableOpacity style={[styles.composerButton, { borderColor: colors.border }]} disabled={isReposting} onPress={() => setShowRepostComposer(false)}>
-                  <Text style={{ color: colors.text }}>Back</Text>
+                <TouchableOpacity style={[styles.composerButton, { borderColor: colors.border }]} disabled={isReposting} onPress={() => (isEditMode ? onClose() : setShowRepostComposer(false))}>
+                  <Text style={{ color: colors.text }}>{isEditMode ? 'Cancel' : 'Back'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.composerButton, styles.postButton, { backgroundColor: colors.primary }]} disabled={isReposting} onPress={submitRepost}>
-                  {isReposting ? <ActivityIndicator color="#111" /> : <Text style={styles.postButtonText}>Repost</Text>}
+                  {isReposting ? <ActivityIndicator color="#111" /> : <Text style={styles.postButtonText}>{isEditMode ? 'Save' : 'Repost'}</Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>

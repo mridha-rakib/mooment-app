@@ -12,6 +12,9 @@ export type EventLocationFilter = {
   radiusMiles: number;
   label: string;
   source: EventLocationSource;
+  // Client-only presentation metadata (e.g. a short place name like "Barisal"
+  // derived from the selected search result) — never sent to the backend.
+  shortLabel?: string;
 };
 
 export type SharedEventFilters = {

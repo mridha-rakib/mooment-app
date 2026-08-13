@@ -1,4 +1,5 @@
 import type {
+  StoryImageTransform,
   StoryMediaType,
   StoryTextBackground,
   StoryTextOverlay,
@@ -13,6 +14,8 @@ import {
   createStoryViewerSession,
   type StoryViewerTab,
 } from "@/lib/storyViewerSession";
+import { getStorageFileUrl } from "@/lib/storage";
+import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
@@ -32,6 +35,10 @@ export type StoryData = {
   id: string;
   type: "add" | "live" | "standard" | "muted";
   isOwnStory?: boolean;
+  /** Marks the first-position current-user tile (see Part 1 of the Story UX plan). */
+  isSelfTile?: boolean;
+  /** Whether the self tile currently represents an active own Story vs. a plain create tile. */
+  hasOwnStory?: boolean;
   imageUri?: string | null;
   mediaUri?: string | null;
   contentType?: string | null;
@@ -39,6 +46,7 @@ export type StoryData = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  imageTransform?: StoryImageTransform | null;
   storyItems?: StorySequenceItem[];
   title?: string;
   authorName?: string;
@@ -57,6 +65,7 @@ export type StorySequenceItem = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  imageTransform?: StoryImageTransform | null;
   createdAt?: string;
   expiresAt?: string;
   viewsCount?: number;
@@ -182,6 +191,11 @@ function StoryCarousel({
   onActiveTabChange: (tab: StoryViewerTab) => void;
 }) {
   const router = useRouter();
+  const currentUser = useAuthStore((state) => state.user);
+  const currentUserAvatarUri = currentUser?.avatarKey
+    ? getStorageFileUrl(currentUser.avatarKey)
+    : null;
+  const currentUserName = currentUser?.name ?? currentUser?.username;
   const [isOpeningAddStory, setIsOpeningAddStory] = React.useState(false);
   const isOpeningAddStoryRef = React.useRef(false);
   const openAddStoryTimeoutRef = React.useRef<ReturnType<
@@ -244,6 +258,61 @@ function StoryCarousel({
     (story) => story.type !== "add" && story.storyItems?.length,
   );
 
+  const openStoryViewer = React.useCallback(
+    (story: StoryData) => {
+      if (
+        !(
+          story.storyItems?.length ||
+          story.mediaUri ||
+          story.mediaType === "text"
+        )
+      ) {
+        router.push("/live-screen/live-video");
+        return;
+      }
+
+      const storyItems =
+        story.storyItems ??
+        (story.mediaUri || story.mediaType === "text"
+          ? [
+              {
+                id: story.id,
+                mediaType: story.mediaType ?? "video",
+                mediaUri: story.mediaUri,
+                contentType: null,
+                durationSeconds: 15,
+                textContent: story.textContent,
+                textBackground: story.textBackground,
+                textOverlay: story.textOverlay,
+                imageTransform: story.imageTransform,
+              },
+            ]
+          : []);
+      const sessionId = createStoryViewerSession({
+        activeTab,
+        discoverGroups: getGroups(stories),
+        friendGroups: getGroups(friendStories),
+      });
+
+      router.push({
+        pathname: "/post-screen/view-story",
+        params: {
+          stories: JSON.stringify(storyItems),
+          title: story.title ?? story.authorName ?? "Story",
+          openedAt: String(Date.now()),
+          storySessionId: sessionId,
+          groupIndex: String(
+            Math.max(
+              0,
+              groups.findIndex((group) => group.id === story.id),
+            ),
+          ),
+        },
+      });
+    },
+    [activeTab, friendStories, getGroups, groups, router, stories],
+  );
+
   return (
     <View style={styles.storiesContainer}>
       <View style={styles.tabs}>
@@ -270,6 +339,91 @@ function StoryCarousel({
         contentContainerStyle={styles.storiesScroll}
       >
         {displayedStories.map((story) => {
+          // Instagram-like self tile: the current user's own active Story
+          // (when present) and the "add another Story" affordance share
+          // this one first-position tile instead of rendering as two
+          // separate tiles. Two sibling press targets (never one nested
+          // inside the other) so the "+" badge and the main story/avatar
+          // area each own an unambiguous hit area.
+          if (story.isSelfTile) {
+            const selfRingStyle = story.seen
+              ? styles.storyRingSeen
+              : styles.storyRingStandard;
+            const mainDisabled = !story.hasOwnStory && isOpeningAddStory;
+
+            return (
+              <View key={story.id} style={styles.selfTileContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.selfTileMain,
+                    mainDisabled && styles.addStoryBtnDisabled,
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={mainDisabled}
+                  onPress={() => {
+                    if (story.hasOwnStory) {
+                      openStoryViewer(story);
+                      return;
+                    }
+                    handleAddStoryPress();
+                  }}
+                  accessibilityLabel={
+                    story.hasOwnStory
+                      ? "View your story"
+                      : "Add to your story"
+                  }
+                >
+                  {story.hasOwnStory ? (
+                    <View style={[styles.storyRing, selfRingStyle]}>
+                      <StoryThumbnail
+                        storyId={story.id}
+                        mediaUri={story.mediaUri}
+                        mediaType={story.mediaType}
+                        fallbackUri={story.imageUri ?? currentUserAvatarUri}
+                        fallbackName={
+                          story.title ?? story.authorName ?? currentUserName
+                        }
+                        textBackground={story.textBackground}
+                      />
+                    </View>
+                  ) : (
+                    <UserAvatar
+                      uri={currentUserAvatarUri}
+                      name={currentUserName}
+                      size={68}
+                      style={styles.addStoryAvatar}
+                    />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.addStoryBadge,
+                    isOpeningAddStory && styles.addStoryBtnDisabled,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={handleAddStoryPress}
+                  disabled={isOpeningAddStory}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Add to your story"
+                  accessibilityState={{
+                    disabled: isOpeningAddStory,
+                    busy: isOpeningAddStory,
+                  }}
+                >
+                  {isOpeningAddStory ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Feather name="plus" size={12} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
+          // Defensive fallback: any row entry that still uses the legacy
+          // plain "add" shape (not expected from home.tsx's own data, kept
+          // only in case another caller passes one) renders exactly as
+          // before.
           if (story.type === "add") {
             return (
               <TouchableOpacity
@@ -281,16 +435,25 @@ function StoryCarousel({
                 activeOpacity={0.8}
                 onPress={handleAddStoryPress}
                 disabled={isOpeningAddStory}
+                accessibilityLabel="Add to your story"
                 accessibilityState={{
                   disabled: isOpeningAddStory,
                   busy: isOpeningAddStory,
                 }}
               >
-                {isOpeningAddStory ? (
-                  <ActivityIndicator size="small" color="#bcbccaff" />
-                ) : (
-                  <Feather name="plus" size={24} color="#bcbccaff" />
-                )}
+                <UserAvatar
+                  uri={currentUserAvatarUri}
+                  name={currentUserName}
+                  size={68}
+                  style={styles.addStoryAvatar}
+                />
+                <View style={styles.addStoryBadge}>
+                  {isOpeningAddStory ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Feather name="plus" size={12} color="#FFFFFF" />
+                  )}
+                </View>
               </TouchableOpacity>
             );
           }
@@ -311,54 +474,7 @@ function StoryCarousel({
               key={story.id}
               style={styles.storyItem}
               activeOpacity={0.8}
-              onPress={() => {
-                if (
-                  story.storyItems?.length ||
-                  story.mediaUri ||
-                  story.mediaType === "text"
-                ) {
-                  const storyItems =
-                    story.storyItems ??
-                    (story.mediaUri || story.mediaType === "text"
-                      ? [
-                          {
-                            id: story.id,
-                            mediaType: story.mediaType ?? "video",
-                            mediaUri: story.mediaUri,
-                            contentType: null,
-                            durationSeconds: 15,
-                            textContent: story.textContent,
-                            textBackground: story.textBackground,
-                            textOverlay: story.textOverlay,
-                          },
-                        ]
-                      : []);
-                  const sessionId = createStoryViewerSession({
-                    activeTab,
-                    discoverGroups: getGroups(stories),
-                    friendGroups: getGroups(friendStories),
-                  });
-
-                  router.push({
-                    pathname: "/post-screen/view-story",
-                    params: {
-                      stories: JSON.stringify(storyItems),
-                      title: story.title ?? story.authorName ?? "Story",
-                      openedAt: String(Date.now()),
-                      storySessionId: sessionId,
-                      groupIndex: String(
-                        Math.max(
-                          0,
-                          groups.findIndex((group) => group.id === story.id),
-                        ),
-                      ),
-                    },
-                  });
-                  return;
-                }
-
-                router.push("/live-screen/live-video");
-              }}
+              onPress={() => openStoryViewer(story)}
             >
               <View style={[styles.storyRing, ringStyle]}>
                 <StoryThumbnail
@@ -408,7 +524,6 @@ const styles = StyleSheet.create({
     width: 68,
     height: 86,
     borderRadius: 34,
-    backgroundColor: "#2B2B36",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -416,8 +531,43 @@ const styles = StyleSheet.create({
   addStoryBtnDisabled: {
     opacity: 0.72,
   },
+  addStoryAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 34,
+  },
+  addStoryBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#AC86D4",
+    borderWidth: 2,
+    borderColor: "#0e0d12",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   storyItem: {
     marginRight: 16,
+  },
+  // Sized to the story ring's footprint (not the plain add tile's) so the
+  // tile doesn't jump in size when the user's own Story appears/expires —
+  // the plain add-avatar (UserAvatar size=68) is simply centered inside it
+  // when there's no active own Story.
+  selfTileContainer: {
+    width: 74,
+    height: 92,
+    marginRight: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  selfTileMain: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   storyRing: {
     width: 74,

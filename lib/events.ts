@@ -231,6 +231,7 @@ export type EventResponse = {
   bannerOriginalImageKey?: string | null;
   bannerImageDisplay?: EventImageDisplay | null;
   ageRestriction?: EventAgeRestriction | null;
+  hashtags?: string[];
   category?: EventCategory | null;
   categories: EventCategory[];
   scheduledAt?: string | null;
@@ -788,6 +789,23 @@ export const getMapEvents = async (params: EventMapQuery = {}): Promise<EventRes
   const page = await getMapEventPage(params);
 
   return page.events;
+};
+
+export type EventHashtagQuery = {
+  limit?: number;
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+};
+
+export const getHashtagEvents = async (
+  hashtag: string,
+  params: EventHashtagQuery = {},
+): Promise<EventResponse[]> => {
+  const response = await api.get(`/events/hashtags/${encodeURIComponent(hashtag)}`, { params });
+  const events = response.data?.data?.events;
+
+  return Array.isArray(events) ? (events as EventResponse[]) : [];
 };
 
 export const getNowModeEvents = async (params: NowModeQuery = {}): Promise<NowModeEventResponse[]> => {

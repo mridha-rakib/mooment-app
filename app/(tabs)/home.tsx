@@ -25,6 +25,7 @@ import {
   getFeedReposts,
   shareMoment,
   type FeedAudience,
+  type Moment,
   type MomentInteractionSummary,
   type MomentTimelineItem,
   type RepostPayload,
@@ -39,12 +40,13 @@ import {
 } from "@/lib/pendingMomentUploads";
 import { usePendingVideoMomentSync, type VideoMomentSyncOutcome } from "@/lib/pendingVideoMomentSync";
 import { getDiscoverStories, getFeedStories, getFriendStories } from "@/lib/stories";
-import type { Story } from "@/lib/stories";
+import { buildStoryRow, groupStoriesByAuthor, SELF_TILE_ID } from "@/lib/storyRow";
 import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
 import {
   getEventFilterSectionEvents,
+  getEventFilterSectionHeading,
   getMixedFeedEvents,
   isLatestEventRequest,
   shouldShowEventFilterEmptyState,
@@ -61,6 +63,7 @@ import {
   type SharedEventFilters,
 } from "@/lib/eventFilters";
 import type { EventCategory } from "@/constants/eventCategories";
+import { applySmartFeedAuthorDiversity, getSmartFeedCreatorId } from "@/lib/smartFeedDiversity";
 import { useAuthStore } from "@/stores/authStore";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -68,74 +71,16 @@ const SUGGESTED_USERS_INSERT_AFTER = 4;
 const REFRESH_TIMEOUT_MS = 10000;
 const FEED_VIDEO_VIEWABILITY_THRESHOLD = 60;
 
-const groupStoriesByAuthor = (feedStories: Story[], seenStoryIds = new Set<string>(), currentUserId?: string): StoryData[] => {
-  const groupedStories = new Map<string, Story[]>();
-
-  feedStories.forEach((story) => {
-    const authorId = story.author?.id ?? story.userId;
-    const authorStories = groupedStories.get(authorId) ?? [];
-
-    authorStories.push(story);
-    groupedStories.set(authorId, authorStories);
-  });
-
-  return Array.from(groupedStories.entries()).map(([authorId, authorStories]) => {
-    const sortedStories = [...authorStories].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    const latestStory = sortedStories[sortedStories.length - 1];
-    const title = latestStory.author?.name ?? 'Story';
-    const storyItems = sortedStories
-      .map((story) => ({
-        id: story.id,
-        mediaType: story.mediaType,
-        mediaUri: story.mediaUrl,
-        contentType: story.contentType,
-        durationSeconds: story.durationSeconds || 15,
-        caption: story.caption,
-        textContent: story.textContent,
-        textBackground: story.textBackground,
-        textOverlay: story.textOverlay,
-        createdAt: story.createdAt,
-        expiresAt: story.expiresAt,
-        viewsCount: story.viewsCount,
-        reactionsCount: story.reactionsCount,
-        commentsCount: story.commentsCount,
-        isReacted: story.isReacted,
-        isOwner: story.isOwner,
-        authorId,
-        authorName: title,
-        authorAvatar: latestStory.author?.avatarUrl ?? null,
-      }));
-
-    return {
-      id: `story-group-${authorId}`,
-      type: 'standard' as const,
-      isOwnStory: currentUserId ? authorId === currentUserId : false,
-      title,
-      authorName: title,
-      imageUri: latestStory.author?.avatarUrl ?? null,
-      mediaUri: latestStory.mediaUrl,
-      contentType: latestStory.contentType,
-      mediaType: latestStory.mediaType,
-      textContent: latestStory.textContent,
-      textBackground: latestStory.textBackground,
-      textOverlay: latestStory.textOverlay,
-      seen: storyItems.length > 0 && storyItems.every((story) => seenStoryIds.has(story.id)),
-      storyItems,
-      authorId,
-      authorAvatar: latestStory.author?.avatarUrl ?? null,
-    };
-  });
-};
-
 type FeedItem =
   | { type: 'pending_video_upload'; id: string; data: PendingVideoMomentUpload }
   | { type: 'video_processing'; id: string; data: PostData }
   | { type: 'post'; id: string; data: PostData }
   | { type: 'event'; id: string; data: EventResponse }
   | { type: 'repost'; id: string; data: MomentTimelineItem }
-  | { type: 'suggested_users'; id: string; data: SuggestedUser[] };
+  | { type: 'suggested_users'; id: string; data: SuggestedUser[] }
+  // Purely a visual boundary between the filtered Event section above and the
+  // normal Smart Feed content below — carries no data of its own.
+  | { type: 'your_feed_header'; id: string };
 
 // A server Moment whose video is still `queued`/`processing` renders the
 // same skeleton as a local pending upload instead of FeedPost's own black
@@ -173,7 +118,7 @@ const buildFeedItems = (
     return right.sortTime - left.sortTime;
   };
 
-  const contentItems: ContentItem[] = [
+  const rankedContentItems: ContentItem[] = [
     ...posts.map((post) => ({
       type: 'post' as const,
       id: `moment-${post.id}`,
@@ -196,6 +141,15 @@ const buildFeedItems = (
       smartFeedScore: share.smartFeedScore,
     })),
   ].sort(compareContentItems);
+
+  // Post-sort diversity pass only — the smartFeedScore/sortTime ranking
+  // above is unchanged; this only interleaves items after the fact so no
+  // more than SMART_FEED_DIVERSITY.maxConsecutiveSameAuthor consecutive
+  // cards share a creator. See app/lib/smartFeedDiversity.ts.
+  const contentItems = applySmartFeedAuthorDiversity(
+    rankedContentItems,
+    (item) => getSmartFeedCreatorId(item.data),
+  );
 
   const items: FeedItem[] = pendingVideoUploads
     .filter((upload) => upload.status !== 'succeeded')
@@ -400,8 +354,12 @@ export default function HomeFeed() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedType, setSelectedType] = useState('Feed');
   const [feedAudience, setFeedAudience] = useState<FeedAudience>("discover");
-  const [stories, setStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
-  const [friendStories, setFriendStories] = useState<StoryData[]>([{ id: 'add-story', type: 'add' }]);
+  const [stories, setStories] = useState<StoryData[]>([
+    { id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false },
+  ]);
+  const [friendStories, setFriendStories] = useState<StoryData[]>([
+    { id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false },
+  ]);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [feedMomentPosts, setFeedMomentPosts] = useState<PostData[]>([]);
   const [feedEvents, setFeedEvents] = useState<EventResponse[]>([]);
@@ -510,14 +468,11 @@ export default function HomeFeed() {
         getFriendStories().catch(() => []),
         getSeenStoryIds(),
       ]);
-      setStories([
-        { id: 'add-story', type: 'add' },
-        ...groupStoriesByAuthor(discover, seenStoryIds, userId),
-      ]);
-      setFriendStories([{ id: 'add-story', type: 'add' }, ...groupStoriesByAuthor(friends, seenStoryIds, userId)]);
+      setStories(buildStoryRow(groupStoriesByAuthor(discover, seenStoryIds, userId)));
+      setFriendStories(buildStoryRow(groupStoriesByAuthor(friends, seenStoryIds, userId)));
     } catch {
-      setStories([{ id: 'add-story', type: 'add' }]);
-      setFriendStories([{ id: 'add-story', type: 'add' }]);
+      setStories([{ id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false }]);
+      setFriendStories([{ id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false }]);
     }
   }, [userId]);
 
@@ -833,6 +788,38 @@ export default function HomeFeed() {
     );
   }, []);
 
+  // Caption-only edit of the authenticated user's own Post — patches the
+  // existing Feed item by id in place (never appended/reordered as new,
+  // never touches createdAt/Smart Feed freshness). Mirrors the
+  // mapMomentToPost + map-by-id pattern already used by
+  // handleVideoMomentResolved below.
+  const handlePostUpdated = useCallback((updatedMoment: Moment) => {
+    const mappedPost = mapMomentToPost(updatedMoment, { storageUrlResolver: getStorageFileUrl });
+
+    if (!mappedPost) {
+      return;
+    }
+
+    setFeedMomentPosts((current) => current.map((post) => (
+      post.id === mappedPost.id ? mappedPost : post
+    )));
+    setSelectedCommentPost((currentPost) => (
+      currentPost?.id === mappedPost.id ? mappedPost : currentPost
+    ));
+    setSelectedSharePost((currentPost) => (
+      currentPost?.id === mappedPost.id ? mappedPost : currentPost
+    ));
+  }, []);
+
+  // Edits ONLY the authenticated user's own repost commentary — patches the
+  // existing repost by share id in place, never the embedded original
+  // content, never reordered/duplicated, never touches share.createdAt.
+  const handleShareUpdated = useCallback((updatedShare: MomentTimelineItem) => {
+    setFeedReposts((current) => current.map((share) => (
+      share.id === updatedShare.id ? updatedShare : share
+    )));
+  }, []);
+
   useEffect(() => {
     const succeededUploads = pendingVideoUploads.filter((upload) => upload.status === 'succeeded' && upload.moment);
 
@@ -928,7 +915,13 @@ export default function HomeFeed() {
       data: event,
     }));
 
-    return [...eventSectionItems, ...nonEventFeedItems];
+    // Only shown while the filtered section above is visible AND there's normal
+    // feed content below it to distinguish from — never on the unfiltered feed.
+    const yourFeedHeaderItems: FeedItem[] = nonEventFeedItems.length > 0
+      ? [{ type: 'your_feed_header' as const, id: 'your-feed-header' }]
+      : [];
+
+    return [...eventSectionItems, ...yourFeedHeaderItems, ...nonEventFeedItems];
   }, [
     eventFilterSectionEvents,
     feedMomentPosts,
@@ -988,7 +981,9 @@ export default function HomeFeed() {
                 {showEventFilterSection ? (
                   <View style={styles.nearbyEventsSection}>
                     <View style={styles.nearbyEventsHeaderRow}>
-                      <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>Nearby Events you can join</Text>
+                      <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>
+                        {getEventFilterSectionHeading(appliedEventFilters.nearby)}
+                      </Text>
                       {hasAppliedEventFilters ? (
                         <TouchableOpacity
                           style={[styles.clearEventFiltersButton, { borderColor: colors.border }]}
@@ -1026,6 +1021,7 @@ export default function HomeFeed() {
                     onAuthorFollowChange={handleAuthorFollowChange}
                     onInteractionChange={applyInteractionSummary}
                     onDeletePress={handleDeletePost}
+                    onPostUpdated={handlePostUpdated}
                     onAuthorBlocked={handleUserBlockedFromReport}
                     isActiveVideo={activeFeedVideoItemId === item.id}
                   />
@@ -1048,12 +1044,21 @@ export default function HomeFeed() {
                   <RepostFeedCard
                     share={item.data}
                     onRepostSuccess={refreshFeedAfterRepost}
+                    onShareUpdated={handleShareUpdated}
                     isActiveVideo={activeFeedVideoItemId === item.id}
                   />
                 );
               }
               if (item.type === 'suggested_users') {
                 return <PeopleToFollow users={item.data} />;
+              }
+              if (item.type === 'your_feed_header') {
+                return (
+                  <View style={styles.yourFeedHeaderSection}>
+                    <View style={[styles.yourFeedDivider, { backgroundColor: colors.border }]} />
+                    <Text style={[styles.yourFeedTitle, { color: '#B3B3B3' }]}>Your Feed</Text>
+                  </View>
+                );
               }
               return null;
             }}
@@ -1169,6 +1174,21 @@ const styles = StyleSheet.create({
   nearbyEventsEmptyText: {
     fontSize: 13,
     marginTop: 8,
+  },
+  yourFeedHeaderSection: {
+    marginTop: 4,
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  yourFeedDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginBottom: 16,
+  },
+  yourFeedTitle: {
+    fontSize: 16,
+    fontWeight: "400",
+    letterSpacing: -0.08,
+    lineHeight: 16,
   },
   feedSkeletonList: {
     paddingBottom: 100,

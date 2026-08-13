@@ -255,6 +255,32 @@ export const deleteMoment = async (momentId: string): Promise<void> => {
   await api.delete(`/moments/${encodeURIComponent(momentId)}`);
 };
 
+// Caption-only edit of an existing Moment/Post. Media, audience, tagged
+// people/friends, and location are not editable through this call.
+export const updateMoment = async (momentId: string, caption: string | null): Promise<Moment> => {
+  const response = await api.patch(`/moments/${encodeURIComponent(momentId)}`, { caption });
+  const moment = response.data?.data?.moment as Moment | undefined;
+
+  if (!moment) {
+    throw new Error("The update response was incomplete.");
+  }
+
+  return moment;
+};
+
+// Edits ONLY the authenticated user's own repost/share commentary. Never
+// touches the original Post/Event, tagged friends, or any other share field.
+export const updateShareCaption = async (shareId: string, caption: string | null): Promise<MomentTimelineItem> => {
+  const response = await api.patch(`/moments/shares/${encodeURIComponent(shareId)}`, { caption });
+  const share = response.data?.data?.share as MomentTimelineItem | undefined;
+
+  if (!share) {
+    throw new Error("The update response was incomplete.");
+  }
+
+  return share;
+};
+
 // Owner-only manual retry for a Moment's failed video processing. The
 // backend identifies the eligible failed video server-side — this never
 // sends a job id, storage key, or user id; the Moment id (already trusted,

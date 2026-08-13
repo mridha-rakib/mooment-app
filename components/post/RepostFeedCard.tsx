@@ -1,23 +1,28 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EventFeedCard from '@/components/home/EventFeedCard';
 import { useTheme } from '@/hooks/useTheme';
 import { getEventById, type EventResponse } from '@/lib/events';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
-import { shareMoment, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
+import { shareMoment, updateShareCaption, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { getStorageFileUrl } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
 import UserAvatar from '../ui/UserAvatar';
 import FeedPost from './FeedPost';
-import ShareModal from './ShareModal';
+import MoreMenuModal from './MoreMenuModal';
+import ShareModal, { type ShareItem } from './ShareModal';
 
 type Props = {
   share: MomentTimelineItem;
   labelOverride?: string;
   onRepostSuccess?: () => void;
+  // Fired after the authenticated user edits ONLY their own repost
+  // commentary (never the original content). Lets the Feed screen patch its
+  // local list by share id instead of refetching.
+  onShareUpdated?: (share: MomentTimelineItem) => void;
   showLoadingIndicator?: boolean;
   isActiveVideo?: boolean;
 };
@@ -26,15 +31,22 @@ export default function RepostFeedCard({
   share,
   labelOverride,
   onRepostSuccess,
+  onShareUpdated,
   showLoadingIndicator = true,
   isActiveVideo = false,
 }: Props) {
   const { colors } = useTheme();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [eventLoading, setEventLoading] = useState(false);
   const [eventUnavailable, setEventUnavailable] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
+  const [editCaptionVisible, setEditCaptionVisible] = useState(false);
   const isEvent = share.originalItem?.type === 'event';
+  // Edit visibility is the SHARE owner, never the original content's author —
+  // a user may always edit their own repost commentary even when they don't
+  // own the original Post/Event.
+  const isOwnRepost = Boolean(currentUserId && share.sharedBy?.id && currentUserId === share.sharedBy.id);
   const reposterName = share.sharedBy?.name?.trim() || share.sharedBy?.username?.trim() || 'Mooment user';
   const reposterAvatar = useMemo(() => {
     if (share.sharedBy?.avatarKey) {
@@ -72,6 +84,52 @@ export default function RepostFeedCard({
     onRepostSuccess?.();
   };
 
+  const handleUpdateCaption = async (shareId: string, caption: string | null) => {
+    const updated = await updateShareCaption(shareId, caption);
+    onShareUpdated?.(updated);
+  };
+
+  // Preview shown inside the edit-composer for context only — mirrors the
+  // same ShareItem shapes already used by the create-repost flows (FeedPost's
+  // post preview above, EventFeedCard's event preview) without duplicating
+  // their full rich formatting (category/date/location labels).
+  const editPreviewItem: ShareItem | undefined = useMemo(() => {
+    if (isEvent) {
+      if (!event) return undefined;
+      let bannerUri: string | null = null;
+      if (event.bannerImageKey) {
+        try { bannerUri = getStorageFileUrl(event.bannerImageKey); } catch { /* fall through */ }
+      }
+      return {
+        type: 'event',
+        id: event.id,
+        preview: event.name,
+        imageUrl: bannerUri,
+        authorName: event.host?.name ?? null,
+      };
+    }
+
+    if (!post) return undefined;
+
+    return {
+      type: 'post',
+      id: post.id,
+      preview: post.caption,
+      imageUrl: post.mediaItems?.[0]?.uri ?? post.mediaUris?.[0],
+      authorName: post.authorName,
+    };
+  }, [event, isEvent, post]);
+
+  const editModal = (
+    <ShareModal
+      visible={editCaptionVisible}
+      onClose={() => setEditCaptionVisible(false)}
+      onUpdateCaption={handleUpdateCaption}
+      item={editPreviewItem}
+      editing={{ shareId: share.id, caption: share.repostCaption ?? null }}
+    />
+  );
+
   const header = (
     <RepostHeader
       reposterId={share.sharedBy?.id}
@@ -81,6 +139,8 @@ export default function RepostFeedCard({
       sharedTime={sharedTime}
       caption={share.repostCaption}
       taggedFriends={share.taggedFriends ?? []}
+      isOwnRepost={isOwnRepost}
+      onEditPress={() => setEditCaptionVisible(true)}
     />
   );
 
@@ -99,6 +159,7 @@ export default function RepostFeedCard({
         ) : (
           <EventFeedCard event={event} onRepostSuccess={onRepostSuccess} embedded />
         )}
+        {editModal}
       </View>
     );
   }
@@ -126,6 +187,7 @@ export default function RepostFeedCard({
       ) : (
         <UnavailableCard />
       )}
+      {editModal}
     </View>
   );
 }
@@ -138,6 +200,8 @@ function RepostHeader({
   sharedTime,
   caption,
   taggedFriends,
+  isOwnRepost,
+  onEditPress,
 }: {
   reposterId?: string | null;
   reposterName: string;
@@ -146,11 +210,23 @@ function RepostHeader({
   sharedTime: string;
   caption?: string | null;
   taggedFriends: MomentAuthor[];
+  isOwnRepost: boolean;
+  onEditPress: () => void;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const validTaggedFriends = taggedFriends.filter((friend) => getTaggedFriendName(friend));
+  const moreBtnRef = useRef<View>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [menuTop, setMenuTop] = useState(0);
+
+  const handleMorePress = () => {
+    moreBtnRef.current?.measureInWindow((_x, y, _w, h) => {
+      setMenuTop(y + h + 5);
+      setShowMoreMenu(true);
+    });
+  };
 
   const openReposterProfile = () => {
     navigateToProfile(router, currentUserId, {
@@ -205,6 +281,20 @@ function RepostHeader({
         {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
         {caption?.trim() ? <Text style={[styles.repostCaption, { color: colors.text }]}>{caption.trim()}</Text> : null}
       </View>
+      {isOwnRepost && (
+        <>
+          <TouchableOpacity ref={moreBtnRef} style={styles.moreBtn} activeOpacity={0.75} onPress={handleMorePress}>
+            <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <MoreMenuModal
+            visible={showMoreMenu}
+            onClose={() => setShowMoreMenu(false)}
+            showEdit
+            onEdit={onEditPress}
+            top={menuTop}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -258,6 +348,10 @@ const styles = StyleSheet.create({
   },
   repostHeaderText: {
     flex: 1,
+  },
+  moreBtn: {
+    padding: 4,
+    marginLeft: 4,
   },
   contextLabel: {
     fontSize: 12,

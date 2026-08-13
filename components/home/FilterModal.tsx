@@ -1,4 +1,5 @@
 import LocationSearchModal from '@/components/post/LocationSearchModal';
+import EventRadiusSlider from '@/components/home/EventRadiusSlider';
 import { getCurrentLocationForSharing, getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import type { LocationSearchContext, LocationSearchResult } from '@/lib/locationSearch';
 import { useAuthStore } from '@/stores/authStore';
@@ -15,7 +16,6 @@ import React,
   useState } from 'react';
 import { Modal,
   Alert,
-  PanResponder,
   Platform,
   ScrollView,
   StatusBar,
@@ -30,8 +30,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
 import {
   DEFAULT_EVENT_RADIUS_MILES,
-  MAX_EVENT_RADIUS_MILES,
-  MIN_EVENT_RADIUS_MILES,
   canApplyEventFilters,
   confirmVisibleEventFilters,
   isValidEventLocationFilter,
@@ -150,19 +148,33 @@ export default function FilterModal({
   // Transient, display-only value: lets the Switch move the instant the user taps it
   // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
   const [pendingLocationValue, setPendingLocationValue] = useState<boolean | null>(null);
-  const useCurrentLocation = pendingLocationValue !== null ? pendingLocationValue : locationSharingEnabled;
 
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
   const [locationSearchContext, setLocationSearchContext] = useState<LocationSearchContext | null>(null);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [selectedLocationCoords, setSelectedLocationCoords] = useState<DraftLocationCoords>(EMPTY_LOCATION_COORDS);
   const [selectedLocationResult, setSelectedLocationResult] = useState<LocationSearchResult | null>(null);
+  // Presentation-only short place name (e.g. "Barisal") for the applied filter's
+  // heading — sourced from the same selected result that supplies the coordinates,
+  // carried forward across reopen so it survives even after selectedLocationResult
+  // is cleared back to null. Never sent to the backend.
+  const [selectedLocationShortLabel, setSelectedLocationShortLabel] = useState<string | null>(null);
+  // Session-scoped: true once Reset has been pressed in this open/edit session,
+  // until the user explicitly re-selects Current Location or a manual place.
+  // Lets "Reset" clear the Event location filter without touching the user's
+  // persisted global location-sharing preference (locationSharingEnabled).
+  const [locationFilterSessionReset, setLocationFilterSessionReset] = useState(false);
+  // Session reset only overrides the *displayed* draft value — it never calls the
+  // sharing API, so the persisted global preference (locationSharingEnabled) is untouched.
+  const useCurrentLocation = pendingLocationValue !== null
+    ? pendingLocationValue
+    : locationFilterSessionReset
+      ? false
+      : locationSharingEnabled;
 
   const [radius, setRadius] = useState(DEFAULT_EVENT_RADIUS_MILES);
-  const [trackWidth, setTrackWidth] = useState(0);
   const [isApplying, setIsApplying] = useState(false);
 
-  const updateRadiusRef = useRef<(x: number) => void>(null!);
   const resetDraftRef = useRef(false);
   const searchContextRequestIdRef = useRef(0);
 
@@ -170,6 +182,7 @@ export default function FilterModal({
     if (!visible) return;
 
     resetDraftRef.current = false;
+    setLocationFilterSessionReset(false);
     setActiveAge(activeFilters.ageRestriction ? AGE_VALUE_TO_OPTION[activeFilters.ageRestriction] : null);
     setActivePrice(activeFilters.priceFilter ? PRICE_VALUE_TO_OPTION[activeFilters.priceFilter] : null);
     setActiveTime(
@@ -185,6 +198,7 @@ export default function FilterModal({
         setSelectedLocation('');
         setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
         setSelectedLocationResult(null);
+        setSelectedLocationShortLabel(null);
       } else {
         setSelectedLocation(activeFilters.nearby.label);
         setSelectedLocationCoords({
@@ -192,39 +206,26 @@ export default function FilterModal({
           longitude: activeFilters.nearby.longitude,
         });
         setSelectedLocationResult(null);
+        setSelectedLocationShortLabel(activeFilters.nearby.shortLabel ?? null);
       }
     } else {
       setRadius(DEFAULT_EVENT_RADIUS_MILES);
       setSelectedLocation('');
       setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
       setSelectedLocationResult(null);
+      setSelectedLocationShortLabel(null);
     }
   }, [activeFilters, visible]);
 
-  // Fix: panResponder is created once; use a ref so callbacks always call the latest updateRadius
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => updateRadiusRef.current?.(evt.nativeEvent.locationX),
-      onPanResponderMove: (evt) => updateRadiusRef.current?.(evt.nativeEvent.locationX),
-    })
-  ).current;
-
-  const updateRadius = (x: number) => {
-    if (trackWidth > 0) {
-      const percent = Math.max(0, Math.min(1, x / trackWidth));
-      const nextRadius = MIN_EVENT_RADIUS_MILES +
-        Math.round(percent * (MAX_EVENT_RADIUS_MILES - MIN_EVENT_RADIUS_MILES));
-      setRadius(normalizeEventRadiusMiles(nextRadius));
-    }
-  };
-  updateRadiusRef.current = updateRadius;
+  const handleRadiusCommitted = useCallback((nextRadius: number) => {
+    setRadius(normalizeEventRadiusMiles(nextRadius));
+  }, []);
 
   const clearSelectedLocationDraft = useCallback(() => {
     setSelectedLocation('');
     setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
     setSelectedLocationResult(null);
+    setSelectedLocationShortLabel(null);
   }, []);
 
   const handleToggleCurrentLocation = useCallback(async (value: boolean) => {
@@ -233,6 +234,10 @@ export default function FilterModal({
     }
 
     setPendingLocationValue(value);
+    if (value) {
+      // Explicitly re-selecting Current Location ends any prior Reset for this session.
+      setLocationFilterSessionReset(false);
+    }
 
     try {
       if (value) {
@@ -298,6 +303,9 @@ export default function FilterModal({
     setHashtags('');
     clearSelectedLocationDraft();
     setRadius(DEFAULT_EVENT_RADIUS_MILES);
+    // Clears the Event *filter* session only — does not call enable/disableLocationSharing,
+    // so the user's persisted global location-sharing preference is left untouched.
+    setLocationFilterSessionReset(true);
   };
 
   const handleApply = async () => {
@@ -312,10 +320,12 @@ export default function FilterModal({
       // global sharing preference, it can stay ON after the user picks a specific place.
       // Uses the authoritative persisted value (not the transient display value) so Apply
       // never resolves "current location" based on an operation that hasn't confirmed yet.
+      // locationFilterSessionReset lets Reset clear the Event location filter for this
+      // session without touching that persisted preference.
       const hasManualLocationSelection = Boolean(selectedLocation.trim() || selectedLocationResult);
       const nearby = hasManualLocationSelection
         ? resolveSelectedLocationFilter(committedRadius)
-        : locationSharingEnabled
+        : locationSharingEnabled && !locationFilterSessionReset
           ? await resolveCurrentLocationFilter(committedRadius)
           : null;
 
@@ -357,6 +367,7 @@ export default function FilterModal({
       radiusMiles,
       label: selectedLocation.trim() || selectedLocationResult?.label || 'Selected Location',
       source: 'selected',
+      shortLabel: selectedLocationShortLabel ?? undefined,
     };
   };
 
@@ -387,6 +398,11 @@ export default function FilterModal({
       longitude: location.longitude,
     });
     setSelectedLocationResult(location);
+    // Prefer the structured short place name over the flat label so the Feed
+    // heading can safely say "Events around Barisal" without string-splitting.
+    setSelectedLocationShortLabel(location.name?.trim() || location.city?.trim() || null);
+    // A fresh manual selection is itself an explicit location decision for this session.
+    setLocationFilterSessionReset(false);
   };
 
   const canApplyCurrentDraft = canApplyEventFilters({
@@ -525,25 +541,9 @@ export default function FilterModal({
                 </View>
               </View>
 
-              {/* Radius Slider */}
-              <View style={[styles.radiusContainer, { borderColor: colors.border }]}>
-                <View style={styles.radiusHeader}>
-                  <Text style={[styles.inputText, { color: colors.text }]}>Radius</Text>
-                  <Text style={[styles.radiusValueText, { color: colors.primary }]}>{radius} miles</Text>
-                </View>
-                <View
-                  style={[styles.sliderTrack, { backgroundColor: isDark ? '#3A3A44' : '#E0E0E0' }]}
-                  onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-                  {...panResponder.panHandlers}
-                >
-                  <View style={[styles.sliderFill, { width: `${((radius - MIN_EVENT_RADIUS_MILES) / (MAX_EVENT_RADIUS_MILES - MIN_EVENT_RADIUS_MILES)) * 100}%`, backgroundColor: colors.primary }]} />
-                  <View style={[styles.sliderThumb, { left: `${((radius - MIN_EVENT_RADIUS_MILES) / (MAX_EVENT_RADIUS_MILES - MIN_EVENT_RADIUS_MILES)) * 100}%`, backgroundColor: colors.text }]} />
-                </View>
-                <View style={styles.radiusLabels}>
-                  <Text style={[styles.radiusLabelText, { color: colors.textSecondary }]}>1</Text>
-                  <Text style={[styles.radiusLabelText, { color: colors.textSecondary }]}>200 miles</Text>
-                </View>
-              </View>
+              {/* Radius Slider — owns its own live drag state so dragging doesn't
+                  re-render the rest of this modal; commits to `radius` on release. */}
+              <EventRadiusSlider value={radius} onChangeCommitted={handleRadiusCommitted} />
             </View>
 
             <View style={{ height: 40 }} />
@@ -685,47 +685,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexShrink: 0,
-  },
-  radiusContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
-  },
-  radiusHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  radiusValueText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  sliderTrack: {
-    height: 4,
-    borderRadius: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sliderFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  sliderThumb: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    position: 'absolute',
-    transform: [{ translateX: -7 }],
-  },
-  radiusLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  radiusLabelText: {
-    fontSize: 10,
   },
   footer: {
     flexDirection: 'row',

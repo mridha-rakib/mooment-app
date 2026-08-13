@@ -72,6 +72,8 @@ type AboutTabProps = {
 
 const SUPPORTED_IMAGE_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const SUPPORTED_VIDEO_CONTENT_TYPES = new Set(["video/mp4", "video/quicktime"]);
+// Event gallery video upload is temporarily disabled (resource-constrained deploy).
+const EVENT_VIDEO_MEDIA_ENABLED = false;
 const INITIAL_GALLERY_MEDIA_RENDER_COUNT = 9;
 const GALLERY_MEDIA_RENDER_BATCH_SIZE = 6;
 
@@ -361,10 +363,14 @@ const GalleryMediaTile = React.memo(function GalleryMediaTile({
   onTileLoaded,
 }: GalleryMediaTileProps) {
   const [videoPoster, setVideoPoster] = useState<StoryThumbnailSource>(() =>
-    item.type === "video" ? getCachedStoryThumbnail(`event-gallery-${item.id}`) : null);
+    item.type === "video" && EVENT_VIDEO_MEDIA_ENABLED ? getCachedStoryThumbnail(`event-gallery-${item.id}`) : null);
 
   useEffect(() => {
-    if (item.type !== "video" || videoPoster || !shouldLoadMedia) {
+    // Video poster generation is temporarily disabled (resource-constrained
+    // deploy) — it decodes a frame of the video to build the thumbnail,
+    // which would fetch video bytes for existing gallery items. Falls
+    // through to the static video-icon tile below instead.
+    if (item.type !== "video" || videoPoster || !shouldLoadMedia || !EVENT_VIDEO_MEDIA_ENABLED) {
       return undefined;
     }
 
@@ -386,6 +392,14 @@ const GalleryMediaTile = React.memo(function GalleryMediaTile({
       isActive = false;
     };
   }, [item.id, item.type, item.url, onTileLoaded, requestHeaders, shouldLoadMedia, videoPoster]);
+
+  useEffect(() => {
+    // Poster generation is skipped while video is disabled (above), so mark
+    // the tile loaded immediately instead of leaving it pulsing forever.
+    if (item.type === "video" && !EVENT_VIDEO_MEDIA_ENABLED && shouldLoadMedia) {
+      onTileLoaded(item.id);
+    }
+  }, [item.id, item.type, onTileLoaded, shouldLoadMedia]);
 
   if (!shouldLoadMedia) {
     return <GallerySkeletonTile pulse={pulse} color={skeletonColor} />;
@@ -424,12 +438,12 @@ const GalleryMediaTile = React.memo(function GalleryMediaTile({
               contentFit="cover"
               cachePolicy="memory-disk"
             />
-          ) : (
+          ) : EVENT_VIDEO_MEDIA_ENABLED ? (
             <Animated.View
               pointerEvents="none"
               style={[styles.galleryTileSkeletonOverlay, { backgroundColor: skeletonColor, opacity: pulse }]}
             />
-          )}
+          ) : null}
           <View style={styles.galleryVideoTile} />
         </>
       )}
@@ -913,6 +927,13 @@ const AboutTab = ({
     batchId: number,
     index: number,
   ): Promise<EventMediaInput> => {
+    if (!EVENT_VIDEO_MEDIA_ENABLED) {
+      // Safety net: the gallery picker no longer offers "videos" as a media
+      // type, so this should be unreachable. If a stale asset somehow gets
+      // here, refuse the upload instead of silently sending video bytes.
+      throw new Error("Video uploads are temporarily unavailable.");
+    }
+
     const contentType = normalizeVideoContentType(asset.mimeType, asset.uri);
 
     if (!contentType) {
@@ -992,7 +1013,7 @@ const AboutTab = ({
 
       const selectionLimit = Math.min(MAX_EVENT_MEDIA_BATCH_ITEMS, remainingSlots);
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images", "videos"],
+        mediaTypes: EVENT_VIDEO_MEDIA_ENABLED ? ["images", "videos"] : ["images"],
         allowsMultipleSelection: true,
         selectionLimit,
         orderedSelection: true,

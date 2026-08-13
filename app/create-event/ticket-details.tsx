@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   Platform,
   StatusBar,
@@ -132,6 +134,11 @@ const isSameCalendarDay = (first: Date, second: Date) =>
 
 const generateTicketLocalId = () => `ticket-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const showTicketFeedback = (message: string) => {
+  if (Platform.OS === 'android') ToastAndroid.show(message, ToastAndroid.SHORT);
+  else Alert.alert('', message);
+};
+
 export default function TicketDetailsScreen() {
   const params = useLocalSearchParams<{ localId?: string }>();
   const router = useRouter();
@@ -180,6 +187,7 @@ export default function TicketDetailsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<TicketErrors>({});
+  const ticketSubmitInFlightRef = useRef(false);
   const pickerButtonColors = {
     negativeButton: { label: 'Cancel', textColor: colors.textSecondary },
     positiveButton: { label: 'OK', textColor: colors.primary },
@@ -271,10 +279,20 @@ export default function TicketDetailsScreen() {
   );
 
   const handleConfirm = async () => {
-    if (isSaving) {
+    if (isSaving || ticketSubmitInFlightRef.current) {
       return;
     }
 
+    ticketSubmitInFlightRef.current = true;
+
+    try {
+      await submitTicket();
+    } finally {
+      ticketSubmitInFlightRef.current = false;
+    }
+  };
+
+  const submitTicket = async () => {
     const parsedCapacity = Number.parseInt(capacity, 10);
     const parsedPrice = Number.parseFloat(ticketPrice);
     const type = ticketType === 'Free' ? 'free' : 'pay';
@@ -365,9 +383,8 @@ export default function TicketDetailsScreen() {
         salesEndAt: salesEndAt.toISOString(),
         type: savedType,
       });
-      setTimeout(() => {
-        router.back();
-      }, 2500);
+      showTicketFeedback(isEditingTicket ? 'Ticket successfully updated' : 'Ticket successfully created');
+      router.back();
     } catch (error) {
       setErrors(parseBackendTicketErrors(error));
     } finally {

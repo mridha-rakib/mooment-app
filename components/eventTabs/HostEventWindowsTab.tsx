@@ -67,6 +67,16 @@ const CONTENT_TYPE_ICONS: Record<EventWindowContentType, React.ComponentProps<ty
   audio: "mic",
 };
 
+// Event-window video posting is temporarily disabled (resource-constrained
+// deploy) — hosts can no longer opt new/updated windows into "video".
+// Existing windows that already allow video keep that configuration (no data
+// mutation here); attendees are blocked from actually posting video by the
+// matching guard in AttendeeEventWindowsTab.
+const EVENT_WINDOW_VIDEO_ENABLED = false;
+const SELECTABLE_EVENT_WINDOW_CONTENT_TYPES = EVENT_WINDOW_VIDEO_ENABLED
+  ? EVENT_WINDOW_CONTENT_TYPES
+  : EVENT_WINDOW_CONTENT_TYPES.filter((type) => type !== "video");
+
 const STATUS_COLORS = {
   scheduled: "#3B82F6",
   open: "#16A34A",
@@ -561,7 +571,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
 
               <Text style={[styles.label, { color: colors.textSecondary }]}>ALLOWED CONTENT</Text>
               <View style={styles.contentSelector}>
-                {EVENT_WINDOW_CONTENT_TYPES.map((type) => {
+                {SELECTABLE_EVENT_WINDOW_CONTENT_TYPES.map((type) => {
                   const selected = form.allowedContentTypes.includes(type);
                   return (
                     <TouchableOpacity

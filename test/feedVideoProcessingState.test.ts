@@ -68,7 +68,7 @@ test("failed state renders a safe, user-friendly message with no internal detail
 });
 
 test("Retry is gated on ownership via the existing isPostByCurrentUser flag", () => {
-  assert.match(mediaRenderBranchSource, /canRetry=\{effectiveProcessingStatus === 'failed' && isPostByCurrentUser\}/);
+  assert.match(mediaRenderBranchSource, /canRetry=\{effectiveProcessingStatus === 'failed' && isPostByCurrentUser && VIDEO_PLAYBACK_ENABLED\}/);
 });
 
 test("owner-only canRetry prop drives whether the Retry button renders", () => {
