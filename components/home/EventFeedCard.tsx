@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { cancelEvent, type EventResponse } from "@/lib/events";
@@ -157,6 +158,7 @@ type Props = {
 };
 
 export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, embedded = false }: Props) {
+  const { colors, isDark } = useTheme();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUser = useAuthStore((s) => s.user);
   const completedProfileTypes = useAuthStore((s) => s.completedProfileTypes);
@@ -647,17 +649,28 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   }
 
   return (
-    <View style={[styles.card, embedded && styles.embeddedCard]}>
+    <View
+      style={[
+        styles.card,
+        // Dark mode keeps its exact pre-existing pixel values (approved,
+        // frozen) — this component previously had no theme branch at all,
+        // so it always rendered dark-styled regardless of the theme
+        // setting. Light mode gets a real light card + border instead of a
+        // near-black chip sitting on a white page.
+        isDark ? styles.cardDark : { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+        embedded && (isDark ? styles.embeddedCardDark : { borderWidth: 1, borderColor: colors.border }),
+      ]}
+    >
       {headerLabel ? (
         <View style={styles.repostContext}>
-          <Text style={styles.repostLabel}>{headerLabel}</Text>
-          {repostCaption ? <Text style={styles.repostCaption}>{repostCaption}</Text> : null}
-          {taggedFriendNames.length > 0 ? <Text style={styles.repostTags}>with {taggedFriendNames.join(", ")}</Text> : null}
+          <Text style={[styles.repostLabel, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>{headerLabel}</Text>
+          {repostCaption ? <Text style={[styles.repostCaption, { color: isDark ? "#FFFFFF" : colors.text }]}>{repostCaption}</Text> : null}
+          {taggedFriendNames.length > 0 ? <Text style={[styles.repostTags, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>with {taggedFriendNames.join(", ")}</Text> : null}
         </View>
       ) : null}
       {likedByContext ? (
-        <Text style={styles.socialContextText}>
-          <Text style={styles.socialContextMuted}>liked by </Text>
+        <Text style={[styles.socialContextText, { color: isDark ? "#FFFFFF" : colors.text }]}>
+          <Text style={[styles.socialContextMuted, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>liked by </Text>
           {likedByContext}
         </Text>
       ) : null}
@@ -666,7 +679,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         <TouchableOpacity style={styles.hostRow} activeOpacity={0.7} onPress={goToHostProfile}>
           <UserAvatar uri={hostAvatarUri} name={hostName} size={40} style={styles.avatar} />
           <View style={styles.hostMeta}>
-            <Text style={styles.hostName} numberOfLines={1}>{hostName}</Text>
+            <Text style={[styles.hostName, { color: isDark ? "#FFFFFF" : colors.text }]} numberOfLines={1}>{hostName}</Text>
             <View style={styles.hostSubRow}>
               {Boolean(timestamp) && <Text style={styles.timestamp}>{timestamp}</Text>}
               {Boolean(timestamp) && <View style={styles.dot} />}
@@ -704,7 +717,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
             activeOpacity={0.75}
             onPress={handleMorePress}
           >
-            <Ionicons name="ellipsis-horizontal" size={18} color="#B3B3B3" />
+            <Ionicons name="ellipsis-horizontal" size={18} color={isDark ? "#B3B3B3" : colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -850,11 +863,11 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
           <>
             <View style={styles.actionBarSpacer} />
             <TouchableOpacity
-              style={styles.viewStatBtn}
+              style={[styles.viewStatBtn, !isDark && { backgroundColor: colors.backgroundSecondary }]}
               activeOpacity={0.8}
               onPress={goToEventStats}
             >
-              <Text style={styles.viewStatText}>View Stat</Text>
+              <Text style={[styles.viewStatText, { color: isDark ? "#FFFFFF" : colors.text }]}>View Stat</Text>
             </TouchableOpacity>
           </>
         )}
@@ -931,15 +944,20 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(17, 17, 17, 0.95)",
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 20,
     overflow: "hidden",
   },
+  // Dark mode: exact pre-existing pixel values (approved, frozen).
+  cardDark: {
+    backgroundColor: "rgba(17, 17, 17, 0.95)",
+  },
   embeddedCard: {
     marginHorizontal: 0,
     marginBottom: 0,
+  },
+  embeddedCardDark: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },

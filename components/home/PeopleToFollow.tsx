@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { followUser, unfollowUser } from '@/lib/users';
 import UserAvatar from '../ui/UserAvatar';
@@ -21,6 +22,7 @@ const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 export default function PeopleToFollow({ users }: PeopleToFollowProps) {
   const router = useRouter();
+  const { colors } = useTheme();
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
 
@@ -76,12 +78,12 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>People to follow</Text>
+        <Text style={[styles.title, { color: colors.text }]}>People to follow</Text>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.push('/discover-screen/people-to-follow')}
         >
-          <Text style={styles.seeAllText}>See all</Text>
+          <Text style={[styles.seeAllText, { color: colors.textSecondary }]}>See all</Text>
         </TouchableOpacity>
       </View>
 
@@ -121,7 +123,7 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
                 }
               } as any)}
             >
-              <Text style={styles.userName} numberOfLines={2}>
+              <Text style={[styles.userName, { color: colors.text }]} numberOfLines={2}>
                 {user.name.split(' ').join('\n')}
               </Text>
             </TouchableOpacity>

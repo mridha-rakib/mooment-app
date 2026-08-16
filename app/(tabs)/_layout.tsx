@@ -2,6 +2,7 @@ import { getDirectMessageConversations } from "@/lib/chat";
 import { getUnreadNotificationCount } from "@/lib/notifications";
 import { subscribe as subscribeRealtime } from "@/lib/socketClient";
 import { getStorageFileUrl } from "@/lib/storage";
+import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatUnreadStore } from "@/stores/chatUnreadStore";
 import { useNotificationStore } from "@/stores/notificationStore";
@@ -14,9 +15,18 @@ import { Path, Svg } from "react-native-svg";
 import AddOptionsModal from "../../components/modals/AddOptionsModal";
 import UserAvatar from "../../components/ui/UserAvatar";
 
-const NAV_BAR_BACKGROUND = "#000000";
-const NAV_BAR_ICON_ACTIVE = "#FFFFFF";
-const NAV_BAR_ICON_INACTIVE = "#B3B3B3";
+// Dark mode: exact pre-existing pixel values (approved, frozen).
+const NAV_BAR_BACKGROUND_DARK = "#000000";
+const NAV_BAR_ICON_ACTIVE_DARK = "#FFFFFF";
+const NAV_BAR_ICON_INACTIVE_DARK = "#B3B3B3";
+// Light mode: a plain white bar with white/near-white active icons would be
+// invisible — instead of inverting to black (which would also blank out the
+// Messages icon's hard-coded dark dot strokes, drawn expecting a light
+// fill), the active fill uses the app's existing brand accent purple
+// ("#AC86D4"), already used everywhere else in this app as the
+// theme-independent "active" indicator (StoryCarousel's active pill,
+// EventFeedCard's follow accent, etc.).
+const NAV_BAR_ICON_ACTIVE_LIGHT = "#AC86D4";
 const NAV_BAR_BASE_HEIGHT = 72;
 const NAV_BAR_MAX_WIDTH = 440;
 const NAV_ICON_SIZE = 32;
@@ -26,6 +36,14 @@ export default function TabLayout() {
   const [isAddModalOpening, setIsAddModalOpening] = useState(false);
   const addModalOpenLockRef = useRef(false);
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  // A step off pure white (colors.backgroundSecondary) instead of
+  // colors.card/background — those equal the page's own white, which is
+  // exactly why the bar previously read as floating directly in the feed
+  // with no perceptible surface of its own.
+  const NAV_BAR_BACKGROUND = isDark ? NAV_BAR_BACKGROUND_DARK : colors.backgroundSecondary;
+  const NAV_BAR_ICON_ACTIVE = isDark ? NAV_BAR_ICON_ACTIVE_DARK : NAV_BAR_ICON_ACTIVE_LIGHT;
+  const NAV_BAR_ICON_INACTIVE = isDark ? NAV_BAR_ICON_INACTIVE_DARK : colors.textSecondary;
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
   const tabAvatarUri = user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null;
@@ -151,9 +169,22 @@ export default function TabLayout() {
             paddingLeft: 24,
             justifyContent: "space-between",
             alignItems: "center",
-            elevation: 0,
-            shadowOpacity: 0,
-            shadowColor: "transparent",
+            // Dark mode's black bar already stands out against the app's
+            // dark background, so it keeps its exact zero-border/
+            // zero-shadow treatment. Light mode gets a border plus a subtle
+            // upward shadow so the bar reads as a distinct fixed surface
+            // instead of floating directly in the scrolling feed.
+            ...(isDark
+              ? { elevation: 0, shadowOpacity: 0, shadowColor: "transparent" }
+              : {
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  shadowColor: "#000000",
+                  shadowOpacity: 0.08,
+                  shadowOffset: { width: 0, height: -2 },
+                  shadowRadius: 8,
+                  elevation: 6,
+                }),
           },
           tabBarItemStyle: styles.tabBarItem,
           tabBarIconStyle: styles.tabBarIcon,

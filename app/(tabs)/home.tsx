@@ -967,7 +967,13 @@ export default function HomeFeed() {
 
         {selectedType === 'Feed' ? (
           <HomeTabsRow
-            activeTab={feedAudience}
+            // Visual selection must come from the single canonical
+            // homeAudience value, not feedAudience — feedAudience only
+            // drives Discover/Friends data fetching and is left untouched
+            // (still whatever it was last set to) while Windows is active,
+            // which previously left the Discover/Friends pill highlighted
+            // at the same time as Windows.
+            activeTab={homeAudience === 'windows' ? null : homeAudience}
             onActiveTabChange={handleHomeAudienceChange}
             showWindowsTab
             isWindowsActive={homeAudience === 'windows'}

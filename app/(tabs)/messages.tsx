@@ -365,9 +365,22 @@ export default function MessagesScreen() {
   };
 
   const renderMessage = (item: ConversationData) => {
-    if (item.isTyping) return <Text style={[styles.lastMsg, styles.typingText]}>Typing...</Text>;
+    if (item.isTyping) {
+      return (
+        <Text style={[styles.lastMsg, styles.typingText, !isDark && { color: colors.primary }]}>
+          Typing...
+        </Text>
+      );
+    }
     return (
-      <Text style={[styles.lastMsg, item.unread > 0 && styles.lastMsgUnread]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.lastMsg,
+          !isDark && { color: colors.textSecondary },
+          item.unread > 0 && (isDark ? styles.lastMsgUnread : { color: colors.text, fontWeight: '500' }),
+        ]}
+        numberOfLines={1}
+      >
         {item.lastMessage}
       </Text>
     );
@@ -397,18 +410,31 @@ export default function MessagesScreen() {
 
   const renderConvoItem = ({ item }: { item: ConversationData }) => (
     <TouchableOpacity
-      style={styles.convoCard}
+      style={[
+        styles.convoCard,
+        // Unlike the Group row below, this card had no theme branch at all
+        // — a translucent near-black surface applied unconditionally, so it
+        // stayed dark-styled regardless of the theme setting.
+        !isDark && { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+      ]}
       onPress={() => handleOpenConversation(item)}
       activeOpacity={0.85}
     >
       {renderAvatar(item)}
       <View style={styles.convoMeta}>
         <View style={styles.convoTopRow}>
-          <Text style={styles.convoName} numberOfLines={1}>
+          <Text style={[styles.convoName, !isDark && { color: colors.text }]} numberOfLines={1}>
             {item.name}
-            {item.isMuted && <Feather name="bell-off" size={12} color="#B3B3B3" style={{ marginLeft: 6 }} />}
+            {item.isMuted && (
+              <Feather
+                name="bell-off"
+                size={12}
+                color={isDark ? "#B3B3B3" : colors.textSecondary}
+                style={{ marginLeft: 6 }}
+              />
+            )}
           </Text>
-          {item.time ? <Text style={styles.convoTime}>{item.time}</Text> : null}
+          {item.time ? <Text style={[styles.convoTime, !isDark && { color: colors.textSecondary }]}>{item.time}</Text> : null}
         </View>
         <View style={styles.convoBottomRow}>
           <View style={styles.msgContent}>
@@ -571,11 +597,15 @@ export default function MessagesScreen() {
         {(['All', 'Unread', 'Blocked'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
-            style={[styles.tab, topTab === tab && styles.tabActive]}
+            style={[
+              styles.tab,
+              !isDark && { borderColor: colors.border },
+              topTab === tab && (isDark ? styles.tabActive : { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }),
+            ]}
             onPress={() => setTopTab(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.tabText, topTab === tab && { color: '#FFFFFF' }]}>{tab}</Text>
+            <Text style={[styles.tabText, topTab === tab && (isDark ? { color: '#FFFFFF' } : { color: colors.text })]}>{tab}</Text>
           </TouchableOpacity>
         ))}
       </View>

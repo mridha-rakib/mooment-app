@@ -42,6 +42,7 @@ import { Camera } from 'expo-camera';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
+import { useTheme } from '@/hooks/useTheme';
 import EventPickerModal from '@/components/post/EventPickerModal';
 import { deleteConversation, getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
 import { safeBack } from '@/lib/navigation';
@@ -478,13 +479,30 @@ const toGroupRealtimeTextMessage = (message: GroupRealtimeMessage, currentUserId
 
 // ── Bubble Components ──────────────────────────────────────────────────────
 function TextBubble({ msg }: { msg: Message }) {
+  const { colors, isDark } = useTheme();
   const isHostMsg = !msg.fromMe && msg.isHost;
   const locationAttachment = msg.attachment?.type === 'location' ? msg.attachment : null;
+  // Outgoing bubbles keep their existing purple brand identity unchanged in
+  // both themes — only the incoming/receiver side (which used a near-black
+  // surface unconditionally) needs a light-mode surface.
+  const isIncomingLight = !msg.fromMe && !isDark;
 
   return (
-    <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : (isHostMsg ? styles.bubbleHost : styles.bubbleThem)]}>
+    <View
+      style={[
+        styles.bubble,
+        msg.fromMe ? styles.bubbleMe : (isHostMsg ? styles.bubbleHost : styles.bubbleThem),
+        isIncomingLight && { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+    >
       {msg.text ? (
-        <Text style={[styles.bubbleText, msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
+        <Text
+          style={[
+            styles.bubbleText,
+            msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem,
+            isIncomingLight && { color: colors.text },
+          ]}
+        >
           {msg.text}
         </Text>
       ) : null}
@@ -492,7 +510,7 @@ function TextBubble({ msg }: { msg: Message }) {
       {/* Location Attachment */}
       {msg.locationTitle && (
         <TouchableOpacity
-          style={styles.locationBox}
+          style={[styles.locationBox, isIncomingLight && { backgroundColor: colors.backgroundSecondary }]}
           activeOpacity={0.8}
           onPress={() => {
             if (locationAttachment) {
@@ -504,8 +522,8 @@ function TextBubble({ msg }: { msg: Message }) {
             <Feather name="map-pin" size={16} color="#FFFFFF" />
           </View>
           <View>
-            <Text style={styles.locationTitle}>{msg.locationTitle}</Text>
-            <Text style={styles.locationDesc}>{msg.locationDesc}</Text>
+            <Text style={[styles.locationTitle, isIncomingLight && { color: colors.text }]}>{msg.locationTitle}</Text>
+            <Text style={[styles.locationDesc, isIncomingLight && { color: colors.textSecondary }]}>{msg.locationDesc}</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -513,8 +531,12 @@ function TextBubble({ msg }: { msg: Message }) {
       {/* One shared bottom-right metadata row for timestamp/edited/delivered state,
           reused by text, audio, event, post, and story cards. */}
       <View style={styles.bubbleMeta}>
-        {msg.editedAt ? <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>Edited • </Text> : null}
-        <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe]}>
+        {msg.editedAt ? (
+          <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe, isIncomingLight && { color: colors.textSecondary }]}>
+            Edited •{' '}
+          </Text>
+        ) : null}
+        <Text style={[styles.bubbleTime, msg.fromMe && styles.bubbleTimeMe, isIncomingLight && { color: colors.textSecondary }]}>
           {msg.time}
           {msg.fromMe && msg.delivered ? ' • Delivered' : ''}
         </Text>
@@ -564,6 +586,12 @@ function VideoBubble({ msg }: { msg: Message }) {
 }
 
 function AudioBubble({ msg }: { msg: Message }) {
+  const { colors, isDark } = useTheme();
+  // Outgoing (purple) side is unchanged in both themes; only the incoming
+  // side's play button/waveform/duration (previously white-on-white-ish
+  // once the bubble itself gets a light surface) need to flip to a dark
+  // foreground in light mode.
+  const isIncomingLight = !msg.fromMe && !isDark;
   const [loadFailed, setLoadFailed] = useState(false);
   const playbackPromiseRef = useRef<Promise<void> | null>(null);
   const audioSource = useMemo(() => (msg.mediaUri ? { uri: msg.mediaUri } : null), [msg.mediaUri]);
@@ -631,18 +659,31 @@ function AudioBubble({ msg }: { msg: Message }) {
     }
   };
 
+  const audioFgColor = isIncomingLight ? colors.text : CHAT_COLORS.senderText;
+
   return (
-    <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : styles.bubbleThem, styles.audioBubble]}>
+    <View
+      style={[
+        styles.bubble,
+        msg.fromMe ? styles.bubbleMe : styles.bubbleThem,
+        styles.audioBubble,
+        isIncomingLight && { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+    >
       <TouchableOpacity
-        style={[styles.audioPlayBtn, msg.fromMe && styles.audioPlayBtnMe]}
+        style={[
+          styles.audioPlayBtn,
+          msg.fromMe && styles.audioPlayBtnMe,
+          isIncomingLight && { backgroundColor: colors.backgroundSecondary },
+        ]}
         onPress={handleTogglePlayback}
         activeOpacity={0.8}
         disabled={!msg.mediaUri}
       >
         {loadFailed ? (
-          <Feather name="alert-circle" size={16} color={CHAT_COLORS.senderText} />
+          <Feather name="alert-circle" size={16} color={audioFgColor} />
         ) : (
-          <Ionicons name={status.playing ? 'pause' : 'play'} size={16} color={CHAT_COLORS.senderText} style={{ marginLeft: status.playing ? 0 : 2 }} />
+          <Ionicons name={status.playing ? 'pause' : 'play'} size={16} color={audioFgColor} style={{ marginLeft: status.playing ? 0 : 2 }} />
         )}
       </TouchableOpacity>
       <View style={styles.waveformRow}>
@@ -653,13 +694,13 @@ function AudioBubble({ msg }: { msg: Message }) {
               styles.waveBar,
               { height: h },
               i < activeBars
-                ? { backgroundColor: CHAT_COLORS.senderText }
-                : { backgroundColor: 'rgba(255,255,255,0.32)' },
+                ? { backgroundColor: audioFgColor }
+                : { backgroundColor: isIncomingLight ? colors.border : 'rgba(255,255,255,0.32)' },
             ]}
           />
         ))}
       </View>
-      <Text style={[styles.audioDuration, msg.fromMe && styles.audioDurationMe]}>{msg.audioDuration}</Text>
+      <Text style={[styles.audioDuration, msg.fromMe && styles.audioDurationMe, isIncomingLight && { color: colors.textSecondary }]}>{msg.audioDuration}</Text>
     </View>
   );
 }
@@ -1377,6 +1418,7 @@ function AudioPickerSheet({
 
 // ── Main Screen ────────────────────────────────────────────────────────────
 export default function ChatDetailScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string; name: string; avatar: string; isGroup?: string; isOnline?: string; isBlocked?: string }>();
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -2362,11 +2404,11 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <SafeAreaView style={[styles.safe, !isDark && { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0e0d12" : colors.background} />
 
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, !isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
         <BackButton size={20} />
 
         <TouchableOpacity
@@ -2385,8 +2427,8 @@ export default function ChatDetailScreen() {
         >
           <UserAvatar uri={avatar} name={name} size={40} style={styles.headerAvatar} />
           <View>
-            <Text style={styles.headerName}>{name}</Text>
-            <Text style={styles.headerStatus}>
+            <Text style={[styles.headerName, !isDark && { color: colors.text }]}>{name}</Text>
+            <Text style={[styles.headerStatus, !isDark && { color: colors.textSecondary }]}>
               {isFriendTyping ? 'Typing...' : isFriendOnline ? 'Online' : 'Offline'}
             </Text>
           </View>
@@ -2411,7 +2453,7 @@ export default function ChatDetailScreen() {
               setIsMoreMenuVisible(true);
             }}
           >
-            <Feather name="more-vertical" size={20} color="#8E8E9B" />
+            <Feather name="more-vertical" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -2444,9 +2486,9 @@ export default function ChatDetailScreen() {
                 {/* Date separator (mock) */}
                 {index === reversedMessages.length - 1 && (
                   <View style={styles.dateSep}>
-                    <View style={styles.dateSepLine} />
-                    <Text style={styles.dateSepText}>Today</Text>
-                    <View style={styles.dateSepLine} />
+                    <View style={[styles.dateSepLine, !isDark && { backgroundColor: colors.border }]} />
+                    <Text style={[styles.dateSepText, !isDark && { color: colors.textSecondary }]}>Today</Text>
+                    <View style={[styles.dateSepLine, !isDark && { backgroundColor: colors.border }]} />
                   </View>
                 )}
 
@@ -2559,20 +2601,24 @@ export default function ChatDetailScreen() {
         )}
 
         {/* ── Input Bar ── */}
-        <View style={styles.inputBar}>
-          <View style={styles.inputWrap}>
+        <View style={[styles.inputBar, !isDark && { backgroundColor: colors.background }]}>
+          <View style={[styles.inputWrap, !isDark && { backgroundColor: colors.backgroundSecondary }]}>
             <TouchableOpacity
               style={styles.emojiBtn}
               activeOpacity={0.8}
               onPress={toggleEmojiPicker}
               disabled={isDirectChatUnavailable}
             >
-              <Feather name={showEmojiPicker ? 'x' : 'smile'} size={20} color={showEmojiPicker ? '#FFFFFF' : '#8E8E9B'} />
+              <Feather
+                name={showEmojiPicker ? 'x' : 'smile'}
+                size={20}
+                color={showEmojiPicker ? (isDark ? '#FFFFFF' : colors.text) : colors.textSecondary}
+              />
             </TouchableOpacity>
             <TextInput
-              style={styles.input}
+              style={[styles.input, !isDark && { color: colors.text }]}
               placeholder="Add text"
-              placeholderTextColor="#8E8E9B"
+              placeholderTextColor={colors.textSecondary}
               value={inputText}
               onChangeText={handleInputTextChange}
               onFocus={() => setShowEmojiPicker(false)}
@@ -2586,12 +2632,16 @@ export default function ChatDetailScreen() {
               disabled={isDirectChatUnavailable}
               onPress={() => { setShowEmojiPicker(false); setShowAttach((current) => !current); }}
             >
-              <HugeiconsIcon icon={AttachmentIcon} size={20} color="#8E8E9B" />
+              <HugeiconsIcon icon={AttachmentIcon} size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={[styles.sendBtn, isDirectChatUnavailable && { opacity: 0.45 }]}
+            style={[
+              styles.sendBtn,
+              !isDark && { borderWidth: 1, borderColor: colors.border },
+              isDirectChatUnavailable && { opacity: 0.45 },
+            ]}
             onPress={sendMessage}
             activeOpacity={0.8}
           >

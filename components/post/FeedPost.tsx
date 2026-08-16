@@ -1786,9 +1786,16 @@ export default function FeedPost({
         style={[
           styles.postCard,
           { backgroundColor: colors.card },
+          // Light mode: colors.card and colors.background are the same
+          // white, so a card with no border/shadow is invisible against the
+          // page — add the subtle separation the dark-mode overlay already
+          // gets for free from its translucency. Dark mode keeps its exact
+          // existing pixel values (normalPostCardDark), untouched.
+          !isDark && styles.postCardLight,
           isNormalPost && styles.normalPostCard,
           isNormalPost && isDark && styles.normalPostCardDark,
           embedded && styles.embeddedPostCard,
+          embedded && (isDark ? styles.embeddedPostCardDark : styles.embeddedPostCardLight),
           embedded && isNormalPost && styles.embeddedNormalPostCard,
         ]}
       >
@@ -1872,7 +1879,9 @@ export default function FeedPost({
         {/* Post Text */}
         {post.caption ? (
           <HashtagText
-            style={[styles.postCaption, isNormalPost && styles.normalPostCaption, { color: isNormalPost && isDark ? '#B3B3B3' : colors.textSecondary }]}
+            // Caption is primary content, not metadata — must read as
+            // strongly as the author name, not as muted secondary text.
+            style={[styles.postCaption, isNormalPost && styles.normalPostCaption, { color: colors.text }]}
             hashtagStyle={{ color: colors.primary, fontWeight: '700' }}
           >
             {post.caption}
@@ -2177,6 +2186,20 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 16,
   },
+  // Light mode only — dark mode's card already separates from the page via
+  // normalPostCardDark's translucent overlay (or, for non-"normal" posts,
+  // colors.card/colors.background genuinely differ). In light mode
+  // colors.card === colors.background (both pure white), so without this the
+  // card has zero visible boundary.
+  postCardLight: {
+    borderWidth: 1,
+    borderColor: "#ECECEF",
+    shadowColor: "#000000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   normalPostCard: {
     borderRadius: 12,
     padding: 0,
@@ -2188,9 +2211,19 @@ const styles = StyleSheet.create({
   embeddedPostCard: {
     marginHorizontal: 0,
     borderRadius: 12,
+  },
+  // Dark mode: exact pre-existing pixel values (approved, frozen).
+  embeddedPostCardDark: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: "rgba(255,255,255,0.035)",
+  },
+  // Light mode: the white-tint overlay above is invisible on a light card,
+  // so use a light-appropriate border/tint instead.
+  embeddedPostCardLight: {
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+    backgroundColor: "rgba(0,0,0,0.015)",
   },
   embeddedNormalPostCard: {
     borderRadius: 12,

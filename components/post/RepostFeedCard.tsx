@@ -35,7 +35,7 @@ export default function RepostFeedCard({
   showLoadingIndicator = true,
   isActiveVideo = false,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [eventLoading, setEventLoading] = useState(false);
@@ -152,7 +152,17 @@ export default function RepostFeedCard({
     }
 
     return (
-      <View style={[styles.repostCard, { backgroundColor: colors.card }]}>
+      <View
+        style={[
+          styles.repostCard,
+          { backgroundColor: colors.card },
+          // Light mode: colors.card === colors.background (both white), so
+          // without a border the repost card is invisible against the page.
+          // Dark mode is untouched (colors.card already differs from the
+          // dark page background).
+          !isDark && { borderWidth: 1, borderColor: colors.border },
+        ]}
+      >
         {header}
         {eventUnavailable || !event ? (
           <UnavailableCard />
