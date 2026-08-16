@@ -22,9 +22,19 @@ type DraggableStoryImageProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-// Freeform Story image object: pan + pinch + rotate, starting from exactly
-// today's full-canvas `cover` position/size (scale 1, centered, no
-// rotation) so an untouched image still looks like the legacy Story.
+// Freeform Story image object: pan + pinch + rotate, starting from the
+// full-canvas `contain` fit (scale 1, centered, no rotation) — the whole
+// source image visible at the largest size that fits the canvas, exactly
+// like scale=1 always has for x/y/rotation. contentFit="contain" (not
+// "cover") is required here: cover crops to the canvas box at Image
+// layout time, before this component's transform ever runs, so no scale
+// value applied on top of it can un-crop already-discarded pixels. Contain
+// needs no extra fit math because it only ever needs the box's own size
+// (canvasWidth x canvasHeight, already known) — unlike a true "contain
+// rectangle" sized to the image's own aspect ratio, it doesn't need the
+// image's natural dimensions at all, so the viewer can reproduce it byte
+// for byte from just canvasWidth/canvasHeight + the same four transform
+// numbers (see renderStoryImage/renderCurrentStoryImage in view-story.tsx).
 export default function DraggableStoryImage({
   uri,
   initialTransform = DEFAULT_IMAGE_TRANSFORM,
@@ -63,7 +73,7 @@ export default function DraggableStoryImage({
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
+          contentFit="contain"
         />
       </Animated.View>
     </GestureDetector>

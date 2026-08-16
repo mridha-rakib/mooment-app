@@ -3,6 +3,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,11 +13,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { Image } from "expo-image";
 import { useTheme } from "@/hooks/useTheme";
 import type { EventStatus } from "@/lib/events";
 import { getLiveRoomMessages, type LiveRoomMessage } from "@/lib/liveRooms";
-import { createRealtimeSocket, type LiveRealtimeMessage } from "@/lib/realtime";
+import * as realtimeSocket from "@/lib/socketClient";
 import { useAuthStore } from "@/stores/authStore";
 
 type ChatTabProps = {
@@ -24,11 +28,29 @@ type ChatTabProps = {
   endAt?: string | null;
   eventStatus?: EventStatus;
   isDraftPreviewDisabled?: boolean;
+  // Lets the parent Event Details ScrollView scroll the composer above the
+  // keyboard — ChatTab is embedded mid-page inside that outer ScrollView, so
+  // a local KeyboardAvoidingView alone cannot reposition it on screen (see
+  // the keyboard-handling notes near the KeyboardAvoidingView below).
+  onComposerFocus?: () => void;
 };
 
 export type ChatTabRefreshHandle = {
   refresh: () => Promise<void>;
+  measureComposerInWindow: (
+    callback: (x: number, y: number, width: number, height: number) => void,
+  ) => void;
 };
+
+type DeliveryState = "sending" | "delivered" | "failed";
+
+// Near-bottom threshold for smart auto-scroll: how close (in px) the user
+// must be to the latest message for incoming realtime messages to
+// auto-follow. Small and fixed relative to typical row height (~40-60px),
+// not a large arbitrary value — big enough to absorb momentum/rounding from
+// RN's onScroll, small enough that "near bottom" still means "next message
+// is basically in view".
+const NEAR_BOTTOM_THRESHOLD = 120;
 
 type ChatMessage = {
   id: string;
@@ -39,10 +61,32 @@ type ChatMessage = {
   text: string;
   time: string;
   fromMe: boolean;
+  deliveryState?: DeliveryState;
 };
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const MESSAGES_LIST_HEIGHT = Math.max(280, SCREEN_HEIGHT * 0.43);
+// chatHeader (~48) + messagesList (MESSAGES_LIST_HEIGHT) + inputBar (~72,
+// incl. its own marginTop) — gives the KeyboardAvoidingView/chatContainer a
+// concrete height so `messagesList`'s `flex: 1` has something bounded to
+// flex within. Without this, a fixed-height ScrollView nested in a
+// flex-column with no defined container height cannot shrink when the
+// keyboard opens, which was the root cause of the composer staying hidden
+// behind the keyboard (see the KeyboardAvoidingView usage below).
+const CHAT_CONTAINER_HEIGHT = MESSAGES_LIST_HEIGHT + 120;
+
+// Sourced from the main Chat's CHAT_COLORS (app/app/chat-screen/chat-detail.tsx)
+// so Event Chat bubbles stay visually consistent with DM/Group chat: sender
+// bubbles use the same accent purple, receiver bubbles the same dark surface,
+// and both keep the shared 16px radius with a 2px "tail" corner.
+const MESSAGE_COLORS = {
+  senderBubble: "#5B3FD6",
+  senderText: "#FFFFFF",
+  receiverBubble: "#15151A",
+  receiverBorder: "rgba(255,255,255,0.08)",
+  receiverText: "#FFFFFF",
+  failed: "#FF3B30",
+};
 
 const formatMessageTime = (value: string) =>
   new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -87,17 +131,11 @@ const isEventClosed = (eventStatus?: EventStatus, endAt?: string | null): boolea
   return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
 };
 
-const toHistoryMessage = (message: LiveRoomMessage, currentUserId?: string): ChatMessage => ({
-  id: message.id,
-  senderId: message.senderId,
-  senderName: message.senderName,
-  senderAvatarUrl: message.senderAvatarUrl ?? null,
-  text: message.text,
-  time: formatMessageTime(message.createdAt),
-  fromMe: message.senderId === currentUserId,
-});
-
-const toRealtimeMessage = (message: LiveRealtimeMessage, currentUserId?: string): ChatMessage => ({
+// Used for both REST history rows and realtime broadcast messages — both
+// resolve to the same LiveRoomMessage shape now that Event Chat sends over
+// Socket.IO (previously these needed separate converters because the raw-ws
+// broadcast payload had its own distinct shape).
+const toChatMessage = (message: LiveRoomMessage, currentUserId?: string): ChatMessage => ({
   id: message.id,
   clientMessageId: message.clientMessageId ?? null,
   senderId: message.senderId,
@@ -106,6 +144,89 @@ const toRealtimeMessage = (message: LiveRealtimeMessage, currentUserId?: string)
   text: message.text,
   time: formatMessageTime(message.createdAt),
   fromMe: message.senderId === currentUserId,
+  deliveryState: "delivered",
+});
+
+type MessageRowProps = {
+  message: ChatMessage;
+  showSender: boolean;
+  spaced: boolean;
+  isDark: boolean;
+  textSecondaryColor: string;
+  isDeliveredVisible: boolean;
+  onRetry: (message: ChatMessage) => void;
+  onToggleDelivered: (messageId: string) => void;
+};
+
+const MessageRow = React.memo(function MessageRow({
+  message,
+  showSender,
+  spaced,
+  isDark,
+  textSecondaryColor,
+  isDeliveredVisible,
+  onRetry,
+  onToggleDelivered,
+}: MessageRowProps) {
+  // Delivered = server persisted + Socket.IO ack/broadcast confirmed (see
+  // sendRealtimeMessage below) — never receiver-side delivery/read receipts.
+  const canToggleDelivered = message.fromMe && message.deliveryState === "delivered";
+
+  return (
+    <View
+      style={[
+        styles.msgWrapper,
+        message.fromMe ? styles.msgWrapperMe : styles.msgWrapperThem,
+        spaced ? { marginTop: 12 } : { marginTop: 4 },
+      ]}
+    >
+      {showSender && (
+        <View style={styles.senderRow}>
+          {message.senderAvatarUrl ? (
+            <Image source={{ uri: message.senderAvatarUrl }} style={styles.senderAvatar} />
+          ) : (
+            <View
+              style={[
+                styles.senderAvatar,
+                styles.senderAvatarPlaceholder,
+                { backgroundColor: isDark ? "#222" : "#DDD" },
+              ]}
+            >
+              <Text style={[styles.senderAvatarInitial, { color: textSecondaryColor }]}>
+                {message.senderName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text style={[styles.senderName, { color: textSecondaryColor }]}>{message.senderName}</Text>
+        </View>
+      )}
+      <TouchableOpacity
+        activeOpacity={canToggleDelivered ? 0.75 : 1}
+        disabled={!canToggleDelivered}
+        onPress={() => onToggleDelivered(message.id)}
+        style={[
+          styles.bubble,
+          message.fromMe
+            ? styles.bubbleMe
+            : [styles.bubbleThem, { borderColor: MESSAGE_COLORS.receiverBorder }],
+        ]}
+      >
+        <Text style={[styles.bubbleText, message.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
+          {message.text}
+        </Text>
+        <Text style={[styles.bubbleTime, message.fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
+          {message.time}
+          {canToggleDelivered && isDeliveredVisible ? " · Delivered" : ""}
+        </Text>
+      </TouchableOpacity>
+      {message.fromMe && message.deliveryState === "failed" && (
+        <TouchableOpacity style={styles.failedRetryRow} activeOpacity={0.8} onPress={() => onRetry(message)}>
+          <Feather name="refresh-cw" size={12} color={MESSAGE_COLORS.failed} />
+          <Text style={[styles.failedRetryText, { color: MESSAGE_COLORS.failed }]}>Retry</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 });
 
 const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
@@ -115,6 +236,7 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
   endAt,
   eventStatus,
   isDraftPreviewDisabled = false,
+  onComposerFocus,
 }, ref) => {
   const { colors, isDark } = useTheme();
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -123,8 +245,23 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const realtimeRef = useRef<ReturnType<typeof createRealtimeSocket> | null>(null);
-  const messagesScrollRef = useRef<ScrollView>(null);
+  // Own-message ids for which the "Delivered" label is currently revealed —
+  // presentation-only, never sent to the server (see MessageRow's tap
+  // handler).
+  const [expandedDeliveryIds, setExpandedDeliveryIds] = useState<Set<string>>(new Set());
+  const messagesListRef = useRef<ScrollView>(null);
+  const composerRef = useRef<View>(null);
+  // Whether the message viewport should auto-follow new content. Starts
+  // true so the very first history render positions at the latest message;
+  // afterwards it's driven by how close the user's scroll position is to
+  // the bottom (see handleMessagesScroll) and force-set to true on the
+  // user's own sends.
+  const stickToBottomRef = useRef(true);
+  // Guards the one-time "jump to latest" after initial history load so
+  // later content-size changes (incoming messages, Delivered-label toggles,
+  // optimistic->authoritative reconciliation) don't repeatedly force a jump
+  // — see handleContentSizeChange.
+  const hasPositionedInitialRef = useRef(false);
 
   const eventStarted = isEventStarted(scheduledAt);
   const eventClosed = isEventClosed(eventStatus, endAt);
@@ -165,7 +302,7 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
         return;
       }
 
-      setMessages(history.map((m) => toHistoryMessage(m, currentUser?.id)));
+      setMessages(history.map((m) => toChatMessage(m, currentUser?.id)));
       setHasAccess(true);
     } catch {
       if (!isActive()) {
@@ -185,6 +322,9 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
 
   React.useImperativeHandle(ref, () => ({
     refresh: () => loadMessages({ showLoader: false }),
+    measureComposerInWindow: (callback) => {
+      composerRef.current?.measureInWindow(callback);
+    },
   }), [loadMessages]);
 
   useEffect(() => {
@@ -197,6 +337,14 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
     };
   }, [loadMessages]);
 
+  // Event Chat now rides the app's single shared Socket.IO connection
+  // (app/lib/socketClient.ts) instead of opening its own raw WebSocket per
+  // mount. joinLiveRoom/leaveLiveRoom explicitly manage this event's room;
+  // onReconnected re-fetches history via the same REST path used on mount
+  // (Socket.IO reconnecting does not replay events missed while
+  // disconnected, and socketClient itself re-emits "live:join" for this
+  // room before onReconnected fires — see socketClient.ts's "connect"
+  // handler — so this refetch reads from an already-rejoined room).
   useEffect(() => {
     if (isDraftPreviewDisabled) {
       return;
@@ -210,51 +358,162 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
       return;
     }
 
-    const realtime = createRealtimeSocket({
-      accessToken,
-      onLiveMessage: (roomId, realtimeMessage) => {
-        if (roomId !== eventId) {
+    let isActive = true;
+
+    void realtimeSocket.joinLiveRoom(eventId).then((result) => {
+      if (!isActive) {
+        return;
+      }
+
+      // Only a server-confirmed denial (code === EVENT_CHAT_ACCESS_DENIED)
+      // may lock the UI into "Check In Required". A failed ack with no code
+      // is client-synthesized (socket not connected yet, ack timeout, no
+      // response — see emitWithAck in socketClient.ts) and does not mean
+      // the user's check-in was revoked. The join is still durable despite
+      // this particular ack failing: socketClient records eventId as the
+      // active live room and retries "live:join" on the next reconnect
+      // (socketClient.ts's "connect" handler), so no explicit retry is
+      // needed here — just don't misreport the transient failure as denial.
+      if (!result.ok && result.code === "EVENT_CHAT_ACCESS_DENIED") {
+        setHasAccess(false);
+      }
+    });
+
+    const unsubscribe = realtimeSocket.subscribe({
+      onLiveRoomMessage: (event) => {
+        if (event.liveRoomId !== eventId) {
           return;
         }
 
         setMessages((prev) => {
-          const alreadyExists = prev.some(
+          const serverMessage = toChatMessage(event.message, currentUser?.id);
+          const existingIndex = prev.findIndex(
             (m) =>
-              m.id === realtimeMessage.id ||
-              (Boolean(realtimeMessage.clientMessageId) &&
-                m.clientMessageId === realtimeMessage.clientMessageId),
+              m.id === event.message.id ||
+              (Boolean(event.message.clientMessageId) && m.clientMessageId === event.message.clientMessageId),
           );
 
-          if (alreadyExists) {
-            return prev;
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            next[existingIndex] = serverMessage;
+            return next;
           }
 
-          return [...prev, toRealtimeMessage(realtimeMessage, currentUser?.id)];
+          return [...prev, serverMessage];
         });
       },
-      onError: (error) => {
-        if (error.code === "EVENT_CHAT_ACCESS_DENIED" || error.code === "AUTH_FAILED") {
-          setHasAccess(false);
-        }
+      onReconnected: () => {
+        void loadMessages({ showLoader: false });
       },
     });
 
-    realtime.joinLiveRoom(eventId);
-    realtimeRef.current = realtime;
-
     return () => {
-      realtime.leaveLiveRoom(eventId);
-      realtime.close();
-
-      if (realtimeRef.current === realtime) {
-        realtimeRef.current = null;
-      }
+      isActive = false;
+      realtimeSocket.leaveLiveRoom(eventId);
+      unsubscribe();
     };
-  }, [accessToken, currentUser?.id, eventClosed, eventId, eventStarted, hasAccess, isDraftPreviewDisabled]);
+  }, [accessToken, currentUser?.id, eventClosed, eventId, eventStarted, hasAccess, isDraftPreviewDisabled, loadMessages]);
 
   const scrollToBottom = useCallback((animated = true) => {
-    messagesScrollRef.current?.scrollToEnd({ animated });
+    messagesListRef.current?.scrollToEnd({ animated });
   }, []);
+
+  const toggleDeliveredVisible = useCallback((messageId: string) => {
+    setExpandedDeliveryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Tracks how close to the bottom the user's scroll position is so
+  // incoming messages only auto-follow when the user is already near the
+  // latest message (Problem 3: don't yank someone reading older history).
+  const handleMessagesScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    stickToBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD;
+  }, []);
+
+  // Content size changes on: initial history render, incoming realtime
+  // messages, own optimistic sends, optimistic->authoritative reconciliation,
+  // and Delivered-label toggles (row height changes). Only the first two (and
+  // sends) should ever move the scroll position.
+  const handleContentSizeChange = useCallback(() => {
+    if (!hasPositionedInitialRef.current) {
+      hasPositionedInitialRef.current = true;
+      stickToBottomRef.current = true;
+      scrollToBottom(false);
+      return;
+    }
+
+    if (stickToBottomRef.current) {
+      scrollToBottom(true);
+    }
+  }, [scrollToBottom]);
+
+  // Keeps the latest message (and composer) visible when the keyboard opens
+  // while the user is already following the bottom of the conversation —
+  // resizing the message viewport (see chatContainer/messagesList styles)
+  // otherwise leaves a gap below the last message without this nudge.
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const subscription = Keyboard.addListener(showEvent, () => {
+      if (stickToBottomRef.current) {
+        requestAnimationFrame(() => scrollToBottom(false));
+      }
+    });
+
+    return () => subscription.remove();
+  }, [scrollToBottom]);
+
+  // Ack is only used to detect FAILURE quickly. Success reconciliation is
+  // left to the onLiveRoomMessage broadcast-echo handler above, which
+  // replaces the optimistic entry with the authoritative server message —
+  // mirrors chat-detail.tsx's sendRealtimeMessage.
+  const sendRealtimeMessage = useCallback((clientMessageId: string, text: string) => {
+    const markFailed = () => {
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.clientMessageId === clientMessageId && item.deliveryState === "sending"
+            ? { ...item, deliveryState: "failed" }
+            : item,
+        ),
+      );
+    };
+
+    realtimeSocket
+      .sendLiveRoomMessage(eventId, text, clientMessageId)
+      .then((ack) => {
+        if (!ack.ok) {
+          markFailed();
+          // A server-confirmed denial here means access was actually
+          // revoked mid-session (ticket refunded, event ended) — the same
+          // authoritative signal the join handler above locks the UI on.
+          // Any other failure only marks this one message as failed.
+          if (ack.code === "EVENT_CHAT_ACCESS_DENIED") {
+            setHasAccess(false);
+          }
+        }
+      })
+      .catch(() => markFailed());
+  }, [eventId]);
+
+  const retryMessage = useCallback((message: ChatMessage) => {
+    if (!message.clientMessageId) {
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((item) => (item.id === message.id ? { ...item, deliveryState: "sending" } : item)),
+    );
+
+    sendRealtimeMessage(message.clientMessageId, message.text);
+  }, [sendRealtimeMessage]);
 
   const sendMessage = () => {
     const text = inputText.trim();
@@ -277,98 +536,37 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
       text,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       fromMe: true,
+      deliveryState: "sending",
     };
 
+    // Own sends must always land the user on the latest message (Problem 3),
+    // regardless of whether they'd scrolled up to read older history.
+    stickToBottomRef.current = true;
     setMessages((prev) => [...prev, newMsg]);
     setInputText("");
-    realtimeRef.current?.sendLiveMessage(eventId, text, clientMessageId);
+    sendRealtimeMessage(clientMessageId, text);
   };
 
   const renderMessage = useCallback(
     ({ item, index }: { item: ChatMessage; index: number }) => {
       const prevMsg = messages[index - 1];
-      const showSender =
-        !item.fromMe &&
-        (!prevMsg || prevMsg.fromMe || prevMsg.senderId !== item.senderId);
+      const showSender = !item.fromMe && (!prevMsg || prevMsg.fromMe || prevMsg.senderId !== item.senderId);
+      const spaced = !prevMsg || prevMsg.fromMe !== item.fromMe;
 
       return (
-        <View
-          style={[
-            styles.msgWrapper,
-            item.fromMe ? styles.msgWrapperMe : styles.msgWrapperThem,
-            !prevMsg || prevMsg.fromMe !== item.fromMe
-              ? { marginTop: 12 }
-              : { marginTop: 4 },
-          ]}
-        >
-          {showSender && (
-            <View style={styles.senderRow}>
-              {item.senderAvatarUrl ? (
-                <Image
-                  source={{ uri: item.senderAvatarUrl }}
-                  style={styles.senderAvatar}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.senderAvatar,
-                    styles.senderAvatarPlaceholder,
-                    { backgroundColor: isDark ? "#222" : "#DDD" },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.senderAvatarInitial,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    {item.senderName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <Text
-                style={[styles.senderName, { color: colors.textSecondary }]}
-              >
-                {item.senderName}
-              </Text>
-            </View>
-          )}
-          <View
-            style={[
-              styles.bubble,
-              item.fromMe
-                ? styles.bubbleMe
-                : [
-                    styles.bubbleThem,
-                    {
-                      borderColor: isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "rgba(0,0,0,0.08)",
-                    },
-                  ],
-            ]}
-          >
-            <Text
-              style={[
-                styles.bubbleText,
-                item.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem,
-              ]}
-            >
-              {item.text}
-            </Text>
-            <Text
-              style={[
-                styles.bubbleTime,
-                item.fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem,
-              ]}
-            >
-              {item.time}
-            </Text>
-          </View>
-        </View>
+        <MessageRow
+          message={item}
+          showSender={showSender}
+          spaced={spaced}
+          isDark={isDark}
+          textSecondaryColor={colors.textSecondary}
+          isDeliveredVisible={expandedDeliveryIds.has(item.id)}
+          onRetry={retryMessage}
+          onToggleDelivered={toggleDeliveredVisible}
+        />
       );
     },
-    [messages, isDark, colors.textSecondary],
+    [messages, isDark, colors.textSecondary, expandedDeliveryIds, retryMessage, toggleDeliveredVisible],
   );
 
   if (isDraftPreviewDisabled) {
@@ -498,7 +696,27 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
   }
 
   return (
-    <View style={styles.chatContainer}>
+    // ChatTab is embedded mid-page inside Event Details' own outer
+    // ScrollView (event.tsx), not a full-screen chat surface — that's why
+    // Android intentionally gets no `behavior` here. Despite the Activity's
+    // `android:windowSoftInputMode="adjustResize"` (AndroidManifest.xml),
+    // on-device measurement (event.tsx's outer ScrollView onLayout/onScroll)
+    // shows this RN screen's laid-out height does NOT actually shrink when
+    // the keyboard opens — Android's edge-to-edge window handling (default
+    // since Expo SDK 54+/RN's new architecture) leaves adjustResize without
+    // a window to resize, so relying on it (or KeyboardAvoidingView's height
+    // compensation, which assumes the same resize) would do nothing here.
+    // What actually keeps the composer visible on Android is the parent
+    // Event Details ScrollView measuring this composer's real screen
+    // position after the keyboard event and scrolling by the required
+    // overlap against the keyboard's own reported height (see event.tsx's
+    // scrollChatComposerIntoView). iOS has no window-resize equivalent
+    // either, so it keeps "padding" here as its own local compensation.
+    <KeyboardAvoidingView
+      style={styles.chatContainer}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
+    >
       {/* Chat Header */}
       <View
         style={[
@@ -529,7 +747,7 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
 
       {/* Messages */}
       <ScrollView
-        ref={messagesScrollRef}
+        ref={messagesListRef}
         style={[
           styles.messagesList,
           {
@@ -544,8 +762,22 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
             : styles.messagesContent
         }
         showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => scrollToBottom(false)}
-        onLayout={() => scrollToBottom(false)}
+        onContentSizeChange={handleContentSizeChange}
+        onScroll={handleMessagesScroll}
+        scrollEventThrottle={100}
+        keyboardShouldPersistTaps="handled"
+        // This message viewport is nested inside Event Details' outer page
+        // ScrollView (same vertical axis). Without this, Android's touch
+        // responder system hands vertical drags to the ANCESTOR ScrollView
+        // by default, so touches here scrolled the whole page instead of
+        // the conversation — the "stuck" chat reported on-device.
+        // nestedScrollEnabled opts this ScrollView into Android's native
+        // nested-scrolling protocol so it consumes the gesture first and
+        // only yields to the outer page once it's scrolled to its own
+        // top/bottom edge (RN's documented mechanism for exactly this
+        // same-axis nested-ScrollView case; iOS ignores the prop and
+        // already resolves nested vertical ScrollViews natively via UIKit).
+        nestedScrollEnabled
       >
         {messages.length === 0 ? (
           <View style={styles.emptyChat}>
@@ -579,6 +811,7 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
 
       {/* Input Bar */}
       <View
+        ref={composerRef}
         style={[
           styles.inputBar,
           { backgroundColor: isDark ? "#0e0d12" : colors.card },
@@ -603,6 +836,7 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
             returnKeyType="send"
             onSubmitEditing={sendMessage}
             blurOnSubmit={false}
+            onFocus={onComposerFocus}
           />
         </View>
         <TouchableOpacity
@@ -634,7 +868,7 @@ const ChatTab = React.forwardRef<ChatTabRefreshHandle, ChatTabProps>(({
           />
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 });
 
@@ -672,6 +906,11 @@ const styles = StyleSheet.create({
   chatContainer: {
     marginTop: 16,
     gap: 0,
+    // Bounded so messagesList's flex: 1 below has a definite height to
+    // shrink within when KeyboardAvoidingView (iOS) or a future height
+    // change reduces this container's height — a fixed-height ScrollView
+    // can't shrink, which was the composer-under-keyboard root cause.
+    height: CHAT_CONTAINER_HEIGHT,
   },
   chatHeader: {
     alignItems: "center",
@@ -709,7 +948,7 @@ const styles = StyleSheet.create({
   messagesList: {
     borderRadius: 12,
     marginTop: 8,
-    height: MESSAGES_LIST_HEIGHT,
+    flex: 1,
   },
   messagesContent: {
     paddingHorizontal: 12,
@@ -767,16 +1006,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   bubble: {
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   bubbleMe: {
-    backgroundColor: "#B2ABBA",
+    backgroundColor: MESSAGE_COLORS.senderBubble,
     borderBottomRightRadius: 2,
   },
   bubbleThem: {
-    backgroundColor: "#111111",
+    backgroundColor: MESSAGE_COLORS.receiverBubble,
     borderTopLeftRadius: 2,
     borderWidth: 1,
   },
@@ -785,20 +1024,30 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bubbleTextMe: {
-    color: "#0e0d12",
+    color: MESSAGE_COLORS.senderText,
   },
   bubbleTextThem: {
-    color: "#FFFFFF",
+    color: MESSAGE_COLORS.receiverText,
   },
   bubbleTime: {
     fontSize: 10,
     marginTop: 4,
   },
   bubbleTimeMe: {
-    color: "rgba(14, 13, 18, 0.5)",
+    color: "rgba(255, 255, 255, 0.7)",
   },
   bubbleTimeThem: {
     color: "#8E8E9B",
+  },
+  failedRetryRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 4,
+  },
+  failedRetryText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   inputBar: {
     alignItems: "center",

@@ -163,23 +163,33 @@ export default function TicketStatScreen() {
   };
 
   const renderItem = ({ item }: { item: TicketStatItem }) => (
-    <View style={styles.statRow}>
-      <View style={styles.userInfo}>
-        <View style={[styles.avatarContainer, { borderColor: colors.primary }]}>
-          <UserAvatar uri={item.avatar} name={item.name} size={48} style={styles.avatar} />
+    <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.statTopRow}>
+        <View style={styles.userInfo}>
+          <View style={[styles.avatarContainer, { borderColor: colors.primary }]}>
+            <UserAvatar uri={item.avatar} name={item.name} size={48} style={styles.avatar} />
+          </View>
+          <View style={styles.userText}>
+            <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text style={[styles.userHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.handle}
+            </Text>
+          </View>
         </View>
-        <View>
-          <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
-          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>{item.handle}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.ticketInfo}>
-        {getStatusIcon(item.status)}
-        <Text style={[styles.ticketType, { color: colors.text }]}>{item.ticketType}</Text>
+
+        <Text style={[styles.amount, { color: colors.text }]} numberOfLines={1}>
+          {item.amount}
+        </Text>
       </View>
 
-      <Text style={[styles.amount, { color: colors.text }]}>{item.amount}</Text>
+      <View style={[styles.ticketInfo, { borderTopColor: colors.border }]}>
+        {getStatusIcon(item.status)}
+        <Text style={[styles.ticketType, { color: colors.text }]} numberOfLines={1}>
+          {item.ticketType}
+        </Text>
+      </View>
     </View>
   );
 
@@ -198,7 +208,6 @@ export default function TicketStatScreen() {
         keyExtractor={item => item.id}
         renderItem={renderItem}
         contentContainerStyle={[styles.listContent, items.length === 0 ? styles.emptyListContent : null]}
-        ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         ListEmptyComponent={(
           <View style={styles.stateContainer}>
@@ -236,17 +245,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 15,
-    marginBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 18,
   },
   headerTitle: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 18,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 32,
+    gap: 12,
   },
   emptyListContent: {
     flexGrow: 1,
@@ -274,20 +286,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  statRow: {
+  statCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  statTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '40%', // Adjust width allocation
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
   },
   avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 2,
     padding: 2,
     marginRight: 12,
@@ -295,10 +314,14 @@ const styles = StyleSheet.create({
   avatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 18,
+    borderRadius: 20,
+  },
+  userText: {
+    flex: 1,
+    minWidth: 0,
   },
   userName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
     marginBottom: 2,
   },
@@ -308,7 +331,9 @@ const styles = StyleSheet.create({
   ticketInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '40%',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   statusCircle: {
     width: 20,
@@ -319,16 +344,16 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   ticketType: {
-    fontSize: 14,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
     fontWeight: '600',
   },
   amount: {
-    fontSize: 14,
+    flexShrink: 0,
+    maxWidth: 112,
+    fontSize: 15,
     fontWeight: 'bold',
-    width: '20%',
     textAlign: 'right',
-  },
-  separator: {
-    height: 1,
   },
 });

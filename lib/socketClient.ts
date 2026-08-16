@@ -1,12 +1,13 @@
 import { io, type Socket } from "socket.io-client";
 import { AppState, type AppStateStatus } from "react-native";
-import { api } from "@/lib/api";
+import { api, refreshConfiguredAuthToken } from "@/lib/api";
 import type {
   ChatMessageAttachment,
   ChatMessageType,
   DirectChatMessageResponse,
   GroupMessageResponse,
 } from "@/lib/chat";
+import type { LiveRoom, LiveRoomMessage } from "@/lib/liveRooms";
 import type { NotificationItem } from "@/lib/notifications";
 import type {
   DirectMessageDeletedRealtimeEvent,
@@ -20,16 +21,23 @@ import type {
 
 /**
  * Single shared Socket.IO connection for the whole authenticated app
- * session — DM/group chat, presence, and notifications.
+ * session — DM/group chat, Event Chat (live rooms), presence, and
+ * notifications.
  *
- * Unlike the legacy `app/lib/realtime.ts` (raw WebSocket, still used
- * as-is by the live-room/event-chat feature — see that file's screens),
- * this module is a module-level singleton: `connect()` is called exactly
- * once, from the root layout, whenever there is an access token, and
- * every screen that needs realtime chat/notification events calls
+ * The legacy `app/lib/realtime.ts` (raw WebSocket) still exists and is still
+ * used as-is by the standalone Live Room (audio room) screen — see
+ * live-room-screen.tsx — but Event Chat (ChatTab.tsx) has been cut over to
+ * this connection. This module is a module-level singleton: `connect()` is
+ * called exactly once, from the root layout, whenever there is an access
+ * token, and every screen that needs realtime events calls
  * `subscribe(handlers)` to attach/detach its own handlers on the SAME
  * connection instead of opening a new one.
  */
+
+export type LiveRoomRealtimeMessage = {
+  liveRoomId: string;
+  message: LiveRoomMessage;
+};
 
 export type RealtimeHandlers = {
   onDirectMessage?: (message: DirectRealtimeMessage) => void;
@@ -39,6 +47,7 @@ export type RealtimeHandlers = {
   onGroupMessage?: (message: GroupRealtimeMessage) => void;
   onGroupMessageDeleted?: (event: GroupMessageDeletedRealtimeEvent) => void;
   onGroupMessageUpdated?: (message: GroupRealtimeMessage) => void;
+  onLiveRoomMessage?: (event: LiveRoomRealtimeMessage) => void;
   onNotification?: (notification: NotificationItem) => void;
   onNotificationRead?: (event: NotificationReadRealtimeEvent) => void;
   onNotificationsReadAll?: (event: NotificationReadAllRealtimeEvent) => void;
@@ -55,6 +64,7 @@ export type AckResult<T> =
   | { ok: false; code?: string; message: string };
 
 const ACK_TIMEOUT_MS = 8000;
+const SOCKET_AUTH_ERROR_CODE = "AUTHENTICATION_REQUIRED";
 
 const HANDLER_EVENT_MAP: Record<keyof RealtimeHandlers, string | null> = {
   onDirectMessage: "dm:message",
@@ -64,6 +74,7 @@ const HANDLER_EVENT_MAP: Record<keyof RealtimeHandlers, string | null> = {
   onGroupMessage: "group:message",
   onGroupMessageDeleted: "group:message:deleted",
   onGroupMessageUpdated: "group:message:updated",
+  onLiveRoomMessage: "live:message",
   onNotification: "notification:new",
   onNotificationRead: "notification:read",
   onNotificationsReadAll: "notification:read-all",
@@ -75,14 +86,30 @@ const HANDLER_EVENT_MAP: Record<keyof RealtimeHandlers, string | null> = {
 
 let socket: Socket | null = null;
 let currentAccessToken: string | null = null;
+let rejectedAccessToken: string | null = null;
 let hasConnectedOnce = false;
 let appStateSubscription: { remove: () => void } | null = null;
+// The Event Chat room currently joined (if any) — Socket.IO room membership
+// does not survive a reconnect, so on "connect" (when hasConnectedOnce is
+// already true, i.e. a *re*connect) we re-emit "live:join" for this room
+// before the consumer's onReconnected fires, so its own REST refetch sees a
+// live, re-authorized subscription rather than racing a stale one.
+let activeLiveRoomId: string | null = null;
+let authRecoveryAttempted = false;
+let authRecoveryPromise: Promise<void> | null = null;
 const pendingSubscriptions: RealtimeHandlers[] = [];
 const activeSubscriptions = new Set<RealtimeHandlers>();
+const registeredSocketListeners = new WeakMap<
+  RealtimeHandlers,
+  Partial<Record<keyof RealtimeHandlers, (...args: unknown[]) => void>>
+>();
 
 const log = __DEV__
   ? (msg: string, data?: object) => console.log(`[SocketIO] ${msg}`, data !== undefined ? data : "")
   : () => {};
+const warn = (msg: string, data?: object): void => {
+  console.warn(`[SocketIO] ${msg}`, data !== undefined ? data : "");
+};
 
 const buildSocketIOOrigin = (): string => {
   const apiBaseUrl = api.defaults.baseURL;
@@ -96,27 +123,86 @@ const buildSocketIOOrigin = (): string => {
 };
 
 const attachHandlerToSocket = (activeSocket: Socket, handlers: RealtimeHandlers): void => {
+  const registeredListeners = registeredSocketListeners.get(handlers) ?? {};
+
   for (const key of Object.keys(HANDLER_EVENT_MAP) as (keyof RealtimeHandlers)[]) {
     const eventName = HANDLER_EVENT_MAP[key];
     const handler = handlers[key];
     if (!eventName || !handler) continue;
 
-    if (key === "onUserOnline" || key === "onUserOffline") {
-      activeSocket.on(eventName, (payload: { userId: string }) => (handler as (userId: string) => void)(payload.userId));
-    } else {
-      activeSocket.on(eventName, handler as (...args: unknown[]) => void);
-    }
+    const listener =
+      registeredListeners[key] ??
+      (key === "onUserOnline" || key === "onUserOffline"
+        ? (...args: unknown[]) => {
+            const payload = args[0] as { userId: string };
+            (handler as (userId: string) => void)(payload.userId);
+          }
+        : (handler as (...args: unknown[]) => void));
+
+    registeredListeners[key] = listener;
+    activeSocket.on(eventName, listener);
   }
+
+  registeredSocketListeners.set(handlers, registeredListeners);
 };
 
 const detachHandlerFromSocket = (activeSocket: Socket, handlers: RealtimeHandlers): void => {
   for (const key of Object.keys(HANDLER_EVENT_MAP) as (keyof RealtimeHandlers)[]) {
     const eventName = HANDLER_EVENT_MAP[key];
-    const handler = handlers[key];
-    if (!eventName || !handler) continue;
+    const listener = registeredSocketListeners.get(handlers)?.[key];
+    if (!eventName || !listener) continue;
 
-    activeSocket.off(eventName, handler as (...args: unknown[]) => void);
+    activeSocket.off(eventName, listener);
   }
+
+  registeredSocketListeners.delete(handlers);
+};
+
+type SocketConnectError = Error & {
+  data?: { code?: unknown };
+};
+
+const isAuthenticationConnectError = (error: SocketConnectError): boolean =>
+  error.data?.code === SOCKET_AUTH_ERROR_CODE || error.message === "Authentication required";
+
+const recoverSocketAuthentication = async (activeSocket: Socket, rejectedToken: string): Promise<void> => {
+  try {
+    log("Authentication recovery started");
+    const refreshedToken = await refreshConfiguredAuthToken({ clearOnUnauthorized: true });
+
+    if (socket !== activeSocket || currentAccessToken !== rejectedToken) {
+      log("Authentication recovery cancelled because the socket session changed");
+      return;
+    }
+
+    if (refreshedToken === rejectedToken) {
+      throw new Error("Authentication refresh returned the rejected access token.");
+    }
+
+    currentAccessToken = refreshedToken;
+    activeSocket.auth = { token: refreshedToken };
+    log("Authentication refreshed; reconnecting");
+    activeSocket.connect();
+  } catch (error) {
+    warn("Authentication recovery failed", {
+      message: error instanceof Error ? error.message : "Unknown refresh failure",
+    });
+  }
+};
+
+const startSocketAuthenticationRecovery = (): void => {
+  if (authRecoveryAttempted || authRecoveryPromise || !socket || !currentAccessToken) {
+    return;
+  }
+
+  authRecoveryAttempted = true;
+  const recovery = recoverSocketAuthentication(socket, currentAccessToken);
+  authRecoveryPromise = recovery;
+  void recovery.finally(() => {
+    if (authRecoveryPromise === recovery) {
+      authRecoveryPromise = null;
+    }
+  });
 };
 
 const flushPendingSubscriptions = (activeSocket: Socket): void => {
@@ -132,7 +218,12 @@ const ensureAppStateListener = (): void => {
   if (appStateSubscription) return;
 
   appStateSubscription = AppState.addEventListener("change", (nextState: AppStateStatus) => {
-    if (nextState === "active" && socket && !socket.connected) {
+    if (
+      nextState === "active" &&
+      socket &&
+      !socket.connected &&
+      currentAccessToken !== rejectedAccessToken
+    ) {
       log("App foregrounded — nudging reconnect");
       socket.connect();
     }
@@ -148,12 +239,17 @@ export const connect = (accessToken: string): void => {
     // Token rotated (refresh/re-login) — reconnect with the new auth
     // instead of tearing down and losing subscribed handlers.
     currentAccessToken = accessToken;
+    rejectedAccessToken = null;
+    authRecoveryAttempted = false;
+    authRecoveryPromise = null;
     socket.auth = { token: accessToken };
     socket.disconnect().connect();
     return;
   }
 
   currentAccessToken = accessToken;
+  rejectedAccessToken = null;
+  authRecoveryAttempted = false;
 
   let origin: string;
   try {
@@ -174,7 +270,17 @@ export const connect = (accessToken: string): void => {
   });
 
   socket.on("connect", () => {
+    rejectedAccessToken = null;
+    authRecoveryAttempted = false;
     log("Connected", { id: socket?.id });
+    if (hasConnectedOnce && activeLiveRoomId) {
+      const liveRoomId = activeLiveRoomId;
+      void emitWithAck("live:join", { liveRoomId }).then((result) => {
+        if (!result.ok) {
+          warn("Failed to rejoin live room after reconnect", { liveRoomId, message: result.message });
+        }
+      });
+    }
     if (hasConnectedOnce) {
       for (const handlers of activeSubscriptions) {
         handlers.onReconnected?.();
@@ -184,8 +290,15 @@ export const connect = (accessToken: string): void => {
     flushPendingSubscriptions(socket as Socket);
   });
 
-  socket.on("connect_error", (error: Error) => {
-    log("Connect error", { message: error.message });
+  socket.on("connect_error", (error: SocketConnectError) => {
+    if (isAuthenticationConnectError(error)) {
+      rejectedAccessToken = currentAccessToken;
+      log("Connect rejected by authentication");
+      startSocketAuthenticationRecovery();
+      return;
+    }
+
+    log("Connect error", { category: "network_or_server", message: error.message });
   });
 
   socket.on("disconnect", (reason: string) => {
@@ -196,9 +309,6 @@ export const connect = (accessToken: string): void => {
   // very first connection) still need to be attached now that a socket
   // instance exists — connect events only re-flush on actual (re)connects.
   flushPendingSubscriptions(socket);
-  for (const handlers of activeSubscriptions) {
-    attachHandlerToSocket(socket, handlers);
-  }
 
   ensureAppStateListener();
 };
@@ -209,7 +319,11 @@ export const disconnect = (): void => {
   socket?.disconnect();
   socket = null;
   currentAccessToken = null;
+  rejectedAccessToken = null;
   hasConnectedOnce = false;
+  authRecoveryAttempted = false;
+  authRecoveryPromise = null;
+  activeLiveRoomId = null;
   pendingSubscriptions.length = 0;
   activeSubscriptions.clear();
 };
@@ -217,7 +331,7 @@ export const disconnect = (): void => {
 export const isConnected = (): boolean => Boolean(socket?.connected);
 
 export const reconnect = (): void => {
-  if (socket && !socket.connected) {
+  if (socket && !socket.connected && currentAccessToken !== rejectedAccessToken) {
     socket.connect();
   }
 };
@@ -321,3 +435,26 @@ export const editGroupMessage = (
 
 export const deleteGroupMessage = (messageId: string): Promise<AckResult<GroupMessageResponse>> =>
   emitWithAck("group:message:delete", { messageId });
+
+// Event Chat (live rooms). Unlike DM/group, join/leave are explicit —
+// broadcasts only reach sockets currently joined to `live:<liveRoomId>` on
+// the server. joinLiveRoom also records the room so a *re*connect
+// automatically re-emits "live:join" (see the "connect" handler above)
+// before the caller's onReconnected fires.
+export const joinLiveRoom = (liveRoomId: string): Promise<AckResult<LiveRoom>> => {
+  activeLiveRoomId = liveRoomId;
+  return emitWithAck("live:join", { liveRoomId });
+};
+
+export const leaveLiveRoom = (liveRoomId: string): void => {
+  if (activeLiveRoomId === liveRoomId) {
+    activeLiveRoomId = null;
+  }
+  socket?.emit("live:leave", { liveRoomId });
+};
+
+export const sendLiveRoomMessage = (
+  liveRoomId: string,
+  text: string,
+  clientMessageId?: string,
+): Promise<AckResult<LiveRoomMessage>> => emitWithAck("live:message", { liveRoomId, text, clientMessageId });

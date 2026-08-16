@@ -15,7 +15,7 @@ export const MAP_MARKER_GLOW_CONFIG = {
   /** Final opacity never exceeds this value, regardless of brightness/pulse. */
   maxOpacity: 1.0,
   /** Live pulse brightens the computed base opacity by up to this multiplier. */
-  livePulsePeakMultiplier: 1.15,
+  livePulsePeakMultiplier: 1.5,
   /** Duration of the live-pulse brighten leg. */
   livePulseBrightenDurationMs: 900,
   /** Duration of the live-pulse dim leg. */

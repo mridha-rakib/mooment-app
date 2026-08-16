@@ -7,6 +7,7 @@ import {
   Keyboard,
   Linking,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -70,7 +71,38 @@ const TEXT_BACKGROUNDS: StoryTextBackground[] = [
   { type: 'color', colors: ['#7C2D12'] },
 ];
 
-const TEXT_COLORS = ['#FFFFFF', '#FDE68A', '#C7D2FE', '#FBCFE8'];
+// Curated static Story text color palette (UI configuration, not app data).
+// Grouped by family purely for readability here; rendered as one flat
+// horizontally-scrollable row in the Color tool.
+const TEXT_COLOR_PALETTE = [
+  // Neutrals
+  '#FFFFFF', '#000000', '#D1D5DB', '#9CA3AF', '#4B5563',
+  // Reds / pinks
+  '#EF4444', '#FF7F6B', '#DC143C', '#FF1493', '#F472B6', '#FBCFE8',
+  // Oranges / yellows
+  '#F97316', '#F59E0B', '#FFD700', '#FDE047', '#FEF9C3',
+  // Greens
+  '#A3E635', '#22C55E', '#10B981', '#6EE7B7', '#808000',
+  // Cyans / blues
+  '#22D3EE', '#40E0D0', '#14B8A6', '#38BDF8', '#3B82F6', '#4169E1', '#1E3A8A',
+  // Purples
+  '#6366F1', '#8B5CF6', '#A855F7', '#C4B5FD', '#D946EF',
+];
+
+const FONT_WEIGHT_OPTIONS: { label: string; value: StoryTextOverlay['fontWeight'] }[] = [
+  { label: 'Regular', value: 'normal' },
+  { label: 'Semibold', value: '600' },
+  { label: 'Bold', value: '700' },
+  { label: 'Heavy', value: 'bold' },
+];
+
+const TEXT_ALIGN_OPTIONS: { value: NonNullable<StoryTextOverlay['textAlign']>; icon: 'align-left' | 'align-center' | 'align-right' }[] = [
+  { value: 'left', icon: 'align-left' },
+  { value: 'center', icon: 'align-center' },
+  { value: 'right', icon: 'align-right' },
+];
+
+type TextTool = 'style' | 'color' | 'align' | 'shadow';
 // The existing canonical/default Story text scale — previously the "M"
 // (middle) option in the removed S/M/L size picker and already the state's
 // own default before any user interaction. New Story text always uses this;
@@ -167,6 +199,8 @@ const buildOverlay = (
   color: string,
   scale: number,
   rotation: number,
+  fontWeight: StoryTextOverlay['fontWeight'],
+  textAlign: StoryTextOverlay['textAlign'],
 ): StoryTextOverlay | null => {
   const trimmedText = text.trim();
   if (!trimmedText) return null;
@@ -177,8 +211,8 @@ const buildOverlay = (
     y: positionY,
     scale,
     color,
-    fontWeight: '700',
-    textAlign: 'center',
+    fontWeight,
+    textAlign,
     rotation,
   };
 };
@@ -191,6 +225,164 @@ function StoryVideoPreview({ uri }: { uri: string }) {
   });
 
   return <VideoView style={styles.previewMedia} player={player} nativeControls={false} contentFit="cover" />;
+}
+
+type StoryTextToolbarProps = {
+  activeTool: TextTool;
+  onSelectTool: (tool: TextTool) => void;
+  onCollapse: () => void;
+  color: string;
+  onColorChange: (color: string) => void;
+  fontWeight: StoryTextOverlay['fontWeight'];
+  onFontWeightChange: (weight: StoryTextOverlay['fontWeight']) => void;
+  textAlign: StoryTextOverlay['textAlign'];
+  onTextAlignChange: (align: StoryTextOverlay['textAlign']) => void;
+  shadowEnabled: boolean;
+  onShadowToggle: (enabled: boolean) => void;
+  // Safe-area bottom anchor (nav bar / home indicator inset). No keyboard
+  // math needed here at all — this tray only ever renders while
+  // isEditingOverlayText is false, i.e. the keyboard is guaranteed closed
+  // (see the mutually-exclusive render branch in AddStoryScreen), so there
+  // is nothing to avoid.
+  safeBottomInset: number;
+};
+
+// Compact floating text-tools tray. Rendered ONLY in positioning mode
+// (isEditingOverlayText === false, text object present, not manually
+// collapsed) — never while the keyboard/TextInput is active. This mutual
+// exclusion with editing is the product requirement: the on-canvas
+// TextInput and this tray are never shown at the same time, so the tray
+// never has to compete with or float above the keyboard.
+function StoryTextToolbar({
+  activeTool,
+  onSelectTool,
+  onCollapse,
+  color,
+  onColorChange,
+  fontWeight,
+  onFontWeightChange,
+  textAlign,
+  onTextAlignChange,
+  shadowEnabled,
+  onShadowToggle,
+  safeBottomInset,
+}: StoryTextToolbarProps) {
+  const activeAlignIcon = TEXT_ALIGN_OPTIONS.find((option) => option.value === textAlign)?.icon ?? 'align-center';
+
+  return (
+    <View style={[styles.textToolbar, { bottom: safeBottomInset }]} pointerEvents="box-none">
+      <View style={styles.textToolPanel}>
+        {activeTool === 'style' ? (
+          <View style={styles.textToolOptionsRow}>
+            {FONT_WEIGHT_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.label}
+                style={[styles.pillOption, fontWeight === option.value && styles.pillOptionSelected]}
+                onPress={() => onFontWeightChange(option.value)}
+              >
+                <Text style={[styles.pillOptionText, fontWeight === option.value && styles.pillOptionTextSelected]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        {activeTool === 'color' ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="always"
+            contentContainerStyle={styles.colorScrollRow}
+          >
+            {TEXT_COLOR_PALETTE.map((swatchColor) => {
+              const isSelected = swatchColor === color;
+              return (
+                <TouchableOpacity
+                  key={swatchColor}
+                  style={[styles.colorSwatchRing, isSelected && styles.colorSwatchRingSelected]}
+                  onPress={() => onColorChange(swatchColor)}
+                >
+                  <View style={[styles.colorSwatch, { backgroundColor: swatchColor }]}>
+                    {isSelected ? (
+                      <View style={styles.colorSwatchCheckBg}>
+                        <Feather name="check" size={12} color="#FFFFFF" />
+                      </View>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {activeTool === 'align' ? (
+          <View style={styles.textToolOptionsRow}>
+            {TEXT_ALIGN_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.iconOption, textAlign === option.value && styles.iconOptionSelected]}
+                onPress={() => onTextAlignChange(option.value)}
+              >
+                <Feather name={option.icon} size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        {activeTool === 'shadow' ? (
+          <View style={styles.textToolOptionsRow}>
+            <TouchableOpacity
+              style={[styles.pillOption, !shadowEnabled && styles.pillOptionSelected]}
+              onPress={() => onShadowToggle(false)}
+            >
+              <Text style={[styles.pillOptionText, !shadowEnabled && styles.pillOptionTextSelected]}>Off</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.pillOption, shadowEnabled && styles.pillOptionSelected]}
+              onPress={() => onShadowToggle(true)}
+            >
+              <Text style={[styles.pillOptionText, shadowEnabled && styles.pillOptionTextSelected]}>On</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.textToolTabRow}>
+        <TouchableOpacity
+          style={[styles.textToolTab, activeTool === 'style' && styles.textToolTabActive]}
+          onPress={() => onSelectTool('style')}
+        >
+          <Feather name="type" size={18} color="#FFFFFF" />
+          <Text style={styles.textToolTabLabel}>Style</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.textToolTab, activeTool === 'color' && styles.textToolTabActive]}
+          onPress={() => onSelectTool('color')}
+        >
+          <View style={[styles.textToolColorDot, { backgroundColor: color }]} />
+          <Text style={styles.textToolTabLabel}>Color</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.textToolTab, activeTool === 'align' && styles.textToolTabActive]}
+          onPress={() => onSelectTool('align')}
+        >
+          <Feather name={activeAlignIcon} size={18} color="#FFFFFF" />
+          <Text style={styles.textToolTabLabel}>Align</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.textToolTab, activeTool === 'shadow' && styles.textToolTabActive]}
+          onPress={() => onSelectTool('shadow')}
+        >
+          <Feather name="layers" size={18} color="#FFFFFF" />
+          <Text style={styles.textToolTabLabel}>Shadow</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.textToolTab} onPress={onCollapse}>
+          <Feather name="chevron-down" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 export default function AddStoryScreen() {
@@ -208,10 +400,27 @@ export default function AddStoryScreen() {
   const [draft, setDraft] = useState<StoryDraft | null>(null);
   const [storyText, setStoryText] = useState('');
   const [overlayText, setOverlayText] = useState('');
-  const [overlayColor, setOverlayColor] = useState(TEXT_COLORS[0]);
+  const [overlayColor, setOverlayColor] = useState(TEXT_COLOR_PALETTE[0]);
   const [overlayX, setOverlayX] = useState(0.5);
   const [overlayY, setOverlayY] = useState(0.5);
   const [overlayRotation, setOverlayRotation] = useState(0);
+  const [overlayFontWeight, setOverlayFontWeight] = useState<StoryTextOverlay['fontWeight']>('700');
+  const [overlayTextAlign, setOverlayTextAlign] = useState<StoryTextOverlay['textAlign']>('center');
+  // Editor-preview-only toggle (not persisted — see final report). Defaults
+  // to true so it matches the always-on shadow every published Story text
+  // has rendered with until now.
+  const [overlayShadowEnabled, setOverlayShadowEnabled] = useState(true);
+  // Which text-tools panel is expanded within the tray. Color is the
+  // product-preferred initial panel (the primary requested styling
+  // action); once the user picks a different tab it's remembered across
+  // edit/dismiss cycles rather than reset each time.
+  const [activeTextTool, setActiveTextTool] = useState<TextTool>('color');
+  // Manual "hide the whole tray" state (the chevron), independent of which
+  // tool is selected — collapsing never forgets activeTextTool. Reset back
+  // to false whenever an edit session finishes, since re-editing the text
+  // is always available (tap it) and is this UI's only "bring tools back"
+  // path — see handleFinishEditingOverlayText.
+  const [isTextToolsCollapsed, setIsTextToolsCollapsed] = useState(false);
   // Whether the single on-canvas Story text object is currently showing
   // its editable TextInput (true) vs. its draggable/rotatable preview
   // (false). The object itself never duplicates — this only switches which
@@ -256,8 +465,17 @@ export default function AddStoryScreen() {
   const lastUploadProgressUpdateAtRef = useRef(0);
 
   const currentOverlay = useMemo(
-    () => buildOverlay(overlayText, overlayX, overlayY, overlayColor, STANDARD_TEXT_SCALE, overlayRotation),
-    [overlayColor, overlayText, overlayX, overlayY, overlayRotation],
+    () => buildOverlay(
+      overlayText,
+      overlayX,
+      overlayY,
+      overlayColor,
+      STANDARD_TEXT_SCALE,
+      overlayRotation,
+      overlayFontWeight,
+      overlayTextAlign,
+    ),
+    [overlayColor, overlayText, overlayX, overlayY, overlayRotation, overlayFontWeight, overlayTextAlign],
   );
   const isPreviewing = Boolean(draft);
 
@@ -275,8 +493,14 @@ export default function AddStoryScreen() {
     setIsEditingOverlayText(true);
   }, [overlayText]);
 
+  // Editing (keyboard) and the tools tray are mutually exclusive — this is
+  // the single transition point where the keyboard closing hands control
+  // back to positioning mode, so it's also where the tray becomes visible
+  // again. Only the collapsed flag resets here; the selected tool
+  // (Style/Color/Align/Shadow) is intentionally left alone.
   const handleFinishEditingOverlayText = useCallback(() => {
     setIsEditingOverlayText(false);
+    setIsTextToolsCollapsed(false);
   }, []);
 
   const updateUploadProgress = useCallback((progress: number) => {
@@ -451,10 +675,15 @@ export default function AddStoryScreen() {
     setDraft(null);
     setStoryText('');
     setOverlayText('');
-    setOverlayColor(TEXT_COLORS[0]);
+    setOverlayColor(TEXT_COLOR_PALETTE[0]);
     setOverlayX(0.5);
     setOverlayY(0.5);
     setOverlayRotation(0);
+    setOverlayFontWeight('700');
+    setOverlayTextAlign('center');
+    setOverlayShadowEnabled(true);
+    setActiveTextTool('color');
+    setIsTextToolsCollapsed(false);
     setIsEditingOverlayText(false);
     setTextBackground(TEXT_BACKGROUNDS[0]);
     setImageTransform(DEFAULT_IMAGE_TRANSFORM);
@@ -492,14 +721,21 @@ export default function AddStoryScreen() {
     setDraft(nextDraft);
     setStoryText(nextDraft.textContent ?? '');
     setOverlayText(nextDraft.textOverlay?.text ?? '');
-    setOverlayColor(nextDraft.textOverlay?.color ?? TEXT_COLORS[0]);
+    setOverlayColor(nextDraft.textOverlay?.color ?? TEXT_COLOR_PALETTE[0]);
     setOverlayX(nextDraft.textOverlay?.x ?? 0.5);
     setOverlayY(nextDraft.textOverlay?.y ?? 0.5);
     setOverlayRotation(nextDraft.textOverlay?.rotation ?? 0);
+    setOverlayFontWeight(nextDraft.textOverlay?.fontWeight ?? '700');
+    setOverlayTextAlign(nextDraft.textOverlay?.textAlign ?? 'center');
+    setOverlayShadowEnabled(true);
+    setActiveTextTool('color');
+    setIsTextToolsCollapsed(false);
     setIsEditingOverlayText(false);
     setTextBackground(nextDraft.textBackground ?? TEXT_BACKGROUNDS[0]);
-    // A newly captured/picked image never carries a prior transform — always
-    // start from the legacy full-cover default (Part 13: no leaking).
+    // A newly captured/picked image never carries a prior transform (Part
+    // 13: no leaking). DraggableStoryImage renders scale=1 as a full-canvas
+    // `contain` fit, so the identity transform already shows the image's
+    // full frame at maximum size — no extra fit-scale computation needed.
     setImageTransform(DEFAULT_IMAGE_TRANSFORM);
     setDraftKey((key) => key + 1);
   };
@@ -1066,6 +1302,9 @@ export default function AddStoryScreen() {
             text={overlayText}
             onChangeText={setOverlayText}
             color={overlayColor}
+            fontWeight={overlayFontWeight}
+            textAlign={overlayTextAlign}
+            shadowEnabled={overlayShadowEnabled}
             x={overlayX}
             y={overlayY}
             rotation={overlayRotation}
@@ -1113,23 +1352,7 @@ export default function AddStoryScreen() {
             </View>
           </View>
 
-          {draft.mediaType !== 'text' ? (
-            <View style={styles.overlayEditor} pointerEvents="box-none">
-              <View style={styles.editorRow}>
-                <TouchableOpacity style={styles.addTextBtn} onPress={handleStartEditingOverlayText}>
-                  <Feather name="type" size={16} color="#FFFFFF" />
-                  <Text style={styles.addTextBtnText}>{overlayText.trim() ? 'Edit text' : 'Add text'}</Text>
-                </TouchableOpacity>
-                {TEXT_COLORS.map((color) => (
-                  <TouchableOpacity
-                    key={color}
-                    style={[styles.colorDot, { backgroundColor: color }, overlayColor === color && styles.selectedDot]}
-                    onPress={() => setOverlayColor(color)}
-                  />
-                ))}
-              </View>
-            </View>
-          ) : (
+          {draft.mediaType === 'text' ? (
             <View style={styles.overlayEditor}>
               <View style={styles.editorRow}>
                 {TEXT_BACKGROUNDS.map((background) => (
@@ -1145,7 +1368,7 @@ export default function AddStoryScreen() {
                 ))}
               </View>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.publishStatus} pointerEvents="box-none">
             {isPublishing ? (
@@ -1155,6 +1378,37 @@ export default function AddStoryScreen() {
             ) : null}
           </View>
         </SafeAreaView>
+
+        {draft.mediaType !== 'text' && !isEditingOverlayText ? (
+          showOverlayTextObject ? (
+            isTextToolsCollapsed ? null : (
+              <StoryTextToolbar
+                activeTool={activeTextTool}
+                onSelectTool={setActiveTextTool}
+                onCollapse={() => setIsTextToolsCollapsed(true)}
+                color={overlayColor}
+                onColorChange={setOverlayColor}
+                fontWeight={overlayFontWeight}
+                onFontWeightChange={setOverlayFontWeight}
+                textAlign={overlayTextAlign}
+                onTextAlignChange={setOverlayTextAlign}
+                shadowEnabled={overlayShadowEnabled}
+                onShadowToggle={setOverlayShadowEnabled}
+                safeBottomInset={Math.max(insets.bottom, 16)}
+              />
+            )
+          ) : (
+            <View
+              style={[styles.overlayTriggerWrap, { bottom: Math.max(insets.bottom, 16) + 26 }]}
+              pointerEvents="box-none"
+            >
+              <TouchableOpacity style={styles.addTextBtn} onPress={handleStartEditingOverlayText}>
+                <Feather name="type" size={16} color="#FFFFFF" />
+                <Text style={styles.addTextBtnText}>Add text</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        ) : null}
 
         {isPublishing ? (
           <View
@@ -1484,10 +1738,10 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
   },
-  // Content-sized (not full-width) now that it only holds the compact
-  // "Add/Edit text" button + color/background swatches — the on-canvas
-  // text object is the actual editor, so this no longer needs to be a
-  // large editing field spanning the Story canvas.
+  // Used only by the text-mode (full-text-Story) background-color picker now
+  // — the image/video overlay-text toolbar has its own dedicated styles
+  // below (textToolbar and friends), pinned to the bottom instead of
+  // floating in the middle of the space-between preview layout.
   overlayEditor: {
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -1506,10 +1760,107 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   addTextBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-  colorDot: { borderRadius: 14, height: 28, width: 28, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' },
-  selectedDot: { borderColor: '#FFFFFF' },
   backgroundSwatch: { height: 32, width: 54, borderRadius: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' },
   selectedSwatch: { borderColor: '#FFFFFF' },
+  // Positioning-mode compact trigger — a small pill pinned to the bottom of
+  // the canvas, well clear of wherever the text object itself currently
+  // sits. box-none on the wrapper so only the pill itself is tappable.
+  overlayTriggerWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  // Text-tools tray shown only in positioning mode (keyboard closed).
+  // Content-sized and anchored at a static safe-area `bottom` (passed
+  // inline) — never a full-screen touch layer.
+  textToolbar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+  },
+  textToolPanel: {
+    backgroundColor: 'rgba(20,20,24,0.92)',
+    borderRadius: 14,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  textToolOptionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pillOption: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  pillOptionSelected: { backgroundColor: '#FFFFFF' },
+  pillOptionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  pillOptionTextSelected: { color: '#111827' },
+  iconOption: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 16,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  iconOptionSelected: { backgroundColor: 'rgba(255,255,255,0.32)' },
+  colorScrollRow: { alignItems: 'center', gap: 10, paddingVertical: 2 },
+  colorSwatchRing: {
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  colorSwatchRingSelected: {
+    borderColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+  },
+  colorSwatch: {
+    alignItems: 'center',
+    borderRadius: 15,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  colorSwatchCheckBg: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 9,
+    height: 18,
+    justifyContent: 'center',
+    width: 18,
+  },
+  textToolTabRow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(20,20,24,0.92)',
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+  },
+  textToolTab: {
+    alignItems: 'center',
+    borderRadius: 12,
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  textToolTabActive: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  textToolTabLabel: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  textToolColorDot: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    height: 16,
+    width: 16,
+  },
   textStoryInput: {
     alignSelf: 'center',
     color: '#FFFFFF',

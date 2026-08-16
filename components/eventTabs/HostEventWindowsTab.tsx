@@ -2,13 +2,16 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import {
   EVENT_WINDOW_CONTENT_TYPES,
+  EVENT_WINDOW_PARTICIPANT_POST_VISIBILITIES,
+  EVENT_WINDOW_POSTING_ELIGIBILITIES,
   cancelEventWindow,
   createEventWindow,
   getEventWindows,
   updateEventWindow,
   type EventWindow,
   type EventWindowContentType,
-  type EventWindowPayload,
+  type EventWindowParticipantPostVisibility,
+  type EventWindowPostingEligibility,
 } from "@/lib/eventWindows";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Feather } from "@expo/vector-icons";
@@ -51,6 +54,30 @@ type WindowFormState = {
   endsAt: Date;
   allowedContentTypes: EventWindowContentType[];
   maxPosts: string;
+  postingEligibility: EventWindowPostingEligibility;
+  participantPostVisibility: EventWindowParticipantPostVisibility;
+};
+
+const POSTING_ELIGIBILITY_LABELS: Record<EventWindowPostingEligibility, { title: string; description: string }> = {
+  ticket_holders: {
+    title: "Ticket holders",
+    description: "Anyone with a valid event ticket can post. Check-in is not required.",
+  },
+  checked_in_attendees: {
+    title: "Checked-in attendees",
+    description: "Only attendees who have successfully checked in can post.",
+  },
+};
+
+const PARTICIPANT_VISIBILITY_LABELS: Record<EventWindowParticipantPostVisibility, { title: string; description: string }> = {
+  instant: {
+    title: "Instant",
+    description: "After posting, participants can immediately view posts in this window.",
+  },
+  end_of_event: {
+    title: "End of event",
+    description: "Participants can view posts after the event ends.",
+  },
 };
 
 const CONTENT_TYPE_LABELS: Record<EventWindowContentType, string> = {
@@ -89,11 +116,11 @@ const parseDate = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 };
 
-const clampDate = (value: Date, minimum: Date, maximum: Date) =>
-  new Date(Math.min(maximum.getTime(), Math.max(minimum.getTime(), value.getTime())));
+// Only the event's end time is a hard ceiling now — a window may legitimately
+// start before the event does, so there is no lower bound to clamp against.
+const clampToEventEnd = (value: Date, maximum: Date) => new Date(Math.min(maximum.getTime(), value.getTime()));
 
 const createInitialForm = (
-  eventStartsAt?: string | null,
   eventEndsAt?: string | null,
   window?: EventWindow | null,
 ): WindowFormState => {
@@ -105,13 +132,14 @@ const createInitialForm = (
       endsAt: parseDate(window.endsAt),
       allowedContentTypes: [...window.allowedContentTypes],
       maxPosts: String(window.maxPosts),
+      postingEligibility: window.postingEligibility,
+      participantPostVisibility: window.participantPostVisibility,
     };
   }
 
-  const eventStart = parseDate(eventStartsAt);
   const eventEnd = parseDate(eventEndsAt);
-  const start = clampDate(new Date(), eventStart, eventEnd);
-  const end = clampDate(new Date(start.getTime() + 30 * 60 * 1000), start, eventEnd);
+  const start = clampToEventEnd(new Date(), eventEnd);
+  const end = clampToEventEnd(new Date(start.getTime() + 30 * 60 * 1000), eventEnd);
 
   return {
     title: "",
@@ -120,6 +148,10 @@ const createInitialForm = (
     endsAt: end,
     allowedContentTypes: ["image"],
     maxPosts: "25",
+    // Backward-compatible defaults — a host who doesn't touch these controls
+    // gets the same behavior every window had before this feature existed.
+    postingEligibility: "checked_in_attendees",
+    participantPostVisibility: "end_of_event",
   };
 };
 
@@ -172,7 +204,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editingWindow, setEditingWindow] = useState<EventWindow | null>(null);
   const [isFormVisible, setIsFormVisible] = useState(false);
-  const [form, setForm] = useState(() => createInitialForm(eventStartsAt, eventEndsAt));
+  const [form, setForm] = useState(() => createInitialForm(eventEndsAt));
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [cancellingWindowId, setCancellingWindowId] = useState<string | null>(null);
@@ -186,7 +218,6 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
   const ModalContainer = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const modalContainerProps = Platform.OS === "ios" ? { behavior: "padding" as const } : {};
 
-  const eventStart = useMemo(() => parseDate(eventStartsAt), [eventStartsAt]);
   const eventEnd = useMemo(() => parseDate(eventEndsAt), [eventEndsAt]);
   const isOpenEdit = editingWindow?.computedStatus === "open";
 
@@ -243,7 +274,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
   const openCreateForm = () => {
     if (!canManageWindows) return;
     setEditingWindow(null);
-    setForm(createInitialForm(eventStartsAt, eventEndsAt));
+    setForm(createInitialForm(eventEndsAt));
     setFormError(null);
     setPickerTarget(null);
     setIsFormVisible(true);
@@ -252,7 +283,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
   const openEditForm = (window: EventWindow) => {
     if (!canManageWindows) return;
     setEditingWindow(window);
-    setForm(createInitialForm(eventStartsAt, eventEndsAt, window));
+    setForm(createInitialForm(eventEndsAt, window));
     setFormError(null);
     setPickerTarget(null);
     setIsFormVisible(true);
@@ -303,7 +334,9 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
     if (form.allowedContentTypes.length === 0) return "Select at least one allowed content type.";
     if (!Number.isInteger(maxPosts) || maxPosts < 1 || maxPosts > 10000) return "Maximum posts must be between 1 and 10,000.";
     if (form.startsAt >= form.endsAt) return "Window end time must be after its start time.";
-    if (form.startsAt < eventStart || form.endsAt > eventEnd) return "Window times must stay inside the event time.";
+    // The window may start before the event does, but it can never outlast
+    // it — endsAt is a hard ceiling at the event's own end time.
+    if (form.endsAt > eventEnd) return "Window cannot end after the event ends.";
     if (editingWindow && maxPosts < editingWindow.acceptedPostCount) {
       return `Maximum posts cannot be lower than ${editingWindow.acceptedPostCount} accepted posts.`;
     }
@@ -320,7 +353,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
       return;
     }
 
-    const payload: EventWindowPayload = {
+    const editableFields = {
       title: form.title.trim() || null,
       details: form.details.trim() || null,
       startsAt: form.startsAt.toISOString(),
@@ -332,11 +365,17 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
     setIsSaving(true);
     setFormError(null);
     try {
+      // postingEligibility/participantPostVisibility are create-time-only —
+      // the backend rejects them on a PATCH, so they're never included here.
       const saved = editingWindow
         ? await updateEventWindow(eventId, editingWindow.id, isOpenEdit
-          ? { title: payload.title, details: payload.details, endsAt: payload.endsAt, maxPosts: payload.maxPosts }
-          : payload)
-        : await createEventWindow(eventId, payload);
+          ? { title: editableFields.title, details: editableFields.details, endsAt: editableFields.endsAt, maxPosts: editableFields.maxPosts }
+          : editableFields)
+        : await createEventWindow(eventId, {
+          ...editableFields,
+          postingEligibility: form.postingEligibility,
+          participantPostVisibility: form.participantPostVisibility,
+        });
       setWindows((current) => {
         const next = editingWindow
           ? current.map((item) => item.id === saved.id ? saved : item)
@@ -601,6 +640,67 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
               />
               {editingWindow ? <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>Currently accepted: {editingWindow.acceptedPostCount}</Text> : null}
 
+              <Text style={[styles.label, { color: colors.textSecondary }]}>WHO CAN POST?</Text>
+              {editingWindow ? (
+                <View style={[styles.policyReadout, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.policyReadoutTitle, { color: colors.text }]}>{POSTING_ELIGIBILITY_LABELS[form.postingEligibility].title}</Text>
+                  <Text style={[styles.policyReadoutBody, { color: colors.textSecondary }]}>{POSTING_ELIGIBILITY_LABELS[form.postingEligibility].description}</Text>
+                </View>
+              ) : (
+                <View style={styles.policyOptions}>
+                  {EVENT_WINDOW_POSTING_ELIGIBILITIES.map((option) => {
+                    const selected = form.postingEligibility === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={[styles.policyOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}14` : colors.card }]}
+                        onPress={() => setForm((current) => ({ ...current, postingEligibility: option }))}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                      >
+                        <Feather name={selected ? "check-circle" : "circle"} size={18} color={selected ? colors.primary : colors.textSecondary} />
+                        <View style={styles.policyOptionText}>
+                          <Text style={[styles.policyOptionTitle, { color: colors.text }]}>{POSTING_ELIGIBILITY_LABELS[option].title}</Text>
+                          <Text style={[styles.policyOptionBody, { color: colors.textSecondary }]}>{POSTING_ELIGIBILITY_LABELS[option].description}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              <Text style={[styles.label, { color: colors.textSecondary }]}>WHEN CAN PARTICIPANTS VIEW POSTS?</Text>
+              {editingWindow ? (
+                <View style={[styles.policyReadout, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.policyReadoutTitle, { color: colors.text }]}>{PARTICIPANT_VISIBILITY_LABELS[form.participantPostVisibility].title}</Text>
+                  <Text style={[styles.policyReadoutBody, { color: colors.textSecondary }]}>{PARTICIPANT_VISIBILITY_LABELS[form.participantPostVisibility].description}</Text>
+                </View>
+              ) : (
+                <View style={styles.policyOptions}>
+                  {EVENT_WINDOW_PARTICIPANT_POST_VISIBILITIES.map((option) => {
+                    const selected = form.participantPostVisibility === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={[styles.policyOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}14` : colors.card }]}
+                        onPress={() => setForm((current) => ({ ...current, participantPostVisibility: option }))}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                      >
+                        <Feather name={selected ? "check-circle" : "circle"} size={18} color={selected ? colors.primary : colors.textSecondary} />
+                        <View style={styles.policyOptionText}>
+                          <Text style={[styles.policyOptionTitle, { color: colors.text }]}>{PARTICIPANT_VISIBILITY_LABELS[option].title}</Text>
+                          <Text style={[styles.policyOptionBody, { color: colors.textSecondary }]}>{PARTICIPANT_VISIBILITY_LABELS[option].description}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+              {editingWindow ? (
+                <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>Set when the window was created — cannot be changed afterward.</Text>
+              ) : null}
+
               {formError ? (
                 <View style={[styles.errorBox, { borderColor: colors.danger }]}>
                   <Feather name="alert-circle" size={17} color={colors.danger} />
@@ -625,7 +725,9 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
                   value={pickerValue}
                   mode={pickerMode}
                   display={Platform.OS === "ios" ? "spinner" : "default"}
-                  minimumDate={pickerMode === "date" ? eventStart : undefined}
+                  // No lower bound — a window may now start before the event
+                  // does. The event's end time is still a hard ceiling for
+                  // both start and end (a window can never outlast the event).
                   maximumDate={pickerMode === "date" ? eventEnd : undefined}
                   onChange={handlePickerChange}
                 />
@@ -724,6 +826,14 @@ const styles = StyleSheet.create({
   contentOption: { width: "48%", minHeight: 46, flexGrow: 1, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, borderWidth: 1, borderRadius: 8 },
   contentOptionText: { flex: 1, fontSize: 13, fontWeight: "600" },
   fieldHint: { fontSize: 12, marginTop: 7 },
+  policyOptions: { gap: 9 },
+  policyOption: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderWidth: 1, borderRadius: 8 },
+  policyOptionText: { flex: 1, gap: 2 },
+  policyOptionTitle: { fontSize: 14, fontWeight: "700" },
+  policyOptionBody: { fontSize: 12.5, lineHeight: 17 },
+  policyReadout: { padding: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, gap: 2 },
+  policyReadoutTitle: { fontSize: 14, fontWeight: "700" },
+  policyReadoutBody: { fontSize: 12.5, lineHeight: 17 },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, marginTop: 20 },
   errorText: { flex: 1, fontSize: 13, lineHeight: 18 },
   pickerContainer: { borderTopWidth: StyleSheet.hairlineWidth },

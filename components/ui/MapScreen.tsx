@@ -236,6 +236,35 @@ const MapMarker = React.memo(({
     };
   }, [isLive, satAnchorGlowBaseOpacity]);
 
+  // Additive live-only ripple rings. These do not touch the marker body or
+  // the existing glow layer — they read the same shared livePulseProgress
+  // value (no second animation driver), one directly and one inverted, so
+  // the two rings expand out of phase for a clearer, more obviously "live"
+  // pulse. Fully transparent and inert whenever isLive is false.
+  const animatedLivePulseRingOuterStyle = useAnimatedStyle(() => {
+    if (!isLive) {
+      return { opacity: 0 };
+    }
+
+    return {
+      opacity: interpolate(livePulseProgress.value, [0, 1], [0.85, 0]),
+      transform: [{ scale: interpolate(livePulseProgress.value, [0, 1], [1, 2]) }],
+    };
+  }, [isLive]);
+
+  const animatedLivePulseRingInnerStyle = useAnimatedStyle(() => {
+    if (!isLive) {
+      return { opacity: 0 };
+    }
+
+    const inverseProgress = 1 - livePulseProgress.value;
+
+    return {
+      opacity: interpolate(inverseProgress, [0, 1], [0.85, 0]),
+      transform: [{ scale: interpolate(inverseProgress, [0, 1], [1, 1.5]) }],
+    };
+  }, [isLive]);
+
   if (isSatellite) {
     return (
       <Mapbox.MarkerView coordinate={coordinate} anchor={{ x: 0.15, y: 1 }} allowOverlap allowOverlapWithPuck>
@@ -358,6 +387,34 @@ const MapMarker = React.memo(({
             <SvgCircle cx="28" cy="28" r="28" fill="url(#mainGlow)" />
           </Svg>
         </Animated.View>
+
+        {/*
+          Live-only ripple rings (additive; marker body/glow unchanged).
+          Rendered AFTER the glow layer so their borders draw on top of the
+          soft filled glow instead of being buried underneath it — that
+          draw-order was the reason the rings previously read as one blurry
+          blob instead of distinct rings.
+        */}
+        {isLive && (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.livePulseRingOuter, { borderColor: glowColor }, animatedLivePulseRingOuterStyle]}
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.livePulseRingInner, { borderColor: glowColor }, animatedLivePulseRingInnerStyle]}
+            />
+          </>
+        )}
+
+        {/* Marker-relative LIVE badge — moves with the Mapbox MarkerView, independent of selection */}
+        {isLive && (
+          <View pointerEvents="none" style={styles.liveBadge}>
+            <View style={[styles.liveBadgeDot, { backgroundColor: colors.danger }]} />
+            <Text style={styles.liveBadgeText}>LIVE</Text>
+          </View>
+        )}
 
         <View
           style={[
@@ -1431,6 +1488,50 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     zIndex: 2,
+  },
+  /* ── Live-only ripple rings (additive) ── */
+  livePulseRingOuter: {
+    position: "absolute",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    zIndex: 1,
+  },
+  livePulseRingInner: {
+    position: "absolute",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    zIndex: 1,
+  },
+  /* ── Live-only marker badge (additive) ── */
+  liveBadge: {
+    position: "absolute",
+    top: -9,
+    right: -32,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    zIndex: 3,
+  },
+  liveBadgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginRight: 4,
+  },
+  liveBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
   markerImage: {
     width: 56,

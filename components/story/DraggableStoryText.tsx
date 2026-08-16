@@ -23,6 +23,8 @@ type DraggableStoryTextProps = {
   scale: number;
   canvasWidth: number;
   canvasHeight: number;
+  /** Editor-preview-only readability shadow toggle. Defaults to true (existing always-on behavior). */
+  shadowEnabled?: boolean;
   /** True while the user is actively typing into this object. */
   isEditing: boolean;
   onStartEditing: () => void;
@@ -51,6 +53,7 @@ export default function DraggableStoryText({
   scale,
   canvasWidth,
   canvasHeight,
+  shadowEnabled = true,
   isEditing,
   onStartEditing,
   onFinishEditing,
@@ -104,6 +107,8 @@ export default function DraggableStoryText({
     ],
   }));
 
+  const shadowStyle = shadowEnabled ? styles.overlayTextShadow : undefined;
+
   return (
     <Animated.View style={[styles.overlayTextWrap, animatedStyle]}>
       {isEditing ? (
@@ -116,13 +121,14 @@ export default function DraggableStoryText({
           maxLength={160}
           placeholder="Type here"
           placeholderTextColor="rgba(255,255,255,0.65)"
-          style={[styles.overlayText, styles.overlayTextInput, { color, fontWeight: fontWeight ?? "700", textAlign: textAlign ?? "center" }]}
+          style={[styles.overlayText, shadowStyle, styles.overlayTextInput, { color, fontWeight: fontWeight ?? "700", textAlign: textAlign ?? "center" }]}
         />
       ) : (
         <GestureDetector gesture={composedGesture}>
           <Text
             style={[
               styles.overlayText,
+              shadowStyle,
               { color, fontWeight: fontWeight ?? "700", textAlign: textAlign ?? "center" },
             ]}
           >
@@ -152,6 +158,8 @@ const styles = StyleSheet.create({
   overlayText: {
     fontSize: 30,
     lineHeight: 36,
+  },
+  overlayTextShadow: {
     textShadowColor: "rgba(0,0,0,0.85)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,

@@ -1643,7 +1643,9 @@ export default function ViewStoryScreen() {
   // gesture, no reanimated shared values: the creator already committed
   // the composition, viewers only see it). Legacy Stories (no
   // imageTransform) fall through to the exact pre-existing `cover` render
-  // untouched.
+  // untouched. The transformed branch below matches DraggableStoryImage's
+  // full-canvas contain-fit baseline (scale=1 = whole image visible) — see
+  // storyTransform.ts / DraggableStoryImage.tsx.
   const renderStoryImage = (
     uri: string,
     imageTransform: StoryImageTransform | null | undefined,
@@ -1683,7 +1685,7 @@ export default function ViewStoryScreen() {
           <Image
             source={{ uri }}
             style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
+            contentFit="contain"
             cachePolicy="memory-disk"
           />
         </View>
@@ -2088,7 +2090,7 @@ export default function ViewStoryScreen() {
           <Image
             source={{ uri: currentStory.mediaUri }}
             style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
+            contentFit="contain"
             transition={100}
             cachePolicy="memory-disk"
             {...imageLoadHandlers}

@@ -138,14 +138,30 @@ export const configureApiAuth = ({
   refreshAccessToken = onRefreshToken;
 };
 
-const refreshAuthToken = async () => {
+export const refreshConfiguredAuthToken = async (
+  options: { clearOnUnauthorized?: boolean } = {},
+): Promise<string> => {
   if (!refreshTokenPromise) {
     refreshTokenPromise = refreshAccessToken().finally(() => {
       refreshTokenPromise = null;
     });
   }
 
-  return refreshTokenPromise;
+  try {
+    await refreshTokenPromise;
+  } catch (error) {
+    if (options.clearOnUnauthorized && isAxiosError(error) && error.response?.status === 401) {
+      handleUnauthorized();
+    }
+    throw error;
+  }
+
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error("The refreshed session did not include an access token.");
+  }
+
+  return token;
 };
 
 export const api = create({
@@ -183,12 +199,9 @@ api.interceptors.response.use(
       originalRequest._authRetry = true;
 
       try {
-        await refreshAuthToken();
-        const token = getAccessToken();
+        const token = await refreshConfiguredAuthToken();
 
-        if (token) {
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-        }
+        originalRequest.headers.Authorization = `Bearer ${token}`;
 
         return api(originalRequest);
       } catch {

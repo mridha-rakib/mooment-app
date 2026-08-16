@@ -1,10 +1,21 @@
 import { api } from "@/lib/api";
+import type { EventImageDisplay } from "@/lib/events";
 
 export const EVENT_WINDOW_CONTENT_TYPES = ["text", "image", "video", "audio"] as const;
 
 export type EventWindowContentType = (typeof EVENT_WINDOW_CONTENT_TYPES)[number];
 export type EventWindowComputedStatus = "scheduled" | "open" | "closed" | "cancelled";
 export type EventWindowMediaSource = "gallery" | "camera" | "upload" | "external";
+
+// Who may post: any current valid ticket holder (no check-in required), or
+// only attendees who have actually been scanned in.
+export const EVENT_WINDOW_POSTING_ELIGIBILITIES = ["ticket_holders", "checked_in_attendees"] as const;
+export type EventWindowPostingEligibility = (typeof EVENT_WINDOW_POSTING_ELIGIBILITIES)[number];
+
+// When a participant who has posted can see everyone else's accepted posts
+// in that same window.
+export const EVENT_WINDOW_PARTICIPANT_POST_VISIBILITIES = ["instant", "end_of_event"] as const;
+export type EventWindowParticipantPostVisibility = (typeof EVENT_WINDOW_PARTICIPANT_POST_VISIBILITIES)[number];
 
 export type EventWindow = {
   id: string;
@@ -19,9 +30,12 @@ export type EventWindow = {
   acceptedPostCount: number;
   status: "scheduled" | "cancelled";
   computedStatus: EventWindowComputedStatus;
+  postingEligibility: EventWindowPostingEligibility;
+  participantPostVisibility: EventWindowParticipantPostVisibility;
   cancelledAt?: string | null;
   hasAttended: boolean;
   hasPosted: boolean;
+  isEligibleToPost: boolean;
   canPost: boolean;
   canViewPosts: boolean;
   remainingSlots: number;
@@ -68,6 +82,11 @@ export type EventWindowPayload = {
   endsAt: string;
   allowedContentTypes: EventWindowContentType[];
   maxPosts: number;
+  // Create-time only — the backend rejects these on an edit (PATCH), since
+  // changing them after posts exist would silently alter rights a
+  // participant already relied on when they posted.
+  postingEligibility: EventWindowPostingEligibility;
+  participantPostVisibility: EventWindowParticipantPostVisibility;
 };
 
 const getWindowFromResponse = (response: unknown): EventWindow => {
@@ -113,10 +132,12 @@ export const createEventWindow = async (
   payload: EventWindowPayload,
 ): Promise<EventWindow> => getWindowFromResponse(await api.post(`/events/${eventId}/windows`, payload));
 
+export type UpdateEventWindowPayload = Partial<Omit<EventWindowPayload, "postingEligibility" | "participantPostVisibility">>;
+
 export const updateEventWindow = async (
   eventId: string,
   windowId: string,
-  payload: Partial<EventWindowPayload>,
+  payload: UpdateEventWindowPayload,
 ): Promise<EventWindow> => getWindowFromResponse(
   await api.patch(`/events/${eventId}/windows/${windowId}`, payload),
 );
@@ -161,4 +182,44 @@ export const getEventWindowPosts = async (
     posts: posts.map(normalizePostMediaUrls),
     nextCursor: data?.nextCursor ?? null,
   };
+};
+
+// Navigation metadata only, never post content — see the backend's
+// listParticipatedEvents. The gallery screen independently re-verifies
+// access when it calls getEventWindowPosts; canViewPosts here is a UI hint
+// only (drives the locked/unlocked card state), never trusted as
+// authorization.
+export type ParticipatedWindow = {
+  id: string;
+  title?: string | null;
+  details?: string | null;
+  startsAt: string;
+  endsAt: string;
+  computedStatus: EventWindowComputedStatus;
+  participantPostVisibility: EventWindowParticipantPostVisibility;
+  canViewPosts: boolean;
+  lastParticipatedAt: string;
+};
+
+export type ParticipatedEvent = {
+  id: string;
+  name: string;
+  bannerImageKey?: string | null;
+  bannerImageDisplay?: EventImageDisplay | null;
+  scheduledAt?: string | null;
+  endAt?: string | null;
+  status: string;
+  participatedWindows: ParticipatedWindow[];
+  lastParticipatedAt: string;
+};
+
+export const getParticipatedEvents = async (limit = 20): Promise<ParticipatedEvent[]> => {
+  const response = await api.get("/events/windows/participated", { params: { limit } });
+  const events = (response as { data?: { data?: { events?: ParticipatedEvent[] } } })?.data?.data?.events;
+
+  if (!Array.isArray(events)) {
+    throw new Error("The participated events response was incomplete.");
+  }
+
+  return events;
 };

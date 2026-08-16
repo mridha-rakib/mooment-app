@@ -1,6 +1,6 @@
 import AboutTab from "@/components/eventTabs/AboutTab";
 import AccessTab from "@/components/eventTabs/AccessTab";
-import ChatTab from "@/components/eventTabs/ChatTab";
+import ChatTab, { type ChatTabRefreshHandle } from "@/components/eventTabs/ChatTab";
 // ProductTab hidden — preserved for future restoration
 // import ProductTab from "@/components/eventTabs/ProductTab";
 import HostEventWindowsTab from "@/components/eventTabs/HostEventWindowsTab";
@@ -77,6 +77,7 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    Keyboard,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -89,9 +90,11 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
+const CHAT_COMPOSER_KEYBOARD_GAP = 8;
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
 
@@ -493,6 +496,11 @@ const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
   router.replace("/(tabs)/home");
 };
 
+// Single source of truth for the posting-windows tab's label/identifier —
+// used as both the displayed tab text and the activeTab comparison key, so
+// renaming it never requires touching more than this one constant.
+const EVENT_WINDOW_TAB = "Window";
+
 const EventScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ eventId?: string; id?: string; mode?: string; source?: string }>();
@@ -548,7 +556,66 @@ const EventScreen = () => {
   const eventMediaWriteGenerationRef = useRef(0);
   const deletedEventMediaIdsRef = useRef(new Set<string>());
   const windowsRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
-  const chatRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
+  const chatRefreshRef = useRef<ChatTabRefreshHandle | null>(null);
+  const outerScrollRef = useRef<ScrollView>(null);
+  const outerScrollMetricsRef = useRef({
+    contentHeight: 0,
+    offsetY: 0,
+    viewportHeight: Dimensions.get("window").height,
+  });
+  const keyboardTopRef = useRef(Dimensions.get("window").height);
+  const keyboardVisibleRef = useRef(false);
+  const [chatKeyboardSpacerHeight, setChatKeyboardSpacerHeight] = useState(0);
+  const scrollChatComposerIntoView = useCallback((animated = true) => {
+    const chatHandle = chatRefreshRef.current;
+
+    if (!chatHandle) {
+      return;
+    }
+
+    chatHandle.measureComposerInWindow((_, composerY, __, composerHeight) => {
+      const composerBottom = composerY + composerHeight;
+      const visibleBottom = keyboardVisibleRef.current
+        ? keyboardTopRef.current - CHAT_COMPOSER_KEYBOARD_GAP
+        : outerScrollMetricsRef.current.viewportHeight;
+      const requiredDelta = composerBottom - visibleBottom;
+
+      if (requiredDelta <= 0) {
+        return;
+      }
+
+      outerScrollRef.current?.scrollTo({
+        y: outerScrollMetricsRef.current.offsetY + requiredDelta,
+        animated,
+      });
+    });
+  }, []);
+  const scheduleChatComposerReveal = useCallback((animated = true) => {
+    requestAnimationFrame(() => scrollChatComposerIntoView(animated));
+  }, [scrollChatComposerIntoView]);
+  const handleComposerFocus = useCallback(() => {
+    if (keyboardVisibleRef.current) {
+      scheduleChatComposerReveal(true);
+    }
+  }, [scheduleChatComposerReveal]);
+  const handleOuterScrollLayout = useCallback((event: LayoutChangeEvent) => {
+    outerScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+
+    if (keyboardVisibleRef.current) {
+      scheduleChatComposerReveal(false);
+    }
+  }, [scheduleChatComposerReveal]);
+  const handleOuterScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    outerScrollMetricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
+    outerScrollMetricsRef.current.viewportHeight = event.nativeEvent.layoutMeasurement.height;
+  }, []);
+  const handleOuterContentSizeChange = useCallback((_: number, contentHeight: number) => {
+    outerScrollMetricsRef.current.contentHeight = contentHeight;
+
+    if (keyboardVisibleRef.current) {
+      scheduleChatComposerReveal(false);
+    }
+  }, [scheduleChatComposerReveal]);
   const [pendingCategoryDestination, setPendingCategoryDestination] = useState<EventCategory | null>(null);
   const [isCategoryDestinationNavigating, setIsCategoryDestinationNavigating] = useState(false);
   const [localIsSaved, setLocalIsSaved] = useState(false);
@@ -573,6 +640,42 @@ const EventScreen = () => {
 
     return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "Chat") {
+      keyboardVisibleRef.current = false;
+      keyboardTopRef.current = Dimensions.get("window").height;
+      setChatKeyboardSpacerHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      keyboardVisibleRef.current = true;
+      keyboardTopRef.current =
+        event.endCoordinates.screenY > 0
+          ? event.endCoordinates.screenY
+          : Dimensions.get("window").height - event.endCoordinates.height;
+      setChatKeyboardSpacerHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      keyboardVisibleRef.current = false;
+      keyboardTopRef.current = Dimensions.get("window").height;
+      setChatKeyboardSpacerHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (chatKeyboardSpacerHeight > 0) {
+      scheduleChatComposerReveal(true);
+    }
+  }, [chatKeyboardSpacerHeight, scheduleChatComposerReveal]);
 
   const isEventOwner = Boolean(
     event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)),
@@ -613,7 +716,7 @@ const EventScreen = () => {
     eventEndMs > currentTimeMs,
   );
   const visibleTabs = useMemo(
-    () => ["About", "Access", "Mooments", "Chat"],
+    () => ["About", "Access", EVENT_WINDOW_TAB, "Chat"],
     [],
   );
 
@@ -753,7 +856,7 @@ const EventScreen = () => {
     try {
       const loadedEvent = await loadEventDetails();
 
-      if (activeTab === "Mooments") {
+      if (activeTab === EVENT_WINDOW_TAB) {
         await windowsRefreshRef.current?.refresh();
       } else if (activeTab === "Chat" && shouldRefreshChatForEvent(loadedEvent)) {
         await chatRefreshRef.current?.refresh();
@@ -1769,7 +1872,12 @@ const EventScreen = () => {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       {renderHeader()}
       <ScrollView
+        ref={outerScrollRef}
         showsVerticalScrollIndicator={false}
+        onLayout={handleOuterScrollLayout}
+        onScroll={handleOuterScroll}
+        onContentSizeChange={handleOuterContentSizeChange}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -1779,7 +1887,7 @@ const EventScreen = () => {
         }
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: (shouldRenderEventFooter ? footerHeight : 0) + 24 },
+          { paddingBottom: (shouldRenderEventFooter ? footerHeight : 0) + 24 + chatKeyboardSpacerHeight },
         ]}
       >
         <View style={styles.imageContainer}>
@@ -2030,7 +2138,7 @@ const EventScreen = () => {
               showRequestManagement={!isDraftPreview}
             />
           )}
-          {activeTab === "Mooments" && eventId && (
+          {activeTab === EVENT_WINDOW_TAB && eventId && (
             isEventOwner ? (
               <HostEventWindowsTab
                 ref={windowsRefreshRef}
@@ -2052,6 +2160,7 @@ const EventScreen = () => {
               endAt={event?.endAt ?? null}
               eventStatus={event?.status}
               isDraftPreviewDisabled={isDraftPreview}
+              onComposerFocus={handleComposerFocus}
             />
           )}
           {/* ProductTab hidden — preserved for future restoration

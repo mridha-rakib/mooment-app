@@ -152,39 +152,68 @@ export default function MessagesScreen() {
   const activeDirectConversationId = useChatUnreadStore((state) => state.activeDirectConversationId);
   const clearDirectUnread = useChatUnreadStore((state) => state.clearDirectUnread);
   const setDirectUnreadCountsFromConversations = useChatUnreadStore((state) => state.setDirectUnreadCountsFromConversations);
+  const isDmsMountedRef = useRef(true);
+  const dmRealtimeRevisionRef = useRef(0);
+  const dmLoadPromiseRef = useRef<Promise<void> | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      let isMounted = true;
+  useEffect(() => {
+    isDmsMountedRef.current = true;
+    return () => {
+      isDmsMountedRef.current = false;
+    };
+  }, []);
 
-      const loadDirectMessages = async () => {
-        setIsDmsLoading(true);
-        setDmsError(null);
+  const loadDirectMessages = useCallback((options: { showLoading?: boolean } = {}): Promise<void> => {
+    if (dmLoadPromiseRef.current) {
+      return dmLoadPromiseRef.current;
+    }
 
-        try {
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) {
+      setIsDmsLoading(true);
+    }
+    setDmsError(null);
+
+    const loadPromise = (async () => {
+      try {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const realtimeRevisionAtStart = dmRealtimeRevisionRef.current;
           const dms = await getDirectMessageConversations();
 
-          if (isMounted) {
+          if (realtimeRevisionAtStart !== dmRealtimeRevisionRef.current) {
+            continue;
+          }
+
+          if (isDmsMountedRef.current) {
             setDirectUnreadCountsFromConversations(dms);
             setDmConversations(dms.map(toConversationData));
           }
-        } catch {
-          if (isMounted) {
-            setDmsError('Unable to load DMs.');
-          }
-        } finally {
-          if (isMounted) {
-            setIsDmsLoading(false);
-          }
+          return;
         }
-      };
+      } catch {
+        if (isDmsMountedRef.current) {
+          setDmsError('Unable to load DMs.');
+        }
+      } finally {
+        if (showLoading && isDmsMountedRef.current) {
+          setIsDmsLoading(false);
+        }
+      }
+    })();
 
+    dmLoadPromiseRef.current = loadPromise;
+    void loadPromise.finally(() => {
+      if (dmLoadPromiseRef.current === loadPromise) {
+        dmLoadPromiseRef.current = null;
+      }
+    });
+    return loadPromise;
+  }, [setDirectUnreadCountsFromConversations]);
+
+  useFocusEffect(
+    useCallback(() => {
       void loadDirectMessages();
-
-      return () => {
-        isMounted = false;
-      };
-    }, [setDirectUnreadCountsFromConversations]),
+    }, [loadDirectMessages]),
   );
 
   const isGroupsMountedRef = useRef(true);
@@ -245,6 +274,7 @@ export default function MessagesScreen() {
         );
       },
       onDirectMessage: (message) => {
+        dmRealtimeRevisionRef.current += 1;
         const currentUserId = currentUserIdRef.current;
         const partnerId =
           message.senderId === currentUserId ? message.recipientId : message.senderId;
@@ -280,6 +310,7 @@ export default function MessagesScreen() {
         });
       },
       onReconnected: () => {
+        void loadDirectMessages({ showLoading: false });
         void loadGroups();
       },
     });
@@ -287,7 +318,7 @@ export default function MessagesScreen() {
     return () => {
       unsubscribe();
     };
-  }, [accessToken, loadGroups]);
+  }, [accessToken, loadDirectMessages, loadGroups]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -516,6 +547,7 @@ export default function MessagesScreen() {
       {/* Segmented Control */}
       <View style={{ marginBottom: 16 }}>
         <SegmentedControl
+          flat
           options={['DMs', 'Groups']}
           selectedOption={subTab}
           onSelect={(opt) => setSubTab(opt as any)}

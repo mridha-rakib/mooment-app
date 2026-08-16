@@ -12,7 +12,8 @@ import type { HomeFeedFilters } from "@/components/home/FilterModal";
 import MapContainer from "@/components/home/MapContainer";
 import EventFeedCard from "@/components/home/EventFeedCard";
 import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
-import StoryCarousel, { StoryData } from "@/components/home/StoryCarousel";
+import StoryCarousel, { HomeTabsRow, StoryData } from "@/components/home/StoryCarousel";
+import ParticipatedWindowsList from "@/components/home/ParticipatedWindowsList";
 import CommentsModal from "@/components/post/CommentsModal";
 import FeedPost, { PostData } from "@/components/post/FeedPost";
 import ShareModal from "@/components/post/ShareModal";
@@ -354,6 +355,10 @@ export default function HomeFeed() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedType, setSelectedType] = useState('Feed');
   const [feedAudience, setFeedAudience] = useState<FeedAudience>("discover");
+  // Independent of feedAudience — "windows" never touches the Discover/
+  // Friends feed state or its data loading below. Discover/Friends behavior
+  // is unchanged; this is purely an additional, additive tab.
+  const [homeAudience, setHomeAudience] = useState<FeedAudience | "windows">("discover");
   const [stories, setStories] = useState<StoryData[]>([
     { id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false },
   ]);
@@ -565,6 +570,16 @@ export default function HomeFeed() {
     setFeedAudience(audience);
     void loadFeed(audience);
   }, [beginAudienceTransition, feedAudience, loadFeed]);
+
+  // Discover/Friends still flow through the exact handleAudienceChange above
+  // (unchanged) — "windows" only ever changes homeAudience, never touching
+  // feedAudience/loadFeed/the Moment+Event+Repost feed state at all.
+  const handleHomeAudienceChange = useCallback((tab: FeedAudience | "windows") => {
+    setHomeAudience(tab);
+    if (tab !== "windows") {
+      handleAudienceChange(tab);
+    }
+  }, [handleAudienceChange]);
 
   const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
     const nextNearbyKey = getEventLocationFilterKey(filters.nearby);
@@ -951,6 +966,18 @@ export default function HomeFeed() {
         />
 
         {selectedType === 'Feed' ? (
+          <HomeTabsRow
+            activeTab={feedAudience}
+            onActiveTabChange={handleHomeAudienceChange}
+            showWindowsTab
+            isWindowsActive={homeAudience === 'windows'}
+            onWindowsPress={() => handleHomeAudienceChange('windows')}
+          />
+        ) : null}
+
+        {homeAudience === 'windows' && selectedType === 'Feed' ? (
+          <ParticipatedWindowsList />
+        ) : selectedType === 'Feed' ? (
           <FlatList
             ref={feedScrollRef}
             data={feedItems}
@@ -976,7 +1003,6 @@ export default function HomeFeed() {
                   stories={stories}
                   friendStories={friendStories}
                   activeTab={feedAudience}
-                  onActiveTabChange={handleAudienceChange}
                 />
                 {showEventFilterSection ? (
                   <View style={styles.nearbyEventsSection}>

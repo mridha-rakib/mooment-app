@@ -132,15 +132,30 @@ const getMediaExtension = (contentType: string, type: MediaContentType) => {
   return type === "image" ? "jpg" : type === "video" ? "mp4" : "mp3";
 };
 
-const getWindowMessage = (window: EventWindow, eventEnded: boolean) => {
-  if (window.hasPosted && eventEnded) return "Private gallery unlocked.";
-  if (window.hasPosted) return "Post submitted. Gallery unlocks after the event ends.";
-  if (!window.hasAttended) return "Check in at event to unlock posting.";
+const getWindowMessage = (window: EventWindow) => {
+  if (window.hasPosted) {
+    return window.canViewPosts ? "Private gallery unlocked." : "Post submitted. Gallery unlocks after the event ends.";
+  }
+  if (!window.isEligibleToPost) {
+    return window.postingEligibility === "ticket_holders"
+      ? "A valid event ticket is required to post in this window."
+      : "Check in at event to unlock posting.";
+  }
   if (window.computedStatus === "open" && window.remainingSlots > 0) return "Post to unlock this window.";
   if (window.computedStatus === "scheduled") return "Posting opens when this window starts.";
   if (window.computedStatus === "cancelled") return "This window was cancelled.";
   if (window.remainingSlots === 0) return "This window is full.";
   return "This window is closed.";
+};
+
+const POSTING_ELIGIBILITY_SUMMARY: Record<EventWindow["postingEligibility"], string> = {
+  ticket_holders: "Ticket holders can post",
+  checked_in_attendees: "Checked-in attendees can post",
+};
+
+const PARTICIPANT_VISIBILITY_SUMMARY: Record<EventWindow["participantPostVisibility"], string> = {
+  instant: "Gallery available after you post",
+  end_of_event: "Gallery available after the event ends",
 };
 
 // Event-window gallery video playback is temporarily disabled
@@ -195,7 +210,6 @@ function GalleryAudio({ uri, headers, durationSeconds }: { uri: string; headers?
 
 const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, AttendeeEventWindowsTabProps>(({
   eventId,
-  eventStatus,
 }, ref) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -235,7 +249,6 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     () => accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     [accessToken],
   );
-  const eventEnded = eventStatus === "completed";
 
   const loadWindows = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
@@ -302,8 +315,13 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
   };
 
   const openPostForm = (window: EventWindow) => {
-    if (!window.hasAttended) {
-      Alert.alert("Check-in required", "Check in at event to unlock posting.");
+    if (!window.isEligibleToPost) {
+      Alert.alert(
+        window.postingEligibility === "ticket_holders" ? "Ticket required" : "Check-in required",
+        window.postingEligibility === "ticket_holders"
+          ? "You need a valid ticket for this event to post in this window."
+          : "Check in at event to unlock posting.",
+      );
       return;
     }
     if (!window.canPost) return;
@@ -371,7 +389,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
   };
 
   const loadGallery = useCallback(async (window: EventWindow, cursor: string | null = null) => {
-    if (!eventEnded || !window.canViewPosts) return;
+    if (!window.canViewPosts) return;
     setGalleryLoadingId(window.id);
     setGalleryErrors((current) => ({ ...current, [window.id]: "" }));
     try {
@@ -389,10 +407,10 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     } finally {
       setGalleryLoadingId(null);
     }
-  }, [eventEnded, eventId]);
+  }, [eventId]);
 
   const toggleGallery = (window: EventWindow) => {
-    if (!eventEnded || !window.canViewPosts) return;
+    if (!window.canViewPosts) return;
     if (expandedWindowId === window.id) {
       setExpandedWindowId(null);
       return;
@@ -496,7 +514,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     const isExpanded = expandedWindowId === window.id;
     const galleryPosts = postsByWindow[window.id];
     const nextCursor = galleryCursors[window.id];
-    const canOpenGallery = eventEnded && window.canViewPosts;
+    const canOpenGallery = window.canViewPosts;
 
     return (
       <View key={window.id} style={[styles.windowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -522,9 +540,14 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
         <View style={[styles.capacityRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.capacityText, { color: colors.textSecondary }]}>{window.remainingSlots} of {window.maxPosts} slots remaining</Text>
         </View>
+        <View style={styles.policySummaryRow}>
+          <Text style={[styles.policySummaryText, { color: colors.textSecondary }]}>{POSTING_ELIGIBILITY_SUMMARY[window.postingEligibility]}</Text>
+          <Text style={[styles.policySummaryDot, { color: colors.textSecondary }]}>·</Text>
+          <Text style={[styles.policySummaryText, { color: colors.textSecondary }]}>{PARTICIPANT_VISIBILITY_SUMMARY[window.participantPostVisibility]}</Text>
+        </View>
         <View style={[styles.windowMessage, { backgroundColor: isDark ? "#191919" : "#F3F4F6" }]}>
-          <Feather name={window.hasPosted ? "unlock" : window.hasAttended ? "lock" : "map-pin"} size={16} color={window.hasPosted ? colors.success : colors.textSecondary} />
-          <Text style={[styles.windowMessageText, { color: colors.textSecondary }]}>{getWindowMessage(window, eventEnded)}</Text>
+          <Feather name={window.hasPosted ? "unlock" : window.isEligibleToPost ? "lock" : "map-pin"} size={16} color={window.hasPosted ? colors.success : colors.textSecondary} />
+          <Text style={[styles.windowMessageText, { color: colors.textSecondary }]}>{getWindowMessage(window)}</Text>
         </View>
 
         {window.canPost ? (
@@ -710,6 +733,9 @@ const styles = StyleSheet.create({
   typeText: { fontSize: 12, fontWeight: "600" },
   capacityRow: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 13 },
   capacityText: { fontSize: 12, fontWeight: "600" },
+  policySummaryRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  policySummaryText: { fontSize: 11.5 },
+  policySummaryDot: { fontSize: 11.5 },
   windowMessage: { flexDirection: "row", alignItems: "center", gap: 8, padding: 11, borderRadius: 8, marginTop: 12 },
   windowMessageText: { flex: 1, fontSize: 13, lineHeight: 18 },
   primaryAction: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 8, marginTop: 12 },

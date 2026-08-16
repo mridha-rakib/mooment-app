@@ -15,6 +15,7 @@ import {
   type StoryViewerTab,
 } from "@/lib/storyViewerSession";
 import { getStorageFileUrl } from "@/lib/storage";
+import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -183,12 +184,14 @@ function StoryCarousel({
   stories,
   friendStories = [],
   activeTab,
-  onActiveTabChange,
 }: {
   stories: StoryData[];
   friendStories?: StoryData[];
-  activeTab: StoryViewerTab;
-  onActiveTabChange: (tab: StoryViewerTab) => void;
+  // The Discover/Friends/Windows selector pills live in the sibling
+  // `HomeTabsRow` component below (rendered once by the Home screen, above
+  // both this carousel and the Windows list) — `activeTab` is only used
+  // here to pick which story set to display.
+  activeTab: StoryViewerTab | null;
 }) {
   const router = useRouter();
   const currentUser = useAuthStore((state) => state.user);
@@ -201,7 +204,7 @@ function StoryCarousel({
   const openAddStoryTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const displayedStories = activeTab === "discover" ? stories : friendStories;
+  const displayedStories = activeTab === "discover" ? stories : activeTab === "friends" ? friendStories : [];
   const resetOpeningAddStory = React.useCallback(() => {
     isOpeningAddStoryRef.current = false;
 
@@ -289,7 +292,10 @@ function StoryCarousel({
             ]
           : []);
       const sessionId = createStoryViewerSession({
-        activeTab,
+        // Unreachable with activeTab === null in practice — a null activeTab
+        // renders zero story tiles (see displayedStories), so this handler
+        // never fires. The fallback only satisfies the non-nullable session type.
+        activeTab: activeTab ?? "discover",
         discoverGroups: getGroups(stories),
         friendGroups: getGroups(friendStories),
       });
@@ -315,24 +321,6 @@ function StoryCarousel({
 
   return (
     <View style={styles.storiesContainer}>
-      <View style={styles.tabs}>
-        {(["discover", "friends"] as const).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => onActiveTabChange(tab)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab && styles.activeTabText,
-              ]}
-            >
-              {tab === "discover" ? "Discover" : "Friends"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -511,6 +499,81 @@ function StoryCarousel({
 
 export default React.memo(StoryCarousel);
 
+// The Discover/Friends/Windows selector row — kept as its own component so
+// Home can render it once, above whichever content mode is active
+// (the story-driven Feed vs. the participated-Windows list), instead of it
+// living inside StoryCarousel and disappearing whenever the Feed itself is
+// swapped out for the Windows list.
+export function HomeTabsRow({
+  activeTab,
+  onActiveTabChange,
+  showWindowsTab = false,
+  isWindowsActive = false,
+  onWindowsPress,
+}: {
+  activeTab: StoryViewerTab | null;
+  onActiveTabChange: (tab: StoryViewerTab) => void;
+  showWindowsTab?: boolean;
+  isWindowsActive?: boolean;
+  onWindowsPress?: () => void;
+}) {
+  const { isDark } = useTheme();
+  // Dark mode keeps the exact pre-existing pixel values (approved, frozen).
+  // Light mode swaps the near-black inactive chip for the app's existing
+  // light-mode secondary surface/text tokens instead of a dark chip sitting
+  // on a light page. The active pill stays the shared brand purple used
+  // elsewhere in Stories in both themes — it already reads fine in light
+  // mode, so it's left untouched.
+  const inactiveBg = isDark ? "#23232D" : "#F5F5F7";
+  const inactiveText = isDark ? "#9B9BA8" : "#8E8E9B";
+
+  return (
+    <View style={styles.tabs}>
+      {(["discover", "friends"] as const).map((tab) => (
+        <TouchableOpacity
+          key={tab}
+          style={[
+            styles.tab,
+            { backgroundColor: inactiveBg },
+            activeTab === tab && styles.activeTab,
+          ]}
+          onPress={() => onActiveTabChange(tab)}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: inactiveText },
+              activeTab === tab && styles.activeTabText,
+            ]}
+          >
+            {tab === "discover" ? "Discover" : "Friends"}
+          </Text>
+        </TouchableOpacity>
+      ))}
+      {showWindowsTab ? (
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            { backgroundColor: inactiveBg },
+            isWindowsActive && styles.activeTab,
+          ]}
+          onPress={onWindowsPress}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: inactiveText },
+              isWindowsActive && styles.activeTabText,
+            ]}
+          >
+            Windows
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   storiesContainer: {
     marginTop: 10,
@@ -600,16 +663,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 20,
+    marginTop: 10,
     marginBottom: 12,
   },
   tab: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 16,
-    backgroundColor: "#23232D",
   },
   activeTab: { backgroundColor: "#AC86D4" },
-  tabText: { color: "#9B9BA8", fontSize: 12, fontWeight: "700" },
+  tabText: { fontSize: 12, fontWeight: "700" },
   activeTabText: { color: "#FFFFFF" },
   textThumbnail: {
     alignItems: "center",

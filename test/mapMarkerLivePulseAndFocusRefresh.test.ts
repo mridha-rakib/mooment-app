@@ -215,3 +215,60 @@ test("marker press and event-detail navigation are untouched", () => {
   assert.match(mapScreenSource, /router\.push\(\{\s*pathname:\s*"\/event-screen\/event",\s*params:\s*\{\s*eventId:\s*selectedMarker\.id,\s*source:\s*"map"\s*\},\s*\}\);/);
   assert.match(mapScreenSource, /const handleMarkerPress = React\.useCallback\(\(marker: MapMarkerData\) => \{/);
 });
+
+// ── G. Live ripple rings + LIVE badge (additive visual enhancement) ────────
+
+test("a live marker renders both ripple rings, gated on isLive", () => {
+  assert.match(mapScreenSource, /\{isLive && \(\s*<>\s*<Animated\.View[\s\S]*?styles\.livePulseRingOuter/);
+  assert.match(mapScreenSource, /styles\.livePulseRingInner/);
+});
+
+test("both ripple rings derive from the single shared livePulseProgress value (no second driver)", () => {
+  assert.match(
+    mapScreenSource,
+    /const animatedLivePulseRingOuterStyle = useAnimatedStyle\(\(\) => \{[\s\S]*?livePulseProgress\.value/,
+  );
+  assert.match(
+    mapScreenSource,
+    /const animatedLivePulseRingInnerStyle = useAnimatedStyle\(\(\) => \{[\s\S]*?1 - livePulseProgress\.value/,
+  );
+  assert.equal(countOccurrences(mapScreenSource, /useSharedValue\(/g), 1);
+});
+
+test("ripple rings are transparent-centered (border-only), not filled blobs", () => {
+  assert.match(mapScreenSource, /livePulseRingOuter:\s*\{[\s\S]*?borderWidth:\s*2\.5,/);
+  assert.match(mapScreenSource, /livePulseRingInner:\s*\{[\s\S]*?borderWidth:\s*2\.5,/);
+  assert.doesNotMatch(mapScreenSource, /livePulseRingOuter:\s*\{[^}]*backgroundColor/);
+  assert.doesNotMatch(mapScreenSource, /livePulseRingInner:\s*\{[^}]*backgroundColor/);
+});
+
+test("a live marker renders a marker-relative LIVE badge; a non-live marker does not", () => {
+  assert.match(mapScreenSource, /\{isLive && \(\s*<View pointerEvents="none" style=\{styles\.liveBadge\}>/);
+  assert.match(mapScreenSource, /<Text style=\{styles\.liveBadgeText\}>LIVE<\/Text>/);
+});
+
+test("the LIVE badge is positioned relative to the marker container, not a screen/device coordinate", () => {
+  assert.match(mapScreenSource, /liveBadge:\s*\{\s*position:\s*"absolute",/);
+  assert.doesNotMatch(mapScreenSource, /liveBadge:[\s\S]*?Dimensions\.get/);
+});
+
+test("the LIVE badge reuses the existing danger color token instead of a new hardcoded hex", () => {
+  assert.match(mapScreenSource, /backgroundColor:\s*colors\.danger/);
+});
+
+test("no JS timer or animation loop was introduced by the ring/badge enhancement", () => {
+  assert.doesNotMatch(mapScreenSource, /setInterval/);
+  assert.doesNotMatch(mapScreenSource, /Animated\.loop/);
+});
+
+test("ring and badge rendering live inside the per-marker MapMarker component, so every live marker gets them independently (not tied to selectedMarker)", () => {
+  const markerComponentMatch = mapScreenSource.match(
+    /const MapMarker = React\.memo\(\(\{[\s\S]*?\n\}\);/,
+  );
+  assert.ok(markerComponentMatch, "MapMarker component body not found");
+  const markerComponentBody = markerComponentMatch[0];
+
+  assert.match(markerComponentBody, /styles\.livePulseRingOuter/);
+  assert.match(markerComponentBody, /styles\.liveBadge/);
+  assert.doesNotMatch(markerComponentBody, /selectedMarker/);
+});

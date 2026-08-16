@@ -102,6 +102,7 @@ type AuthState = {
   completedProfileTypes: ('personal' | 'business')[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  isLoggingOut: boolean;
   isRestoring: boolean;
   hasRestored: boolean;
   error: string | null;
@@ -213,6 +214,17 @@ const clearStoredAuthState = async () => {
   ]);
 };
 
+let authPersistenceQueue: Promise<void> = Promise.resolve();
+
+const enqueueAuthPersistence = <T>(operation: () => Promise<T>): Promise<T> => {
+  const result = authPersistenceQueue.then(operation, operation);
+  authPersistenceQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+};
+
 const readCompletedProfileTypes = async (): Promise<('personal' | 'business')[]> => {
   const stored = await readStoredValue(COMPLETED_PROFILE_TYPES_KEY);
   if (!stored) return [];
@@ -273,6 +285,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   completedProfileTypes: [],
   isAuthenticated: false,
   isLoading: false,
+  isLoggingOut: false,
   isRestoring: true,
   hasRestored: false,
   error: null,
@@ -580,7 +593,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, isLoggingOut: true });
 
     try {
       if (get().accessToken) {
@@ -610,7 +623,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } finally {
       await setStoredPendingVerificationEmail(null);
       await get().clearAuthState();
-      set({ pendingVerificationEmail: null, isLoading: false, isRestoring: false, hasRestored: true });
+      set({
+        pendingVerificationEmail: null,
+        isLoading: false,
+        isLoggingOut: false,
+        isRestoring: false,
+        hasRestored: true,
+      });
     }
   },
 
@@ -640,6 +659,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   refreshAuthSession: async () => {
+    if (get().isLoggingOut) {
+      throw new Error("Authentication recovery was cancelled during logout.");
+    }
+
     const storedRefreshToken = get().refreshToken ?? (await readStoredValue(AUTH_REFRESH_TOKEN_KEY));
 
     if (!storedRefreshToken) {
@@ -661,7 +684,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw new Error("The refreshed session response was incomplete.");
     }
 
-    await persistAuthState(user, { accessToken, refreshToken });
+    const currentAuthState = get();
+    if (currentAuthState.isLoggingOut || currentAuthState.refreshToken !== storedRefreshToken) {
+      throw new Error("Authentication recovery was cancelled because the session changed.");
+    }
+
+    await enqueueAuthPersistence(() => persistAuthState(user, { accessToken, refreshToken }));
+
+    const latestAuthState = get();
+    if (latestAuthState.isLoggingOut || latestAuthState.refreshToken !== storedRefreshToken) {
+      throw new Error("Authentication recovery was cancelled because the session changed.");
+    }
+
     set({
       user,
       accessToken,
@@ -750,13 +784,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuthState: async () => {
-    await clearStoredAuthState();
+    await enqueueAuthPersistence(clearStoredAuthState);
     set({
       user: null,
       accessToken: null,
       refreshToken: null,
       completedProfileTypes: [],
       isAuthenticated: false,
+      isLoggingOut: false,
       error: null,
       authErrorCode: null,
     });

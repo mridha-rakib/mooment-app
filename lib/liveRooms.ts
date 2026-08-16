@@ -33,6 +33,7 @@ export type LiveRoomMessage = {
   senderName: string;
   senderAvatarUrl?: string | null;
   text: string;
+  clientMessageId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
