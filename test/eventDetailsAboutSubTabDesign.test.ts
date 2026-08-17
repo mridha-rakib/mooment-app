@@ -54,6 +54,11 @@ test("About sub-tab keeps its existing options, icons, state, and content split"
 });
 
 test("About sub-tab icon colors now match Access selected and inactive colors", () => {
-  assert.match(accessSegmentedControl, /color=\{isSelected \? "#FFFFFF" : "rgba\(255, 255, 255, 0\.4\)"\}/);
-  assert.match(aboutSegmentedControl, /color=\{isSelected \? "#FFFFFF" : "rgba\(255, 255, 255, 0\.4\)"\}/);
+  assert.match(accessSegmentedControl, /color=\{isSelected \? colors\.text : colors\.textSecondary\}/);
+  assert.match(aboutSegmentedControl, /color=\{isSelected \? colors\.text : colors\.textSecondary\}/);
+});
+
+test("About and Access sub-tab icons are theme-aware, not hardcoded white", () => {
+  assert.doesNotMatch(aboutSegmentedControl, /color=\{isSelected \? "#FFFFFF"/);
+  assert.doesNotMatch(accessSegmentedControl, /color=\{isSelected \? "#FFFFFF"/);
 });

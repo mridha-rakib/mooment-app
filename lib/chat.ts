@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { PaginationMeta } from "@/lib/users";
 
 export type DirectMessageConversationResponse = {
   id: string;
@@ -189,4 +190,86 @@ export const sendGroupMessage = async (
   }
 
   return message as GroupMessageResponse;
+};
+
+// ── Message-only block (Chat-only restriction) ──────────────────────────
+// Entirely separate from the Full/Profile block in @/lib/users.ts
+// (blockUser/unblockUser/getBlockedUsers, which hit /users/:id/block and
+// /users/me/blocked-users) — these hit the chat module's own
+// /chat/dms/:friendId/message-block routes and manage a completely
+// different, chat-only restriction. Do not merge these two.
+
+export type MessageBlockStatusResponse = {
+  userId: string;
+  isMessageBlocked: boolean;
+};
+
+export type MessageBlockedUserResponse = {
+  id: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
+  blockedAt: string;
+};
+
+// Combined directional state for a single DM pair, in one request — see
+// xenog-api chat.service.ts's getDirectMessageRelationship for why this
+// lives on a chat-specific endpoint rather than extending GET /users/:id
+// (avoids a user-module -> chat-module circular dependency).
+export type DirectMessageRelationshipResponse = {
+  fullBlockedByMe: boolean;
+  fullBlockedMe: boolean;
+  messageBlockedByMe: boolean;
+  messageBlockedMe: boolean;
+  canMessage: boolean;
+};
+
+const parseMessageBlockStatus = (payload: unknown, fallbackUserId: string): MessageBlockStatusResponse => {
+  const block = payload as Partial<MessageBlockStatusResponse> | undefined;
+
+  if (typeof block?.isMessageBlocked !== "boolean") {
+    throw new Error("The message block response was incomplete.");
+  }
+
+  return {
+    userId: typeof block.userId === "string" ? block.userId : fallbackUserId,
+    isMessageBlocked: block.isMessageBlocked,
+  };
+};
+
+export const blockMessages = async (friendId: string): Promise<MessageBlockStatusResponse> => {
+  const response = await api.post(`/chat/dms/${encodeURIComponent(friendId)}/message-block`);
+  return parseMessageBlockStatus(response.data?.data?.block, friendId);
+};
+
+export const unblockMessages = async (friendId: string): Promise<MessageBlockStatusResponse> => {
+  const response = await api.delete(`/chat/dms/${encodeURIComponent(friendId)}/message-block`);
+  return parseMessageBlockStatus(response.data?.data?.block, friendId);
+};
+
+export const getMessageBlockedUsers = async (
+  page = 1,
+  limit = 30,
+): Promise<{ users: MessageBlockedUserResponse[]; pagination?: PaginationMeta }> => {
+  const response = await api.get("/chat/dms/message-blocked", {
+    params: { page, limit },
+  });
+  const users = response.data?.data?.users;
+
+  return {
+    users: Array.isArray(users) ? (users as MessageBlockedUserResponse[]) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
+};
+
+export const getDirectMessageRelationship = async (friendId: string): Promise<DirectMessageRelationshipResponse> => {
+  const response = await api.get(`/chat/dms/${encodeURIComponent(friendId)}/relationship`);
+  const relationship = response.data?.data?.relationship;
+
+  if (!relationship) {
+    throw new Error("The relationship response was incomplete.");
+  }
+
+  return relationship as DirectMessageRelationshipResponse;
 };

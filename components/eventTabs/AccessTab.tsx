@@ -1065,7 +1065,7 @@ const AccessTab = ({
                     : "gift-outline"
             }
             size={20}
-            color={isSelected ? "#FFFFFF" : "rgba(255, 255, 255, 0.4)"}
+            color={isSelected ? colors.text : colors.textSecondary}
           />
         )}
       />

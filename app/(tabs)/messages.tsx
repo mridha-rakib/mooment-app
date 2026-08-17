@@ -4,8 +4,9 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import {
     useTheme
 } from '@/hooks/useTheme';
-import type { DirectMessageConversationResponse, GroupConversationResponse } from '@/lib/chat';
-import { getDirectMessageConversations, getGroupConversations } from '@/lib/chat';
+import type { DirectMessageConversationResponse, GroupConversationResponse, MessageBlockedUserResponse } from '@/lib/chat';
+import { getDirectMessageConversations, getGroupConversations, getMessageBlockedUsers, unblockMessages } from '@/lib/chat';
+import { getAuthErrorMessage } from '@/lib/authErrors';
 import { subscribe as subscribeRealtime } from '@/lib/socketClient';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatUnreadStore } from '@/stores/chatUnreadStore';
@@ -17,11 +18,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, {
     useCallback,
     useEffect,
+    useMemo,
     useRef,
     useState
 } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Dimensions,
     FlatList,
     RefreshControl,
@@ -250,6 +253,69 @@ export default function MessagesScreen() {
       void loadGroups();
     }, [loadGroups]),
   );
+
+  // Chat -> DMs -> Blocked now means MESSAGE-blocked users (users I've
+  // message-blocked from this Chat menu) — a completely separate dataset
+  // from dmConversations, which only ever contains current mutual friends
+  // (message-blocking never touches the follow relationship, so a
+  // message-blocked user stays out of that friend-conversation list
+  // regardless). Full/Profile-blocked users belong to Profile's own
+  // "Blocked Accounts" screen (GET /users/me/blocked-users), not here.
+  const [messageBlockedUsers, setMessageBlockedUsers] = useState<MessageBlockedUserResponse[]>([]);
+  const [isMessageBlockedLoading, setIsMessageBlockedLoading] = useState(false);
+  const [messageBlockedError, setMessageBlockedError] = useState<string | null>(null);
+  const [pendingMessageUnblockIds, setPendingMessageUnblockIds] = useState<string[]>([]);
+  const pendingMessageUnblockIdSet = useMemo(() => new Set(pendingMessageUnblockIds), [pendingMessageUnblockIds]);
+  const isBlockedDmView = subTab === 'DMs' && topTab === 'Blocked';
+
+  const loadMessageBlockedUsers = useCallback(async () => {
+    setIsMessageBlockedLoading(true);
+    setMessageBlockedError(null);
+    try {
+      const result = await getMessageBlockedUsers();
+      setMessageBlockedUsers(result.users);
+    } catch (error) {
+      setMessageBlockedUsers([]);
+      setMessageBlockedError(getAuthErrorMessage(error, 'Unable to load blocked users.'));
+    } finally {
+      setIsMessageBlockedLoading(false);
+    }
+  }, []);
+
+  // Refetch whenever the user switches onto the Blocked/DMs combination
+  // (topTab/subTab change while already focused)...
+  useEffect(() => {
+    if (isBlockedDmView) {
+      void loadMessageBlockedUsers();
+    }
+  }, [isBlockedDmView, loadMessageBlockedUsers]);
+
+  // ...and whenever the screen regains focus while already on that
+  // combination (e.g. returning from Unblock Messages in an open
+  // conversation) — Expo Router doesn't remount on focus, so the effect
+  // above alone wouldn't re-run without a topTab/subTab change.
+  useFocusEffect(
+    useCallback(() => {
+      if (isBlockedDmView) {
+        void loadMessageBlockedUsers();
+      }
+    }, [isBlockedDmView, loadMessageBlockedUsers]),
+  );
+
+  const handleUnblockMessages = async (user: MessageBlockedUserResponse) => {
+    if (pendingMessageUnblockIdSet.has(user.id)) return;
+
+    setPendingMessageUnblockIds((current) => [...current, user.id]);
+
+    try {
+      await unblockMessages(user.id);
+      setMessageBlockedUsers((current) => current.filter((item) => item.id !== user.id));
+    } catch (error) {
+      Alert.alert('Unable to unblock', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setPendingMessageUnblockIds((current) => current.filter((id) => id !== user.id));
+    }
+  };
 
   useEffect(() => {
     currentUserIdRef.current = currentUser?.id;
@@ -493,6 +559,54 @@ export default function MessagesScreen() {
     </TouchableOpacity>
   );
 
+  const renderBlockedItem = ({ item }: { item: MessageBlockedUserResponse }) => {
+    const isPending = pendingMessageUnblockIdSet.has(item.id);
+
+    return (
+      <View style={[styles.blockedRow, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          style={styles.blockedRowClickable}
+          activeOpacity={0.7}
+          onPress={() => handleOpenConversation({
+            id: item.id,
+            name: item.name,
+            avatar: item.avatarUrl ?? null,
+            lastMessage: '',
+            time: '',
+            unread: 0,
+            isOnline: false,
+            isGroup: false,
+          })}
+        >
+          <UserAvatar uri={item.avatarUrl} name={item.name} size={40} style={styles.avatar} />
+          <View style={styles.blockedRowInfo}>
+            <Text style={[styles.convoName, !isDark && { color: colors.text }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.unblockMessagesBtn,
+            { borderColor: isDark ? '#AC86D4' : colors.primary },
+            isPending && styles.disabledBtn,
+          ]}
+          activeOpacity={0.8}
+          disabled={isPending}
+          onPress={() => handleUnblockMessages(item)}
+        >
+          {isPending ? (
+            <ActivityIndicator size="small" color={isDark ? '#AC86D4' : colors.primary} />
+          ) : (
+            <Text style={[styles.unblockMessagesBtnText, { color: isDark ? '#AC86D4' : colors.primary }]}>
+              Unblock
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderRoomItem = ({ item }: { item: typeof MOCK_ROOMS[0] }) => (
     <TouchableOpacity
       style={styles.roomCard}
@@ -632,6 +746,37 @@ export default function MessagesScreen() {
 
 
       {/* Lists */}
+      {isBlockedDmView ? (
+        <FlatList
+          key="message-blocked-list"
+          data={messageBlockedUsers}
+          keyExtractor={item => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isMessageBlockedLoading}
+              onRefresh={() => void loadMessageBlockedUsers()}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              {isMessageBlockedLoading ? (
+                <ActivityIndicator color={colors.textSecondary} />
+              ) : (
+                <>
+                  <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.border} />
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    {messageBlockedError ?? 'No blocked users'}
+                  </Text>
+                </>
+              )}
+            </View>
+          }
+          renderItem={renderBlockedItem}
+        />
+      ) : (
       <FlatList
         key="conversations-list"
         data={filtered}
@@ -663,6 +808,7 @@ export default function MessagesScreen() {
         }
         renderItem={(props) => subTab === 'Groups' ? renderGroupItem(props) : renderConvoItem(props)}
       />
+      )}
       {/* Rooms grid hidden — preserved for future restoration
       {subTab === 'Rooms' && (
         <FlatList
@@ -733,6 +879,46 @@ const styles = StyleSheet.create({
   groupAv1: { width: 34, height: 34, borderRadius: 17, position: 'absolute', top: 0, left: 0, borderWidth: 2, borderColor: '#0e0d12' },
   groupAv2: { width: 28, height: 28, borderRadius: 14, position: 'absolute', bottom: 0, right: 0, borderWidth: 2, borderColor: '#0e0d12' },
   onlineDot: { position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#16D869', borderWidth: 2, borderColor: '#111111' },
+
+  // Chat -> DMs -> Blocked (message-blocked users) row — a dedicated,
+  // management-oriented row (no last-message/unread/online, per product
+  // requirement), mirroring app/profile-screen/blocked-accounts.tsx's row
+  // pattern for the analogous Full Block list.
+  blockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  blockedRowClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+  },
+  blockedRowInfo: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 12,
+  },
+  unblockMessagesBtn: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    minWidth: 84,
+    paddingHorizontal: 10,
+  },
+  disabledBtn: {
+    opacity: 0.65,
+  },
+  unblockMessagesBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
 
   convoMeta: { flex: 1, gap: 4 },
   convoTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

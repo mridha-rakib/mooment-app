@@ -216,32 +216,41 @@ const hasVideoFeedItem = (item?: FeedItem) => {
   return false;
 };
 
-function FeedSkeletonBlock({ pulse, style }: { pulse: Animated.Value; style: object }) {
-  return <Animated.View style={[styles.feedSkeletonBlock, style, { opacity: pulse }]} />;
+function FeedSkeletonBlock({ pulse, style, isDark }: { pulse: Animated.Value; style: object; isDark: boolean }) {
+  return (
+    <Animated.View
+      style={[
+        styles.feedSkeletonBlock,
+        style,
+        { opacity: pulse, backgroundColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)" },
+      ]}
+    />
+  );
 }
 
-function FeedSkeletonCard({ pulse }: { pulse: Animated.Value }) {
+function FeedSkeletonCard({ pulse, isDark }: { pulse: Animated.Value; isDark: boolean }) {
   return (
-    <View style={styles.feedSkeletonCard}>
+    <View style={[styles.feedSkeletonCard, !isDark && styles.feedSkeletonCardLight]}>
       <View style={styles.feedSkeletonHeader}>
-        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAvatar} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAvatar} />
         <View style={styles.feedSkeletonAuthor}>
-          <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAuthorLine} />
-          <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonTimeLine} />
+          <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAuthorLine} />
+          <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonTimeLine} />
         </View>
-        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonMenu} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonMenu} />
       </View>
-      <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonMedia} />
+      <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonMedia} />
       <View style={styles.feedSkeletonActions}>
-        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAction} />
-        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAction} />
-        <FeedSkeletonBlock pulse={pulse} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAction} />
       </View>
     </View>
   );
 }
 
 function FeedSkeletonList() {
+  const { isDark } = useTheme();
   const pulse = useRef(new Animated.Value(0.55)).current;
 
   useEffect(() => {
@@ -272,13 +281,14 @@ function FeedSkeletonList() {
       importantForAccessibility="no-hide-descendants"
     >
       {[0, 1, 2].map((item) => (
-        <FeedSkeletonCard key={item} pulse={pulse} />
+        <FeedSkeletonCard key={item} pulse={pulse} isDark={isDark} />
       ))}
     </View>
   );
 }
 
 function EventFeedSkeletonList() {
+  const { isDark } = useTheme();
   const pulse = useRef(new Animated.Value(0.55)).current;
 
   useEffect(() => {
@@ -309,13 +319,14 @@ function EventFeedSkeletonList() {
       importantForAccessibility="no-hide-descendants"
     >
       {[0, 1].map((item) => (
-        <FeedSkeletonCard key={item} pulse={pulse} />
+        <FeedSkeletonCard key={item} pulse={pulse} isDark={isDark} />
       ))}
     </View>
   );
 }
 
 function PendingVideoPostSkeleton() {
+  const { isDark } = useTheme();
   const pulse = useRef(new Animated.Value(0.55)).current;
 
   useEffect(() => {
@@ -341,7 +352,7 @@ function PendingVideoPostSkeleton() {
 
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <FeedSkeletonCard pulse={pulse} />
+      <FeedSkeletonCard pulse={pulse} isDark={isDark} />
     </View>
   );
 }
@@ -1234,6 +1245,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "rgba(17, 17, 17, 0.85)",
+  },
+  feedSkeletonCardLight: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#ECECEF",
   },
   feedSkeletonHeader: {
     flexDirection: "row",

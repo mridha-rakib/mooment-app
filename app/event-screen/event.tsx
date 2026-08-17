@@ -25,6 +25,7 @@ import {
     getJoinRequests,
     getMyEventRewardClaims,
     publishEvent as publishSavedEventDraft,
+    saveEventDraft,
     submitJoinRequest,
     submitEventHostReview,
     ticketAlreadyHasReward,
@@ -1809,7 +1810,7 @@ const EventScreen = () => {
   const handlePrivacyChange = async (newPrivacy: "public" | "locked") => {
     setPrivacyDropdownVisible(false);
 
-    if (!event || isDraftPreview || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
+    if (!event || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
       return;
     }
 
@@ -1820,7 +1821,9 @@ const EventScreen = () => {
     setIsUpdatingPrivacy(true);
 
     try {
-      const updatedEvent = await updateEvent(event.id, { privacy: newPrivacy });
+      const updatedEvent = isDraftPreview
+        ? await saveEventDraft({ privacy: newPrivacy }, event.id)
+        : await updateEvent(event.id, { privacy: newPrivacy });
       mergeUpdatedEvent(updatedEvent);
     } catch (error) {
       Alert.alert("Unable to update privacy", getAuthErrorMessage(error, "Please try again."));
@@ -1832,7 +1835,7 @@ const EventScreen = () => {
   const renderHeader = () => (
     <View style={[styles.headerActions, { top: insets.top + 10 }]}>
       <BackButton color={colors.text} onPress={() => goBackOrHome(router)} />
-      {isHostMode && !isDraftPreview && event?.privacy !== "private" && !isEventCompleted && !isEventCancelled && (
+      {isHostMode && event?.privacy !== "private" && !isEventCompleted && !isEventCancelled && (
         <TouchableOpacity
           style={styles.privacyPill}
           activeOpacity={0.8}
@@ -2191,7 +2194,7 @@ const EventScreen = () => {
           {isDraftPreview ? (
             <View style={styles.hostFooterBtns}>
               <TouchableOpacity
-                style={styles.cancelEventBtn}
+                style={[styles.cancelEventBtn, !isDark && styles.cancelEventBtnLight]}
                 activeOpacity={0.8}
                 onPress={handleEdit}
                 disabled={isPublishingDraft}
@@ -2200,7 +2203,11 @@ const EventScreen = () => {
                 <Text style={styles.cancelEventBtnText}>Edit Event</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.publishDraftBtn, { opacity: isPublishingDraft ? 0.7 : 1 }]}
+                style={[
+                  styles.publishDraftBtn,
+                  !isDark && styles.publishDraftBtnLight,
+                  { opacity: isPublishingDraft ? 0.7 : 1 },
+                ]}
                 activeOpacity={0.85}
                 onPress={handlePublishDraft}
                 disabled={isPublishingDraft}
@@ -2220,7 +2227,11 @@ const EventScreen = () => {
               <View style={styles.hostFooterBtns}>
                 {showCancelEvent && (
                   <TouchableOpacity
-                    style={[styles.cancelEventBtn, isCancellingEvent && { opacity: 0.7 }]}
+                    style={[
+                      styles.cancelEventBtn,
+                      !isDark && styles.cancelEventBtnLight,
+                      isCancellingEvent && { opacity: 0.7 },
+                    ]}
                     activeOpacity={0.8}
                     onPress={handleCancelEvent}
                     disabled={isCancellingEvent}
@@ -2299,10 +2310,10 @@ const EventScreen = () => {
               onPress={() => handlePrivacyChange("public")}
               activeOpacity={0.7}
             >
-              <Feather name="globe" size={16} color="#FFFFFF" />
-              <Text style={styles.privacyDropdownText}>Public</Text>
+              <Feather name="globe" size={16} color={isDark ? "#FFFFFF" : colors.text} />
+              <Text style={[styles.privacyDropdownText, { color: isDark ? "#FFFFFF" : colors.text }]}>Public</Text>
             </TouchableOpacity>
-            <View style={styles.menuSeparator} />
+            <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
             <TouchableOpacity
               style={[
                 styles.privacyDropdownItem,
@@ -2311,8 +2322,8 @@ const EventScreen = () => {
               onPress={() => handlePrivacyChange("locked")}
               activeOpacity={0.7}
             >
-              <Feather name="lock" size={16} color="#FFFFFF" />
-              <Text style={styles.privacyDropdownText}>Locked</Text>
+              <Feather name="lock" size={16} color={isDark ? "#FFFFFF" : colors.text} />
+              <Text style={[styles.privacyDropdownText, { color: isDark ? "#FFFFFF" : colors.text }]}>Locked</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -2339,13 +2350,15 @@ const EventScreen = () => {
                 {!isEventCompleted && !isEventCancelled && (
                   <>
                     <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
-                      <Feather name="edit-3" size={20} color="#FFF" />
-                      <Text style={[styles.menuItemText, { color: "#FFF" }]}>
+                      <Feather name="edit-3" size={20} color={isDark ? "#FFF" : colors.text} />
+                      <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.text }]}>
                         {isDraftPreview ? "Edit Event" : "Edit"}
                       </Text>
                     </TouchableOpacity>
 
-                    {!isDraftPreview && <View style={styles.menuSeparator} />}
+                    {!isDraftPreview && (
+                      <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+                    )}
                   </>
                 )}
 
@@ -2356,8 +2369,8 @@ const EventScreen = () => {
                     activeOpacity={0.7}
                     disabled={isDeletingEvent}
                   >
-                    <HugeiconsIcon icon={Delete02Icon} size={20} color="#FFF" />
-                    <Text style={[styles.menuItemText, { color: "#FFF" }]}>
+                    <HugeiconsIcon icon={Delete02Icon} size={20} color={isDark ? "#FFF" : colors.danger} />
+                    <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.danger }]}>
                       {isDeletingEvent ? "Deleting..." : "Delete"}
                     </Text>
                   </TouchableOpacity>
@@ -2374,13 +2387,22 @@ const EventScreen = () => {
                       disabled={hasReportedEvent}
                       accessibilityState={hasReportedEvent ? { disabled: true } : undefined}
                     >
-                      <HugeiconsIcon icon={Flag01Icon} size={20} color={hasReportedEvent ? colors.primary : "#FFF"} />
-                      <Text style={[styles.menuItemText, { color: hasReportedEvent ? colors.primary : "#FFF" }]}>
+                      <HugeiconsIcon
+                        icon={Flag01Icon}
+                        size={20}
+                        color={hasReportedEvent ? colors.primary : isDark ? "#FFF" : colors.danger}
+                      />
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          { color: hasReportedEvent ? colors.primary : isDark ? "#FFF" : colors.danger },
+                        ]}
+                      >
                         {hasReportedEvent ? "Reported" : "Report"}
                       </Text>
                     </TouchableOpacity>
 
-                    <View style={styles.menuSeparator} />
+                    <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
                   </>
                 )}
 
@@ -2390,8 +2412,17 @@ const EventScreen = () => {
                   activeOpacity={0.7}
                   disabled={isSavePending}
                 >
-                  <HugeiconsIcon icon={Bookmark01Icon} size={20} color={localIsSaved ? colors.primary : "#FFF"} />
-                  <Text style={[styles.menuItemText, { color: localIsSaved ? colors.primary : "#FFF" }]}>
+                  <HugeiconsIcon
+                    icon={Bookmark01Icon}
+                    size={20}
+                    color={localIsSaved ? colors.primary : isDark ? "#FFF" : colors.text}
+                  />
+                  <Text
+                    style={[
+                      styles.menuItemText,
+                      { color: localIsSaved ? colors.primary : isDark ? "#FFF" : colors.text },
+                    ]}
+                  >
                     {localIsSaved ? "Saved" : "Save"}
                   </Text>
                 </TouchableOpacity>
@@ -3028,6 +3059,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 14,
   },
+  publishDraftBtnLight: {
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   endEventBtn: {
     alignItems: "center",
     backgroundColor: "#E65100",
@@ -3045,6 +3085,11 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: "center",
     paddingVertical: 14,
+  },
+  cancelEventBtnLight: {
+    backgroundColor: "rgba(212, 67, 67, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(212, 67, 67, 0.3)",
   },
   cancelEventBtnText: {
     fontSize: 15,
@@ -3091,7 +3136,6 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   privacyDropdownText: {
-    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "600",
   },

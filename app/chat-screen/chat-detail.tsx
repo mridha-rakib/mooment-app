@@ -8,6 +8,7 @@ import { AttachmentIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react-native';
 import { useLocalSearchParams,
   useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import React,
   { useCallback,
   useEffect,
@@ -44,14 +45,21 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
 import EventPickerModal from '@/components/post/EventPickerModal';
-import { deleteConversation, getDirectMessageHistory, getGroupMessages } from '@/lib/chat';
+import {
+  blockMessages,
+  deleteConversation,
+  getDirectMessageHistory,
+  getDirectMessageRelationship,
+  getGroupMessages,
+  unblockMessages,
+} from '@/lib/chat';
 import { safeBack } from '@/lib/navigation';
 import type { ChatFileAttachment, ChatLocationAttachment, ChatMessageAttachment, ChatMessageType, DirectChatMessageResponse, GroupMessageResponse } from '@/lib/chat';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import type { DirectRealtimeMessage, GroupRealtimeMessage } from '@/lib/realtime';
 import * as realtimeSocket from '@/lib/socketClient';
 import { getStorageFileUrl, uploadFileToStorage } from '@/lib/storage';
-import { blockUser, unblockUser } from '@/lib/users';
+import { unblockUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatUnreadStore } from '@/stores/chatUnreadStore';
 import { getMoment } from '@/lib/moments';
@@ -1431,7 +1439,19 @@ export default function ChatDetailScreen() {
   const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [isFriendOnline, setIsFriendOnline] = useState(params.isOnline === 'true');
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(params.isBlocked === 'true');
+  // Two entirely separate block systems, four directional booleans total.
+  // Full/Profile Block (existing UserBlockModel, managed from Profile) is
+  // the stronger restriction — its UI takes precedence whenever present.
+  // Message Block (new DirectMessageBlock, managed from this Chat menu) is
+  // a lighter, Chat-only restriction. The nav param (`params.isBlocked`)
+  // only ever reflects "I fully blocked them" (the DM list's isBlocked is
+  // computed the same way — see xenog-api chat.service.ts), so it seeds
+  // fullBlockedByMe as a reasonable initial value while the authoritative
+  // combined fetch below is in flight.
+  const [fullBlockedByMe, setFullBlockedByMe] = useState(params.isBlocked === 'true');
+  const [fullBlockedMe, setFullBlockedMe] = useState(false);
+  const [messageBlockedByMe, setMessageBlockedByMe] = useState(false);
+  const [messageBlockedMe, setMessageBlockedMe] = useState(false);
   const [directAccessError, setDirectAccessError] = useState<string | null>(null);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
@@ -1492,8 +1512,18 @@ export default function ChatDetailScreen() {
   const isGroup = params.isGroup === 'true';
   const isDirectRecipientInvalid = !isGroup && !isObjectId(friendId);
   const isSelfDirectConversation = !isGroup && Boolean(currentUser?.id && friendId === currentUser.id);
+  // Either block system, either direction, makes messaging unavailable —
+  // matches xenog-api's assertCanSendDirectMessage (Full Block OR Message
+  // Block, either direction).
+  const isFullBlocked = fullBlockedByMe || fullBlockedMe;
+  const isMessageBlocked = messageBlockedByMe || messageBlockedMe;
   const isDirectChatUnavailable =
-    !isGroup && (isDirectRecipientInvalid || isSelfDirectConversation || isBlocked || Boolean(directAccessError));
+    !isGroup && (isDirectRecipientInvalid || isSelfDirectConversation || isFullBlocked || isMessageBlocked || Boolean(directAccessError));
+  // Distinct from isDirectChatUnavailable (which also covers invalid-recipient/
+  // self-chat/fetch-error cases that already navigate the user back out via
+  // Alert.alert) — this specifically gates the blocked-state banner that
+  // replaces the composer.
+  const isBlockedConversation = !isGroup && (isFullBlocked || isMessageBlocked);
 
   const updatePendingAttachment = (id: string, patch: Partial<PendingAttachment>) => {
     setPendingAttachments((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -1942,6 +1972,42 @@ export default function ChatDetailScreen() {
       isMounted = false;
     };
   }, [currentUser?.id, friendId, isGroup, isSelfDirectConversation, router]);
+
+  // Combined Full Block + Message Block directional state (four booleans,
+  // one request) via the chat module's own relationship endpoint — see
+  // xenog-api chat.service.ts's getDirectMessageRelationship for why this
+  // is chat-owned rather than extending GET /users/:id (avoids a
+  // user-module -> chat-module circular dependency, since chat already
+  // depends on user). Runs on focus (not just mount) so returning to an
+  // already-open thread after blocking/being blocked/unblocking elsewhere
+  // reflects the authoritative state without requiring an app restart.
+  useFocusEffect(
+    useCallback(() => {
+      if (isGroup || !isObjectId(friendId)) {
+        return;
+      }
+
+      let isMounted = true;
+
+      getDirectMessageRelationship(friendId)
+        .then((relationship) => {
+          if (!isMounted) return;
+          setFullBlockedByMe(relationship.fullBlockedByMe);
+          setFullBlockedMe(relationship.fullBlockedMe);
+          setMessageBlockedByMe(relationship.messageBlockedByMe);
+          setMessageBlockedMe(relationship.messageBlockedMe);
+        })
+        .catch(() => {
+          // Leave whatever state is already known (e.g. the nav param's
+          // seeded fullBlockedByMe value) — a failed refresh shouldn't flip
+          // a possibly-correct state to unknown/false.
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }, [friendId, isGroup]),
+  );
 
   // Best-effort catch-up refresh after a *re*connect — Socket.IO reconnecting
   // does not replay events missed while disconnected, so re-fetch the open
@@ -2600,7 +2666,38 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        {/* ── Input Bar ── */}
+        {/* ── Blocked-state banner (replaces the composer entirely, rather
+             than leaving a merely-disabled composer with no explanation) ── */}
+        {isBlockedConversation ? (
+          <View
+            style={[
+              styles.blockedBanner,
+              !isDark && { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
+            ]}
+          >
+            <Feather name="slash" size={18} color={colors.textSecondary} style={styles.blockedBannerIcon} />
+            <View style={styles.blockedBannerTextCol}>
+              {/* Full Block UI takes precedence over Message Block whenever
+                  both exist — Full Block is the stronger, pre-existing
+                  restriction. Message Block only gets its own copy when no
+                  Full Block is present in either direction. */}
+              <Text style={[styles.blockedBannerTitle, !isDark && { color: colors.text }]}>
+                {fullBlockedByMe
+                  ? 'You blocked this user.'
+                  : fullBlockedMe
+                    ? "You can't reply to this conversation."
+                    : messageBlockedByMe
+                      ? 'You blocked messages from this user.'
+                      : "You can't reply to this conversation."}
+              </Text>
+              {fullBlockedByMe || messageBlockedByMe ? (
+                <Text style={[styles.blockedBannerSubtitle, !isDark && { color: colors.textSecondary }]}>
+                  {fullBlockedByMe ? 'Unblock them to send messages again.' : 'Unblock messages to reply.'}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        ) : (
         <View style={[styles.inputBar, !isDark && { backgroundColor: colors.background }]}>
           <View style={[styles.inputWrap, !isDark && { backgroundColor: colors.backgroundSecondary }]}>
             <TouchableOpacity
@@ -2648,6 +2745,7 @@ export default function ChatDetailScreen() {
             <Feather name="send" size={18} color="#111111" style={{ marginLeft: -2, marginTop: 2 }} />
           </TouchableOpacity>
         </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* ── Message Actions ── */}
@@ -2743,34 +2841,49 @@ export default function ChatDetailScreen() {
       <Modal visible={isMoreMenuVisible} transparent animationType="fade" onRequestClose={() => setIsMoreMenuVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsMoreMenuVisible(false)}>
           <View style={[styles.moreMenuContainer, { top: moreMenuTop }]}>
-            <View style={styles.moreMenuBox}>
-              <TouchableOpacity
-                style={styles.moreMenuItem}
-                activeOpacity={0.8}
-                disabled={isBlockLoading}
-                onPress={async () => {
-                  setIsMoreMenuVisible(false);
-                  if (!isObjectId(friendId)) return;
-                  setIsBlockLoading(true);
-                  try {
-                    if (isBlocked) {
-                      await unblockUser(friendId);
-                    } else {
-                      await blockUser(friendId);
+            <View style={[styles.moreMenuBox, !isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {/* Full Block UI wins whenever present in either direction —
+                  a Message Block toggle would be redundant/confusing while
+                  Full Block already covers messaging. fullBlockedByMe keeps
+                  the existing "Unblock" (full-unblock) action exactly as
+                  before; fullBlockedMe hides this item entirely, since the
+                  current user doesn't own that block and has no action to
+                  take on it. Only when neither Full Block direction is
+                  active does this become the new Message Block toggle. */}
+              {fullBlockedMe && !fullBlockedByMe ? null : (
+                <TouchableOpacity
+                  style={styles.moreMenuItem}
+                  activeOpacity={0.8}
+                  disabled={isBlockLoading}
+                  onPress={async () => {
+                    setIsMoreMenuVisible(false);
+                    if (!isObjectId(friendId)) return;
+                    setIsBlockLoading(true);
+                    try {
+                      if (fullBlockedByMe) {
+                        const result = await unblockUser(friendId);
+                        setFullBlockedByMe(result.isBlocked);
+                      } else {
+                        const result = messageBlockedByMe
+                          ? await unblockMessages(friendId)
+                          : await blockMessages(friendId);
+                        setMessageBlockedByMe(result.isMessageBlocked);
+                      }
+                    } finally {
+                      setIsBlockLoading(false);
                     }
-                    setIsBlocked((prev) => !prev);
-                  } finally {
-                    setIsBlockLoading(false);
-                  }
-                }}
-              >
-                {isBlockLoading ? (
-                  <Spinner size="small" color="#FFFFFF" style={styles.moreMenuIcon} />
-                ) : (
-                  <Ionicons name="ban-outline" size={18} color="#FFFFFF" style={styles.moreMenuIcon} />
-                )}
-                <Text style={styles.moreMenuText}>{isBlocked ? 'Unblock' : 'Block'}</Text>
-              </TouchableOpacity>
+                  }}
+                >
+                  {isBlockLoading ? (
+                    <Spinner size="small" color={isDark ? '#FFFFFF' : colors.text} style={styles.moreMenuIcon} />
+                  ) : (
+                    <Ionicons name="ban-outline" size={18} color={isDark ? '#FFFFFF' : colors.text} style={styles.moreMenuIcon} />
+                  )}
+                  <Text style={[styles.moreMenuText, !isDark && { color: colors.text }]}>
+                    {fullBlockedByMe ? 'Unblock' : messageBlockedByMe ? 'Unblock Messages' : 'Block Messages'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* Create Plan — hidden until feature is ready */}
               {/* <View style={styles.moreMenuSeparator} />
@@ -2793,7 +2906,7 @@ export default function ChatDetailScreen() {
                 <Text style={styles.moreMenuText}>Share Calendar</Text>
               </TouchableOpacity> */}
 
-              <View style={styles.moreMenuSeparator} />
+              <View style={[styles.moreMenuSeparator, !isDark && { backgroundColor: colors.border }]} />
 
               <TouchableOpacity
                 style={styles.moreMenuItem}
@@ -3009,6 +3122,27 @@ const styles = StyleSheet.create({
   emojiBtn: { justifyContent: 'center', alignItems: 'center', width: 24 },
   fileBtn: { justifyContent: 'center', alignItems: 'center', width: 24 },
   sendBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
+
+  /* Blocked-state banner — replaces the Input Bar above when messaging is
+     unavailable due to a block in either direction. Dark-mode values reuse
+     the same subtleSurface/receiverBorder/receiverText/metadataText tokens
+     already used by the location card, so it reads as part of the same
+     design language rather than a new surface. */
+  blockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: CHAT_COLORS.subtleSurface,
+    borderWidth: 1,
+    borderColor: CHAT_COLORS.receiverBorder,
+  },
+  blockedBannerIcon: { marginRight: 12, marginTop: 2 },
+  blockedBannerTextCol: { flex: 1 },
+  blockedBannerTitle: { color: CHAT_COLORS.receiverText, fontSize: 13, fontWeight: '700' },
+  blockedBannerSubtitle: { color: CHAT_COLORS.metadataText, fontSize: 12, marginTop: 2 },
 
   /* Modal */
   modalOverlay: { flex: 1, backgroundColor: 'transparent' },
