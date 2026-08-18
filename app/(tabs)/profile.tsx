@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProfileView, { UserProfileData } from "@/components/profile/ProfileView";
 import { PostData } from "@/components/post/FeedPost";
 import { useTheme } from "@/hooks/useTheme";
@@ -57,6 +57,12 @@ export default function ProfileTab() {
   const [eventPages, setEventPages] = useState({ active: 1, past: 1 });
   const [hasMoreEvents, setHasMoreEvents] = useState({ active: false, past: false });
   const [isEventsLoadingMore, setIsEventsLoadingMore] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const hasLoadedStatsRef = useRef(false);
+  const hasLoadedFeedRef = useRef(false);
+  const hasLoadedEventsRef = useRef(false);
 
   useEffect(() => {
     if (!user?.avatarKey) {
@@ -82,6 +88,80 @@ export default function ProfileTab() {
     setReposts((current) => append ? [...current, ...nextReposts] : nextReposts);
   }, [avatarUri]);
 
+  // Each section fetches and reveals independently: a first-ever load shows
+  // that section's skeleton, while a background refresh (focus return, pull
+  // to refresh) never re-arms the skeleton and never clears data that was
+  // already successfully shown, even if this particular attempt fails.
+  const fetchStats = useCallback(async (userId: string) => {
+    if (!hasLoadedStatsRef.current) setStatsLoading(true);
+
+    try {
+      const stats = await getUserProfileStats(userId);
+      hasLoadedStatsRef.current = true;
+      setProfileStats((current) => ({
+        ...current,
+        reviews: stats.reviews,
+        followers: stats.followers,
+        following: stats.following,
+      }));
+    } catch {
+      // First load: leave the zero-value defaults. Refresh: keep whatever loaded before.
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchFeed = useCallback(async (userId: string) => {
+    if (!hasLoadedFeedRef.current) setFeedLoading(true);
+
+    try {
+      const timeline = await getProfileTimeline(userId, { page: 1, limit: PAGE_SIZE });
+      hasLoadedFeedRef.current = true;
+      applyTimelineItems(timeline.items);
+      setFeedPage(1);
+      setHasMoreFeed(Boolean(timeline.pagination && timeline.pagination.page < timeline.pagination.totalPages));
+    } catch {
+      // First load: the empty-state UI already covers this. Refresh: keep the visible feed.
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [applyTimelineItems]);
+
+  const fetchEvents = useCallback(async (userId: string) => {
+    if (!hasLoadedEventsRef.current) setEventsLoading(true);
+
+    try {
+      const [activeEvents, pastEvents] = await Promise.all([
+        getProfileEvents(userId, { filter: "active", page: 1, limit: PAGE_SIZE }),
+        getProfileEvents(userId, { filter: "past", page: 1, limit: PAGE_SIZE }),
+      ]);
+      hasLoadedEventsRef.current = true;
+      setProfileEvents({ active: activeEvents.active, past: pastEvents.past });
+      setEventPages({ active: 1, past: 1 });
+      setHasMoreEvents({
+        active: Boolean(activeEvents.pagination && activeEvents.pagination.page < activeEvents.pagination.totalPages),
+        past: Boolean(pastEvents.pagination && pastEvents.pagination.page < pastEvents.pagination.totalPages),
+      });
+      setProfileStats((current) => ({
+        ...current,
+        events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
+      }));
+    } catch {
+      // First load: the empty-state UI already covers this. Refresh: keep the visible events.
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
+
+  const fetchWalletEvents = useCallback(async (userId: string) => {
+    try {
+      const walletEvents = await getMyTicketWalletEvents();
+      setProfileFeedEvents(walletEvents);
+    } catch {
+      // Wallet events are supplementary to the feed; a failure here must not clear posts/reposts.
+    }
+  }, []);
+
   const loadTimeline = useCallback(async () => {
     if (!user?.id) {
       setPosts([]);
@@ -89,43 +169,19 @@ export default function ProfileTab() {
       setProfileEvents(EMPTY_PROFILE_EVENTS);
       setProfileFeedEvents([]);
       setProfileStats(PROFILE_STATS);
+      setStatsLoading(false);
+      setFeedLoading(false);
+      setEventsLoading(false);
       return;
     }
 
-    try {
-      const [timeline, stats, activeEvents, pastEvents, walletEvents] = await Promise.all([
-        getProfileTimeline(user.id, { page: 1, limit: PAGE_SIZE }),
-        getUserProfileStats(user.id),
-        getProfileEvents(user.id, { filter: "active", page: 1, limit: PAGE_SIZE }),
-        getProfileEvents(user.id, { filter: "past", page: 1, limit: PAGE_SIZE }),
-        getMyTicketWalletEvents(),
-      ]);
-
-      applyTimelineItems(timeline.items);
-      setFeedPage(1);
-      setHasMoreFeed(Boolean(timeline.pagination && timeline.pagination.page < timeline.pagination.totalPages));
-      setProfileEvents({ active: activeEvents.active, past: pastEvents.past });
-      setEventPages({ active: 1, past: 1 });
-      setHasMoreEvents({
-        active: Boolean(activeEvents.pagination && activeEvents.pagination.page < activeEvents.pagination.totalPages),
-        past: Boolean(pastEvents.pagination && pastEvents.pagination.page < pastEvents.pagination.totalPages),
-      });
-      setProfileFeedEvents(walletEvents);
-      setProfileStats((currentStats) => ({
-        ...currentStats,
-        events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
-        reviews: stats.reviews,
-        followers: stats.followers,
-        following: stats.following,
-      }));
-    } catch {
-      setPosts([]);
-      setReposts([]);
-      setProfileEvents(EMPTY_PROFILE_EVENTS);
-      setProfileFeedEvents([]);
-      setProfileStats(PROFILE_STATS);
-    }
-  }, [applyTimelineItems, user?.id]);
+    await Promise.allSettled([
+      fetchStats(user.id),
+      fetchFeed(user.id),
+      fetchEvents(user.id),
+      fetchWalletEvents(user.id),
+    ]);
+  }, [fetchEvents, fetchFeed, fetchStats, fetchWalletEvents, user?.id]);
 
   const loadMoreFeed = useCallback(() => {
     if (!user?.id || isFeedLoadingMore || !hasMoreFeed) return;
@@ -254,6 +310,9 @@ export default function ProfileTab() {
             events: new Set([...events.active, ...events.past].map((event) => event.id)).size,
           }));
         }}
+        statsLoading={statsLoading || eventsLoading}
+        feedLoading={feedLoading}
+        eventsLoading={eventsLoading}
       />
     </View>
   );

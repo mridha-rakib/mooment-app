@@ -1,11 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import React, { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, type RefreshControlProps } from "react-native";
+import React, { useCallback, useMemo } from "react";
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, type ListRenderItem, type RefreshControlProps } from "react-native";
 
 import EventFeedCard from "@/components/home/EventFeedCard";
 import { useTheme } from "@/hooks/useTheme";
 import type { EventResponse, ProfileEventGroups } from "@/lib/events";
+import { ProfileEventsSkeletonList } from "./ProfileSkeletons";
+
+export type ProfileEventsFilter = "active" | "past";
 
 type ProfileEventsProps = {
   isOwnProfile?: boolean;
@@ -15,8 +18,11 @@ type ProfileEventsProps = {
   onEventsChange?: (events: ProfileEventGroups) => void;
   listHeaderComponent?: React.ReactElement;
   refreshControl?: React.ReactElement<RefreshControlProps>;
-  onLoadMore?: (filter: "active" | "past") => void;
+  onLoadMore?: (filter: ProfileEventsFilter) => void;
   isLoadingMore?: boolean;
+  isLoading?: boolean;
+  filter: ProfileEventsFilter;
+  onFilterChange: (filter: ProfileEventsFilter) => void;
 };
 
 const dedupeEvents = (events: EventResponse[]): EventResponse[] => {
@@ -38,20 +44,29 @@ export default function ProfileEvents({
   refreshControl,
   onLoadMore,
   isLoadingMore = false,
+  isLoading = false,
+  filter,
+  onFilterChange,
 }: ProfileEventsProps) {
   const { colors } = useTheme();
-  const [filter, setFilter] = useState<"active" | "past">("active");
   const visibleEvents = useMemo(
     () => dedupeEvents(events[filter]),
     [events, filter],
   );
 
-  const handleEventCancelled = (eventId: string) => {
+  const handleEventCancelled = useCallback((eventId: string) => {
     onEventsChange?.({
       active: events.active.filter((event) => event.id !== eventId),
       past: events.past.filter((event) => event.id !== eventId),
     });
-  };
+  }, [events.active, events.past, onEventsChange]);
+
+  const renderEvent = useCallback<ListRenderItem<EventResponse>>(({ item }) => (
+    <EventFeedCard
+      event={item}
+      onEventCancelled={handleEventCancelled}
+    />
+  ), [handleEventCancelled]);
 
   const header = (
     <>
@@ -60,7 +75,7 @@ export default function ProfileEvents({
         <BlurView intensity={20} tint="dark" style={styles.toggleContainer}>
           <TouchableOpacity
             style={[styles.toggleBtn, filter === "active" && styles.toggleBtnActive]}
-            onPress={() => setFilter("active")}
+            onPress={() => onFilterChange("active")}
             activeOpacity={0.8}
           >
             <View style={styles.toggleInner}>
@@ -70,7 +85,7 @@ export default function ProfileEvents({
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toggleBtn, filter === "past" && styles.toggleBtnActive]}
-            onPress={() => setFilter("past")}
+            onPress={() => onFilterChange("past")}
             activeOpacity={0.8}
           >
             <View style={styles.toggleInner}>
@@ -93,13 +108,10 @@ export default function ProfileEvents({
       contentContainerStyle={styles.listContent}
       onEndReachedThreshold={0.5}
       onEndReached={() => onLoadMore?.(filter)}
-      renderItem={({ item }) => (
-        <EventFeedCard
-          event={item}
-          onEventCancelled={handleEventCancelled}
-        />
-      )}
-      ListEmptyComponent={(
+      renderItem={renderEvent}
+      ListEmptyComponent={isLoading ? (
+        <ProfileEventsSkeletonList />
+      ) : (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               {filter === "active" ? "No active events yet" : "No past events yet"}

@@ -1,7 +1,6 @@
 import { useTheme } from "@/hooks/useTheme";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { getMyProfileEvents } from "@/lib/events";
-import { setPendingScannerHostedEvents, toScannerHostedEvents } from "@/lib/scanQrHostedEvents";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import {
@@ -123,8 +122,6 @@ export default function AddOptionsModal({
           setOptionsEnabled(true);
           return;
         }
-
-        setPendingScannerHostedEvents(toScannerHostedEvents(profileEvents.active));
       } catch {
         optionPressLockRef.current = false;
         setOptionsEnabled(true);

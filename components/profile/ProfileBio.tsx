@@ -1,6 +1,8 @@
 import { useTheme } from "@/hooks/useTheme";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import FadeInOnReady from "../ui/FadeInOnReady";
+import { ProfileIdentityTextSkeleton } from "./ProfileSkeletons";
 
 type ProfileBioProps = {
   name: string;
@@ -9,6 +11,7 @@ type ProfileBioProps = {
   accountType?: "personal" | "business";
   isOwnProfile?: boolean;
   actions?: React.ReactNode;
+  identityLoading?: boolean;
 };
 
 export default function ProfileBio({
@@ -18,27 +21,38 @@ export default function ProfileBio({
   accountType,
   isOwnProfile = true,
   actions,
+  identityLoading = false,
 }: ProfileBioProps) {
   const { colors } = useTheme();
   // const isBusiness = accountType === "business";
 
+  if (identityLoading) {
+    return (
+      <View style={styles.container}>
+        <ProfileIdentityTextSkeleton />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.topRow}>
-        <View style={styles.nameCol}>
-          <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: colors.text }]}>{name}</Text>
-            {/* {isBusiness && ( <BlurView intensity={30} tint="default" style={styles.businessBadge} accessibilityLabel="Business Account" accessibilityRole="image" > <View style={styles.badgeOverlay} /> <HugeiconsIcon icon={Store01Icon} size={12} color="#FFFFFF" /> </BlurView> )} */}
+      <FadeInOnReady>
+        <View style={styles.topRow}>
+          <View style={styles.nameCol}>
+            <View style={styles.nameRow}>
+              <Text style={[styles.name, { color: colors.text }]}>{name}</Text>
+              {/* {isBusiness && ( <BlurView intensity={30} tint="default" style={styles.businessBadge} accessibilityLabel="Business Account" accessibilityRole="image" > <View style={styles.badgeOverlay} /> <HugeiconsIcon icon={Store01Icon} size={12} color="#FFFFFF" /> </BlurView> )} */}
+            </View>
+            <Text style={[styles.handle, { color: colors.textSecondary }]}>
+              {handle}
+            </Text>
           </View>
-          <Text style={[styles.handle, { color: colors.textSecondary }]}>
-            {handle}
-          </Text>
+          {!isOwnProfile && actions && (
+            <View style={styles.actionsCol}>{actions}</View>
+          )}
         </View>
-        {!isOwnProfile && actions && (
-          <View style={styles.actionsCol}>{actions}</View>
-        )}
-      </View>
-      <Text style={[styles.bioText, { color: colors.text }]}>{bio}</Text>
+        <Text style={[styles.bioText, { color: colors.text }]}>{bio}</Text>
+      </FadeInOnReady>
     </View>
   );
 }

@@ -1051,6 +1051,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         contentFit="cover"
         cachePolicy="disk"
         recyclingKey={item.uri}
+        transition={150}
       />
     );
   }
@@ -1079,6 +1080,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         contentFit="fill"
         cachePolicy="disk"
         recyclingKey={item.uri}
+        transition={150}
       />
     </View>
   );
@@ -1252,7 +1254,7 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
   );
 }
 
-export default function FeedPost({
+function FeedPost({
   post,
   onCommentPress,
   onSharePress,
@@ -2152,6 +2154,8 @@ export default function FeedPost({
     </View>
   );
 }
+
+export default React.memo(FeedPost);
 
 const styles = StyleSheet.create({
   postWrapper: {

@@ -309,14 +309,14 @@ const TicketWalletScreen = () => {
   const selectedSubFilter = activeTab === "Shared" ? sharedSubFilter : activeSubFilter;
   const isExpiredSubFilter = showSubFilter && selectedSubFilter === "Expired";
   const renderSubFilterOption = (option: string, isSelected: boolean) => {
-    const iconColor = isSelected ? "#FFFFFF" : "#9E96A6";
+    const iconColor = isSelected ? colors.text : isDark ? "#D4D0DA" : "#302B35";
 
     return (
-      <View style={styles.subFilterOption}>
+      <View key={`${option}-${isSelected}`} style={styles.subFilterOption}>
         {option === "Active" ? (
-          <Ionicons name="ticket-outline" size={20} color={iconColor} />
+          <Ionicons key={`${option}-${isSelected}-icon`} name="ticket-outline" size={20} color={iconColor} />
         ) : (
-          <Feather name="clock" size={18} color={iconColor} />
+          <Feather key={`${option}-${isSelected}-icon`} name="clock" size={18} color={iconColor} />
         )}
       </View>
     );
@@ -366,8 +366,8 @@ const TicketWalletScreen = () => {
             options={WALLET_SUB_FILTERS}
             selectedOption={selectedSubFilter}
             onSelect={handleSelectSubFilter}
-            containerStyle={styles.subFilterControl}
-            activeSegmentStyle={styles.subFilterActiveSegment}
+            containerStyle={[styles.subFilterControl, isDark ? styles.subFilterControlDark : styles.subFilterControlLight]}
+            activeSegmentStyle={[styles.subFilterActiveSegment, isDark ? styles.subFilterActiveSegmentDark : styles.subFilterActiveSegmentLight]}
             renderOption={renderSubFilterOption}
             getAccessibilityLabel={(option) => `${option} tickets`}
           />
@@ -596,24 +596,41 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 44,
     minHeight: 44,
-    backgroundColor: "rgba(17, 17, 17, 0.78)",
-    borderColor: "rgba(255, 255, 255, 0.09)",
     borderWidth: 1,
     borderRadius: 18,
-    shadowColor: "#000000",
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.26,
     shadowRadius: 18,
+  },
+  subFilterControlDark: {
+    backgroundColor: "rgba(17, 17, 17, 0.78)",
+    borderColor: "rgba(255, 255, 255, 0.09)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.26,
     elevation: 6,
   },
+  subFilterControlLight: {
+    backgroundColor: "#F5F5F7",
+    borderColor: "#E5E5E5",
+    shadowColor: "#000000",
+    shadowOpacity: 0.06,
+    elevation: 2,
+  },
   subFilterActiveSegment: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 12,
+  },
+  subFilterActiveSegmentDark: {
     backgroundColor: "rgba(255, 255, 255, 0.18)",
     borderColor: "rgba(255, 255, 255, 0.22)",
-    borderWidth: 1,
     shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
-    shadowRadius: 12,
+  },
+  subFilterActiveSegmentLight: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E5E5E5",
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
   },
   subFilterOption: {
     alignItems: "center",

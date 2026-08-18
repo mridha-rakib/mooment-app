@@ -729,17 +729,19 @@ const AccessTab = ({
           <TouchableOpacity
             style={[
               styles.createTicketButton,
+              { backgroundColor: isDark ? "#B3B3B3" : colors.backgroundSecondary },
+              !isDark && styles.createTicketButtonLight,
               ticketCreationCutoffReached ? styles.createTicketButtonDisabled : null,
             ]}
             onPress={onCreateTicket}
             activeOpacity={0.85}
             disabled={ticketCreationCutoffReached}
           >
-            <Feather name="plus" size={20} color="#111111" />
-            <Text style={styles.createTicketText}>Create ticket</Text>
+            <Feather name="plus" size={20} color={isDark ? "#111111" : colors.text} />
+            <Text style={[styles.createTicketText, { color: isDark ? "#111111" : colors.text }]}>Create ticket</Text>
           </TouchableOpacity>
           {ticketCreationCutoffReached ? (
-            <Text style={styles.createTicketHelperText}>
+            <Text style={[styles.createTicketHelperText, { color: isDark ? "#B3B3B3" : colors.textSecondary }]}>
               {TICKET_CREATION_CUTOFF_MESSAGE}
             </Text>
           ) : null}
@@ -758,20 +760,20 @@ const AccessTab = ({
             return (
               <TouchableOpacity
                 key={ticketKey}
-                style={styles.creatorTicketCard}
+                style={[styles.creatorTicketCard, !isDark && styles.creatorTicketCardLight]}
                 onPress={() => onViewTicket?.(ticket)}
                 activeOpacity={0.82}
                 disabled={!onViewTicket}
               >
                 <View style={styles.creatorTicketTopRow}>
                   <View style={styles.creatorTicketInfo}>
-                    <Text style={styles.creatorTicketTitle} numberOfLines={1}>
+                    <Text style={[styles.creatorTicketTitle, { color: isDark ? "#B3B3B3" : colors.text }]} numberOfLines={1}>
                       {ticket.name || "General Ticket"}
                     </Text>
-                    <Text style={styles.creatorTicketDescription} numberOfLines={1}>
+                    <Text style={[styles.creatorTicketDescription, { color: isDark ? "#B3B3B3" : colors.textSecondary }]} numberOfLines={1}>
                       {ticket.description || ""}
                     </Text>
-                    <Text style={styles.creatorTicketExpiry} numberOfLines={1}>
+                    <Text style={[styles.creatorTicketExpiry, { color: isDark ? "#B3B3B3" : colors.textSecondary }]} numberOfLines={1}>
                       {formatExpiry(ticket.salesEndAt, scheduledAt)}
                     </Text>
                   </View>
@@ -782,33 +784,33 @@ const AccessTab = ({
                       onPress={() => onEditTicket(ticket)}
                       activeOpacity={0.75}
                     >
-                      <Feather name="edit-2" size={20} color="#B3B3B3" />
+                      <Feather name="edit-2" size={20} color={isDark ? "#B3B3B3" : colors.textSecondary} />
                     </TouchableOpacity>
                   ) : null}
                 </View>
 
-                <View style={styles.creatorTicketStatsRow}>
+                <View style={[styles.creatorTicketStatsRow, !isDark && styles.creatorTicketStatsRowLight]}>
                   <View style={styles.creatorTicketStatSold}>
-                    <Feather name="tag" size={12} color="#999999" />
-                    <Text style={styles.creatorTicketStatSoldValue}>
+                    <Feather name="tag" size={12} color={isDark ? "#999999" : colors.textSecondary} />
+                    <Text style={[styles.creatorTicketStatSoldValue, { color: isDark ? "#FFFFFF" : colors.text }]}>
                       {statsLoaded ? (stat?.sold ?? 0) : "—"}
                     </Text>
-                    <Text style={styles.creatorTicketStatSoldLabel}>sold</Text>
+                    <Text style={[styles.creatorTicketStatSoldLabel, { color: isDark ? "#999999" : colors.textSecondary }]}>sold</Text>
                   </View>
-                  <View style={styles.creatorTicketStatDivider} />
-                  <View style={styles.creatorTicketStatAvailable}>
-                    <Feather name="check-circle" size={12} color="#1D9E75" />
-                    <Text style={styles.creatorTicketStatAvailableValue}>
+                  <View style={[styles.creatorTicketStatDivider, !isDark && styles.creatorTicketStatDividerLight]} />
+                  <View style={[styles.creatorTicketStatAvailable, !isDark && styles.creatorTicketStatAvailableLight]}>
+                    <Feather name="check-circle" size={12} color={isDark ? "#1D9E75" : colors.success} />
+                    <Text style={[styles.creatorTicketStatAvailableValue, { color: isDark ? "#1D9E75" : colors.success }]}>
                       {statsLoaded ? (stat?.available ?? getTicketAvailability(ticket)) : "—"}
                     </Text>
-                    <Text style={styles.creatorTicketStatAvailableLabel}>available</Text>
+                    <Text style={[styles.creatorTicketStatAvailableLabel, { color: isDark ? "#1D9E75" : colors.success }]}>available</Text>
                   </View>
                 </View>
 
                 <View style={styles.creatorTicketFooter}>
                   <View style={styles.creatorTicketPriceBlock}>
-                    <Text style={styles.creatorTicketPrice}>{formatPrice(ticket)}</Text>
-                    {!isFreeTicket && <Text style={styles.creatorTicketPriceCaption}>per ticket</Text>}
+                    <Text style={[styles.creatorTicketPrice, { color: isDark ? "#FFFFFF" : colors.text }]}>{formatPrice(ticket)}</Text>
+                    {!isFreeTicket && <Text style={[styles.creatorTicketPriceCaption, { color: isDark ? "#FFFFFF" : colors.textSecondary }]}>per ticket</Text>}
                   </View>
 
                   {onDeleteTicket ? (
@@ -819,9 +821,9 @@ const AccessTab = ({
                       disabled={isDeleting}
                     >
                       {isDeleting ? (
-                        <ActivityIndicator size="small" color="#B3B3B3" />
+                        <ActivityIndicator size="small" color={isDark ? "#B3B3B3" : colors.danger} />
                       ) : (
-                        <Feather name="trash-2" size={20} color="#B3B3B3" />
+                        <Feather name="trash-2" size={20} color={isDark ? "#B3B3B3" : colors.danger} />
                       )}
                     </TouchableOpacity>
                   ) : null}
@@ -830,18 +832,18 @@ const AccessTab = ({
             );
           })
         ) : (
-          <View style={styles.creatorTicketCard}>
-            <Text style={styles.creatorTicketTitle}>No tickets yet</Text>
-            <Text style={styles.creatorTicketDescription}>
+          <View style={[styles.creatorTicketCard, !isDark && styles.creatorTicketCardLight]}>
+            <Text style={[styles.creatorTicketTitle, { color: isDark ? "#B3B3B3" : colors.text }]}>No tickets yet</Text>
+            <Text style={[styles.creatorTicketDescription, { color: isDark ? "#B3B3B3" : colors.textSecondary }]}>
               Create a ticket to make access available for this event.
             </Text>
           </View>
         )}
       </View>
 
-      <View style={styles.creatorSecureBadge}>
-        <Feather name="shield" size={18} color="#1D9E75" />
-        <Text style={styles.creatorSecureText}>Payment held securely until event completes</Text>
+      <View style={[styles.creatorSecureBadge, !isDark && styles.creatorSecureBadgeLight]}>
+        <Feather name="shield" size={18} color={isDark ? "#1D9E75" : colors.success} />
+        <Text style={[styles.creatorSecureText, { color: isDark ? "#1D9E75" : colors.success }]}>Payment held securely until event completes</Text>
       </View>
     </View>
   );
@@ -934,9 +936,17 @@ const AccessTab = ({
   const renderCreatorRewards = () => (
     <View style={styles.creatorRewardsContainer}>
       {onCreateReward ? (
-        <TouchableOpacity style={styles.createTicketButton} activeOpacity={0.85} onPress={onCreateReward}>
-          <Feather name="plus" size={20} color="#111111" />
-          <Text style={styles.createTicketText}>Create Rewards</Text>
+        <TouchableOpacity
+          style={[
+            styles.createTicketButton,
+            { backgroundColor: isDark ? "#B3B3B3" : colors.backgroundSecondary },
+            !isDark && styles.createTicketButtonLight,
+          ]}
+          activeOpacity={0.85}
+          onPress={onCreateReward}
+        >
+          <Feather name="plus" size={20} color={isDark ? "#111111" : colors.text} />
+          <Text style={[styles.createTicketText, { color: isDark ? "#111111" : colors.text }]}>Create Rewards</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -953,6 +963,7 @@ const AccessTab = ({
               key={rewardKey}
               style={[
                 styles.creatorRewardCard,
+                !isDark && styles.creatorRewardCardLight,
                 hasImage ? styles.creatorRewardCardWithImage : styles.creatorRewardCardCompact,
               ]}
               activeOpacity={0.82}
@@ -970,30 +981,30 @@ const AccessTab = ({
                 <View style={hasImage ? styles.creatorRewardImageInfo : styles.creatorRewardInfo}>
                   <View style={hasImage ? styles.creatorRewardTextBlock : styles.creatorRewardHeader}>
                     <View style={styles.creatorRewardTitleBlock}>
-                      <Text style={styles.creatorRewardTitle} numberOfLines={1}>
+                      <Text style={[styles.creatorRewardTitle, { color: isDark ? "#B3B3B3" : colors.text }]} numberOfLines={1}>
                         {item.name}
                       </Text>
                       {!hasImage && (
-                        <Text style={styles.creatorRewardDescription} numberOfLines={1}>
+                        <Text style={[styles.creatorRewardDescription, { color: isDark ? "#B3B3B3" : colors.textSecondary }]} numberOfLines={1}>
                           {getRewardDescription(item)}
                         </Text>
                       )}
                     </View>
 
                     {!hasImage && (
-                      <View style={styles.creatorRewardCountBadge}>
-                        <Text style={styles.creatorRewardCountText}>{getRewardCapacityLabel(item)}</Text>
+                      <View style={[styles.creatorRewardCountBadge, !isDark && styles.creatorRewardCountBadgeLight]}>
+                        <Text style={[styles.creatorRewardCountText, { color: isDark ? "#FFFFFF" : colors.text }]}>{getRewardCapacityLabel(item)}</Text>
                       </View>
                     )}
                   </View>
 
-                  <Text style={styles.creatorRewardExpiry} numberOfLines={1}>
+                  <Text style={[styles.creatorRewardExpiry, { color: isDark ? "#FFFFFF" : colors.textSecondary }]} numberOfLines={1}>
                     {formatExpiry(item.expiresAt, scheduledAt)}
                   </Text>
 
                   {hasImage && (
-                    <View style={styles.creatorRewardCountBadge}>
-                      <Text style={styles.creatorRewardCountText}>{getRewardCapacityLabel(item)}</Text>
+                    <View style={[styles.creatorRewardCountBadge, !isDark && styles.creatorRewardCountBadgeLight]}>
+                      <Text style={[styles.creatorRewardCountText, { color: isDark ? "#FFFFFF" : colors.text }]}>{getRewardCapacityLabel(item)}</Text>
                     </View>
                   )}
                 </View>
@@ -1009,9 +1020,9 @@ const AccessTab = ({
                       onPress={() => onDeleteReward(item)}
                     >
                       {isDeleting ? (
-                        <ActivityIndicator size="small" color="#B3B3B3" />
+                        <ActivityIndicator size="small" color={isDark ? "#B3B3B3" : colors.danger} />
                       ) : (
-                        <Feather name="trash-2" size={20} color="#B3B3B3" />
+                        <Feather name="trash-2" size={20} color={isDark ? "#B3B3B3" : colors.danger} />
                       )}
                     </TouchableOpacity>
                   ) : null}
@@ -1021,7 +1032,7 @@ const AccessTab = ({
                       activeOpacity={0.75}
                       onPress={() => onEditReward(item)}
                     >
-                      <Feather name="edit-2" size={20} color="#B3B3B3" />
+                      <Feather name="edit-2" size={20} color={isDark ? "#B3B3B3" : colors.textSecondary} />
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -1030,9 +1041,9 @@ const AccessTab = ({
           );
         })
         ) : (
-          <View style={styles.creatorRewardCard}>
-            <Text style={styles.creatorRewardTitle}>No rewards yet</Text>
-            <Text style={styles.creatorRewardDescription}>
+          <View style={[styles.creatorRewardCard, !isDark && styles.creatorRewardCardLight]}>
+            <Text style={[styles.creatorRewardTitle, { color: isDark ? "#B3B3B3" : colors.text }]}>No rewards yet</Text>
+            <Text style={[styles.creatorRewardDescription, { color: isDark ? "#B3B3B3" : colors.textSecondary }]}>
               Create product or ticket rewards for people attending this event.
             </Text>
           </View>
@@ -1117,6 +1128,10 @@ const styles = StyleSheet.create({
   createTicketButtonDisabled: {
     opacity: 0.45,
   },
+  createTicketButtonLight: {
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
   createTicketText: {
     color: "#111111",
     fontSize: 16,
@@ -1139,6 +1154,11 @@ const styles = StyleSheet.create({
     minHeight: 162,
     padding: 12,
   },
+  creatorTicketCardLight: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
   creatorTicketTopRow: {
     flexDirection: "row",
     gap: 8,
@@ -1160,6 +1180,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  creatorTicketStatsRowLight: {
+    backgroundColor: "#F5F5F7",
   },
   creatorTicketStatSold: {
     flex: 1,
@@ -1186,6 +1209,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
     marginVertical: 8,
   },
+  creatorTicketStatDividerLight: {
+    backgroundColor: "#E5E5E5",
+  },
   creatorTicketStatAvailable: {
     flex: 1,
     flexDirection: "row",
@@ -1194,6 +1220,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: "rgba(29, 158, 117, 0.1)",
+  },
+  creatorTicketStatAvailableLight: {
+    backgroundColor: "rgba(22, 216, 105, 0.12)",
   },
   creatorTicketStatAvailableValue: {
     color: "#1D9E75",
@@ -1254,6 +1283,9 @@ const styles = StyleSheet.create({
     minHeight: 46,
     padding: 12,
   },
+  creatorSecureBadgeLight: {
+    backgroundColor: "rgba(22, 216, 105, 0.12)",
+  },
   creatorSecureText: {
     color: "#1D9E75",
     flex: 1,
@@ -1272,6 +1304,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(17, 17, 17, 0.8)",
     borderRadius: 12,
     padding: 12,
+  },
+  creatorRewardCardLight: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
   },
   creatorRewardCardCompact: {
     gap: 16,
@@ -1317,6 +1354,9 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: "center",
     paddingHorizontal: 8,
+  },
+  creatorRewardCountBadgeLight: {
+    backgroundColor: "#F5F5F7",
   },
   creatorRewardCountText: {
     color: "#FFFFFF",

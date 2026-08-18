@@ -154,10 +154,15 @@ type Props = {
   // Feed screen drop this host's *other* already-rendered items from the
   // currently mounted list. This card's own slot is handled locally below.
   onHostBlocked?: (ownerId: string) => void;
+  // Fired after a follow/unfollow of this event's host — optimistically and
+  // again once the API call resolves (or rolls back on failure) — so other
+  // currently-loaded surfaces representing this same host (feed cards,
+  // People-to-follow) can reconcile to the same state.
+  onHostFollowChange?: (hostId: string, isFollowing: boolean) => void;
   embedded?: boolean;
 };
 
-export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, embedded = false }: Props) {
+export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, onHostFollowChange, embedded = false }: Props) {
   const { colors, isDark } = useTheme();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUser = useAuthStore((s) => s.user);
@@ -183,23 +188,31 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const displayCategories = categories.slice(0, 3);
   const categoryCount = displayCategories.length;
   const overlayLayout = useMemo(() => {
+    // minHeight (not a fixed height) below: the panel's real height depends
+    // on how many lines the category chips wrap to, which varies with chip
+    // label length and device width. A hard `height` guess was previously
+    // used here, and content taller than the guess overflowed upward past
+    // the panel's top edge (chips escaping the overlay — see screenshot).
+    // minHeight preserves the exact original box size in the common,
+    // non-wrapping case, but lets the panel grow downward-from-content when
+    // chips actually need a second row, instead of clipping/escaping.
     if (categoryCount >= 3) {
       return {
-        overlay: { bottom: 6, height: 176, paddingBottom: 8 },
-        panel: { height: 160, paddingVertical: 8, gap: 4 },
+        overlay: { bottom: 6, minHeight: 176, paddingBottom: 8 },
+        panel: { minHeight: 160, paddingVertical: 8, gap: 4 },
       };
     }
 
     if (categoryCount === 2) {
       return {
-        overlay: { bottom: 8, height: 158, paddingBottom: 10 },
-        panel: { height: 138, paddingVertical: 10, gap: 5 },
+        overlay: { bottom: 8, minHeight: 158, paddingBottom: 10 },
+        panel: { minHeight: 138, paddingVertical: 10, gap: 5 },
       };
     }
 
     return {
-      overlay: { bottom: 0, height: 138, paddingBottom: 20 },
-      panel: { height: 118, paddingVertical: 10, gap: 5 },
+      overlay: { bottom: 0, minHeight: 138, paddingBottom: 20 },
+      panel: { minHeight: 118, paddingVertical: 10, gap: 5 },
     };
   }, [categoryCount]);
   const firstCategory = categories[0] ?? null;
@@ -372,13 +385,16 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
 
     const wasFollowing = isFollowing;
     setIsFollowing(!wasFollowing);
+    onHostFollowChange?.(hostId, !wasFollowing);
     setIsFollowPending(true);
 
     try {
       const result = wasFollowing ? await unfollowUser(hostId) : await followUser(hostId);
       if (mountedRef.current) setIsFollowing(result.isFollowing);
+      onHostFollowChange?.(hostId, result.isFollowing);
     } catch (error) {
       if (mountedRef.current) setIsFollowing(wasFollowing);
+      onHostFollowChange?.(hostId, wasFollowing);
       Alert.alert(
         wasFollowing ? "Unable to unfollow" : "Unable to follow",
         getAuthErrorMessage(error, "Please try again."),
@@ -777,7 +793,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         <View style={[styles.infoOverlay, overlayLayout.overlay]}>
           {/* left: accent bar + gradient panel */}
           <View style={styles.infoLeft}>
-            <View style={[styles.accentBar, { height: overlayLayout.panel.height }]} />
+            <View style={styles.accentBar} />
             <LinearGradient
               colors={["#1F1A23", "rgba(102,102,102,0)"]}
               start={{ x: 0, y: 0.5 }}
@@ -1157,7 +1173,10 @@ const styles = StyleSheet.create({
   infoLeft: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
+    // "stretch" (not "center") so accentBar always spans the panel's real,
+    // content-driven height — it no longer relies on a hardcoded number
+    // matching the panel's own hardcoded height.
+    alignItems: "stretch",
     gap: 8,
     marginRight: 12,
   },

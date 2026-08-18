@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, View, Text, type RefreshControlProps, type ViewToken } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, StyleSheet, View, Text, type ListRenderItem, type RefreshControlProps, type ViewToken } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import type { MomentInteractionSummary, MomentTimelineItem } from "@/lib/moments";
 import type { EventResponse, ProfileEventGroups } from "@/lib/events";
@@ -7,7 +7,9 @@ import EventFeedCard from "../home/EventFeedCard";
 import FeedPost, { PostData } from "../post/FeedPost";
 import RepostFeedCard from "../post/RepostFeedCard";
 import ProfileEvents from "./ProfileEvents";
+import { ProfileFeedSkeletonList } from "./ProfileSkeletons";
 import { ProfileTabType } from "./ProfileTabs";
+import type { ProfileEventsFilter } from "./ProfileEvents";
 
 type ProfileContentProps = {
   activeTab: ProfileTabType;
@@ -31,6 +33,8 @@ type ProfileContentProps = {
   isFeedLoadingMore?: boolean;
   onLoadMoreEvents?: (filter: "active" | "past") => void;
   isEventsLoadingMore?: boolean;
+  feedLoading?: boolean;
+  eventsLoading?: boolean;
 };
 
 const PROFILE_VIDEO_VIEWABILITY_THRESHOLD = 60;
@@ -65,10 +69,13 @@ export default function ProfileContent({
   isFeedLoadingMore = false,
   onLoadMoreEvents,
   isEventsLoadingMore = false,
+  feedLoading = false,
+  eventsLoading = false,
 }: ProfileContentProps) {
   const { colors } = useTheme();
   const [activeVideoItemId, setActiveVideoItemId] = useState<string | null>(null);
-  const feedItems = [
+  const [eventsFilter, setEventsFilter] = useState<ProfileEventsFilter>("active");
+  const feedItems = useMemo(() => [
     ...posts.map((post) => ({ type: 'post' as const, id: post.id, createdAt: post.createdAt ?? '', post })),
     ...reposts.map((share) => ({ type: 'repost' as const, id: share.id, createdAt: share.createdAt, share })),
     ...profileFeedEvents.map((event) => ({
@@ -77,16 +84,44 @@ export default function ProfileContent({
       createdAt: event.publishedAt ?? event.createdAt ?? event.scheduledAt ?? '',
       event,
     })),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const firstEventRepostId = feedItems.find((item) => (
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [posts, reposts, profileFeedEvents]);
+  type FeedItem = (typeof feedItems)[number];
+  const firstEventRepostId = useMemo(() => feedItems.find((item) => (
     item.type === 'repost' && item.share.originalItem?.type === 'event'
-  ))?.id;
-  const headerWithGap = listHeaderComponent ? (
-    <>
-      {listHeaderComponent}
-      <View style={styles.afterTabsGap} />
-    </>
-  ) : undefined;
+  ))?.id, [feedItems]);
+  const headerWithGap = useMemo(() => (
+    listHeaderComponent ? (
+      <>
+        {listHeaderComponent}
+        <View style={styles.afterTabsGap} />
+      </>
+    ) : undefined
+  ), [listHeaderComponent]);
+
+  const renderFeedItem = useCallback<ListRenderItem<FeedItem>>(({ item }) => {
+    if (item.type === 'repost') {
+      return (
+        <RepostFeedCard
+          key={`repost-${item.id}`}
+          share={item.share}
+          labelOverride={isOwnProfile ? 'Shared by you' : undefined}
+          onRepostSuccess={onRepostSuccess}
+          showLoadingIndicator={item.share.originalItem?.type !== 'event' || item.id === firstEventRepostId}
+          isActiveVideo={activeVideoItemId === `repost-${item.id}`}
+        />
+      );
+    }
+
+    if (item.type === 'event') {
+      return <EventFeedCard key={`event-${item.id}`} event={item.event} />;
+    }
+
+    return (
+      <FeedPost key={`post-${item.id}`} post={item.post} onCommentPress={onCommentPress} onSharePress={onSharePress}
+        onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile}
+        isActiveVideo={activeVideoItemId === `post-${item.id}`} />
+    );
+  }, [activeVideoItemId, firstEventRepostId, isOwnProfile, onCommentPress, onDeletePost, onInteractionChange, onRepostSuccess, onSharePress]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: PROFILE_VIDEO_VIEWABILITY_THRESHOLD,
@@ -130,7 +165,9 @@ export default function ProfileContent({
         extraData={activeVideoItemId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={(
+        ListEmptyComponent={feedLoading ? (
+          <ProfileFeedSkeletonList />
+        ) : (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No posts yet</Text>
           </View>
@@ -138,36 +175,13 @@ export default function ProfileContent({
         ListFooterComponent={isFeedLoadingMore ? (
           <ActivityIndicator color={colors.textSecondary} style={styles.footerLoader} />
         ) : <View style={{ height: 100 }} />}
-        renderItem={({ item }) => {
-            if (item.type === 'repost') {
-              return (
-                <RepostFeedCard
-                  key={`repost-${item.id}`}
-                  share={item.share}
-                  labelOverride={isOwnProfile ? 'Shared by you' : undefined}
-                  onRepostSuccess={onRepostSuccess}
-                  showLoadingIndicator={item.share.originalItem?.type !== 'event' || item.id === firstEventRepostId}
-                  isActiveVideo={activeVideoItemId === `repost-${item.id}`}
-                />
-              );
-            }
-
-            if (item.type === 'event') {
-              return <EventFeedCard key={`event-${item.id}`} event={item.event} />;
-            }
-
-            return (
-              <FeedPost key={`post-${item.id}`} post={item.post} onCommentPress={onCommentPress} onSharePress={onSharePress}
-                onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile}
-                isActiveVideo={activeVideoItemId === `post-${item.id}`} />
-            );
-          }}
+        renderItem={renderFeedItem}
       />
     );
   }
 
   return (
-        <ProfileEvents 
+        <ProfileEvents
           isOwnProfile={isOwnProfile}
           profileUserId={profileUserId}
           profileIsFollowing={profileIsFollowing}
@@ -177,6 +191,9 @@ export default function ProfileContent({
           refreshControl={refreshControl}
           onLoadMore={onLoadMoreEvents}
           isLoadingMore={isEventsLoadingMore}
+          isLoading={eventsLoading}
+          filter={eventsFilter}
+          onFilterChange={setEventsFilter}
         />
   );
 }

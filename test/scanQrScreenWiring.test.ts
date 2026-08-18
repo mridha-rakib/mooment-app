@@ -8,6 +8,14 @@ import test from "node:test";
 // this repo has no component-rendering test library installed, so wiring that
 // can't be unit-tested in isolation (React effects, navigation focus, camera)
 // is verified against the exact scan-qr.tsx / AddOptionsModal.tsx source text.
+//
+// Manual Check-In no longer requires a selected event (see scan-qr audit +
+// implementation): the ticket code alone determines its event server-side, so
+// the per-screen hosted-events fetch/snapshot/chip-selector was removed
+// entirely from this screen. AddOptionsModal's own active-hosted-event
+// pre-check is kept, because it independently gates whether "Scan QR" is
+// reachable at all (for a user hosting zero active events) -- that gate is
+// unrelated to the removed manual event selector, so it stays.
 const readSourceNormalized = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
 const scanQrSource = readSourceNormalized(join(process.cwd(), "app/event-screen/scan-qr.tsx"));
@@ -28,41 +36,14 @@ const handleOptionSource = sliceBetween(
   "const handleOption = async",
   "const dragResponder",
 );
-const fetchHostedEventsSource = sliceBetween(
-  scanQrSource,
-  "const fetchHostedEvents = useCallback",
-  "const checkInTicket = async",
-);
-const mountEffectSource = sliceBetween(
-  scanQrSource,
-  "useEffect(() => {\n    isMountedRef.current = true;",
-  "useFocusEffect(",
-);
-const focusEffectSource = sliceBetween(
-  scanQrSource,
-  "useFocusEffect(",
-  "const handleRetryHostedEvents",
-);
 const manualPanelSource = sliceBetween(scanQrSource, "const manualPanel = (", "if (!permission)");
 
-// ── 1/2/3. AddOptionsModal still gates on active events, then hands off ────
+// ── AddOptionsModal still gates "Scan QR" on active hosted events ──────────
+// (independent of the manual event selector, which lived inside scan-qr.tsx)
 
 test("AddOptionsModal still performs its existing active-hosted-event pre-check before navigating", () => {
   assert.match(handleOptionSource, /const profileEvents = await getMyProfileEvents\(\);/);
   assert.match(handleOptionSource, /if \(profileEvents\.active\.length === 0\)/);
-});
-
-test("a successful pre-check with active events stores the handoff before falling through to navigation", () => {
-  const preCheckSource = sliceBetween(handleOptionSource, 'if (optionId === "scan")', 'if (optionId === "event")');
-
-  assert.match(
-    preCheckSource,
-    /setPendingScannerHostedEvents\(toScannerHostedEvents\(profileEvents\.active\)\)/,
-  );
-  // The handoff call must happen after the empty-active early return, i.e. only on the success path.
-  const earlyReturnIndex = preCheckSource.indexOf("return;");
-  const handoffIndex = preCheckSource.indexOf("setPendingScannerHostedEvents");
-  assert.ok(earlyReturnIndex !== -1 && handoffIndex > earlyReturnIndex);
 });
 
 test("no active events still returns without navigating and without redesigning the modal", () => {
@@ -73,81 +54,52 @@ test("no active events still returns without navigating and without redesigning 
   );
 });
 
-// ── 4. Scanner resolves its initial state from the reused handoff ──────────
+test("the now-dead scanner hosted-events handoff was removed from AddOptionsModal", () => {
+  assert.doesNotMatch(addOptionsModalSource, /setPendingScannerHostedEvents/);
+  assert.doesNotMatch(addOptionsModalSource, /toScannerHostedEvents/);
+  assert.doesNotMatch(addOptionsModalSource, /scanQrHostedEvents/);
+});
 
-test("the scanner consumes the handoff exactly once via a lazy initializer and derives initial state from it", () => {
-  assert.match(scanQrSource, /const \[initialHandoff\] = useState\(\(\) => takePendingScannerHostedEvents\(\)\);/);
+// ── The scanner screen no longer fetches/holds a hosted-events snapshot ────
+
+test("scan-qr.tsx no longer imports or references the removed scanQrHostedEvents module", () => {
+  assert.doesNotMatch(scanQrSource, /scanQrHostedEvents/);
+  assert.doesNotMatch(scanQrSource, /hostEventsSnapshot/);
+  assert.doesNotMatch(scanQrSource, /selectedEventId/);
+  assert.doesNotMatch(scanQrSource, /getMyProfileEvents/);
+});
+
+test("scan-qr.tsx no longer fetches hosted events on mount, focus, or retry", () => {
+  assert.doesNotMatch(scanQrSource, /fetchHostedEvents/);
+  assert.doesNotMatch(scanQrSource, /useFocusEffect/);
+  assert.doesNotMatch(scanQrSource, /handleRetryHostedEvents/);
+});
+
+// ── Manual panel: no event selector, chip list, loading, or error UI ───────
+
+test("the manual panel no longer renders an event selector, chip list, or hosted-events loading/error UI", () => {
+  assert.doesNotMatch(manualPanelSource, /eventChip/);
+  assert.doesNotMatch(manualPanelSource, /hostEvents/);
+  assert.doesNotMatch(manualPanelSource, /Couldn&apos;t load your hosted events\./);
+  assert.doesNotMatch(manualPanelSource, /No active hosted event is available\./);
+});
+
+test("the manual panel is just the heading and the ticket-number input row", () => {
+  assert.match(manualPanelSource, /Manual Ticket No/);
+  assert.match(manualPanelSource, /placeholder="MOM-26-X7K9-P4M2"/);
+});
+
+// ── Check-In enablement no longer depends on a selected event ──────────────
+
+test("Check In is disabled only by an empty manual code or an active submission, never by event selection", () => {
   assert.match(
     scanQrSource,
-    /const \[hostEventsSnapshot, setHostEventsSnapshot\] = useState\(\(\) =>\s*createInitialHostedEventsSnapshot\(initialHandoff\)\);/,
+    /disabled=\{!manualTicketNo\.trim\(\) \|\| isManualSubmitting\}/,
   );
+  assert.doesNotMatch(scanQrSource, /!selectedEventId/);
 });
 
-// ── 5/6/7. No duplicate/unnecessary requests around mount and first focus ──
-
-test("the mount effect skips fetching hosted events when a valid handoff already exists", () => {
-  assert.match(mountEffectSource, /if \(!hasValidHandoff\) \{\s*void fetchHostedEvents\(\{ showLoading: true \}\);\s*\}/);
-});
-
-test("the focus effect ignores the very first focus so it never duplicates the mount/handoff fetch", () => {
-  assert.match(
-    focusEffectSource,
-    /if \(isInitialFocusRef\.current\) \{\s*isInitialFocusRef\.current = false;\s*return;\s*\}/,
-  );
-});
-
-test("subsequent focus events (after the first) do call the central fetch function for revalidation", () => {
-  assert.match(focusEffectSource, /void fetchHostedEvents\(\{ showLoading: false \}\);/);
-});
-
-test("there is exactly one fetch function reused by mount, focus, and retry (no duplicated fetch logic)", () => {
-  const fetchCallSites = scanQrSource.match(/void fetchHostedEvents\(/g) ?? [];
-  assert.equal(fetchCallSites.length, 3); // mount, focus, retry
-});
-
-// ── Race safety: duplicate-request guard, stale-response guard, unmount guard ─
-
-test("fetchHostedEvents guards against a duplicate concurrent request", () => {
-  assert.match(fetchHostedEventsSource, /if \(activeFetchRef\.current\) return;/);
-  assert.match(fetchHostedEventsSource, /activeFetchRef\.current = true;/);
-});
-
-test("fetchHostedEvents drops results from a superseded (stale) or unmounted request", () => {
-  assert.match(fetchHostedEventsSource, /const fetchId = \+\+fetchIdRef\.current;/);
-  assert.match(
-    fetchHostedEventsSource,
-    /if \(!isMountedRef\.current \|\| fetchId !== fetchIdRef\.current\) \{\s*return;\s*\}/,
-  );
-});
-
-test("a failed request never converts to a literal empty array before the pure resolver decides the outcome", () => {
-  assert.doesNotMatch(fetchHostedEventsSource, /\.catch\(\(\) => setHostEvents\(\[\]\)\)/);
-  assert.match(fetchHostedEventsSource, /\.catch\(\(\) => \(\{ ok: false as const \}\)\)/);
-});
-
-// ── 10/11/12. Retry action reuses the same fetch function, one at a time ──
-
-test("the manual message area shows the approved error copy and a Try Again action wired to the shared fetch", () => {
-  assert.match(manualPanelSource, /Couldn&apos;t load your hosted events\./);
-  assert.match(manualPanelSource, />Try Again<\/Text>/);
-  assert.match(manualPanelSource, /onPress=\{handleRetryHostedEvents\}/);
-});
-
-test("handleRetryHostedEvents reuses fetchHostedEvents with the loading state shown, not a bespoke retry path", () => {
-  const retrySource = sliceBetween(scanQrSource, "const handleRetryHostedEvents", "const checkInTicket = async");
-  assert.match(retrySource, /void fetchHostedEvents\(\{ showLoading: true \}\);/);
-});
-
-// ── 23/24. Check-In enablement rule is untouched except for a real selectedEventId ─
-
-test("Check In stays disabled without a manual code, without a selected event, or while submitting", () => {
-  assert.match(
-    scanQrSource,
-    /disabled=\{!manualTicketNo\.trim\(\) \|\| !selectedEventId \|\| isManualSubmitting\}/,
-  );
-});
-
-// ── 25/26/27/29. QR + manual submission, payload, and Alerts are untouched ─
+// ── QR submission remains byte-for-byte unchanged ───────────────────────────
 
 test("QR submission still calls checkInTicket with only the scanned data, gated by the existing scanner lock", () => {
   assert.match(
@@ -156,12 +108,15 @@ test("QR submission still calls checkInTicket with only the scanned data, gated 
   );
 });
 
-test("manual submission still trims and uppercases the code before calling the same checkInTicket function", () => {
+// ── Manual submission now sends the same code-only shape as QR ─────────────
+
+test("manual submission still trims and uppercases the code, and now calls checkInTicket without a client-selected eventId", () => {
   assert.match(scanQrSource, /const checkInCode = manualTicketNo\.trim\(\)\.toUpperCase\(\);/);
-  assert.match(scanQrSource, /void checkInTicket\(checkInCode, selectedEventId, true\);/);
+  assert.match(scanQrSource, /if \(!checkInCode \|\| isManualSubmitting\) return;/);
+  assert.match(scanQrSource, /void checkInTicket\(checkInCode, undefined, true\);/);
 });
 
-test("checkInTicket still posts through scanTicketQrCode with only (checkInCode, eventId)", () => {
+test("checkInTicket still posts through scanTicketQrCode with only (checkInCode, eventId), unchanged by the manual-flow change", () => {
   assert.match(scanQrSource, /const scannedTicket = await scanTicketQrCode\(checkInCode, eventId\);/);
 });
 
@@ -172,15 +127,10 @@ test("the success and failure Alerts are byte-identical to the pre-fix implement
   assert.match(scanQrSource, /text: 'Try again'/);
 });
 
-// ── 28. No polling, pull-to-refresh, WebSocket, or new package ─────────────
+// ── No polling, pull-to-refresh, or WebSocket mechanism ─────────────────────
 
 test("no polling, pull-to-refresh, or WebSocket mechanism was introduced", () => {
   assert.doesNotMatch(scanQrSource, /setInterval|setTimeout/);
   assert.doesNotMatch(scanQrSource, /RefreshControl/);
   assert.doesNotMatch(scanQrSource, /WebSocket/);
-});
-
-test("no new package import beyond the already-installed navigation focus hook", () => {
-  const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
-  assert.ok(packageJson.dependencies["@react-navigation/native"]);
 });

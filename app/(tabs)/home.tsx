@@ -396,6 +396,11 @@ export default function HomeFeed() {
   const appliedNearbyFilterKeyRef = useRef(getEventLocationFilterKey(appliedEventFilters.nearby));
   const feedAudienceRef = useRef(feedAudience);
   const didMountEventFilterEffectRef = useRef(false);
+  // Tracks suggestion cards removed from `suggestedUsers` because a follow
+  // action (optimistic or confirmed) targeted that user, keyed by user id.
+  // Lets a same-user unfollow/rollback restore the exact original card
+  // instead of leaving it gone until the next suggestions refetch.
+  const pendingSuggestionRemovalsRef = useRef<Map<string, SuggestedUser>>(new Map());
   const params = useLocalSearchParams<{ showSuccess?: string; view?: string; category?: string | string[] }>();
 
   useEffect(() => {
@@ -624,17 +629,37 @@ export default function HomeFeed() {
     }
   }, [beginEventFilterTransition]);
 
+  const loadSuggestedUsers = useCallback(async () => {
+    try {
+      const users = await getSuggestedUsers(10);
+
+      // A fresh fetch is authoritative — any locally-tracked removal is
+      // superseded by whatever the backend now says.
+      pendingSuggestionRemovalsRef.current.clear();
+
+      setSuggestedUsers(users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        avatarUri: user.avatarUrl?.trim() || (user.avatarKey ? getStorageFileUrl(user.avatarKey) : null),
+        isFollowing: user.isFollowing,
+      })));
+    } catch {
+      // Keep whatever suggestions are already on screen rather than wiping
+      // them out because a secondary refresh request failed.
+    }
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
       await Promise.race([
-        Promise.all([loadStories(), loadFeed(feedAudience)]),
+        Promise.all([loadStories(), loadFeed(feedAudience), loadSuggestedUsers()]),
         new Promise((resolve) => setTimeout(resolve, REFRESH_TIMEOUT_MS)),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [feedAudience, loadFeed, loadStories]);
+  }, [feedAudience, loadFeed, loadStories, loadSuggestedUsers]);
 
   const refreshFeedAfterRepost = useCallback(async () => {
     await loadFeed(feedAudience);
@@ -680,33 +705,8 @@ export default function HomeFeed() {
   }, [pendingVideoUploads, selectedType]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadSuggestedUsers = async () => {
-      try {
-        const users = await getSuggestedUsers(10);
-
-        if (!isMounted) return;
-
-        setSuggestedUsers(users.map((user) => ({
-          id: user.id,
-          name: user.name,
-          avatarUri: user.avatarUrl?.trim() || (user.avatarKey ? getStorageFileUrl(user.avatarKey) : null),
-          isFollowing: user.isFollowing,
-        })));
-      } catch {
-        if (isMounted) {
-          setSuggestedUsers([]);
-        }
-      }
-    };
-
     void loadSuggestedUsers();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [loadSuggestedUsers]);
 
   const applyInteractionSummary = useCallback((postId: string, summary: MomentInteractionSummary) => {
     const applyToPost = (post: PostData) => ({
@@ -765,10 +765,46 @@ export default function HomeFeed() {
     }
   }, [applyInteractionSummary, refreshFeedAfterRepost, selectedSharePost]);
 
+  // Single canonical propagation point for a follow-state change on any user,
+  // regardless of which surface (feed author card, event host card, or
+  // People-to-follow) originated it — every other currently-loaded
+  // representation of that same user id is reconciled here so no surface is
+  // left showing stale Follow/Following state.
   const handleAuthorFollowChange = useCallback((authorId: string, isFollowing: boolean) => {
     setFeedMomentPosts((currentPosts) => currentPosts.map((post) => (
       post.authorId === authorId ? { ...post, isFollowing } : post
     )));
+
+    setFeedEvents((currentEvents) => currentEvents.map((event) => (
+      event.host && event.host.id === authorId
+        ? { ...event, host: { ...event.host, isFollowing } }
+        : event
+    )));
+
+    setSuggestedUsers((currentSuggestions) => {
+      if (isFollowing) {
+        // The suggestions endpoint never returns already-followed users, so
+        // the smallest correct reconciliation is to drop the card rather
+        // than leave an obsolete "Follow" suggestion for someone already
+        // followed.
+        const match = currentSuggestions.find((user) => user.id === authorId);
+        if (!match) {
+          return currentSuggestions;
+        }
+        pendingSuggestionRemovalsRef.current.set(authorId, match);
+        return currentSuggestions.filter((user) => user.id !== authorId);
+      }
+
+      // isFollowing === false: only restore a card we ourselves removed
+      // (an unfollow, or a rollback of a failed follow) — never fabricate
+      // suggestion data that didn't come from the backend.
+      const removed = pendingSuggestionRemovalsRef.current.get(authorId);
+      if (!removed || currentSuggestions.some((user) => user.id === authorId)) {
+        return currentSuggestions;
+      }
+      pendingSuggestionRemovalsRef.current.delete(authorId);
+      return [...currentSuggestions, removed];
+    });
   }, []);
 
   // Immediate local reflection of a Report+Block flow's block step
@@ -1079,6 +1115,7 @@ export default function HomeFeed() {
                     event={item.data}
                     onRepostSuccess={refreshFeedAfterRepost}
                     onHostBlocked={handleUserBlockedFromReport}
+                    onHostFollowChange={handleAuthorFollowChange}
                   />
                 );
               }
@@ -1093,7 +1130,7 @@ export default function HomeFeed() {
                 );
               }
               if (item.type === 'suggested_users') {
-                return <PeopleToFollow users={item.data} />;
+                return <PeopleToFollow users={item.data} onFollowChange={handleAuthorFollowChange} />;
               }
               if (item.type === 'your_feed_header') {
                 return (

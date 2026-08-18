@@ -192,6 +192,26 @@ export const sendGroupMessage = async (
   return message as GroupMessageResponse;
 };
 
+export type LeaveGroupResponse = {
+  groupId: string;
+  status: "left" | "group_deleted";
+  newOwnerId?: string;
+};
+
+// Group-specific membership action — never reuse blockMessages/deleteConversation
+// (both DM-only) for a group id. Backend is authoritative for ownership
+// transfer / group deletion; this call carries no such logic itself.
+export const leaveGroup = async (groupId: string): Promise<LeaveGroupResponse> => {
+  const response = await api.post(`/groups/${encodeURIComponent(groupId)}/leave`);
+  const leave = response.data?.data?.leave;
+
+  if (!leave) {
+    throw new Error("The leave group response was incomplete.");
+  }
+
+  return leave as LeaveGroupResponse;
+};
+
 // ── Message-only block (Chat-only restriction) ──────────────────────────
 // Entirely separate from the Full/Profile block in @/lib/users.ts
 // (blockUser/unblockUser/getBlockedUsers, which hit /users/:id/block and

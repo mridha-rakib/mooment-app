@@ -332,6 +332,14 @@ export type TicketWalletItem = {
         avatarKey?: string | null;
       }[];
     };
+    // Canonical Event -> Interaction Moment summary, matching the fields
+    // Feed/Event Details already return for the same event.
+    interactionMomentId?: string;
+    likesCount?: number;
+    commentsCount?: number;
+    sharesCount?: number;
+    isLiked?: boolean;
+    isSaved?: boolean;
   };
 };
 
@@ -391,14 +399,26 @@ export const getActiveTicketWalletCount = (tickets: TicketWalletItem[]) =>
 export const createCheckoutIntent = async (
   payload: CreateCheckoutIntentPayload,
 ): Promise<CheckoutIntent> => {
-  const response = await api.post("/payments/checkout-intents", payload);
-  const checkout = response.data?.data?.checkout as CheckoutIntent | undefined;
+  try {
+    const response = await api.post("/payments/checkout-intents", payload);
+    const checkout = response.data?.data?.checkout as CheckoutIntent | undefined;
 
-  if (!checkout?.order) {
-    throw new Error("The payment response was incomplete.");
+    if (!checkout?.order) {
+      throw new Error("The payment response was incomplete.");
+    }
+
+    return checkout;
+  } catch (error) {
+    if (isAxiosError(error)) {
+      const message = error.response?.data?.message;
+
+      if (typeof message === "string" && message.trim()) {
+        throw new Error(message);
+      }
+    }
+
+    throw error;
   }
-
-  return checkout;
 };
 
 export const confirmCheckoutOrder = async (orderId: string): Promise<CheckoutOrder> => {

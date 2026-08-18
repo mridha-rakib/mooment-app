@@ -2,17 +2,15 @@ import {
   Feather } from '@expo/vector-icons';
 import { CameraView,
   useCameraPermissions } from 'expo-camera';
-import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React,
-  { useCallback, useEffect, useRef, useState } from 'react';
+  { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -26,14 +24,7 @@ import CinematicButton from '@/components/ui/CinematicButton';
 import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-icons";
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { scanTicketQrCode } from '@/lib/payments';
-import { getMyProfileEvents } from '@/lib/events';
 import { safeBack } from '@/lib/navigation';
-import {
-  createInitialHostedEventsSnapshot,
-  resolveHostedEventsSnapshot,
-  takePendingScannerHostedEvents,
-  toScannerHostedEvents,
-} from '@/lib/scanQrHostedEvents';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const { width, height } = Dimensions.get('window');
@@ -50,81 +41,6 @@ export default function ScanQRScreen() {
   const [manualTicketNo, setManualTicketNo] = useState('');
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
   const submitLockRef = useRef(false);
-
-  const [initialHandoff] = useState(() => takePendingScannerHostedEvents());
-  const hasValidHandoff = Boolean(initialHandoff && initialHandoff.length > 0);
-  const [hostEventsSnapshot, setHostEventsSnapshot] = useState(() =>
-    createInitialHostedEventsSnapshot(initialHandoff));
-
-  const { status: hostEventsStatus, events: hostEvents, selectedEventId } = hostEventsSnapshot;
-
-  const isMountedRef = useRef(true);
-  const hasLoadedOnceRef = useRef(hasValidHandoff);
-  const activeFetchRef = useRef(false);
-  const fetchIdRef = useRef(0);
-  const isInitialFocusRef = useRef(true);
-
-  const fetchHostedEvents = useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
-    if (activeFetchRef.current) return;
-
-    activeFetchRef.current = true;
-    const fetchId = ++fetchIdRef.current;
-
-    if (showLoading) {
-      setHostEventsSnapshot((prev) => ({ ...prev, status: 'loading' }));
-    }
-
-    const outcome = await getMyProfileEvents()
-      .then(({ active }) => ({ ok: true as const, events: toScannerHostedEvents(active) }))
-      .catch(() => ({ ok: false as const }));
-
-    activeFetchRef.current = false;
-
-    if (!isMountedRef.current || fetchId !== fetchIdRef.current) {
-      return;
-    }
-
-    setHostEventsSnapshot((prev) => {
-      const next = resolveHostedEventsSnapshot(outcome, {
-        events: prev.events,
-        selectedEventId: prev.selectedEventId,
-        hasLoadedOnce: hasLoadedOnceRef.current,
-      });
-
-      if (outcome.ok) {
-        hasLoadedOnceRef.current = true;
-      }
-
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    if (!hasValidHandoff) {
-      void fetchHostedEvents({ showLoading: true });
-    }
-
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, [fetchHostedEvents, hasValidHandoff]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (isInitialFocusRef.current) {
-        isInitialFocusRef.current = false;
-        return;
-      }
-
-      void fetchHostedEvents({ showLoading: false });
-    }, [fetchHostedEvents]),
-  );
-
-  const handleRetryHostedEvents = useCallback(() => {
-    void fetchHostedEvents({ showLoading: true });
-  }, [fetchHostedEvents]);
 
   const checkInTicket = async (checkInCode: string, eventId?: string, manual = false) => {
     if (submitLockRef.current) return;
@@ -167,44 +83,13 @@ export default function ScanQRScreen() {
   const handleManualCheckIn = () => {
     const checkInCode = manualTicketNo.trim().toUpperCase();
 
-    if (!checkInCode || !selectedEventId || isManualSubmitting) return;
-    void checkInTicket(checkInCode, selectedEventId, true);
+    if (!checkInCode || isManualSubmitting) return;
+    void checkInTicket(checkInCode, undefined, true);
   };
 
   const manualPanel = (
     <View style={[styles.manualPanel, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <Text style={styles.manualTitle}>Manual Ticket No</Text>
-      {hostEventsStatus === 'loading' ? (
-        <ActivityIndicator size="small" color="#FFFFFF" style={styles.eventLoader} />
-      ) : hostEventsStatus === 'error' ? (
-        <View style={styles.eventErrorRow}>
-          <Text style={styles.eventErrorText}>Couldn&apos;t load your hosted events.</Text>
-          <TouchableOpacity onPress={handleRetryHostedEvents} activeOpacity={0.8}>
-            <Text style={styles.eventRetryText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      ) : hostEvents.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventList}>
-          {hostEvents.map((event) => {
-            const selected = event.id === selectedEventId;
-            return (
-              <TouchableOpacity
-                key={event.id}
-                style={[styles.eventChip, selected && styles.eventChipSelected]}
-                onPress={() => setHostEventsSnapshot((prev) => ({ ...prev, selectedEventId: event.id }))}
-                disabled={isManualSubmitting}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.eventChipText, selected && styles.eventChipTextSelected]} numberOfLines={1}>
-                  {event.name || 'Event'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      ) : (
-        <Text style={styles.noEventsText}>No active hosted event is available.</Text>
-      )}
       <View style={styles.manualInputRow}>
         <TextInput
           value={manualTicketNo}
@@ -223,9 +108,9 @@ export default function ScanQRScreen() {
           style={[
             styles.manualSubmit,
             { backgroundColor: buttonBackground(colors) },
-            (!manualTicketNo.trim() || !selectedEventId || isManualSubmitting) && styles.manualSubmitDisabled,
+            (!manualTicketNo.trim() || isManualSubmitting) && styles.manualSubmitDisabled,
           ]}
-          disabled={!manualTicketNo.trim() || !selectedEventId || isManualSubmitting}
+          disabled={!manualTicketNo.trim() || isManualSubmitting}
           onPress={handleManualCheckIn}
           activeOpacity={0.85}
         >
@@ -321,13 +206,13 @@ export default function ScanQRScreen() {
           onPress={() => safeBack(router)}
           icon={ArrowLeft01Icon}
           size={22}
-          color="#FFFFFF"
+          color={colors.text}
         />
         <CinematicButton
           onPress={() => setFlash(f => !f)}
           icon={flash ? FlashIcon : FlashOffIcon}
           size={20}
-          color={flash ? '#F59E0B' : '#FFFFFF'}
+          color={flash ? '#F59E0B' : colors.text}
         />
       </SafeAreaView>
 
@@ -438,23 +323,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   manualTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  eventLoader: { alignSelf: 'flex-start', marginBottom: 10 },
-  eventList: { gap: 8, paddingBottom: 10 },
-  eventChip: {
-    maxWidth: 180,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  eventChipSelected: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
-  eventChipText: { color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '600' },
-  eventChipTextSelected: { color: '#111111' },
-  noEventsText: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 10 },
-  eventErrorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  eventErrorText: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
-  eventRetryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
   manualInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   manualInput: {
     flex: 1,

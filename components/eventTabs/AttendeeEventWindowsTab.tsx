@@ -540,11 +540,11 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
         <View style={[styles.capacityRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.capacityText, { color: colors.textSecondary }]}>{window.remainingSlots} of {window.maxPosts} slots remaining</Text>
         </View>
-        <View style={styles.policySummaryRow}>
-          <Text style={[styles.policySummaryText, { color: colors.textSecondary }]}>{POSTING_ELIGIBILITY_SUMMARY[window.postingEligibility]}</Text>
-          <Text style={[styles.policySummaryDot, { color: colors.textSecondary }]}>·</Text>
-          <Text style={[styles.policySummaryText, { color: colors.textSecondary }]}>{PARTICIPANT_VISIBILITY_SUMMARY[window.participantPostVisibility]}</Text>
-        </View>
+        <Text style={[styles.policySummaryText, { color: colors.textSecondary }]}>
+          {POSTING_ELIGIBILITY_SUMMARY[window.postingEligibility]}
+          <Text style={styles.policySummaryDot}> · </Text>
+          {PARTICIPANT_VISIBILITY_SUMMARY[window.participantPostVisibility]}
+        </Text>
         <View style={[styles.windowMessage, { backgroundColor: isDark ? "#191919" : "#F3F4F6" }]}>
           <Feather name={window.hasPosted ? "unlock" : window.isEligibleToPost ? "lock" : "map-pin"} size={16} color={window.hasPosted ? colors.success : colors.textSecondary} />
           <Text style={[styles.windowMessageText, { color: colors.textSecondary }]}>{getWindowMessage(window)}</Text>
@@ -733,8 +733,7 @@ const styles = StyleSheet.create({
   typeText: { fontSize: 12, fontWeight: "600" },
   capacityRow: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 13 },
   capacityText: { fontSize: 12, fontWeight: "600" },
-  policySummaryRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
-  policySummaryText: { fontSize: 11.5 },
+  policySummaryText: { fontSize: 11.5, lineHeight: 16, marginTop: 6 },
   policySummaryDot: { fontSize: 11.5 },
   windowMessage: { flexDirection: "row", alignItems: "center", gap: 8, padding: 11, borderRadius: 8, marginTop: 12 },
   windowMessageText: { flex: 1, fontSize: 13, lineHeight: 18 },

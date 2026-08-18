@@ -150,6 +150,17 @@ export default function MessagesScreen() {
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Groups has no "Blocked" concept (no group-blocking feature exists —
+  // only Leave Group). If the user was on DMs → Blocked and switches to
+  // Groups, resolve to a valid Groups filter instead of leaving 'Blocked'
+  // selected and silently rendering an empty list.
+  useEffect(() => {
+    if (subTab === 'Groups' && topTab === 'Blocked') {
+      setTopTab('All');
+    }
+  }, [subTab, topTab]);
+
   const currentUserIdRef = useRef<string | undefined>(currentUser?.id);
   const activeDirectConversationIdRef = useRef<string | null>(null);
   const activeDirectConversationId = useChatUnreadStore((state) => state.activeDirectConversationId);
@@ -706,9 +717,11 @@ export default function MessagesScreen() {
         />
       </View>
 
-      {/* Top Tabs */}
+      {/* Top Tabs — Groups has no Blocked concept (see Leave Group instead),
+          so that chip is hidden entirely (not merely disabled) when Groups
+          is the active subTab. */}
       <View style={styles.tabRow}>
-        {(['All', 'Unread', 'Blocked'] as const).map(tab => (
+        {(subTab === 'Groups' ? (['All', 'Unread'] as const) : (['All', 'Unread', 'Blocked'] as const)).map(tab => (
           <TouchableOpacity
             key={tab}
             style={[

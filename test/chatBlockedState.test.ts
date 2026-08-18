@@ -89,8 +89,8 @@ test("banner: Full Block copy/subtitle take precedence over Message Block whenev
   );
 });
 
-test("menu: fullBlockedByMe keeps the existing full 'Unblock' action; fullBlockedMe hides the item entirely (no confusing duplicate toggle)", () => {
-  assert.match(chatDetailSource, /\{fullBlockedMe && !fullBlockedByMe \? null : \(/);
+test("menu: fullBlockedByMe keeps the existing full 'Unblock' action; fullBlockedMe hides the item entirely (no confusing duplicate toggle); the whole item is DM-only (never rendered for a group thread — see groupLeaveMenu.test.ts)", () => {
+  assert.match(chatDetailSource, /\{!isGroup && \(fullBlockedMe && !fullBlockedByMe \? null : \(/);
   assert.match(
     chatDetailSource,
     /if \(fullBlockedByMe\) \{\s*const result = await unblockUser\(friendId\);\s*setFullBlockedByMe\(result\.isBlocked\);/,

@@ -727,6 +727,12 @@ const ticketWalletEventToEventResponse = (walletItem: TicketWalletItem): EventRe
     publicGoingSummary: walletEvent.publicGoingSummary,
     createdAt: walletItem.purchasedAt ?? walletEvent.scheduledAt ?? new Date(0).toISOString(),
     updatedAt: walletItem.purchasedAt ?? walletEvent.scheduledAt ?? new Date(0).toISOString(),
+    interactionMomentId: walletEvent.interactionMomentId,
+    likesCount: walletEvent.likesCount,
+    commentsCount: walletEvent.commentsCount,
+    sharesCount: walletEvent.sharesCount,
+    isLiked: walletEvent.isLiked,
+    isSaved: walletEvent.isSaved,
   };
 };
 

@@ -1,4 +1,5 @@
 import TicketWalletShortcut from "@/components/ticket/TicketWalletShortcut";
+import { useTheme } from "@/hooks/useTheme";
 import { installLogBoxStackGuard } from "@/lib/installLogBoxStackGuard";
 import { registerFcmToken } from "@/lib/notifications";
 import { connect as connectRealtimeSocket, disconnect as disconnectRealtimeSocket } from "@/lib/socketClient";
@@ -91,6 +92,21 @@ function ThemePreferenceGate() {
       isMounted = false;
     };
   }, [dispatch]);
+
+  return null;
+}
+
+function SystemNavigationBarGate() {
+  const { isDark } = useTheme();
+
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    NavigationBar.setStyle(isDark ? "dark" : "light");
+    void NavigationBar.setVisibilityAsync("visible");
+  }, [isDark]);
 
   return null;
 }
@@ -366,15 +382,6 @@ export default function RootLayout() {
     };
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS !== "android") {
-      return;
-    }
-
-    NavigationBar.setStyle("dark");
-    void NavigationBar.setVisibilityAsync("visible");
-  }, []);
-
   return (
     // Non-visual wrapper required by react-native-gesture-handler's
     // GestureDetector (used by the Story image/text transform editor). It
@@ -395,6 +402,7 @@ export default function RootLayout() {
         </Stack>
         <TicketWalletShortcut />
         <ThemePreferenceGate />
+        <SystemNavigationBarGate />
         <AuthSessionGate />
         <LocationSharingGate />
         <PushNotificationGate />

@@ -11,7 +11,7 @@ import { getUserStories, type Story } from "@/lib/stories";
 import { createStoryViewerSession } from "@/lib/storyViewerSession";
 import { blockUser, unblockUser } from "@/lib/users";
 import { Feather } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -113,6 +113,10 @@ type ProfileViewProps = {
   onLoadMoreEvents?: (filter: "active" | "past") => void;
   isEventsLoadingMore?: boolean;
   onUnblockProfile?: () => Promise<void>;
+  identityLoading?: boolean;
+  statsLoading?: boolean;
+  feedLoading?: boolean;
+  eventsLoading?: boolean;
 };
 
 export default function ProfileView({
@@ -133,6 +137,10 @@ export default function ProfileView({
   onLoadMoreEvents,
   isEventsLoadingMore = false,
   onUnblockProfile,
+  identityLoading = false,
+  statsLoading = false,
+  feedLoading = false,
+  eventsLoading = false,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -531,6 +539,122 @@ export default function ProfileView({
     }
   }, [isUnblockingProfile, onUnblockProfile, user.id, user.viewerHasBlockedTarget]);
 
+  const handleOpenMenu = useCallback(() => setMenuVisible(true), []);
+  const handleAvatarTap = useCallback(() => void handleAvatarPress(), [handleAvatarPress]);
+  const handleOpenAllEvents = useCallback(() => {
+    router.push({
+      pathname: "/profile-screen/all-events" as never,
+      params: { userId: user.id },
+    });
+  }, [router, user.id]);
+
+  const listHeader = useMemo(() => (
+    <>
+      <ProfileHeader
+        userId={user.id}
+        name={user.name}
+        avatar={user.avatar}
+        stats={user.stats}
+        accountType={user.accountType}
+        hasActiveStory={hasActiveStory}
+        isOwnProfile={isOwnProfile}
+        onMenuPress={handleOpenMenu}
+        onAvatarPress={handleAvatarTap}
+        onReport={!isOwnProfile ? handleReportPress : undefined}
+        reportDisabled={hasProfileBlockRelationship}
+        onBlock={!isOwnProfile && !user.targetHasBlockedViewer ? handleProfileBlockMenuPress : undefined}
+        blockLabel={user.viewerHasBlockedTarget ? "Unblock" : "Block"}
+        blockDisabled={isProfileBlockMutationPending}
+        onEventsPress={handleOpenAllEvents}
+        identityLoading={identityLoading}
+        statsLoading={statsLoading}
+      />
+      <ProfileBio
+        name={user.name}
+        handle={user.handle}
+        bio={user.bio}
+        accountType={user.accountType}
+        isOwnProfile={isOwnProfile}
+        identityLoading={identityLoading}
+        actions={
+          <ProfileActions
+            userId={user.id}
+            userName={user.name}
+            userAvatar={user.avatar}
+            isOwnProfile={isOwnProfile}
+            onlyButtons={true}
+            initialIsFollowing={user.isFollowing}
+            onFollowChange={onFollowChange}
+          />
+        }
+      />
+      {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
+
+      <ProfileTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        isOwnProfile={isOwnProfile}
+      />
+    </>
+  ), [
+    activeTab,
+    handleAvatarTap,
+    handleOpenAllEvents,
+    handleOpenMenu,
+    handleProfileBlockMenuPress,
+    handleReportPress,
+    hasActiveStory,
+    hasProfileBlockRelationship,
+    identityLoading,
+    isOwnProfile,
+    isProfileBlockMutationPending,
+    onFollowChange,
+    statsLoading,
+    user.accountType,
+    user.avatar,
+    user.bio,
+    user.handle,
+    user.id,
+    user.isFollowing,
+    user.name,
+    user.stats,
+    user.targetHasBlockedViewer,
+    user.viewerHasBlockedTarget,
+  ]);
+
+  const refreshControl = onRefresh ? (
+    <RefreshControl
+      refreshing={isRefreshing}
+      onRefresh={handleRefresh}
+      tintColor={colors.primary}
+    />
+  ) : undefined;
+
+  const handleCommentPress = useCallback((post: PostData) => {
+    setSelectedCommentPost(post);
+    setCommentsVisible(true);
+  }, []);
+
+  const handleSharePress = useCallback((post: PostData) => {
+    setSelectedSharePost(post);
+    setShareVisible(true);
+  }, []);
+
+  const handleFeedInteractionChange = useCallback((postId: string, summary: MomentInteractionSummary) => {
+    onInteractionChange?.(postId, summary);
+    setSelectedCommentPost((currentPost) =>
+      currentPost?.id === postId
+        ? {
+            ...currentPost,
+            likesCount: summary.likesCount,
+            commentsCount: summary.commentsCount,
+            sharesCount: summary.sharesCount,
+            isLiked: summary.isLiked,
+          }
+        : currentPost,
+    );
+  }, [onInteractionChange]);
+
   const reportModals = (
     <>
       <ReportModal
@@ -650,66 +774,6 @@ export default function ProfileView({
     );
   }
 
-  const listHeader = (
-    <>
-      <ProfileHeader
-        userId={user.id}
-        name={user.name}
-        avatar={user.avatar}
-        stats={user.stats}
-        accountType={user.accountType}
-        hasActiveStory={hasActiveStory}
-        isOwnProfile={isOwnProfile}
-        onMenuPress={() => setMenuVisible(true)}
-        onAvatarPress={() => void handleAvatarPress()}
-        onReport={!isOwnProfile ? handleReportPress : undefined}
-        reportDisabled={hasProfileBlockRelationship}
-        onBlock={!isOwnProfile && !user.targetHasBlockedViewer ? handleProfileBlockMenuPress : undefined}
-        blockLabel={user.viewerHasBlockedTarget ? "Unblock" : "Block"}
-        blockDisabled={isProfileBlockMutationPending}
-        onEventsPress={() =>
-          router.push({
-            pathname: "/profile-screen/all-events" as never,
-            params: { userId: user.id },
-          })
-        }
-      />
-      <ProfileBio
-        name={user.name}
-        handle={user.handle}
-        bio={user.bio}
-        accountType={user.accountType}
-        isOwnProfile={isOwnProfile}
-        actions={
-          <ProfileActions
-            userId={user.id}
-            userName={user.name}
-            userAvatar={user.avatar}
-            isOwnProfile={isOwnProfile}
-            onlyButtons={true}
-            initialIsFollowing={user.isFollowing}
-            onFollowChange={onFollowChange}
-          />
-        }
-      />
-      {isOwnProfile && <ProfileActions isOwnProfile={isOwnProfile} />}
-
-      <ProfileTabs
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        isOwnProfile={isOwnProfile}
-      />
-    </>
-  );
-
-  const refreshControl = onRefresh ? (
-    <RefreshControl
-      refreshing={isRefreshing}
-      onRefresh={handleRefresh}
-      tintColor={colors.primary}
-    />
-  ) : undefined;
-
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -717,29 +781,10 @@ export default function ProfileView({
         activeTab={activeTab}
         posts={posts}
         reposts={reposts}
-        onCommentPress={(post) => {
-          setSelectedCommentPost(post);
-          setCommentsVisible(true);
-        }}
-        onSharePress={(post) => {
-          setSelectedSharePost(post);
-          setShareVisible(true);
-        }}
+        onCommentPress={handleCommentPress}
+        onSharePress={handleSharePress}
         onDeletePost={onDeletePost}
-        onInteractionChange={(postId, summary) => {
-          onInteractionChange?.(postId, summary);
-          setSelectedCommentPost((currentPost) =>
-            currentPost?.id === postId
-              ? {
-                  ...currentPost,
-                  likesCount: summary.likesCount,
-                  commentsCount: summary.commentsCount,
-                  sharesCount: summary.sharesCount,
-                  isLiked: summary.isLiked,
-                }
-              : currentPost,
-          );
-        }}
+        onInteractionChange={handleFeedInteractionChange}
         isOwnProfile={isOwnProfile}
         profileUserId={user.id}
         profileIsFollowing={user.isFollowing}
@@ -754,6 +799,8 @@ export default function ProfileView({
         isFeedLoadingMore={isFeedLoadingMore}
         onLoadMoreEvents={onLoadMoreEvents}
         isEventsLoadingMore={isEventsLoadingMore}
+        feedLoading={feedLoading}
+        eventsLoading={eventsLoading}
       />
 
       <CommentsModal

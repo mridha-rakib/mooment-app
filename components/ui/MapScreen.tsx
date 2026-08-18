@@ -2,7 +2,7 @@ import { getCategoryColor, getCategoryMarkerColor } from "@/constants/categoryCo
 import { EVENT_CATEGORIES, type EventCategory } from "@/constants/eventCategories";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
-import { APP_MAP_STYLE_URL, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
+import { APP_MAP_STYLE_URL, APP_MAP_STYLE_URL_LIGHT, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
 import type { EventMapViewport } from "@/lib/mapEventRequests";
 import {
   getCarouselIndexByMarkerId,
@@ -590,7 +590,7 @@ export default function MapScreen({
 }: MapScreenProps) {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const plans = usePlanStore((state) => state.plans);
   const restorePlans = usePlanStore((state) => state.restorePlans);
   const sharedLocation = useAuthStore((state) =>
@@ -639,7 +639,9 @@ export default function MapScreen({
   const isSatellite = mapMode === "satellite";
   const currentMapStyle = isSatellite
     ? SATELLITE_MAP_STYLE_URL
-    : APP_MAP_STYLE_URL;
+    : isDark
+      ? APP_MAP_STYLE_URL
+      : APP_MAP_STYLE_URL_LIGHT;
 
   // Reset the loaded flag whenever the style URL changes so markers are
   // held back until Mapbox has fully applied the new style.
@@ -655,10 +657,11 @@ export default function MapScreen({
     traffic: TrafficIncidentIcon,
     satellite: SatelliteIcon,
   }[mapMode];
-  const mapShadeStyle = {
-    traffic: styles.mapShadeTraffic,
-    satellite: styles.mapShadeSatellite,
-  }[mapMode];
+  const mapShadeStyle = isSatellite
+    ? styles.mapShadeSatellite
+    : isDark
+      ? styles.mapShadeTraffic
+      : styles.mapShadeTrafficLight;
   const lastReportedLocationRef = React.useRef<string | null>(null);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
@@ -1318,7 +1321,9 @@ export default function MapScreen({
                         borderColor: catColor,
                         borderWidth: 1,
                       }
-                    : styles.categoryBtnInactive,
+                    : isDark
+                      ? styles.categoryBtnInactive
+                      : styles.categoryBtnInactiveLight,
                 ]}
               >
                 {cat !== "All" && (
@@ -1332,7 +1337,13 @@ export default function MapScreen({
                 <Text
                   style={[
                     styles.categoryText,
-                    { color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.65)" },
+                    {
+                      color: isActive
+                        ? "#FFFFFF"
+                        : isDark
+                          ? "rgba(255,255,255,0.65)"
+                          : "rgba(0,0,0,0.72)",
+                    },
                   ]}
                 >
                   {cat}
@@ -1655,6 +1666,9 @@ const styles = StyleSheet.create({
   mapShadeTraffic: {
     backgroundColor: "rgba(0,0,0,0.48)",
   },
+  mapShadeTrafficLight: {
+    backgroundColor: "rgba(0,0,0,0.26)",
+  },
   mapShadeSatellite: {
     backgroundColor: "rgba(0,0,0,0.26)",
   },
@@ -1674,6 +1688,11 @@ const styles = StyleSheet.create({
   categoryBtnInactive: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+  },
+  categoryBtnInactiveLight: {
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderColor: "rgba(0,0,0,0.08)",
     borderWidth: 1,
   },
   categoryDot: {

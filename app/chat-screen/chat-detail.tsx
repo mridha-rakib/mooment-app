@@ -51,6 +51,7 @@ import {
   getDirectMessageHistory,
   getDirectMessageRelationship,
   getGroupMessages,
+  leaveGroup,
   unblockMessages,
 } from '@/lib/chat';
 import { safeBack } from '@/lib/navigation';
@@ -1455,6 +1456,7 @@ export default function ChatDetailScreen() {
   const [directAccessError, setDirectAccessError] = useState<string | null>(null);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [isLeaveLoading, setIsLeaveLoading] = useState(false);
   const [moreMenuTop, setMoreMenuTop] = useState(0);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [isEventPickerVisible, setIsEventPickerVisible] = useState(false);
@@ -2450,6 +2452,36 @@ export default function ChatDetailScreen() {
     );
   };
 
+  // Group-only membership action — backend is authoritative on ownership
+  // transfer / group deletion, so this never computes or sends a successor;
+  // it only tells the user what could happen.
+  const handleLeaveGroup = async () => {
+    if (!isObjectId(friendId)) return;
+    setIsLeaveLoading(true);
+    try {
+      await leaveGroup(friendId);
+      // messages.tsx's Groups list refetches on focus (useFocusEffect), so
+      // navigating back is enough to make the group disappear immediately —
+      // no separate cache/event-bus mechanism needed.
+      safeBack(router, '/(tabs)/messages');
+    } catch (error) {
+      Alert.alert('Unable to leave group', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsLeaveLoading(false);
+    }
+  };
+
+  const confirmLeaveGroup = () => {
+    Alert.alert(
+      'Leave Group',
+      'You will leave this group and stop receiving its messages. If you are the owner, ownership transfers automatically to another member, or the group is deleted if you are the only member.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: () => void handleLeaveGroup() },
+      ],
+    );
+  };
+
   const renderBubble = (item: Message) => {
     if (item.text) {
       const match = item.text.match(STORY_LINK_REGEX);
@@ -2850,7 +2882,10 @@ export default function ChatDetailScreen() {
                   current user doesn't own that block and has no action to
                   take on it. Only when neither Full Block direction is
                   active does this become the new Message Block toggle. */}
-              {fullBlockedMe && !fullBlockedByMe ? null : (
+              {/* DM-only: block/unblock is a user-relationship action and has
+                  no meaning against a group id. Never render it for a group
+                  thread — see Leave Group below for the group equivalent. */}
+              {!isGroup && (fullBlockedMe && !fullBlockedByMe ? null : (
                 <TouchableOpacity
                   style={styles.moreMenuItem}
                   activeOpacity={0.8}
@@ -2869,6 +2904,8 @@ export default function ChatDetailScreen() {
                           : await blockMessages(friendId);
                         setMessageBlockedByMe(result.isMessageBlocked);
                       }
+                    } catch (error) {
+                      Alert.alert('Unable to update block status', getAuthErrorMessage(error, 'Please try again.'));
                     } finally {
                       setIsBlockLoading(false);
                     }
@@ -2882,6 +2919,27 @@ export default function ChatDetailScreen() {
                   <Text style={[styles.moreMenuText, !isDark && { color: colors.text }]}>
                     {fullBlockedByMe ? 'Unblock' : messageBlockedByMe ? 'Unblock Messages' : 'Block Messages'}
                   </Text>
+                </TouchableOpacity>
+              ))}
+
+              {/* Group-only: real membership action, backend-authoritative
+                  ownership transfer / deletion. Never a DM action. */}
+              {isGroup && (
+                <TouchableOpacity
+                  style={styles.moreMenuItem}
+                  activeOpacity={0.8}
+                  disabled={isLeaveLoading}
+                  onPress={() => {
+                    setIsMoreMenuVisible(false);
+                    confirmLeaveGroup();
+                  }}
+                >
+                  {isLeaveLoading ? (
+                    <Spinner size="small" color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
+                  ) : (
+                    <Feather name="log-out" size={18} color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
+                  )}
+                  <Text style={[styles.moreMenuText, { color: CHAT_COLORS.semanticError }]}>Leave Group</Text>
                 </TouchableOpacity>
               )}
 
@@ -2906,31 +2964,39 @@ export default function ChatDetailScreen() {
                 <Text style={styles.moreMenuText}>Share Calendar</Text>
               </TouchableOpacity> */}
 
-              <View style={[styles.moreMenuSeparator, !isDark && { backgroundColor: colors.border }]} />
+              {/* DM-only: deletes a DM conversation record; has no group
+                  equivalent (see Leave Group above for groups). */}
+              {!isGroup && (
+                <>
+                  <View style={[styles.moreMenuSeparator, !isDark && { backgroundColor: colors.border }]} />
 
-              <TouchableOpacity
-                style={styles.moreMenuItem}
-                activeOpacity={0.8}
-                disabled={isDeleteLoading}
-                onPress={async () => {
-                  setIsMoreMenuVisible(false);
-                  if (!isObjectId(friendId)) return;
-                  setIsDeleteLoading(true);
-                  try {
-                    await deleteConversation(friendId);
-                    safeBack(router, '/(tabs)/messages');
-                  } finally {
-                    setIsDeleteLoading(false);
-                  }
-                }}
-              >
-                {isDeleteLoading ? (
-                  <Spinner size="small" color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
-                ) : (
-                  <Feather name="trash-2" size={18} color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
-                )}
-                <Text style={[styles.moreMenuText, { color: CHAT_COLORS.semanticError }]}>Delete Conversation</Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.moreMenuItem}
+                    activeOpacity={0.8}
+                    disabled={isDeleteLoading}
+                    onPress={async () => {
+                      setIsMoreMenuVisible(false);
+                      if (!isObjectId(friendId)) return;
+                      setIsDeleteLoading(true);
+                      try {
+                        await deleteConversation(friendId);
+                        safeBack(router, '/(tabs)/messages');
+                      } catch (error) {
+                        Alert.alert('Unable to delete conversation', getAuthErrorMessage(error, 'Please try again.'));
+                      } finally {
+                        setIsDeleteLoading(false);
+                      }
+                    }}
+                  >
+                    {isDeleteLoading ? (
+                      <Spinner size="small" color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
+                    ) : (
+                      <Feather name="trash-2" size={18} color={CHAT_COLORS.semanticError} style={styles.moreMenuIcon} />
+                    )}
+                    <Text style={[styles.moreMenuText, { color: CHAT_COLORS.semanticError }]}>Delete Conversation</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </TouchableOpacity>

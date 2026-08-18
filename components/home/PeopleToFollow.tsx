@@ -16,11 +16,16 @@ export type SuggestedUser = {
 
 type PeopleToFollowProps = {
   users: SuggestedUser[];
+  // Fired after a follow/unfollow of one of these users — optimistically and
+  // again once the API call resolves (or rolls back on failure) — so other
+  // currently-loaded surfaces representing this same user (feed cards, event
+  // host cards) can reconcile to the same state.
+  onFollowChange?: (userId: string, isFollowing: boolean) => void;
 };
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
-export default function PeopleToFollow({ users }: PeopleToFollowProps) {
+export default function PeopleToFollow({ users, onFollowChange }: PeopleToFollowProps) {
   const router = useRouter();
   const { colors } = useTheme();
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
@@ -41,6 +46,7 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
       : [...followedUserIds, user.id];
 
     setFollowedUserIds(nextFollowedUserIds);
+    onFollowChange?.(user.id, !wasFollowing);
 
     if (!MONGO_OBJECT_ID_PATTERN.test(user.id)) {
       return;
@@ -56,12 +62,14 @@ export default function PeopleToFollow({ users }: PeopleToFollowProps) {
           ? Array.from(new Set([...current, user.id]))
           : current.filter((id) => id !== user.id)
       ));
+      onFollowChange?.(user.id, follow.isFollowing);
     } catch (error) {
       setFollowedUserIds((current) => (
         wasFollowing
           ? Array.from(new Set([...current, user.id]))
           : current.filter((id) => id !== user.id)
       ));
+      onFollowChange?.(user.id, wasFollowing);
       Alert.alert(
         wasFollowing ? 'Unable to unfollow' : 'Unable to follow',
         getAuthErrorMessage(error, 'Please try again.'),

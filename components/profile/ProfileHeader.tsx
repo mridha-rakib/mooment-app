@@ -11,7 +11,9 @@ import MoreMenuModal from "../post/MoreMenuModal";
 import BackButton from "../ui/BackButton";
 import ChevronRightIcon from "../ui/ChevronRightIcon";
 import CinematicButton from "../ui/CinematicButton";
+import FadeInOnReady from "../ui/FadeInOnReady";
 import UserAvatar from "../ui/UserAvatar";
+import { ProfileAvatarSkeleton, ProfileStatsRowSkeleton } from "./ProfileSkeletons";
 
 export type ProfileStats = {
   events: number;
@@ -40,6 +42,8 @@ type ProfileHeaderProps = {
   blockDisabled?: boolean;
   onEventsPress?: () => void;
   onAvatarPress?: () => void;
+  identityLoading?: boolean;
+  statsLoading?: boolean;
 };
 
 export default function ProfileHeader({
@@ -59,6 +63,8 @@ export default function ProfileHeader({
   blockDisabled = false,
   onEventsPress,
   onAvatarPress,
+  identityLoading = false,
+  statsLoading = false,
 }: ProfileHeaderProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -134,113 +140,125 @@ export default function ProfileHeader({
               },
             ]}
           >
-            <UserAvatar
-              uri={avatar}
-              name={name}
-              size={80}
-              style={styles.avatar}
-              iconSize={36}
-            />
+            {identityLoading ? (
+              <ProfileAvatarSkeleton />
+            ) : (
+              <FadeInOnReady>
+                <UserAvatar
+                  uri={avatar}
+                  name={name}
+                  size={80}
+                  style={styles.avatar}
+                  iconSize={36}
+                />
+              </FadeInOnReady>
+            )}
           </View>
         </TouchableOpacity>
 
-        <View style={styles.statsContainer}>
-          <TouchableOpacity
-            activeOpacity={0.75}
-            onPress={onEventsPress}
-            disabled={!onEventsPress}
-          >
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {stats.events}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Events
-              </Text>
-            </View>
-          </TouchableOpacity>
-          <View
-            style={[styles.statDivider, { backgroundColor: colors.border }]}
-          />
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: "/profile-screen/reviews",
-                params: { userId },
-              })
-            }
-          >
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {stats.reviews}
-              </Text>
-              <View style={styles.labelRow}>
-                <Text
-                  style={[styles.statLabel, { color: colors.textSecondary }]}
-                >
-                  Reviews
-                </Text>
-                <View style={styles.chevronWrapper}>
-                  <ChevronRightIcon />
+        {statsLoading ? (
+          <ProfileStatsRowSkeleton />
+        ) : (
+          <FadeInOnReady style={styles.statsContainer}>
+            <>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={onEventsPress}
+                disabled={!onEventsPress}
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.events}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                    Events
+                  </Text>
                 </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-          <View
-            style={[styles.statDivider, { backgroundColor: colors.border }]}
-          />
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: "/profile-screen/followers",
-                params: { userId },
-              })
-            }
-          >
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {stats.followers}
-              </Text>
-              <View style={styles.labelRow}>
-                <Text
-                  style={[styles.statLabel, { color: colors.textSecondary }]}
-                >
-                  Followers
-                </Text>
-                <View style={styles.chevronWrapper}>
-                  <ChevronRightIcon />
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/reviews",
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.reviews}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Reviews
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-          <View
-            style={[styles.statDivider, { backgroundColor: colors.border }]}
-          />
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: "/profile-screen/following",
-                params: { userId },
-              })
-            }
-          >
-            <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {stats.following}
-              </Text>
-              <View style={styles.labelRow}>
-                <Text
-                  style={[styles.statLabel, { color: colors.textSecondary }]}
-                >
-                  Following
-                </Text>
-                <View style={styles.chevronWrapper}>
-                  <ChevronRightIcon />
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/followers",
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.followers}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Followers
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/following",
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.following}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Following
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </>
+          </FadeInOnReady>
+        )}
       </View>
     </View>
   );
