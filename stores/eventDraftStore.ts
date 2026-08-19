@@ -31,6 +31,7 @@ export type EventDraftTicket = EventTicketPayload & {
 type EventDraftState = {
   draftId: string | null;
   isEditingPublishedEvent: boolean;
+  isExistingEventSession: boolean;
   publishedEventBaseline: string | null;
   publishedEventBaselineEvent: EventResponse | null;
   name: string;
@@ -93,6 +94,7 @@ const createInitialState = () => {
     scheduledAt: null,
     draftId: null,
     isEditingPublishedEvent: false,
+    isExistingEventSession: false,
     publishedEventBaseline: null,
     publishedEventBaselineEvent: null,
     name: "",
@@ -561,6 +563,11 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     set({
       draftId: event.id,
       isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
+      // loadFromEvent is only ever called when opening an already-persisted
+      // Event/draft for editing, unlike a fresh Create session where draftId
+      // is only assigned later by autosave — so this is set unconditionally
+      // here, independent of status, and never touched by saveDraft/publish.
+      isExistingEventSession: true,
       publishedEventBaseline: getPublishedEventBaseline(event),
       publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
       name: event.name ?? "",

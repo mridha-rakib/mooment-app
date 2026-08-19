@@ -285,6 +285,24 @@ function PushNotificationGate() {
                 ...(data.groupAvatar ? { avatar: data.groupAvatar } : {}),
               },
             } as any);
+          } else if (
+            (data.type === "moment_reaction" || data.type === "moment_comment" || data.type === "moment_share")
+          ) {
+            // contentType is authoritative for routing (never inferred from
+            // type alone) — an Event's Interaction Moment shares these same
+            // types with normal Post interactions, so momentId must never be
+            // used to open an Event notification, and vice versa.
+            if (data.contentType === "event" && data.eventId) {
+              router.push({
+                pathname: "/event-screen/event",
+                params: { eventId: data.eventId },
+              } as any);
+            } else if (data.momentId) {
+              router.push({
+                pathname: "/post-screen/view-post",
+                params: { postId: data.momentId },
+              } as any);
+            }
           }
         };
 

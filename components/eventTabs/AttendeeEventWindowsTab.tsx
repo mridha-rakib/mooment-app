@@ -14,14 +14,24 @@ import { uploadFileToStorage } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import {
+  AudioModule,
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   Keyboard,
   KeyboardAvoidingView,
@@ -36,6 +46,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
 
 type AttendeeEventWindowsTabProps = {
   eventId: string;
@@ -208,6 +219,380 @@ function GalleryAudio({ uri, headers, durationSeconds }: { uri: string; headers?
   );
 }
 
+// Same recorder configuration/lifecycle pattern as AudioPickerSheet in
+// app/app/post-screen/create-post.tsx (and chat-detail.tsx's voice
+// messages) — expo-audio is already installed and already linked for those
+// two flows, so no new native module or config is introduced here.
+const RECORDING_AUDIO_MODE = {
+  allowsRecording: true,
+  playsInSilentMode: true,
+  shouldRouteThroughEarpiece: false,
+  interruptionMode: "doNotMix" as const,
+};
+
+const PLAYBACK_AUDIO_MODE = {
+  allowsRecording: false,
+  playsInSilentMode: true,
+  shouldRouteThroughEarpiece: false,
+  interruptionMode: "doNotMix" as const,
+};
+
+type RuntimeAudioRecorder = {
+  uri?: string | null;
+  getStatus?: () => { durationMillis?: number; isRecording?: boolean; url?: string | null };
+  prepareToRecordAsync: () => Promise<void>;
+  record: () => void;
+  stop: () => Promise<{ durationMillis?: number; url?: string | null } | void>;
+  remove?: () => void;
+};
+
+const formatRecordingTime = (milliseconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
+
+const validateRecordedFile = async (uri: string) => {
+  const fileInfo = await FileSystem.getInfoAsync(uri);
+  if (!fileInfo.exists || typeof fileInfo.size !== "number" || fileInfo.size <= 0) {
+    throw new Error("The recorded audio file was empty.");
+  }
+};
+
+function RecordVoiceSheet({
+  visible,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: (uri: string, contentType: string, fileName: string, durationSeconds: number | null) => void;
+}) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const mountedRef = useRef(true);
+  const recorderRef = useRef<RuntimeAudioRecorder | null>(null);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
+  const stopPromiseRef = useRef<Promise<{ uri: string | null; durationMillis: number } | null> | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
+
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
+  const [recordingDurationMillis, setRecordingDurationMillis] = useState(0);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewDurationSeconds, setPreviewDurationSeconds] = useState<number | null>(null);
+
+  const previewSource = useMemo(() => (previewUri ? { uri: previewUri } : null), [previewUri]);
+  const previewPlayer = useAudioPlayer(previewSource, { downloadFirst: false, updateInterval: 250 });
+  const previewStatus = useAudioPlayerStatus(previewPlayer);
+  const previewDuration = previewStatus.duration > 0 ? previewStatus.duration : previewDurationSeconds ?? 0;
+  const previewCurrentTime = previewDuration > 0 ? Math.min(previewStatus.currentTime, previewDuration) : previewStatus.currentTime;
+
+  const resetState = useCallback(() => {
+    setPreviewUri(null);
+    setPreviewDurationSeconds(null);
+    setRecordingDurationMillis(0);
+    setIsRecording(false);
+    setIsPreparing(false);
+    setIsStopping(false);
+  }, []);
+
+  const teardownRecorder = useCallback(() => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    recordingStartedAtRef.current = null;
+    if (recorder) {
+      void recorder.stop().catch(() => undefined);
+    }
+    void setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      teardownRecorder();
+    };
+  }, [teardownRecorder]);
+
+  useEffect(() => {
+    if (visible) return;
+    teardownRecorder();
+    try {
+      previewPlayer.pause();
+    } catch {
+      // Native player may already be released when the source is cleared.
+    }
+    resetState();
+    // Only re-run when visibility actually changes — previewPlayer/resetState
+    // are stable-enough callbacks and must not retrigger teardown mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const interval = setInterval(() => {
+      const status = recorderRef.current?.getStatus?.();
+      const nextDuration = status?.durationMillis
+        ?? (recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : 0);
+      setRecordingDurationMillis((current) => (
+        Math.floor(current / 1000) === Math.floor(nextDuration / 1000) ? current : nextDuration
+      ));
+    }, 250);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const stopNativeRecorder = async () => {
+    if (stopPromiseRef.current) return stopPromiseRef.current;
+    const recorder = recorderRef.current;
+    if (!recorder) return null;
+
+    if (mountedRef.current) setIsStopping(true);
+
+    const stopPromise = (async () => {
+      let stopError: unknown = null;
+      let finalStatus: { durationMillis?: number; url?: string | null } | undefined;
+      const fallbackStatus = recorder.getStatus?.();
+      const fallbackUri = recorder.uri ?? fallbackStatus?.url ?? null;
+      const fallbackDurationMillis = fallbackStatus?.durationMillis
+        ?? (recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : recordingDurationMillis);
+
+      try {
+        const stopResult = await recorder.stop();
+        finalStatus = stopResult && typeof stopResult === "object" ? stopResult : undefined;
+      } catch (error) {
+        stopError = error;
+      }
+
+      const uri = finalStatus?.url ?? recorder.uri ?? fallbackUri;
+      const durationMillis = finalStatus?.durationMillis ?? fallbackDurationMillis;
+
+      try {
+        await setAudioModeAsync(PLAYBACK_AUDIO_MODE);
+      } catch {
+        // The native audio module may already be unavailable while tearing down.
+      }
+
+      recorderRef.current = null;
+      recordingStartedAtRef.current = null;
+
+      if (mountedRef.current) {
+        setIsRecording(false);
+        setIsStopping(false);
+      }
+
+      if (stopError) throw stopError;
+      return { uri, durationMillis };
+    })().finally(() => {
+      stopPromiseRef.current = null;
+      if (mountedRef.current) setIsStopping(false);
+    });
+
+    stopPromiseRef.current = stopPromise;
+    return stopPromise;
+  };
+
+  const startRecording = async () => {
+    if (startPromiseRef.current || stopPromiseRef.current || isPreparing || isRecording) return;
+    setIsPreparing(true);
+
+    const startPromise = (async () => {
+      const currentPermission = await getRecordingPermissionsAsync();
+      const permission = currentPermission.granted ? currentPermission : await requestRecordingPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert("Microphone access needed", "Please allow microphone access to record audio.");
+        return;
+      }
+
+      await setAudioModeAsync(RECORDING_AUDIO_MODE);
+
+      const NativeAudioRecorder = (
+        AudioModule as unknown as { AudioRecorder?: new (options: Record<string, unknown>) => RuntimeAudioRecorder }
+      ).AudioRecorder;
+
+      if (!NativeAudioRecorder) {
+        await setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
+        Alert.alert("Recording unavailable", "Audio recording requires a rebuilt development client. You can still choose an audio file.");
+        return;
+      }
+
+      const recorder = new NativeAudioRecorder(RecordingPresets.HIGH_QUALITY as unknown as Record<string, unknown>);
+      await recorder.prepareToRecordAsync();
+
+      if (!mountedRef.current) {
+        try {
+          recorder.remove?.();
+        } catch {
+          // The recorder may already be released by native teardown.
+        }
+        return;
+      }
+
+      recorder.record();
+      recorderRef.current = recorder;
+      recordingStartedAtRef.current = Date.now();
+      setRecordingDurationMillis(0);
+      setIsRecording(true);
+    })();
+
+    startPromiseRef.current = startPromise;
+
+    try {
+      await startPromise;
+    } catch (error) {
+      try {
+        await setAudioModeAsync(PLAYBACK_AUDIO_MODE);
+      } catch {
+        // Best-effort reset after a failed recording attempt.
+      }
+      Alert.alert("Recording failed", getAuthErrorMessage(error, "Please try recording again."));
+    } finally {
+      startPromiseRef.current = null;
+      if (mountedRef.current) setIsPreparing(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!isRecording || isStopping) return;
+
+    try {
+      const recording = await stopNativeRecorder();
+      const uri = recording?.uri;
+
+      if (!uri) {
+        Alert.alert("Recording failed", "No recorded audio file was created.");
+        return;
+      }
+
+      if (!recording.durationMillis || recording.durationMillis <= 0) {
+        Alert.alert("Recording failed", "The recorded audio was too short. Please try recording again.");
+        return;
+      }
+
+      await validateRecordedFile(uri);
+
+      setPreviewUri(uri);
+      setPreviewDurationSeconds(recording.durationMillis / 1000);
+    } catch (error) {
+      Alert.alert("Recording failed", getAuthErrorMessage(error, "Please try stopping the recording again."));
+    }
+  };
+
+  const togglePreview = async () => {
+    if (!previewUri) return;
+    try {
+      await setAudioModeAsync(PLAYBACK_AUDIO_MODE);
+      if (previewStatus.playing) {
+        previewPlayer.pause();
+        return;
+      }
+      if (previewDuration > 0 && previewCurrentTime >= previewDuration - 0.25) {
+        await previewPlayer.seekTo(0);
+      }
+      previewPlayer.play();
+    } catch {
+      // Best-effort playback toggle.
+    }
+  };
+
+  const discardRecording = () => {
+    try {
+      previewPlayer.pause();
+    } catch {
+      // Native player may already be released.
+    }
+    setPreviewUri(null);
+    setPreviewDurationSeconds(null);
+    setRecordingDurationMillis(0);
+  };
+
+  const closeSheet = async () => {
+    if (isRecording || stopPromiseRef.current) {
+      await stopNativeRecorder().catch(() => undefined);
+    }
+    try {
+      previewPlayer.pause();
+    } catch {
+      // Native player may already be released.
+    }
+    resetState();
+    onClose();
+  };
+
+  const confirmRecording = () => {
+    if (!previewUri) return;
+    const fileName = `Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.m4a`;
+    onConfirm(previewUri, "audio/mp4", fileName, previewDurationSeconds);
+    resetState();
+    onClose();
+  };
+
+  const { sheetTranslateY, dragPanHandlers } = useBottomSheetDragDismiss({ visible, onClose: closeSheet });
+  const bottomInset = Platform.OS === "android" ? Math.max(insets.bottom, 22) + 12 : Math.max(insets.bottom, 32);
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={() => void closeSheet()}>
+      <View style={recordSheetStyles.overlay}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => void closeSheet()} disabled={isStopping} />
+        <Animated.View style={[recordSheetStyles.sheet, { backgroundColor: colors.card, paddingBottom: bottomInset, transform: [{ translateY: sheetTranslateY }] }]}>
+          <View {...dragPanHandlers}>
+            <View style={[recordSheetStyles.handle, { backgroundColor: colors.border }]} />
+            <Text style={[recordSheetStyles.title, { color: colors.text }]}>Record voice</Text>
+            <Text style={[recordSheetStyles.subtitle, { color: colors.textSecondary }]}>
+              {previewUri ? "Review your recording before posting" : "Record a voice clip for this window"}
+            </Text>
+          </View>
+
+          <View style={[recordSheetStyles.recordCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            <View style={[recordSheetStyles.recordDot, { backgroundColor: colors.textSecondary }, (isRecording || previewStatus.playing) && recordSheetStyles.recordDotActive]} />
+            <View style={recordSheetStyles.recordInfo}>
+              <Text style={[recordSheetStyles.recordTitle, { color: colors.text }]}>
+                {previewUri ? "Recording ready" : isRecording ? "Recording" : "Ready to record"}
+              </Text>
+              <Text style={[recordSheetStyles.recordTime, { color: colors.textSecondary }]}>
+                {previewUri
+                  ? `${formatRecordingTime(previewCurrentTime * 1000)} / ${formatRecordingTime(previewDuration * 1000)}`
+                  : formatRecordingTime(recordingDurationMillis)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[recordSheetStyles.actionButton, { backgroundColor: colors.text }, isRecording && recordSheetStyles.stopButton]}
+              activeOpacity={0.85}
+              onPress={previewUri ? () => void togglePreview() : isRecording ? () => void stopRecording() : () => void startRecording()}
+              disabled={previewUri ? false : (isPreparing || isStopping)}
+            >
+              <Feather
+                name={previewUri ? (previewStatus.playing ? "pause" : "play") : isRecording ? "square" : "mic"}
+                size={18}
+                color={colors.background}
+              />
+              <Text style={[recordSheetStyles.actionButtonText, { color: colors.background }]}>
+                {previewUri ? (previewStatus.playing ? "Pause" : "Play") : isRecording ? (isStopping ? "Wait" : "Stop") : isPreparing ? "Wait" : "Record"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {previewUri ? (
+            <View style={recordSheetStyles.previewActions}>
+              <TouchableOpacity style={[recordSheetStyles.secondaryButton, { borderColor: colors.border }]} onPress={discardRecording} accessibilityLabel="Delete recording and re-record">
+                <Feather name="rotate-ccw" size={16} color={colors.text} />
+                <Text style={[recordSheetStyles.secondaryButtonText, { color: colors.text }]}>Re-record</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[recordSheetStyles.primaryButton, { backgroundColor: colors.text }]} onPress={confirmRecording}>
+                <Feather name="check" size={16} color={colors.background} />
+                <Text style={[recordSheetStyles.primaryButtonText, { color: colors.background }]}>Use recording</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
 const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, AttendeeEventWindowsTabProps>(({
   eventId,
 }, ref) => {
@@ -225,6 +610,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
   const [selectedType, setSelectedType] = useState<EventWindowContentType>("text");
   const [text, setText] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia | null>(null);
+  const [showRecordVoice, setShowRecordVoice] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -311,6 +697,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     setSelectedWindow(null);
     setPostError(null);
     setSelectedMedia(null);
+    setShowRecordVoice(false);
     setText("");
   };
 
@@ -329,6 +716,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     setSelectedType(postableContentTypes(window.allowedContentTypes)[0] ?? "text");
     setText("");
     setSelectedMedia(null);
+    setShowRecordVoice(false);
     setPostError(null);
     setUploadProgress(0);
   };
@@ -336,6 +724,19 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
   const selectType = (type: EventWindowContentType) => {
     setSelectedType(type);
     setSelectedMedia(null);
+    setShowRecordVoice(false);
+    setPostError(null);
+  };
+
+  const handleVoiceRecorded = (uri: string, contentType: string, fileName: string, durationSeconds: number | null) => {
+    setSelectedMedia({
+      uri,
+      type: "audio",
+      source: "upload",
+      contentType,
+      fileName,
+      durationSeconds,
+    });
     setPostError(null);
   };
 
@@ -668,6 +1069,17 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
                         <Text style={[styles.selectedMediaName, { color: colors.text }]} numberOfLines={2}>{selectedMedia.fileName}</Text>
                         <TouchableOpacity style={styles.removeMedia} onPress={() => setSelectedMedia(null)} accessibilityLabel="Remove selected media"><Feather name="x" size={20} color={colors.textSecondary} /></TouchableOpacity>
                       </View>
+                    ) : selectedType === "audio" ? (
+                      <View style={styles.audioMediaOptionsRow}>
+                        <TouchableOpacity style={[styles.mediaPicker, styles.audioMediaOption, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => void pickMedia()}>
+                          <Feather name="upload" size={21} color={colors.primary} />
+                          <Text style={[styles.mediaPickerText, { color: colors.text }]}>Choose audio</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.mediaPicker, styles.audioMediaOption, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => setShowRecordVoice(true)}>
+                          <Feather name="mic" size={21} color={colors.primary} />
+                          <Text style={[styles.mediaPickerText, { color: colors.text }]}>Record voice</Text>
+                        </TouchableOpacity>
+                      </View>
                     ) : (
                       <TouchableOpacity style={[styles.mediaPicker, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={() => void pickMedia()}>
                         <Feather name="upload" size={21} color={colors.primary} />
@@ -706,6 +1118,12 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
           </View>
         </ModalContainer>
       </Modal>
+
+      <RecordVoiceSheet
+        visible={showRecordVoice}
+        onClose={() => setShowRecordVoice(false)}
+        onConfirm={handleVoiceRecorded}
+      />
     </View>
   );
 });
@@ -778,6 +1196,8 @@ const styles = StyleSheet.create({
   typeOptionText: { flex: 1, fontSize: 13, fontWeight: "600" },
   mediaPicker: { minHeight: 76, alignItems: "center", justifyContent: "center", gap: 7, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
   mediaPickerText: { fontSize: 14, fontWeight: "700" },
+  audioMediaOptionsRow: { flexDirection: "row", gap: 10 },
+  audioMediaOption: { flex: 1 },
   selectedMedia: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, padding: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
   selectedMediaPreview: { width: 54, height: 54, borderRadius: 6 },
   selectedMediaName: { flex: 1, fontSize: 14, lineHeight: 19, fontWeight: "600" },
@@ -790,4 +1210,26 @@ const styles = StyleSheet.create({
   cancelText: { fontSize: 15, fontWeight: "700" },
   submitText: { fontSize: 15, fontWeight: "700" },
   submittingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+});
+
+const recordSheetStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.62)" },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingTop: 12 },
+  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16, opacity: 0.5 },
+  title: { fontSize: 18, fontWeight: "700" },
+  subtitle: { fontSize: 13, marginTop: 4, marginBottom: 18 },
+  recordCard: { minHeight: 76, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", alignItems: "center", paddingHorizontal: 14 },
+  recordDot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
+  recordDotActive: { backgroundColor: "#F2245C" },
+  recordInfo: { flex: 1 },
+  recordTitle: { fontSize: 14, fontWeight: "700" },
+  recordTime: { fontSize: 12, marginTop: 4, fontVariant: ["tabular-nums"] },
+  actionButton: { minWidth: 96, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },
+  stopButton: { backgroundColor: "#F2245C" },
+  actionButtonText: { fontSize: 13, fontWeight: "700" },
+  previewActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  secondaryButton: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10 },
+  secondaryButtonText: { fontSize: 14, fontWeight: "700" },
+  primaryButton: { flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 10 },
+  primaryButtonText: { fontSize: 14, fontWeight: "700" },
 });

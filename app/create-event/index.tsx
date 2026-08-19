@@ -60,8 +60,7 @@ export default function CreateEventScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
-  const draftId = useEventDraftStore((state) => state.draftId);
-  const isEditingEvent = Boolean(draftId || isEditingPublished);
+  const isEditingEvent = useEventDraftStore((state) => state.isExistingEventSession);
   const draftName = useEventDraftStore((state) => state.name);
   const draftDescription = useEventDraftStore((state) => state.description);
   const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);

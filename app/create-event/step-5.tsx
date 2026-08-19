@@ -32,8 +32,7 @@ export default function CreateEventStep5() {
   const publishEvent = useEventDraftStore((state) => state.publish);
   const resetDraft = useEventDraftStore((state) => state.resetDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
-  const draftId = useEventDraftStore((state) => state.draftId);
-  const isEditingEvent = Boolean(draftId || isEditingPublished);
+  const isEditingEvent = useEventDraftStore((state) => state.isExistingEventSession);
   const currentUser = useAuthStore((state) => state.user);
   const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
   const updateProfile = useAuthStore((state) => state.updateProfile);

@@ -1,6 +1,21 @@
 import { api } from "@/lib/api";
 
-export type NotificationType = "follow" | "ticket_buyer" | "ticket_creator" | "ticket_share" | "join_request" | "join_request_accepted" | "event_member_added";
+export type NotificationType =
+  | "follow"
+  | "ticket_buyer"
+  | "ticket_creator"
+  | "ticket_share"
+  | "join_request"
+  | "join_request_accepted"
+  | "event_member_added"
+  | "moment_reaction"
+  | "moment_comment"
+  | "moment_share";
+
+// Only meaningful for the moment_* interaction types — explicit rather than
+// inferred from `type`, since an Event's Interaction Moment shares those same
+// types with normal Post interactions.
+export type NotificationContentType = "post" | "event";
 
 export type NotificationItem = {
   id: string;
@@ -11,8 +26,12 @@ export type NotificationItem = {
   actorAvatarUrl?: string | null;
   isFollowing?: boolean | null;
   eventId?: string | null;
+  momentId?: string | null;
+  contentType?: NotificationContentType | null;
   eventName?: string | null;
   ticketName?: string | null;
+  title?: string | null;
+  message?: string | null;
   isRead: boolean;
   createdAt: string;
 };

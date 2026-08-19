@@ -40,8 +40,7 @@ export default function CreateEventStep4() {
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
-  const draftId = useEventDraftStore((state) => state.draftId);
-  const isEditingEvent = Boolean(draftId || isEditingPublished);
+  const isEditingEvent = useEventDraftStore((state) => state.isExistingEventSession);
   const [currentTimeMs, setCurrentTimeMs] = React.useState(Date.now());
   const ticketCreationCutoffReached = isTicketCreationCutoffReached(endAt, currentTimeMs);
 

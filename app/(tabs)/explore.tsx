@@ -322,6 +322,15 @@ export default function Explore() {
                   {item.eventName ?? "your event"}
                 </Text>
               </Text>
+            ) : item.title && item.message ? (
+              <>
+                <Text style={[styles.inviteTitle, { color: colors.text }]} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {item.message}
+                </Text>
+              </>
             ) : (
               <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
                 Ticket confirmed for{" "}
@@ -420,10 +429,68 @@ export default function Explore() {
     </TouchableOpacity>
   );
 
+  // Reaction/comment/share notifications share one card. contentType is
+  // authoritative for both copy and tap target — an Event's Interaction
+  // Moment carries the same `type` as a normal Post interaction, so it must
+  // never be inferred from `type` alone, and an Event notification must never
+  // navigate using momentId (that id is the technical Interaction Moment,
+  // not a real standalone Post).
+  const interactionVerb = (type: NotificationItem["type"]): string => {
+    if (type === "moment_comment") return "commented on";
+    if (type === "moment_share") return "shared";
+    return "liked";
+  };
+
+  const renderInteractionCard = (item: NotificationItem) => {
+    const targetLabel = item.contentType === "event" ? "event" : "post";
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.activityCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
+          !item.isRead && styles.unreadCard,
+        ]}
+        activeOpacity={0.7}
+        onPress={() => handleNotificationPress(item, () => {
+          if (item.contentType === "event") {
+            if (item.eventId) {
+              router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+            }
+            return;
+          }
+          if (item.momentId) {
+            router.push({ pathname: "/post-screen/view-post", params: { postId: item.momentId } });
+          }
+        })}
+      >
+        <View style={styles.cardContent}>
+          <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
+          <View style={styles.textContainer}>
+            <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+              <Text style={[styles.boldText, { color: colors.text }]}>
+                {getActorDisplayName(item)}
+              </Text>{" "}
+              {interactionVerb(item.type)} your {targetLabel}.
+            </Text>
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
+        <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+    );
+  };
+
   const renderItem = (item: NotificationItem) => {
     if (item.type === "follow") return renderFollowCard(item);
     if (item.type === "ticket_share") return renderTicketShareCard(item);
     if (item.type === "event_member_added") return renderEventMemberCard(item);
+    if (item.type === "moment_reaction" || item.type === "moment_comment" || item.type === "moment_share") {
+      return renderInteractionCard(item);
+    }
     return renderTicketCard(item);
   };
 
