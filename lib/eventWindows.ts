@@ -56,6 +56,13 @@ export type EventWindowPost = {
   eventId: string;
   windowId: string;
   userId: string;
+  author?: {
+    id: string;
+    name: string;
+    username?: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  } | null;
   contentType: EventWindowContentType;
   text?: string | null;
   mediaItems: EventWindowPostMedia[];

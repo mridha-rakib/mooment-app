@@ -10,8 +10,9 @@ import {
   type EventWindowPost,
   type EventWindowPostMedia,
 } from "@/lib/eventWindows";
-import { uploadFileToStorage } from "@/lib/storage";
+import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -122,6 +123,22 @@ const formatWindowRange = (startsAt: string, endsAt: string) => {
 const formatPostedAt = (value: string) => {
   const date = parseDate(value);
   return `${formatDate(date)} · ${formatTime(date)}`;
+};
+
+const resolveAuthorAvatarUri = (author?: EventWindowPost["author"]) => {
+  if (author?.avatarUrl?.trim()) {
+    return author.avatarUrl.trim();
+  }
+
+  if (!author?.avatarKey) {
+    return null;
+  }
+
+  try {
+    return getStorageFileUrl(author.avatarKey);
+  } catch {
+    return null;
+  }
 };
 
 const getDefaultContentType = (type: MediaContentType) => {
@@ -885,12 +902,19 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     }
   };
 
-  const renderGalleryPost = (post: EventWindowPost) => (
+  const renderGalleryPost = (post: EventWindowPost) => {
+    const avatarUri = resolveAuthorAvatarUri(post.author);
+
+    return (
     <View key={post.id} style={[styles.galleryPost, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
       <View style={styles.galleryPostHeader}>
-        <View style={[styles.participantAvatar, { backgroundColor: colors.card }]}>
-          <Feather name="user" size={15} color={colors.textSecondary} />
-        </View>
+        <UserAvatar
+          uri={avatarUri}
+          name={avatarUri ? post.author?.name : null}
+          size={32}
+          style={styles.participantAvatar}
+          iconSize={15}
+        />
         <View style={styles.galleryPostMeta}>
           <Text style={[styles.participantName, { color: colors.text }]}>{post.userId === currentUserId ? "You" : "Participant"}</Text>
           <Text style={[styles.postedAt, { color: colors.textSecondary }]}>{formatPostedAt(post.createdAt)}</Text>
@@ -908,7 +932,8 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
         return <GalleryAudio key={`${post.id}-${index}`} uri={media.url} headers={mediaRequestHeaders} durationSeconds={media.durationSeconds} />;
       })}
     </View>
-  );
+    );
+  };
 
   const renderWindow = (window: EventWindow) => {
     const statusColor = STATUS_COLORS[window.computedStatus];
@@ -1162,7 +1187,7 @@ const styles = StyleSheet.create({
   gallery: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 15, paddingTop: 15, gap: 12 },
   galleryPost: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: 12 },
   galleryPostHeader: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 10 },
-  participantAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  participantAvatar: { width: 32, height: 32, borderRadius: 16 },
   galleryPostMeta: { flex: 1 },
   participantName: { fontSize: 13, fontWeight: "700" },
   postedAt: { fontSize: 11, marginTop: 2 },

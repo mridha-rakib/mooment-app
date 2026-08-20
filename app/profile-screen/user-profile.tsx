@@ -23,6 +23,7 @@ const EMPTY_STATS = {
   reviews: 0,
   followers: 0,
   following: 0,
+  windows: 0,
 };
 
 const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
@@ -115,7 +116,7 @@ export default function UserProfileScreen() {
       hasLoadedStatsRef.current = true;
       setProfileUser((current) => ({
         ...current,
-        stats: { ...current.stats, reviews: stats.reviews, followers: stats.followers, following: stats.following },
+        stats: { ...current.stats, reviews: stats.reviews, followers: stats.followers, following: stats.following, windows: stats.windows },
       }));
     } catch {
       // First load: EMPTY_STATS default already shown. Refresh: keep whatever loaded before.

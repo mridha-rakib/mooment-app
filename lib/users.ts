@@ -26,6 +26,7 @@ export type ProfileStatsResponse = {
   reviews: number;
   followers: number;
   following: number;
+  windows: number;
 };
 
 export type PaginationMeta = {
@@ -89,6 +90,50 @@ export type UserResponse = {
   blockedDescription?: string;
 };
 
+export type ProfileWindowEventResponse = {
+  id: string;
+  name: string;
+  bannerImageKey?: string | null;
+  bannerImageDisplay?: unknown;
+  scheduledAt?: string | null;
+  endAt?: string | null;
+  status: string;
+  windowCount: number;
+  lastParticipatedAt: string;
+};
+
+export type ProfileWindowPostResponse = {
+  id: string;
+  eventId: string;
+  windowId: string;
+  userId: string;
+  author?: {
+    id: string;
+    name: string;
+    username?: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  contentType: "text" | "image" | "video" | "audio";
+  text?: string | null;
+  mediaItems: {
+    type: "image" | "video" | "audio";
+    source: "gallery" | "camera" | "upload" | "external";
+    url?: string | null;
+    contentType?: string | null;
+    durationSeconds?: number | null;
+  }[];
+  status: "accepted" | "removed";
+  window: {
+    id: string;
+    title?: string | null;
+    startsAt: string;
+    endsAt: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
 const parseFollowStatus = (payload: unknown, fallbackUserId: string): FollowStatusResponse => {
   const follow = payload as Partial<FollowStatusResponse> | undefined;
 
@@ -145,6 +190,54 @@ export const getUserProfileStats = async (userId: string): Promise<ProfileStatsR
     reviews: typeof stats?.reviews === "number" ? stats.reviews : 0,
     followers: typeof stats?.followers === "number" ? stats.followers : 0,
     following: typeof stats?.following === "number" ? stats.following : 0,
+    windows: typeof stats?.windows === "number" ? stats.windows : 0,
+  };
+};
+
+const resolveApiUrl = (url?: string | null) => {
+  if (!url || /^https?:\/\//i.test(url)) {
+    return url ?? null;
+  }
+
+  const baseURL = api.defaults.baseURL?.replace(/\/$/, "");
+  return baseURL ? `${baseURL}${url.startsWith("/") ? url : `/${url}`}` : url;
+};
+
+const normalizeProfileWindowPostMediaUrls = (post: ProfileWindowPostResponse): ProfileWindowPostResponse => ({
+  ...post,
+  mediaItems: post.mediaItems.map((mediaItem) => ({
+    ...mediaItem,
+    url: resolveApiUrl(mediaItem.url),
+  })),
+});
+
+export const getUserProfileWindowEvents = async (
+  userId: string,
+  options: { page?: number; limit?: number } = {},
+): Promise<{ events: ProfileWindowEventResponse[]; pagination?: PaginationMeta }> => {
+  const response = await api.get(`/users/${encodeURIComponent(userId)}/profile-windows`, { params: options });
+  const events = response.data?.data?.events;
+
+  return {
+    events: Array.isArray(events) ? (events as ProfileWindowEventResponse[]) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
+  };
+};
+
+export const getUserProfileWindowPosts = async (
+  userId: string,
+  eventId: string,
+  options: { page?: number; limit?: number } = {},
+): Promise<{ posts: ProfileWindowPostResponse[]; pagination?: PaginationMeta }> => {
+  const response = await api.get(
+    `/users/${encodeURIComponent(userId)}/profile-windows/${encodeURIComponent(eventId)}/posts`,
+    { params: options },
+  );
+  const posts = response.data?.data?.posts;
+
+  return {
+    posts: Array.isArray(posts) ? (posts as ProfileWindowPostResponse[]).map(normalizeProfileWindowPostMediaUrls) : [],
+    pagination: response.data?.meta?.pagination as PaginationMeta | undefined,
   };
 };
 

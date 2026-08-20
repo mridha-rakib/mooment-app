@@ -1,7 +1,9 @@
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getEventWindowPosts, type EventWindowPost } from "@/lib/eventWindows";
+import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { Feather } from "@expo/vector-icons";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Image } from "expo-image";
@@ -59,6 +61,22 @@ const formatPostedAt = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+};
+
+const resolveAuthorAvatarUri = (author?: EventWindowPost["author"]) => {
+  if (author?.avatarUrl?.trim()) {
+    return author.avatarUrl.trim();
+  }
+
+  if (!author?.avatarKey) {
+    return null;
+  }
+
+  try {
+    return getStorageFileUrl(author.avatarKey);
+  } catch {
+    return null;
+  }
 };
 
 export default function WindowGalleryScreen() {
@@ -133,12 +151,19 @@ export default function WindowGalleryScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {posts.length === 0 ? (
             <Text style={[styles.emptyGalleryText, { color: colors.textSecondary }]}>No posts available.</Text>
-          ) : posts.map((post) => (
+          ) : posts.map((post) => {
+            const avatarUri = resolveAuthorAvatarUri(post.author);
+
+            return (
             <View key={post.id} style={[styles.post, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
               <View style={styles.postHeader}>
-                <View style={[styles.participantAvatar, { backgroundColor: colors.card }]}>
-                  <Feather name="user" size={15} color={colors.textSecondary} />
-                </View>
+                <UserAvatar
+                  uri={avatarUri}
+                  name={avatarUri ? post.author?.name : null}
+                  size={32}
+                  style={styles.participantAvatar}
+                  iconSize={15}
+                />
                 <View style={styles.postMeta}>
                   <Text style={[styles.participantName, { color: colors.text }]}>
                     {post.userId === currentUserId ? "You" : "Participant"}
@@ -165,7 +190,8 @@ export default function WindowGalleryScreen() {
                 return <GalleryAudio key={`${post.id}-${index}`} uri={media.url} headers={mediaRequestHeaders} />;
               })}
             </View>
-          ))}
+            );
+          })}
 
           {nextCursor ? (
             <TouchableOpacity
@@ -197,7 +223,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 60, gap: 12 },
   post: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: 12 },
   postHeader: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 10 },
-  participantAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  participantAvatar: { width: 32, height: 32, borderRadius: 16 },
   postMeta: { flex: 1 },
   participantName: { fontSize: 13, fontWeight: "700" },
   postedAt: { fontSize: 11, marginTop: 2 },

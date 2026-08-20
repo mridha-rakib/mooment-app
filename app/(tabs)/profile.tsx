@@ -22,6 +22,7 @@ const PROFILE_STATS = {
   reviews: 0,
   followers: 0,
   following: 0,
+  windows: 0,
 };
 
 const EMPTY_PROFILE_EVENTS: ProfileEventGroups = {
@@ -103,6 +104,7 @@ export default function ProfileTab() {
         reviews: stats.reviews,
         followers: stats.followers,
         following: stats.following,
+        windows: stats.windows,
       }));
     } catch {
       // First load: leave the zero-value defaults. Refresh: keep whatever loaded before.

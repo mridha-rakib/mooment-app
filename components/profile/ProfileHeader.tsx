@@ -20,6 +20,7 @@ export type ProfileStats = {
   reviews: number;
   followers: number;
   following: number;
+  windows: number;
 };
 
 const STORY_RING_COLOR = "#AC86D4";
@@ -222,6 +223,33 @@ export default function ProfileHeader({
                       style={[styles.statLabel, { color: colors.textSecondary }]}
                     >
                       Friends
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/windows" as never,
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.windows}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Windows
                     </Text>
                     <View style={styles.chevronWrapper}>
                       <ChevronRightIcon />
