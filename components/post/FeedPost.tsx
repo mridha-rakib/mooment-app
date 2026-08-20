@@ -36,6 +36,8 @@ const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 const MOMENT_VIDEO_CONTROL_HIDE_MS = 3000;
 const MOMENT_VIDEO_AUTOPLAY_RETRY_LIMIT = 4;
+const FEED_IMAGE_RECOVERY_DELAY_MS = 5000;
+const FEED_IMAGE_MAX_RECOVERY_ATTEMPTS = 1;
 const momentVideoPositions = new Map<string, number>();
 let momentVideoSessionMuted = true;
 const momentVideoMuteListeners = new Set<(muted: boolean) => void>();
@@ -1014,11 +1016,58 @@ const VideoProcessingPlaceholder = React.memo(function VideoProcessingPlaceholde
 });
 
 function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
+  const { theme } = useTheme();
   const [imageSize, setImageSize] = useState(() => ({
     width: item.displayCrop?.imageWidth ?? 0,
     height: item.displayCrop?.imageHeight ?? 0,
   }));
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [hasLoadError, setHasLoadError] = useState(false);
+  const didLoadRef = useRef(false);
   const crop = item.displayCrop?.crop;
+  const imageInstanceKey = `${item.uri}-${theme}-${loadAttempt}`;
+
+  useEffect(() => {
+    setLoadAttempt(0);
+    setHasLoadError(false);
+    didLoadRef.current = false;
+  }, [item.uri, theme]);
+
+  useEffect(() => {
+    if (hasLoadError || didLoadRef.current) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      if (didLoadRef.current) {
+        return;
+      }
+
+      if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
+        setLoadAttempt(loadAttempt + 1);
+      } else {
+        setHasLoadError(true);
+      }
+    }, FEED_IMAGE_RECOVERY_DELAY_MS);
+
+    return () => clearTimeout(timeout);
+  }, [hasLoadError, loadAttempt, imageInstanceKey]);
+
+  const handleImageLoad = useCallback(() => {
+    didLoadRef.current = true;
+    setHasLoadError(false);
+  }, []);
+
+  const handleImageError = useCallback(() => {
+    didLoadRef.current = false;
+
+    if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
+      setLoadAttempt(loadAttempt + 1);
+      return;
+    }
+
+    setHasLoadError(true);
+  }, [loadAttempt]);
 
   useEffect(() => {
     if (imageSize.width > 0 && imageSize.height > 0) {
@@ -1044,14 +1093,25 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   }, [item.displayCrop?.imageHeight, item.displayCrop?.imageWidth, item.uri]);
 
   if (!crop || !imageSize.width || !imageSize.height) {
+    if (hasLoadError) {
+      return (
+        <View style={[styles.postImage, styles.imageLoadFallback]}>
+          <Feather name="image" size={28} color="#8E8E9B" />
+        </View>
+      );
+    }
+
     return (
       <ExpoImage
+        key={imageInstanceKey}
         source={{ uri: item.uri }}
         style={[styles.postImage, { width: frameWidth }]}
         contentFit="cover"
         cachePolicy="disk"
-        recyclingKey={item.uri}
+        recyclingKey={imageInstanceKey}
         transition={150}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
       />
     );
   }
@@ -1066,22 +1126,31 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
   return (
     <View style={styles.croppedImageFrame}>
-      <ExpoImage
-        source={{ uri: item.uri }}
-        style={[
-          styles.croppedImage,
-          {
-            width: renderedWidth,
-            height: renderedHeight,
-            left,
-            top,
-          },
-        ]}
-        contentFit="fill"
-        cachePolicy="disk"
-        recyclingKey={item.uri}
-        transition={150}
-      />
+      {hasLoadError ? (
+        <View style={[styles.postImage, styles.imageLoadFallback]}>
+          <Feather name="image" size={28} color="#8E8E9B" />
+        </View>
+      ) : (
+        <ExpoImage
+          key={imageInstanceKey}
+          source={{ uri: item.uri }}
+          style={[
+            styles.croppedImage,
+            {
+              width: renderedWidth,
+              height: renderedHeight,
+              left,
+              top,
+            },
+          ]}
+          contentFit="fill"
+          cachePolicy="disk"
+          recyclingKey={imageInstanceKey}
+          transition={150}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+        />
+      )}
     </View>
   );
 }
@@ -2413,6 +2482,11 @@ const styles = StyleSheet.create({
   postImage: {
     width: "100%",
     height: "100%",
+  },
+  imageLoadFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#000000",
   },
   mediaSlide: {
     height: "100%",

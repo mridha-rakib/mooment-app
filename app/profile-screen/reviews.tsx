@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type ReviewCardProps = {
   colors: ReturnType<typeof useTheme>["colors"];
+  isDark: boolean;
   onOpenProfile: () => void;
   review: UserReviewResponse;
 };
@@ -31,11 +32,11 @@ const formatReviewTime = (createdAt: string) => {
   }).format(date);
 };
 
-function ReviewCard({ colors, onOpenProfile, review }: ReviewCardProps) {
+function ReviewCard({ colors, isDark, onOpenProfile, review }: ReviewCardProps) {
   const authorName = review.author?.name ?? "Mooment User";
 
   return (
-    <View style={[styles.reviewCard, { backgroundColor: "#111112", borderColor: colors.border }]}>
+    <View style={[styles.reviewCard, { backgroundColor: isDark ? "#111112" : colors.card, borderColor: colors.border }]}>
       <View style={styles.reviewHeader}>
         <TouchableOpacity style={styles.userInfo} onPress={onOpenProfile} activeOpacity={0.7}>
           {review.author?.avatarUrl ? (
@@ -158,6 +159,7 @@ export default function ReviewsScreen() {
           renderItem={({ item: review }) => (
             <ReviewCard
               colors={colors}
+              isDark={isDark}
               onOpenProfile={() => openProfile(review)}
               review={review}
             />

@@ -77,6 +77,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     Dimensions,
     Keyboard,
     KeyboardAvoidingView,
@@ -93,9 +94,11 @@ import {
 } from "react-native";
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
 
 const { width } = Dimensions.get("window");
 const CHAT_COMPOSER_KEYBOARD_GAP = 8;
+const REVIEW_KEYBOARD_GAP = 12;
 const DEFAULT_BANNER =
   "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
 
@@ -627,6 +630,7 @@ const EventScreen = () => {
   const [reviewLiked, setReviewLiked] = useState<boolean | null>(null);
   const [reviewText, setReviewText] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewKeyboardHeight, setReviewKeyboardHeight] = useState(0);
   const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
   const [isCancellingEvent, setIsCancellingEvent] = useState(false);
 
@@ -677,6 +681,39 @@ const EventScreen = () => {
       scheduleChatComposerReveal(true);
     }
   }, [chatKeyboardSpacerHeight, scheduleChatComposerReveal]);
+
+  useEffect(() => {
+    if (!reviewModalVisible) {
+      setReviewKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setReviewKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setReviewKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [reviewModalVisible]);
+
+  const closeReviewModal = useCallback(() => {
+    if (isSubmittingReview) {
+      return;
+    }
+
+    Keyboard.dismiss();
+    setReviewModalVisible(false);
+  }, [isSubmittingReview]);
+
+  const { sheetTranslateY: reviewSheetTranslateY, dragPanHandlers: reviewDragPanHandlers } =
+    useBottomSheetDragDismiss({ visible: reviewModalVisible, onClose: closeReviewModal });
 
   const isEventOwner = Boolean(
     event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)),
@@ -1870,6 +1907,15 @@ const EventScreen = () => {
     );
   }
 
+  const reviewKeyboardVisible = reviewKeyboardHeight > 0;
+  const reviewKeyboardClearance = reviewKeyboardVisible ? Math.max(insets.bottom, REVIEW_KEYBOARD_GAP) : 0;
+  const reviewSheetMaxHeight = reviewKeyboardVisible
+    ? Math.max(260, Dimensions.get("window").height - reviewKeyboardHeight - reviewKeyboardClearance - insets.top - REVIEW_KEYBOARD_GAP)
+    : undefined;
+  const reviewSheetBottomOffset = Platform.OS === "android"
+    ? reviewKeyboardHeight + reviewKeyboardClearance
+    : 0;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
@@ -2624,11 +2670,7 @@ const EventScreen = () => {
         visible={reviewModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          if (!isSubmittingReview) {
-            setReviewModalVisible(false);
-          }
-        }}
+        onRequestClose={closeReviewModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -2637,77 +2679,91 @@ const EventScreen = () => {
           <TouchableOpacity
             style={styles.reviewModalBackdrop}
             activeOpacity={1}
-            onPress={() => {
-              if (!isSubmittingReview) {
-                setReviewModalVisible(false);
-              }
-            }}
+            onPress={closeReviewModal}
           />
-          <View style={[styles.reviewModalSheet, { backgroundColor: isDark ? "#1E1E1E" : colors.card }]}>
-            <View style={styles.rewardDetailHandle} />
-            <View style={styles.reviewModalHeader}>
-              <Text style={[styles.reviewModalTitle, { color: colors.text }]}>Review The Host</Text>
-              <TouchableOpacity
-                style={styles.rewardDetailCloseBtn}
-                activeOpacity={0.7}
-                disabled={isSubmittingReview}
-                onPress={() => setReviewModalVisible(false)}
-              >
-                <Feather name="x" size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
+          <Animated.View
+            style={[
+              styles.reviewModalSheet,
+              {
+                backgroundColor: isDark ? "#1E1E1E" : colors.card,
+                maxHeight: reviewSheetMaxHeight,
+                marginBottom: reviewSheetBottomOffset,
+                transform: [{ translateY: reviewSheetTranslateY }],
+              },
+            ]}
+          >
+            <View {...reviewDragPanHandlers} style={styles.reviewDragHandleArea}>
+              <View style={styles.rewardDetailHandle} />
             </View>
+            <ScrollView
+              style={styles.reviewModalBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.reviewModalHeader}>
+                <Text style={[styles.reviewModalTitle, { color: colors.text }]}>Review The Host</Text>
+                <TouchableOpacity
+                  style={styles.rewardDetailCloseBtn}
+                  activeOpacity={0.7}
+                  disabled={isSubmittingReview}
+                  onPress={closeReviewModal}
+                >
+                  <Feather name="x" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.reviewChoiceRow}>
-              <TouchableOpacity
+              <View style={styles.reviewChoiceRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.reviewChoiceBtn,
+                    {
+                      borderColor: reviewLiked === true ? colors.primary : colors.border,
+                      backgroundColor: reviewLiked === true ? `${colors.primary}22` : "transparent",
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={isSubmittingReview}
+                  onPress={() => setReviewLiked(true)}
+                >
+                  <Feather name="thumbs-up" size={18} color={reviewLiked === true ? colors.primary : colors.text} />
+                  <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Like</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.reviewChoiceBtn,
+                    {
+                      borderColor: reviewLiked === false ? colors.primary : colors.border,
+                      backgroundColor: reviewLiked === false ? `${colors.primary}22` : "transparent",
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={isSubmittingReview}
+                  onPress={() => setReviewLiked(false)}
+                >
+                  <Feather name="thumbs-down" size={18} color={reviewLiked === false ? colors.primary : colors.text} />
+                  <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Dislike</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
                 style={[
-                  styles.reviewChoiceBtn,
+                  styles.reviewInput,
                   {
-                    borderColor: reviewLiked === true ? colors.primary : colors.border,
-                    backgroundColor: reviewLiked === true ? `${colors.primary}22` : "transparent",
+                    borderColor: colors.border,
+                    color: colors.text,
+                    backgroundColor: isDark ? "#111112" : colors.background,
                   },
                 ]}
-                activeOpacity={0.8}
-                disabled={isSubmittingReview}
-                onPress={() => setReviewLiked(true)}
-              >
-                <Feather name="thumbs-up" size={18} color={reviewLiked === true ? colors.primary : colors.text} />
-                <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Like</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.reviewChoiceBtn,
-                  {
-                    borderColor: reviewLiked === false ? colors.primary : colors.border,
-                    backgroundColor: reviewLiked === false ? `${colors.primary}22` : "transparent",
-                  },
-                ]}
-                activeOpacity={0.8}
-                disabled={isSubmittingReview}
-                onPress={() => setReviewLiked(false)}
-              >
-                <Feather name="thumbs-down" size={18} color={reviewLiked === false ? colors.primary : colors.text} />
-                <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Dislike</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[
-                styles.reviewInput,
-                {
-                  borderColor: colors.border,
-                  color: colors.text,
-                  backgroundColor: isDark ? "#111112" : colors.background,
-                },
-              ]}
-              placeholder="Add an optional review"
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              maxLength={1000}
-              value={reviewText}
-              editable={!isSubmittingReview}
-              onChangeText={setReviewText}
-            />
+                placeholder="Add an optional review"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                maxLength={1000}
+                value={reviewText}
+                editable={!isSubmittingReview}
+                onChangeText={setReviewText}
+              />
+            </ScrollView>
 
             <TouchableOpacity
               style={[
@@ -2727,7 +2783,7 @@ const EventScreen = () => {
                 <Text style={styles.reviewSubmitText}>Submit Review</Text>
               )}
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -3345,6 +3401,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 40,
+  },
+  reviewDragHandleArea: {
+    alignItems: "center",
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+  },
+  reviewModalBody: {
+    flexShrink: 1,
   },
   reviewModalHeader: {
     flexDirection: "row",
