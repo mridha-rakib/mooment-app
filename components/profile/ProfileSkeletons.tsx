@@ -12,14 +12,14 @@ export function ProfileAvatarSkeleton() {
   return <SkeletonBlock pulse={pulse} isDark={isDark} style={styles.avatar} />;
 }
 
-// Reserves the same four-column row as ProfileHeader's real stats
+// Reserves the same three-column row as ProfileHeader's real stats
 // (statBox/statLabel geometry) without shifting columns.
 export function ProfileStatsRowSkeleton() {
   const { isDark } = useTheme();
   const pulse = useSkeletonPulse();
   return (
     <View style={styles.statsRow}>
-      {[0, 1, 2, 3].map((item) => (
+      {[0, 1, 2].map((item) => (
         <View key={item} style={styles.statColumn}>
           <SkeletonBlock pulse={pulse} isDark={isDark} style={styles.statValue} />
           <SkeletonBlock pulse={pulse} isDark={isDark} style={styles.statLabel} />

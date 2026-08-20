@@ -208,47 +208,20 @@ export default function ProfileHeader({
               <TouchableOpacity
                 onPress={() =>
                   router.push({
-                    pathname: "/profile-screen/followers",
+                    pathname: "/profile-screen/friends" as never,
                     params: { userId },
                   })
                 }
               >
                 <View style={styles.statBox}>
                   <Text style={[styles.statValue, { color: colors.text }]}>
-                    {stats.followers}
+                    {stats.followers + stats.following}
                   </Text>
                   <View style={styles.labelRow}>
                     <Text
                       style={[styles.statLabel, { color: colors.textSecondary }]}
                     >
-                      Followers
-                    </Text>
-                    <View style={styles.chevronWrapper}>
-                      <ChevronRightIcon />
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <View
-                style={[styles.statDivider, { backgroundColor: colors.border }]}
-              />
-              <TouchableOpacity
-                onPress={() =>
-                  router.push({
-                    pathname: "/profile-screen/following",
-                    params: { userId },
-                  })
-                }
-              >
-                <View style={styles.statBox}>
-                  <Text style={[styles.statValue, { color: colors.text }]}>
-                    {stats.following}
-                  </Text>
-                  <View style={styles.labelRow}>
-                    <Text
-                      style={[styles.statLabel, { color: colors.textSecondary }]}
-                    >
-                      Following
+                      Friends
                     </Text>
                     <View style={styles.chevronWrapper}>
                       <ChevronRightIcon />

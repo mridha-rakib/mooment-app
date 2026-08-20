@@ -36,8 +36,8 @@ test("ProfileAvatarSkeleton reserves exactly the same 80x80/radius-40 geometry a
   assert.match(headerSource, /avatarBorder: \{\s*width: 86,\s*height: 86,\s*borderRadius: 43,/);
 });
 
-test("ProfileStatsRowSkeleton renders exactly four columns, matching Events/Reviews/Followers/Following", () => {
-  assert.match(profileSkeletonsSource, /\[0, 1, 2, 3\]\.map/);
+test("ProfileStatsRowSkeleton renders exactly three columns, matching Events/Reviews/Friends", () => {
+  assert.match(profileSkeletonsSource, /\[0, 1, 2\]\.map/);
 });
 
 test("FadeInOnReady is a one-shot, opacity-only, ~150ms transition (no slide/scale/bounce)", () => {
@@ -78,12 +78,11 @@ test("ProfileHeader avatar and stats row swap to skeletons only while loading, r
   assert.match(headerSource, /<FadeInOnReady style=\{styles\.statsContainer\}>/);
 });
 
-test("ProfileHeader's real avatar/stat props (uri, name, stats.events/reviews/followers/following) are unchanged", () => {
+test("ProfileHeader's real avatar/stat props keep Events/Reviews and aggregate Friends from followers/following", () => {
   assert.match(headerSource, /uri=\{avatar\}/);
   assert.match(headerSource, /\{stats\.events\}/);
   assert.match(headerSource, /\{stats\.reviews\}/);
-  assert.match(headerSource, /\{stats\.followers\}/);
-  assert.match(headerSource, /\{stats\.following\}/);
+  assert.match(headerSource, /\{stats\.followers \+ stats\.following\}/);
 });
 
 test("ProfileBio swaps to an identity text skeleton only while loading, and its real typography is untouched", () => {
