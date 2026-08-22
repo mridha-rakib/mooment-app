@@ -70,6 +70,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 const SUGGESTED_USERS_INSERT_AFTER = 4;
 const REFRESH_TIMEOUT_MS = 10000;
+const FEED_LOADING_RECOVERY_TIMEOUT_MS = 45000;
 const FEED_VIDEO_VIEWABILITY_THRESHOLD = 60;
 
 type FeedItem =
@@ -359,7 +360,7 @@ function PendingVideoPostSkeleton() {
 
 export default function HomeFeed() {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, theme: activeTheme } = useTheme();
   const userId = useAuthStore((state) => state.user?.id);
   const [commentModalVisible, setCommentModalVisible] = React.useState(false);
   const [shareModalVisible, setShareModalVisible] = React.useState(false);
@@ -383,6 +384,7 @@ export default function HomeFeed() {
   const [appliedEventFilters, setAppliedEventFilters] = useState<SharedEventFilters>(() => createEmptyEventFilters());
   const [pendingMapFilterRecenterKey, setPendingMapFilterRecenterKey] = useState<string | null>(null);
   const [isFeedLoading, setIsFeedLoading] = useState(false);
+  const [hasFeedLoadedOnce, setHasFeedLoadedOnce] = useState(false);
   const [isEventFilterLoading, setIsEventFilterLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
@@ -390,11 +392,24 @@ export default function HomeFeed() {
   const [activeFeedVideoItemId, setActiveFeedVideoItemId] = useState<string | null>(null);
   const pendingVideoUploads = usePendingVideoMomentUploads();
   const feedRequestIdRef = useRef(0);
+  const eventRequestIdRef = useRef(0);
+  const feedLoadingRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isRefreshingRef = useRef(false);
   const feedScrollRef = useRef<FlatList>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
   const appliedEventFiltersRef = useRef(appliedEventFilters);
   const appliedNearbyFilterKeyRef = useRef(getEventLocationFilterKey(appliedEventFilters.nearby));
   const feedAudienceRef = useRef(feedAudience);
+  const activeThemeRef = useRef(activeTheme);
+  const previousThemeRef = useRef(activeTheme);
+  const feedRuntimeSnapshotRef = useRef({
+    feedMomentPostsLength: 0,
+    feedEventsLength: 0,
+    feedRepostsLength: 0,
+    suggestedUsersLength: 0,
+    feedItemsLength: 0,
+    shouldShowFeedSkeleton: false,
+  });
   const didMountEventFilterEffectRef = useRef(false);
   // Tracks suggestion cards removed from `suggestedUsers` because a follow
   // action (optimistic or confirmed) targeted that user, keyed by user id.
@@ -412,11 +427,79 @@ export default function HomeFeed() {
     feedAudienceRef.current = feedAudience;
   }, [feedAudience]);
 
+  activeThemeRef.current = activeTheme;
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    const previousTheme = previousThemeRef.current;
+    if (previousTheme === activeTheme) {
+      return;
+    }
+
+    previousThemeRef.current = activeTheme;
+    const snapshot = feedRuntimeSnapshotRef.current;
+    console.log('[XENOG_THEME_CHANGE]', {
+      previousTheme,
+      activeTheme,
+      feedItemsLength: snapshot.feedItemsLength,
+      feedMomentPostsLength: snapshot.feedMomentPostsLength,
+      feedEventsLength: snapshot.feedEventsLength,
+      feedRepostsLength: snapshot.feedRepostsLength,
+      isFeedLoading,
+      isRefreshing,
+      isEventFilterLoading,
+      shouldShowFeedSkeleton: snapshot.shouldShowFeedSkeleton,
+      selectedType,
+    });
+  }, [activeTheme, isEventFilterLoading, isFeedLoading, isRefreshing, selectedType]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.log('[XENOG_HOME_MOUNT]', {
+      activeTheme: activeThemeRef.current,
+    });
+
+    return () => {
+      console.log('[XENOG_HOME_UNMOUNT]', {
+        activeTheme: activeThemeRef.current,
+      });
+    };
+  }, []);
+
+  const clearFeedLoadingRecoveryTimer = useCallback(() => {
+    if (feedLoadingRecoveryTimerRef.current) {
+      clearTimeout(feedLoadingRecoveryTimerRef.current);
+      feedLoadingRecoveryTimerRef.current = null;
+    }
+  }, []);
+
+  const armFeedLoadingRecoveryTimer = useCallback((requestId: number) => {
+    clearFeedLoadingRecoveryTimer();
+    feedLoadingRecoveryTimerRef.current = setTimeout(() => {
+      feedLoadingRecoveryTimerRef.current = null;
+      const isLatest = isLatestEventRequest(requestId, feedRequestIdRef.current);
+
+      if (__DEV__) {
+        console.log('[XENOG_LOAD_FEED_RECOVERY]', {
+          requestId,
+          currentRequestId: feedRequestIdRef.current,
+          isLatest,
+        });
+      }
+
+      if (isLatest) {
+        setIsFeedLoading(false);
+      }
+    }, FEED_LOADING_RECOVERY_TIMEOUT_MS);
+  }, [clearFeedLoadingRecoveryTimer]);
+
+  useEffect(() => clearFeedLoadingRecoveryTimer, [clearFeedLoadingRecoveryTimer]);
+
   const beginEventFilterTransition = useCallback(() => {
-    feedRequestIdRef.current += 1;
-    setIsFeedLoading(false);
+    eventRequestIdRef.current += 1;
     setIsEventFilterLoading(true);
-    setFeedEvents([]);
   }, []);
 
   const setActiveFeedVideoItemIdIfChanged = useCallback((itemId: string | null) => {
@@ -429,14 +512,15 @@ export default function HomeFeed() {
   }, []);
 
   const beginAudienceTransition = useCallback(() => {
-    feedRequestIdRef.current += 1;
+    const requestId = ++feedRequestIdRef.current;
     setActiveFeedVideoItemIdIfChanged(null);
     setIsFeedLoading(true);
+    armFeedLoadingRecoveryTimer(requestId);
     setIsEventFilterLoading(false);
     setFeedMomentPosts([]);
     setFeedEvents([]);
     setFeedReposts([]);
-  }, [setActiveFeedVideoItemIdIfChanged]);
+  }, [armFeedLoadingRecoveryTimer, setActiveFeedVideoItemIdIfChanged]);
 
   const feedViewabilityConfig = useRef({
     itemVisiblePercentThreshold: FEED_VIDEO_VIEWABILITY_THRESHOLD,
@@ -498,7 +582,7 @@ export default function HomeFeed() {
   }, [userId]);
 
   const loadFeedEvents = useCallback(async (audience: FeedAudience) => {
-    const requestId = ++feedRequestIdRef.current;
+    const requestId = ++eventRequestIdRef.current;
     setIsEventFilterLoading(true);
     try {
       const events = await getFeedEvents(buildEventFilterRequestParams(appliedEventFiltersRef.current, {
@@ -506,15 +590,13 @@ export default function HomeFeed() {
         audience,
       }));
 
-      if (!isLatestEventRequest(requestId, feedRequestIdRef.current)) return;
+      if (!isLatestEventRequest(requestId, eventRequestIdRef.current)) return;
 
       setFeedEvents(events);
     } catch {
-      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
-        setFeedEvents([]);
-      }
+      // Preserve the existing feed events if an event-only refresh fails.
     } finally {
-      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+      if (isLatestEventRequest(requestId, eventRequestIdRef.current)) {
         setIsEventFilterLoading(false);
       }
     }
@@ -522,7 +604,31 @@ export default function HomeFeed() {
 
   const loadFeed = useCallback(async (audience: FeedAudience = feedAudienceRef.current) => {
     const requestId = ++feedRequestIdRef.current;
+    const eventRequestId = eventRequestIdRef.current;
+    const beforeSnapshot = feedRuntimeSnapshotRef.current;
+    if (__DEV__) {
+      console.log('[XENOG_LOAD_FEED_START]', {
+        requestId,
+        currentRequestId: feedRequestIdRef.current,
+        audience,
+        activeTheme: activeThemeRef.current,
+        feedMomentPostsLength: beforeSnapshot.feedMomentPostsLength,
+        feedEventsLength: beforeSnapshot.feedEventsLength,
+        feedRepostsLength: beforeSnapshot.feedRepostsLength,
+        suggestedUsersLength: beforeSnapshot.suggestedUsersLength,
+        feedItemsLength: beforeSnapshot.feedItemsLength,
+      });
+      console.log('[XENOG_LOAD_FEED]', {
+        phase: 'start',
+        requestId,
+        activeTheme: activeThemeRef.current,
+        beforeLength: beforeSnapshot.feedItemsLength,
+        afterLength: beforeSnapshot.feedItemsLength,
+        isLatest: true,
+      });
+    }
     setIsFeedLoading(true);
+    armFeedLoadingRecoveryTimer(requestId);
     try {
       const eventFilters = appliedEventFiltersRef.current;
       const eventRequestParams = buildEventFilterRequestParams(eventFilters, { limit: 100, audience });
@@ -537,8 +643,35 @@ export default function HomeFeed() {
         getFeedEvents(eventRequestParams),
         getFeedReposts(50, audience),
       ]);
+      const isLatestSettled = isLatestEventRequest(requestId, feedRequestIdRef.current);
+      const settledAfterLength = (
+        (momentsResult.status === "fulfilled" ? momentsResult.value.length : beforeSnapshot.feedMomentPostsLength) +
+        (eventsResult.status === "fulfilled" ? eventsResult.value.length : beforeSnapshot.feedEventsLength) +
+        (repostsResult.status === 'fulfilled' ? repostsResult.value.length : beforeSnapshot.feedRepostsLength)
+      );
 
-      if (!isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+      if (__DEV__) {
+        console.log('[XENOG_LOAD_FEED_SETTLED]', {
+          requestId,
+          isLatest: isLatestSettled,
+          momentsStatus: momentsResult.status,
+          eventsStatus: eventsResult.status,
+          repostsStatus: repostsResult.status,
+          momentsCount: momentsResult.status === "fulfilled" ? momentsResult.value.length : undefined,
+          eventsCount: eventsResult.status === "fulfilled" ? eventsResult.value.length : undefined,
+          repostsCount: repostsResult.status === 'fulfilled' ? repostsResult.value.length : undefined,
+        });
+        console.log('[XENOG_LOAD_FEED]', {
+          phase: 'settled',
+          requestId,
+          activeTheme: activeThemeRef.current,
+          beforeLength: beforeSnapshot.feedItemsLength,
+          afterLength: settledAfterLength,
+          isLatest: isLatestSettled,
+        });
+      }
+
+      if (!isLatestSettled) {
         return;
       }
 
@@ -550,23 +683,53 @@ export default function HomeFeed() {
             }))
             .filter((post): post is PostData => Boolean(post)),
         );
-      } else {
-        setFeedMomentPosts([]);
       }
 
-      setFeedEvents(
-        eventsResult.status === "fulfilled"
-          ? eventsResult.value
-          : [],
-      );
-      setFeedReposts(repostsResult.status === 'fulfilled' ? repostsResult.value : []);
+      if (
+        eventsResult.status === "fulfilled" &&
+        isLatestEventRequest(eventRequestId, eventRequestIdRef.current)
+      ) {
+        setFeedEvents(eventsResult.value);
+      }
+
+      if (repostsResult.status === 'fulfilled') {
+        setFeedReposts(repostsResult.value);
+      }
+
+      if (
+        momentsResult.status === "fulfilled" ||
+        eventsResult.status === "fulfilled" ||
+        repostsResult.status === 'fulfilled'
+      ) {
+        setHasFeedLoadedOnce(true);
+      }
     } finally {
-      if (isLatestEventRequest(requestId, feedRequestIdRef.current)) {
+      const isLatestFinally = isLatestEventRequest(requestId, feedRequestIdRef.current);
+
+      if (__DEV__) {
+        console.log('[XENOG_LOAD_FEED_FINALLY]', {
+          requestId,
+          currentRequestId: feedRequestIdRef.current,
+          isLatest: isLatestFinally,
+          willClearIsFeedLoading: isLatestFinally,
+        });
+        console.log('[XENOG_LOAD_FEED]', {
+          phase: 'finally',
+          requestId,
+          activeTheme: activeThemeRef.current,
+          beforeLength: beforeSnapshot.feedItemsLength,
+          afterLength: feedRuntimeSnapshotRef.current.feedItemsLength,
+          isLatest: isLatestFinally,
+        });
+      }
+
+      if (isLatestFinally) {
+        clearFeedLoadingRecoveryTimer();
         setIsFeedLoading(false);
         setIsEventFilterLoading(false);
       }
     }
-  }, []);
+  }, [armFeedLoadingRecoveryTimer, clearFeedLoadingRecoveryTimer]);
 
   useEffect(() => {
     if (!didMountEventFilterEffectRef.current) {
@@ -650,6 +813,11 @@ export default function HomeFeed() {
   }, []);
 
   const handleRefresh = useCallback(async () => {
+    if (isRefreshingRef.current) {
+      return;
+    }
+
+    isRefreshingRef.current = true;
     setIsRefreshing(true);
     try {
       await Promise.race([
@@ -657,6 +825,7 @@ export default function HomeFeed() {
         new Promise((resolve) => setTimeout(resolve, REFRESH_TIMEOUT_MS)),
       ]);
     } finally {
+      isRefreshingRef.current = false;
       setIsRefreshing(false);
     }
   }, [feedAudience, loadFeed, loadStories, loadSuggestedUsers]);
@@ -670,6 +839,14 @@ export default function HomeFeed() {
 
   useFocusEffect(
     useCallback(() => {
+      if (__DEV__) {
+        console.log('[XENOG_HOME_FOCUS]', {
+          activeTheme: activeThemeRef.current,
+          feedAudience,
+          feedItemsLength: feedRuntimeSnapshotRef.current.feedItemsLength,
+        });
+      }
+
       const pendingMoment = consumePendingNewMoment();
 
       if (pendingMoment) {
@@ -686,7 +863,14 @@ export default function HomeFeed() {
       void loadFeed(feedAudience);
 
       return () => {
+        if (__DEV__) {
+          console.log('[XENOG_HOME_BLUR]', {
+            activeTheme: activeThemeRef.current,
+            feedAudience,
+          });
+        }
         setActiveFeedVideoItemIdIfChanged(null);
+        isRefreshingRef.current = false;
         setIsRefreshing(false);
       };
     }, [feedAudience, loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged]),
@@ -999,7 +1183,54 @@ export default function HomeFeed() {
     isFeedLoading,
     eventCount: feedEvents.length,
   });
-  const shouldShowFeedSkeleton = selectedType === 'Feed' && isFeedLoading && feedItems.length === 0 && !isRefreshing;
+  const shouldShowFeedSkeleton = selectedType === 'Feed' && !hasFeedLoadedOnce && isFeedLoading && feedItems.length === 0 && !isRefreshing;
+  feedRuntimeSnapshotRef.current = {
+    feedMomentPostsLength: feedMomentPosts.length,
+    feedEventsLength: feedEvents.length,
+    feedRepostsLength: feedReposts.length,
+    suggestedUsersLength: suggestedUsers.length,
+    feedItemsLength: feedItems.length,
+    shouldShowFeedSkeleton,
+  };
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.log('[XENOG_FEED_STATE]', {
+      activeTheme,
+      selectedType,
+      homeAudience,
+      feedAudience,
+      isFeedLoading,
+      isRefreshing,
+      isEventFilterLoading,
+      hasFeedLoadedOnce,
+      feedMomentPostsLength: feedMomentPosts.length,
+      feedEventsLength: feedEvents.length,
+      feedRepostsLength: feedReposts.length,
+      suggestedUsersLength: suggestedUsers.length,
+      feedItemsLength: feedItems.length,
+      shouldShowFeedSkeleton,
+    });
+  }, [
+    activeTheme,
+    selectedType,
+    homeAudience,
+    feedAudience,
+    isFeedLoading,
+    isRefreshing,
+    isEventFilterLoading,
+    hasFeedLoadedOnce,
+    feedMomentPosts.length,
+    feedEvents.length,
+    feedReposts.length,
+    suggestedUsers.length,
+    feedItems.length,
+    shouldShowFeedSkeleton,
+  ]);
+  const feedListExtraData = useMemo(
+    () => ({ activeFeedVideoItemId, activeTheme }),
+    [activeFeedVideoItemId, activeTheme],
+  );
 
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -1035,7 +1266,7 @@ export default function HomeFeed() {
             ref={feedScrollRef}
             data={feedItems}
             keyExtractor={(item) => item.id}
-            extraData={activeFeedVideoItemId}
+            extraData={feedListExtraData}
             showsVerticalScrollIndicator={false}
             initialNumToRender={3}
             maxToRenderPerBatch={3}
@@ -1091,6 +1322,16 @@ export default function HomeFeed() {
             ListFooterComponent={shouldShowFeedSkeleton ? null : <View style={{ height: 100 }} />}
             renderItem={({ item }) => {
               if (item.type === 'post') {
+                if (__DEV__) {
+                  console.log('[XENOG_FEED_ROW]', {
+                    id: item.id,
+                    type: item.type,
+                    activeTheme,
+                    hasMedia: Boolean(item.data.mediaItems?.length || item.data.mediaUris?.length),
+                    mediaCount: item.data.mediaItems?.length ?? item.data.mediaUris?.length ?? 0,
+                  });
+                }
+
                 return (
                   <FeedPost
                     post={item.data}

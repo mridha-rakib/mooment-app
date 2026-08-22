@@ -3,7 +3,8 @@ import {
 import { useRouter } from "expo-router";
 import React,
   { useState } from "react";
-import { KeyboardAvoidingView,
+import { Image,
+  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
@@ -57,8 +58,11 @@ export default function ForgotPassword() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            {/* Logo placeholder */}
-            <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
+            <Image
+              source={require("@/assets/images/image.png")}
+              style={[styles.logoImage, { tintColor: colors.text }]}
+              resizeMode="contain"
+            />
              
             <Text style={[styles.title, { color: colors.text }]}>Forget Password</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Type your email to recover your account</Text>
@@ -122,9 +126,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
-  logoText: {
-    fontSize: 40,
-    fontFamily: 'OleoScript-Regular',
+  logoImage: {
+    width: 154,
+    height: 36,
     marginBottom: 48,
   },
   title: {

@@ -1,10 +1,10 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useEventListener } from 'expo';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { Image as ExpoImage } from 'expo-image';
 import { VideoView,
   useVideoPlayer,
   type VideoSourceObject } from 'expo-video';
-import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -1016,22 +1016,38 @@ const VideoProcessingPlaceholder = React.memo(function VideoProcessingPlaceholde
 });
 
 function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
-  const { theme } = useTheme();
+  const resolvedUri = item.fullUri?.trim() || item.uri.trim();
+  const frameStyle = useMemo(() => ({
+    width: frameWidth,
+    height: frameHeight,
+  }), [frameHeight, frameWidth]);
   const [imageSize, setImageSize] = useState(() => ({
     width: item.displayCrop?.imageWidth ?? 0,
     height: item.displayCrop?.imageHeight ?? 0,
   }));
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [hasLoadError, setHasLoadError] = useState(false);
   const didLoadRef = useRef(false);
+  const lastLoadedUriRef = useRef<string | null>(null);
+  const previousImageIdentityRef = useRef(resolvedUri);
   const crop = item.displayCrop?.crop;
-  const imageInstanceKey = `${item.uri}-${theme}-${loadAttempt}`;
+  const imageInstanceKey = `${resolvedUri}-${loadAttempt}`;
+  const shouldShowFallback = hasLoadError && !isLoading;
 
   useEffect(() => {
+    const previousIdentity = previousImageIdentityRef.current;
+
+    if (previousIdentity === resolvedUri) {
+      return;
+    }
+
+    previousImageIdentityRef.current = resolvedUri;
     setLoadAttempt(0);
+    setIsLoading(false);
     setHasLoadError(false);
     didLoadRef.current = false;
-  }, [item.uri, theme]);
+  }, [resolvedUri]);
 
   useEffect(() => {
     if (hasLoadError || didLoadRef.current) {
@@ -1046,28 +1062,41 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
       if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
         setLoadAttempt(loadAttempt + 1);
       } else {
-        setHasLoadError(true);
+        setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
       }
     }, FEED_IMAGE_RECOVERY_DELAY_MS);
 
     return () => clearTimeout(timeout);
-  }, [hasLoadError, loadAttempt, imageInstanceKey]);
+  }, [hasLoadError, loadAttempt, resolvedUri, imageInstanceKey]);
+
+  const handleImageLoadStart = useCallback(() => {
+    didLoadRef.current = false;
+    setIsLoading(true);
+    setHasLoadError(false);
+  }, []);
 
   const handleImageLoad = useCallback(() => {
     didLoadRef.current = true;
+    lastLoadedUriRef.current = resolvedUri;
+    setIsLoading(false);
     setHasLoadError(false);
+  }, [resolvedUri]);
+
+  const handleImageLoadEnd = useCallback(() => {
+    setIsLoading(false);
   }, []);
 
   const handleImageError = useCallback(() => {
     didLoadRef.current = false;
+    setIsLoading(false);
 
     if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
       setLoadAttempt(loadAttempt + 1);
       return;
     }
 
-    setHasLoadError(true);
-  }, [loadAttempt]);
+    setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
+  }, [resolvedUri, loadAttempt]);
 
   useEffect(() => {
     if (imageSize.width > 0 && imageSize.height > 0) {
@@ -1075,7 +1104,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
     }
 
     Image.getSize(
-      item.uri,
+      resolvedUri,
       (resolvedWidth, resolvedHeight) => {
         setImageSize({ width: resolvedWidth, height: resolvedHeight });
       },
@@ -1083,36 +1112,45 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         setImageSize({ width: 0, height: 0 });
       },
     );
-  }, [imageSize.height, imageSize.width, item.uri]);
+  }, [imageSize.height, imageSize.width, resolvedUri]);
 
   useEffect(() => {
     setImageSize({
       width: item.displayCrop?.imageWidth ?? 0,
       height: item.displayCrop?.imageHeight ?? 0,
     });
-  }, [item.displayCrop?.imageHeight, item.displayCrop?.imageWidth, item.uri]);
+  }, [item.displayCrop?.imageHeight, item.displayCrop?.imageWidth, resolvedUri]);
 
   if (!crop || !imageSize.width || !imageSize.height) {
-    if (hasLoadError) {
+    if (shouldShowFallback) {
       return (
-        <View style={[styles.postImage, styles.imageLoadFallback]}>
+        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback]}>
           <Feather name="image" size={28} color="#8E8E9B" />
         </View>
       );
     }
 
-    return (
-      <ExpoImage
-        key={imageInstanceKey}
-        source={{ uri: item.uri }}
-        style={[styles.postImage, { width: frameWidth }]}
-        contentFit="cover"
-        cachePolicy="disk"
-        recyclingKey={imageInstanceKey}
-        transition={150}
-        onLoad={handleImageLoad}
-        onError={handleImageError}
-      />
+    return resolvedUri ? (
+      <View style={[styles.croppedImageFrame, frameStyle]}>
+        <ExpoImage
+          key={imageInstanceKey}
+          source={{ uri: resolvedUri }}
+          style={[styles.postImage, frameStyle]}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          onLoadStart={handleImageLoadStart}
+          onLoad={handleImageLoad}
+          onLoadEnd={handleImageLoadEnd}
+          onError={handleImageError}
+        />
+        {isLoading ? (
+          <ActivityIndicator style={styles.imageLoadingIndicator} color="#FFFFFF" />
+        ) : null}
+      </View>
+    ) : (
+      <View style={[styles.postImage, frameStyle, styles.imageLoadFallback]}>
+        <Feather name="image" size={28} color="#8E8E9B" />
+      </View>
     );
   }
 
@@ -1125,15 +1163,15 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   const top = (frameHeight - cropPixelHeight * scale) / 2 - crop.y * imageSize.height * scale;
 
   return (
-    <View style={styles.croppedImageFrame}>
-      {hasLoadError ? (
-        <View style={[styles.postImage, styles.imageLoadFallback]}>
+    <View style={[styles.croppedImageFrame, frameStyle]}>
+      {shouldShowFallback ? (
+        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback]}>
           <Feather name="image" size={28} color="#8E8E9B" />
         </View>
       ) : (
         <ExpoImage
           key={imageInstanceKey}
-          source={{ uri: item.uri }}
+          source={{ uri: resolvedUri }}
           style={[
             styles.croppedImage,
             {
@@ -1144,13 +1182,16 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
             },
           ]}
           contentFit="fill"
-          cachePolicy="disk"
-          recyclingKey={imageInstanceKey}
-          transition={150}
+          cachePolicy="memory-disk"
+          onLoadStart={handleImageLoadStart}
           onLoad={handleImageLoad}
+          onLoadEnd={handleImageLoadEnd}
           onError={handleImageError}
         />
       )}
+      {isLoading && !shouldShowFallback ? (
+        <ActivityIndicator style={styles.imageLoadingIndicator} color="#FFFFFF" />
+      ) : null}
     </View>
   );
 }
@@ -1603,6 +1644,14 @@ function FeedPost({
     if (post.postType === 'event') {
       handleEventPress();
       return;
+    }
+
+    if (__DEV__) {
+      const item = mediaItems[index];
+      console.log('[XENOG_FULLSCREEN_OPEN]', {
+        mediaIndex: index,
+        uri: item?.fullUri?.trim() || item?.uri?.trim(),
+      });
     }
 
     setCurrentMediaIndex(index);
@@ -2487,6 +2536,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#000000",
+  },
+  imageLoadingIndicator: {
+    ...StyleSheet.absoluteFillObject,
   },
   mediaSlide: {
     height: "100%",
