@@ -1903,6 +1903,8 @@ function FeedPost({
       )}
 
       <View
+        // TEMPORARY DIAGNOSTIC (single-turn wrapper-remount test) - revert after test.
+        key={isDark ? 'dark' : 'light'}
         style={[
           styles.postCard,
           { backgroundColor: colors.card },

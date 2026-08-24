@@ -46,6 +46,7 @@ type CommentType = {
   parentCommentId?: string | null;
   authorId?: string;
   authorName: string;
+  authorUsername?: string;
   authorAvatar?: string | null;
   text: string;
   createdAt: string;
@@ -106,6 +107,7 @@ const momentCommentToComment = (comment: MomentComment): CommentType => ({
   parentCommentId: comment.parentCommentId ?? null,
   authorId: comment.author?.id,
   authorName: comment.author?.name ?? "Mooment User",
+  authorUsername: comment.author?.username,
   authorAvatar:
     (comment.author?.avatarKey
       ? getStorageFileUrl(comment.author.avatarKey)
@@ -125,6 +127,7 @@ const storyCommentToComment = (comment: StoryComment): CommentType => ({
   parentCommentId: comment.parentCommentId ?? null,
   authorId: comment.author?.id,
   authorName: comment.author?.name ?? "Mooment User",
+  authorUsername: comment.author?.username,
   authorAvatar:
     comment.author?.avatarUrl ??
     (comment.author?.avatarKey
@@ -221,6 +224,7 @@ export default function CommentsModal({
     id: string;
     rootParentId: string;
     name: string;
+    username?: string;
   } | null>(null);
   const [commentText, setCommentText] = useState("");
   const [isLoadingComments, setIsLoadingComments] = useState(false);
@@ -500,7 +504,27 @@ export default function CommentsModal({
     item: CommentType,
     rootParentId: string,
   ) => {
-    setReplyingTo({ id: item.id, rootParentId, name: item.authorName });
+    const username = item.authorUsername?.trim().replace(/^@+/, "");
+    const previousUsername = replyingTo?.username?.trim().replace(/^@+/, "");
+
+    setReplyingTo({
+      id: item.id,
+      rootParentId,
+      name: item.authorName,
+      username: username || undefined,
+    });
+
+    if (username) {
+      setCommentText((currentText) => {
+        const previousPrefix = previousUsername ? `@${previousUsername} ` : null;
+        const draftText = previousPrefix && currentText.startsWith(previousPrefix)
+          ? currentText.slice(previousPrefix.length)
+          : currentText;
+
+        return `@${username} ${draftText}`;
+      });
+    }
+
     inputRef.current?.focus();
   };
 
@@ -607,12 +631,10 @@ export default function CommentsModal({
     item: CommentType,
     options: {
       isChild?: boolean;
-      isLast?: boolean;
       rootParentId: string;
     },
   ) => {
     const isChild = options.isChild ?? false;
-    const isLast = options.isLast ?? false;
     const avatarSize = isChild ? 30 : 36;
     const formattedLikes =
       item.likesCount >= 1000
@@ -624,20 +646,9 @@ export default function CommentsModal({
         key={item.id}
         style={[styles.commentRow, isChild && styles.childCommentRow]}
       >
-        {/* Connection line for replies */}
         {isChild && (
           <View
-            style={[
-              styles.replyLineVertical,
-              { borderColor: colors.border },
-              isLast ? styles.replyLineVerticalLast : undefined,
-            ]}
-            pointerEvents="none"
-          />
-        )}
-        {isChild && (
-          <View
-            style={[styles.replyLineHorizontal, { borderColor: colors.border }]}
+            style={[styles.replyBranchConnector, { borderColor: colors.border }]}
             pointerEvents="none"
           />
         )}
@@ -835,10 +846,13 @@ export default function CommentsModal({
                         {renderReplyToggle(comment)}
                         {isExpanded && replies.length > 0 ? (
                           <View style={styles.repliesContainer}>
-                            {replies.map((reply, index, arr) =>
+                            <View
+                              style={[styles.replyConnectorLine, { backgroundColor: colors.border }]}
+                              pointerEvents="none"
+                            />
+                            {replies.map((reply) =>
                               renderComment(reply, {
                                 isChild: true,
-                                isLast: index === arr.length - 1,
                                 rootParentId: comment.id,
                               }),
                             )}
@@ -887,7 +901,7 @@ export default function CommentsModal({
                       <Text
                         style={{ color: colors.primary, fontWeight: "bold" }}
                       >
-                        @{replyingTo.name}
+                        {replyingTo.username ? `@${replyingTo.username}` : replyingTo.name}
                       </Text>
                     </Text>
                     <TouchableOpacity onPress={() => setReplyingTo(null)}>
@@ -1138,12 +1152,12 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginLeft: 48,
     marginTop: -2,
-    marginBottom: 14,
+    marginBottom: 12,
     paddingVertical: 2,
     paddingRight: 12,
   },
   viewMoreLine: {
-    width: 28,
+    width: 24,
     borderTopWidth: 1,
     marginRight: 8,
   },
@@ -1154,29 +1168,27 @@ const styles = StyleSheet.create({
   },
   repliesContainer: {
     position: "relative",
-    marginLeft: 54,
+    marginLeft: 58,
     paddingTop: 2,
   },
-  replyLineVertical: {
+  replyConnectorLine: {
     position: "absolute",
-    left: -23,
-    top: -16,
-    bottom: -16,
-    borderLeftWidth: 1,
-    zIndex: 1,
+    left: -25,
+    top: -32,
+    bottom: 31,
+    width: StyleSheet.hairlineWidth,
+    zIndex: 0,
   },
-  replyLineVerticalLast: {
-    bottom: undefined,
-    height: 31,
+  replyBranchConnector: {
+    position: "absolute",
+    left: -25,
+    top: 13,
+    width: 25,
+    height: 13,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomLeftRadius: 8,
-  },
-  replyLineHorizontal: {
-    position: "absolute",
-    left: -23,
-    top: 15,
-    width: 21,
-    borderTopWidth: 1,
-    zIndex: 1,
+    zIndex: 0,
   },
   inputSection: {
     paddingHorizontal: 18,

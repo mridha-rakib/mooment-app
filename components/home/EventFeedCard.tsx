@@ -666,6 +666,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
 
   return (
     <View
+      key={isDark ? 'dark' : 'light'}
       style={[
         styles.card,
         // Dark mode keeps its exact pre-existing pixel values (approved,
@@ -754,9 +755,6 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
             <Feather name="calendar" size={32} color="#333" />
           </View>
         )}
-
-        {/* dark tint over image */}
-        <View style={styles.imageTint} />
 
         <View style={styles.statusBadgeGroup} pointerEvents="none">
           <View
@@ -1102,10 +1100,6 @@ const styles = StyleSheet.create({
   bannerFallback: {
     alignItems: "center",
     justifyContent: "center",
-  },
-  imageTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(28, 11, 11, 0.55)",
   },
   statusBadgeGroup: {
     position: "absolute",

@@ -1947,14 +1947,6 @@ const EventScreen = () => {
             locations={[0, 1]}
             style={styles.topShade}
           />
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(92, 48, 187, 0.1)", "#000000"]}
-            locations={[0, 1]}
-            start={{ x: 0.95, y: 0 }}
-            end={{ x: 0.18, y: 1 }}
-            style={styles.gradient}
-          />
           <View style={[styles.heroStatusStack, { top: insets.top + 62 }]} pointerEvents="none">
             <LiveLifecycleBadge eventStatus={event?.status} />
             <CrowdStatusBadge eventStatus={event?.status} crowdStatus={event?.crowdStatus} />
@@ -2878,9 +2870,6 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     height: 130,
-  },
-  gradient: {
-    ...StyleSheet.absoluteFillObject,
   },
   heroStatusStack: {
     alignItems: "flex-end",
