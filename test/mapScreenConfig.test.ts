@@ -92,3 +92,13 @@ test("user gesture still cancels pending initial recenter without disabling manu
   assert.match(mapScreenSource, /pendingCameraMoveRef\.current = null/);
   assert.match(mapScreenSource, /mode: "manual"/);
 });
+
+test("current-location marker visibility follows the existing sharing setting without unmounting location updates", () => {
+  assert.match(
+    mapScreenSource,
+    /const currentLocationMarkerVisible = useAuthStore\(\(state\) =>\s*Boolean\(state\.user\?\.currentLocationSharingEnabled\),\s*\);/,
+  );
+  assert.match(mapScreenSource, /<Mapbox\.UserLocation\s+visible=\{currentLocationMarkerVisible\}/);
+  assert.match(mapScreenSource, /onUpdate=\{\(location\) => \{/);
+  assert.doesNotMatch(mapScreenSource, /\{currentLocationMarkerVisible && \(\s*<Mapbox\.UserLocation/);
+});

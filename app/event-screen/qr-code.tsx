@@ -43,6 +43,25 @@ const parsePositiveInteger = (value: string | string[] | undefined, fallback = 0
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+const getVisibleQrTicketPasses = (passes: TicketWalletPass[], walletSource: string) =>
+  (walletSource === 'owned' ? passes.filter((pass) => !pass.currentShare) : passes)
+    .filter((pass) => pass.status !== 'cancelled' && !pass.cancellation);
+
+const getRevokeQrTicketPasses = (passes: TicketWalletPass[], walletSource: string) =>
+  walletSource === 'owned'
+    ? passes.filter((pass) => Boolean(pass.currentShare) && pass.status === 'active' && !pass.cancellation)
+    : [];
+
+const findTicketPassIndex = (
+  passes: TicketWalletPass[],
+  orderId?: string | null,
+  ticketIndex?: number | null,
+) => passes.findIndex((pass) =>
+  Boolean(orderId) &&
+  pass.orderId === orderId &&
+  pass.ticketIndex === ticketIndex
+);
+
 const resolveAvatarUri = (key?: string | null, url?: string | null) => {
   if (url?.trim()) {
     return url.trim();
@@ -102,6 +121,8 @@ export default function QRCodeScreen() {
     amount?: string;
     currency?: string;
     ticketPasses?: string;
+    selectedOrderId?: string;
+    selectedTicketIndex?: string;
   }>();
 
   const type = getParam(params.type, 'event');
@@ -149,7 +170,14 @@ export default function QRCodeScreen() {
       : [];
   }, [orderId, params.ticketPasses, ticketNo]);
   const [ticketPasses, setTicketPasses] = useState<TicketWalletPass[]>(initialTicketPasses);
-  const [selectedPassIndex, setSelectedPassIndex] = useState(0);
+  const [selectedPassIndex, setSelectedPassIndex] = useState(() => {
+    const selectedOrderId = getParam(params.selectedOrderId, initialTicketPasses[0]?.orderId ?? '');
+    const selectedTicketIndex = parsePositiveInteger(params.selectedTicketIndex, initialTicketPasses[0]?.ticketIndex ?? 1);
+    const initialVisiblePasses = getVisibleQrTicketPasses(initialTicketPasses, walletSource);
+    const selectedIndex = findTicketPassIndex(initialVisiblePasses, selectedOrderId, selectedTicketIndex);
+
+    return selectedIndex >= 0 ? selectedIndex : 0;
+  });
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [friends, setFriends] = useState<FriendUserResponse[]>([]);
   const [friendSearch, setFriendSearch] = useState('');
@@ -157,12 +185,20 @@ export default function QRCodeScreen() {
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const [shareErrorMessage, setShareErrorMessage] = useState<string | null>(null);
   const visibleTicketPasses = useMemo(
-    () =>
-      (walletSource === 'owned' ? ticketPasses.filter((pass) => !pass.currentShare) : ticketPasses)
-        .filter((pass) => pass.status !== 'cancelled' && !pass.cancellation),
+    () => getVisibleQrTicketPasses(ticketPasses, walletSource),
+    [ticketPasses, walletSource],
+  );
+  const revokeTicketPasses = useMemo(
+    () => getRevokeQrTicketPasses(ticketPasses, walletSource),
     [ticketPasses, walletSource],
   );
   const selectedPass = visibleTicketPasses[Math.min(selectedPassIndex, Math.max(0, visibleTicketPasses.length - 1))];
+  const selectedRevokePass =
+    revokeTicketPasses.find((pass) =>
+      pass.orderId === selectedPass?.orderId &&
+      pass.ticketIndex === selectedPass?.ticketIndex
+    ) ?? revokeTicketPasses[0] ?? null;
+  const shareModalTicketIndex = selectedPass?.ticketIndex ?? selectedRevokePass?.ticketIndex ?? 1;
   const selectedVisiblePassNumber = Math.max(
     1,
     visibleTicketPasses.findIndex(
@@ -171,7 +207,7 @@ export default function QRCodeScreen() {
   );
   const selectedTicketNo = selectedPass?.ticketNo ?? ticketNo;
   const selectedQrValue = selectedPass?.qrCode || ticketNo || '';
-  const selectedCurrentShare = selectedPass?.currentShare ?? null;
+  const selectedCurrentShare = selectedRevokePass?.currentShare ?? null;
   const shareablePassCount = visibleTicketPasses.filter((pass) => pass.status === 'active').length;
   const canShareSelectedPass = (
     type === 'event' &&
@@ -180,6 +216,11 @@ export default function QRCodeScreen() {
     selectedPass?.status === 'active' &&
     Boolean(selectedPass.qrCode) &&
     Boolean(eventId && ticketId && selectedPass?.orderId)
+  );
+  const canManageSelectedShare = (
+    type === 'event' &&
+    walletSource === 'owned' &&
+    Boolean(selectedCurrentShare && selectedRevokePass)
   );
   const filteredFriends = useMemo(
     () => friends.filter((friend) => friend.id !== selectedCurrentShare?.friend?.id),
@@ -281,7 +322,7 @@ export default function QRCodeScreen() {
   };
 
   const handleOpenShareModal = async () => {
-    if (!canShareSelectedPass) {
+    if (!canShareSelectedPass && !canManageSelectedShare) {
       Alert.alert('Share unavailable', 'This ticket QR cannot be shared.');
       return;
     }
@@ -298,8 +339,8 @@ export default function QRCodeScreen() {
       return;
     }
 
-    if (selectedCurrentShare) {
-      setShareErrorMessage('Cancel the current share before choosing another friend.');
+    if (!canShareSelectedPass) {
+      setShareErrorMessage('No owner-held ticket QR is currently available to share.');
       return;
     }
 
@@ -330,7 +371,7 @@ export default function QRCodeScreen() {
   };
 
   const handleCancelShare = async () => {
-    if (!selectedCurrentShare || !selectedPass) {
+    if (!selectedCurrentShare || !selectedRevokePass) {
       return;
     }
 
@@ -341,9 +382,10 @@ export default function QRCodeScreen() {
       const cancelledShare = await cancelTicketShare(selectedCurrentShare.id);
       setTicketPasses((passes) =>
         passes.map((pass) =>
-          pass.orderId === selectedPass.orderId && pass.ticketIndex === selectedPass.ticketIndex
+          pass.orderId === selectedRevokePass.orderId && pass.ticketIndex === selectedRevokePass.ticketIndex
             ? {
                 ...pass,
+                status: 'active',
                 ticketNo: cancelledShare.qrCode,
                 qrCode: cancelledShare.qrCode,
                 currentShare: null,
@@ -594,7 +636,7 @@ export default function QRCodeScreen() {
               </Text>
             </View>
 
-            {canShareSelectedPass && (
+            {(canShareSelectedPass || canManageSelectedShare) && (
               <TouchableOpacity
                 style={[
                   styles.shareQrButton,
@@ -650,7 +692,7 @@ export default function QRCodeScreen() {
               <View {...shareModalDragResponder.panHandlers}>
                 <Text style={styles.shareModalTitle}>Share QR</Text>
                 <Text style={styles.shareModalSubtitle}>
-                  Ticket {selectedPass?.ticketIndex ?? 1} • {ticketName}
+                  Ticket {shareModalTicketIndex} • {ticketName}
                 </Text>
               </View>
               <TouchableOpacity
@@ -713,7 +755,7 @@ export default function QRCodeScreen() {
                     <TouchableOpacity
                       style={styles.friendRow}
                       onPress={() => void handleShareWithFriend(item)}
-                      disabled={isShareSubmitting || Boolean(selectedCurrentShare)}
+                      disabled={isShareSubmitting || !canShareSelectedPass}
                       activeOpacity={0.85}
                     >
                       <UserAvatar uri={resolveAvatarUri(item.avatarKey, item.avatarUrl)} name={item.name} size={42} style={styles.friendAvatar} />
@@ -721,8 +763,8 @@ export default function QRCodeScreen() {
                         <Text style={styles.friendName}>{item.name}</Text>
                         {!!item.username && <Text style={styles.friendHandle}>@{item.username}</Text>}
                       </View>
-                      <Text style={[styles.friendAction, selectedCurrentShare && styles.friendActionDisabled]}>
-                        {selectedCurrentShare ? 'Cancel first' : 'Share'}
+                      <Text style={[styles.friendAction, !canShareSelectedPass && styles.friendActionDisabled]}>
+                        {canShareSelectedPass ? 'Share' : 'Unavailable'}
                       </Text>
                     </TouchableOpacity>
                   )}

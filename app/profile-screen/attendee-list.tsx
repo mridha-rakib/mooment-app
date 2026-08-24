@@ -65,6 +65,11 @@ type AttendeeListItem = EventTicketStatItem | PublicEventGoingItem;
 const isPrivateStatItem = (item: AttendeeListItem): item is EventTicketStatItem =>
   "status" in item;
 
+const getTicketCount = (item: AttendeeListItem) =>
+  "ticketCount" in item && typeof item.ticketCount === "number" && Number.isFinite(item.ticketCount)
+    ? Math.max(1, Math.trunc(item.ticketCount))
+    : 1;
+
 const getAvatarUri = (avatarKey?: string | null) => {
   if (!avatarKey) return null;
 
@@ -236,7 +241,7 @@ export default function AttendeeListScreen() {
 
   const toggleFollow = async (item: AttendeeListItem) => {
     const attendee = item.attendee;
-    if (!attendee || attendee.id === authUser?.id || pendingUserIdsRef.current.has(attendee.id)) {
+    if (!attendee || attendee.anonymous || attendee.id === authUser?.id || pendingUserIdsRef.current.has(attendee.id)) {
       return;
     }
 
@@ -348,46 +353,59 @@ export default function AttendeeListScreen() {
         ItemSeparatorComponent={() => <View style={[styles.separator, { borderBottomColor: "#B3B3B3" }]} />}
         renderItem={({ item }) => {
           const attendee = item.attendee;
-          const avatarUri = getAvatarUri(attendee?.avatarKey ?? null);
-          const username = attendee?.username?.trim();
-          const isSelf = Boolean(attendee?.id && attendee.id === authUser?.id);
+          const isAnonymous = attendee?.anonymous === true;
+          const avatarUri = isAnonymous ? null : getAvatarUri(attendee?.avatarKey ?? null);
+          const username = isAnonymous ? "" : attendee?.username?.trim();
+          const displayName = isAnonymous ? "Anonymous" : attendee?.name.trim() || "Attendee";
+          const ticketCount = getTicketCount(item);
+          const ticketCountLabel = ticketCount > 1 ? `${ticketCount} Tickets` : "";
+          const handleLabel = username ? `@${username.replace(/^@+/, "")}` : "@xenog";
+          const secondaryLabel = [
+            !isAnonymous ? handleLabel : null,
+            ticketCountLabel,
+          ].filter(Boolean).join(" · ");
+          const isSelf = Boolean(!isAnonymous && attendee?.id && attendee.id === authUser?.id);
           const isFollowing = Boolean(attendee?.isFollowing);
-          const isPending = Boolean(attendee?.id && pendingUserIds.includes(attendee.id));
+          const isPending = Boolean(!isAnonymous && attendee?.id && pendingUserIds.includes(attendee.id));
 
           return (
             <View style={styles.row}>
-              {attendee ? (
+              {attendee && !isAnonymous ? (
                 <TouchableOpacity
                   style={styles.userSection}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${attendee.name || "attendee"} profile`}
+                  accessibilityLabel={`Open ${displayName} profile`}
                   onPress={() => openProfile(attendee, avatarUri)}
                 >
                   <View style={styles.avatarBorder}>
-                    <UserAvatar uri={avatarUri} name={attendee.name} size={52} />
+                    <UserAvatar uri={avatarUri} name={displayName} size={52} />
                   </View>
                   <View style={styles.userText}>
                     <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
-                      {attendee.name.trim() || "Attendee"}
+                      {displayName}
                     </Text>
-                    <Text style={[styles.userHandle, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {username ? `@${username.replace(/^@+/, "")}` : "@xenog"}
-                    </Text>
+                    {secondaryLabel ? (
+                      <Text style={[styles.userHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {secondaryLabel}
+                      </Text>
+                    ) : null}
                   </View>
                 </TouchableOpacity>
               ) : (
                 <View style={styles.userSection}>
                   <View style={styles.avatarBorder}>
-                    <UserAvatar uri={avatarUri} name="Attendee" size={52} />
+                    <UserAvatar uri={null} name={isAnonymous ? "Anonymous" : "Attendee"} size={52} />
                   </View>
                   <View style={styles.userText}>
                     <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
-                      Attendee
+                      {isAnonymous ? "Anonymous" : "Attendee"}
                     </Text>
-                    <Text style={[styles.userHandle, { color: colors.textSecondary }]} numberOfLines={1}>
-                      @xenog
-                    </Text>
+                    {secondaryLabel ? (
+                      <Text style={[styles.userHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {secondaryLabel}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               )}
@@ -395,7 +413,7 @@ export default function AttendeeListScreen() {
               {!isPublicGoingMode && isPrivateStatItem(item) ? renderStatusIcon(item.status) : null}
 
               <View style={styles.followArea}>
-                {attendee && !isSelf ? (
+                {attendee && !isAnonymous && !isSelf ? (
                   <TouchableOpacity
                     style={[
                       isFollowing ? styles.followingBtn : styles.followBtn,

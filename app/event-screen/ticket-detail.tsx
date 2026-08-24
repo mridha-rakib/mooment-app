@@ -201,6 +201,35 @@ const getTicketCancellationStatusLabel = (cancellation?: TicketCancellation | nu
   return cancellation.status === "needs_attention" ? "Refund needs attention" : "Cancelled";
 };
 
+const findWalletPassIndex = (
+  passes: TicketWalletPass[],
+  orderId?: string | null,
+  ticketIndex?: number | null,
+) => passes.findIndex((pass) =>
+  Boolean(orderId) &&
+  pass.orderId === orderId &&
+  pass.ticketIndex === ticketIndex
+);
+
+const getWalletShareContextPasses = (passes: TicketWalletPass[], walletSource: string) =>
+  walletSource === "owned"
+    ? passes.filter((pass) =>
+        !pass.currentShare &&
+        pass.status === "active" &&
+        !pass.cancellation &&
+        Boolean(pass.qrCode)
+      )
+    : passes;
+
+const getWalletRevokeContextPasses = (passes: TicketWalletPass[], walletSource: string) =>
+  walletSource === "owned"
+    ? passes.filter((pass) =>
+        Boolean(pass.currentShare) &&
+        pass.status === "active" &&
+        !pass.cancellation
+      )
+    : [];
+
 const TicketDetailScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -243,6 +272,9 @@ const TicketDetailScreen = () => {
     currentShareFriendName?: string;
     currentShareFriendId?: string;
     ticketPasses?: string;
+    walletContextPasses?: string;
+    selectedOrderId?: string;
+    selectedTicketIndex?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -494,14 +526,48 @@ const TicketDetailScreen = () => {
     params.ticketPasses,
     walletTicketNo,
   ]);
+  const initialWalletContextPasses = useMemo<TicketWalletPass[]>(() => {
+    const rawPasses = getParamValue(params.walletContextPasses, "");
+
+    if (rawPasses) {
+      try {
+        const parsed = JSON.parse(rawPasses) as TicketWalletPass[];
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Fall through to the selected-pass payload for older wallet links.
+      }
+    }
+
+    return initialWalletTicketPasses;
+  }, [initialWalletTicketPasses, params.walletContextPasses]);
   const [walletTicketPasses, setWalletTicketPasses] = useState<TicketWalletPass[]>(initialWalletTicketPasses);
+  const [walletContextPasses, setWalletContextPasses] = useState<TicketWalletPass[]>(initialWalletContextPasses);
   const [selectedSharePassIndex, setSelectedSharePassIndex] = useState(() => {
-    const firstUnsharedIndex = initialWalletTicketPasses.findIndex((pass) => !pass.currentShare && pass.status === "active");
-    return firstUnsharedIndex >= 0 ? firstUnsharedIndex : 0;
+    const selectedOrderId = getParamValue(params.selectedOrderId, initialWalletTicketPasses[0]?.orderId ?? "");
+    const selectedTicketIndex = parsePositiveInteger(params.selectedTicketIndex, initialWalletTicketPasses[0]?.ticketIndex ?? 1);
+    const initialShareContextPasses = getWalletShareContextPasses(initialWalletContextPasses, walletSource);
+    const selectedIndex = findWalletPassIndex(initialShareContextPasses, selectedOrderId, selectedTicketIndex);
+
+    if (selectedIndex >= 0) {
+      return selectedIndex;
+    }
+
+    return 0;
   });
   const walletVisibleTicketPasses = useMemo(
     () => (walletSource === "owned" ? walletTicketPasses.filter((pass) => !pass.currentShare) : walletTicketPasses),
     [walletSource, walletTicketPasses],
+  );
+  const walletShareContextPasses = useMemo(
+    () => getWalletShareContextPasses(walletContextPasses, walletSource),
+    [walletContextPasses, walletSource],
+  );
+  const walletRevokeContextPasses = useMemo(
+    () => getWalletRevokeContextPasses(walletContextPasses, walletSource),
+    [walletContextPasses, walletSource],
   );
   const selectedWalletPass = walletVisibleTicketPasses[0] ?? null;
   const selectedCancellation = selectedWalletPass?.cancellation ?? null;
@@ -532,12 +598,21 @@ const TicketDetailScreen = () => {
     selectedWalletPass?.status === "cancelled" ||
     Boolean(selectedCancellation) ||
     Boolean(walletRefundStatus);
-  const walletActiveVisiblePassCount = walletVisibleTicketPasses.filter((pass) => pass.status === "active").length;
+  const walletActiveVisiblePassCount = walletShareContextPasses.length;
   const walletCanShare = !walletIsCancelled && walletSource === "owned" && walletActiveVisiblePassCount >= 2;
+  const walletCanManageShares = !walletIsCancelled && walletSource === "owned" && walletRevokeContextPasses.length > 0;
+  const walletCanOpenShareModal = walletCanShare || walletCanManageShares;
   const walletCanShowQr = !walletIsCancelled && Boolean(selectedWalletPass?.qrCode) && selectedWalletPass?.status === "active";
-  const selectedSharePass = walletTicketPasses[Math.min(selectedSharePassIndex, Math.max(0, walletTicketPasses.length - 1))] ?? null;
-  const selectedShare = selectedSharePass?.currentShare ?? null;
-  const hasAnySharedPass = walletTicketPasses.some((pass) => Boolean(pass.currentShare));
+  const selectedSharePass = walletShareContextPasses[Math.min(selectedSharePassIndex, Math.max(0, walletShareContextPasses.length - 1))] ?? null;
+  const selectedRevokeSharePass =
+    walletRevokeContextPasses.find((pass) =>
+      pass.orderId === (selectedWalletPass?.orderId ?? walletTicketPasses[0]?.orderId) &&
+      pass.ticketIndex === (selectedWalletPass?.ticketIndex ?? walletTicketPasses[0]?.ticketIndex)
+    ) ?? walletRevokeContextPasses[0] ?? null;
+  const selectedShare = selectedRevokeSharePass?.currentShare ?? null;
+  const shareModalTicketIndex = selectedSharePass?.ticketIndex ?? selectedRevokeSharePass?.ticketIndex ?? 1;
+  const shareModalTicketCount = walletShareContextPasses.length || walletRevokeContextPasses.length || 1;
+  const hasAnySharedPass = walletContextPasses.some((pass) => Boolean(pass.currentShare));
   const hasAnyUsedPass = walletTicketPasses.some((pass) => pass.status === "used");
   const walletStatusLabel = walletIsCancelled
     ? "Cancelled"
@@ -723,10 +798,16 @@ const TicketDetailScreen = () => {
   };
 
   const handleOpenShareModal = async () => {
-    const firstUnsharedIndex = walletTicketPasses.findIndex((pass) => !pass.currentShare && pass.status !== "used");
+    const selectedPassIndex = findWalletPassIndex(
+      walletShareContextPasses,
+      selectedWalletPass?.orderId,
+      selectedWalletPass?.ticketIndex,
+    );
 
-    if (firstUnsharedIndex >= 0) {
-      setSelectedSharePassIndex(firstUnsharedIndex);
+    if (selectedPassIndex >= 0) {
+      setSelectedSharePassIndex(selectedPassIndex);
+    } else if (walletShareContextPasses.length > 0) {
+      setSelectedSharePassIndex(0);
     }
 
     shareModalTranslateY.setValue(0);
@@ -736,11 +817,6 @@ const TicketDetailScreen = () => {
   };
 
   const handleShareWithFriend = async (friend: FriendUserResponse) => {
-    if (selectedShare) {
-      setShareErrorMessage("Cancel the current share before choosing another friend.");
-      return;
-    }
-
     if (selectedSharePass?.status === "used") {
       setShareErrorMessage("Used tickets cannot be shared.");
       return;
@@ -774,6 +850,13 @@ const TicketDetailScreen = () => {
             : pass
         )),
       );
+      setWalletContextPasses((passes) =>
+        passes.map((pass) => (
+          pass.orderId === sharePass.orderId && pass.ticketIndex === sharePass.ticketIndex
+            ? { ...pass, currentShare: share }
+            : pass
+        )),
+      );
     } catch (error) {
       setShareErrorMessage(getAuthErrorMessage(error, "Unable to share ticket."));
     } finally {
@@ -782,7 +865,7 @@ const TicketDetailScreen = () => {
   };
 
   const handleCancelShare = async () => {
-    if (!selectedShare || !selectedSharePass) {
+    if (!selectedShare || !selectedRevokeSharePass) {
       return;
     }
 
@@ -793,9 +876,23 @@ const TicketDetailScreen = () => {
       const cancelledShare = await cancelTicketShare(selectedShare.id);
       setWalletTicketPasses((passes) =>
         passes.map((pass) => (
-          pass.orderId === selectedSharePass.orderId && pass.ticketIndex === selectedSharePass.ticketIndex
+          pass.orderId === selectedRevokeSharePass.orderId && pass.ticketIndex === selectedRevokeSharePass.ticketIndex
             ? {
                 ...pass,
+                status: "active",
+                ticketNo: cancelledShare.qrCode,
+                qrCode: cancelledShare.qrCode,
+                currentShare: null,
+              }
+            : pass
+        )),
+      );
+      setWalletContextPasses((passes) =>
+        passes.map((pass) => (
+          pass.orderId === selectedRevokeSharePass.orderId && pass.ticketIndex === selectedRevokeSharePass.ticketIndex
+            ? {
+                ...pass,
+                status: "active",
                 ticketNo: cancelledShare.qrCode,
                 qrCode: cancelledShare.qrCode,
                 currentShare: null,
@@ -980,8 +1077,8 @@ const TicketDetailScreen = () => {
               </TouchableOpacity>
             )}
 
-            <View style={walletCanShare ? styles.walletDualActions : styles.walletSingleActions}>
-              {walletCanShare && (
+            <View style={walletCanOpenShareModal ? styles.walletDualActions : styles.walletSingleActions}>
+              {walletCanOpenShareModal && (
                 <TouchableOpacity
                   style={[
                     styles.walletShareButton,
@@ -996,7 +1093,7 @@ const TicketDetailScreen = () => {
               <TouchableOpacity
                 style={[
                   styles.walletShowButton,
-                  walletCanShare ? styles.walletActionFlex : styles.walletShowButtonFull,
+                  walletCanOpenShareModal ? styles.walletActionFlex : styles.walletShowButtonFull,
                   !walletCanShowQr && styles.walletActionDisabled,
                 ]}
                 activeOpacity={0.85}
@@ -1023,7 +1120,9 @@ const TicketDetailScreen = () => {
                       totalQuantity: String(walletPurchaseCount),
                       amount: getParamValue(params.amount, "0"),
                       currency: getParamValue(params.currency, "usd"),
-                      ticketPasses: JSON.stringify(walletVisibleTicketPasses),
+                      ticketPasses: JSON.stringify(walletShareContextPasses),
+                      selectedOrderId: selectedWalletPass?.orderId ?? getParamValue(params.orderId, ""),
+                      selectedTicketIndex: String(selectedWalletPass?.ticketIndex ?? 1),
                     },
                   })
                 }
@@ -1089,9 +1188,9 @@ const TicketDetailScreen = () => {
                 <View {...shareModalDragResponder.panHandlers}>
                   <Text style={styles.shareModalTitle}>Share QR</Text>
                   <Text style={styles.shareModalSubtitle}>
-                  {walletTicketName} • Ticket {selectedSharePass?.ticketIndex ?? 1} of {walletTicketPasses.length}
-                </Text>
-              </View>
+                    {walletTicketName} • Ticket {shareModalTicketIndex} of {shareModalTicketCount}
+                  </Text>
+                </View>
                 <TouchableOpacity
                   style={styles.shareModalClose}
                   onPress={closeShareModal}
@@ -1101,9 +1200,9 @@ const TicketDetailScreen = () => {
                 </TouchableOpacity>
               </View>
 
-              {walletTicketPasses.length > 1 && (
+              {walletShareContextPasses.length > 1 && (
                 <View style={styles.sharePassSelector}>
-                  {walletTicketPasses.map((pass, index) => {
+                  {walletShareContextPasses.map((pass, index) => {
                     const isSelected = index === selectedSharePassIndex;
                     const isShared = Boolean(pass.currentShare);
                     const isUsed = pass.status === "used";
@@ -1142,8 +1241,10 @@ const TicketDetailScreen = () => {
               <Text style={styles.sharePassHint}>
                 {selectedSharePass?.status === "used"
                   ? "Selected ticket is already used and cannot be shared again."
-                  : selectedSharePass?.currentShare
-                  ? "Selected QR is already shared. Cancel it to share with someone else."
+                  : selectedShare
+                  ? "An active shared QR can be cancelled below. Owner-held tickets remain selectable for new shares."
+                  : !selectedSharePass
+                  ? "No owner-held ticket QR is currently available to share."
                   : "Select a ticket QR, then choose one friend to share that ticket with."}
               </Text>
 
@@ -1156,10 +1257,10 @@ const TicketDetailScreen = () => {
                   <TouchableOpacity
                     style={styles.cancelShareButton}
                     onPress={() => void handleCancelShare()}
-                    disabled={isShareSubmitting || selectedSharePass?.status === "used"}
+                    disabled={isShareSubmitting || selectedRevokeSharePass?.status === "used"}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.cancelShareButtonText}>{selectedSharePass?.status === "used" ? "Used" : "Cancel"}</Text>
+                    <Text style={styles.cancelShareButtonText}>{selectedRevokeSharePass?.status === "used" ? "Used" : "Cancel"}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1198,7 +1299,7 @@ const TicketDetailScreen = () => {
                       <TouchableOpacity
                         style={styles.friendRow}
                         onPress={() => void handleShareWithFriend(item)}
-                        disabled={isShareSubmitting || Boolean(selectedShare) || selectedSharePass?.status === "used"}
+                        disabled={isShareSubmitting || !selectedSharePass || selectedSharePass?.status === "used"}
                         activeOpacity={0.85}
                       >
                         <UserAvatar uri={resolveAvatarUri(item.avatarKey, item.avatarUrl)} name={item.name} size={42} style={styles.friendAvatar} />
@@ -1209,10 +1310,10 @@ const TicketDetailScreen = () => {
                         <Text
                           style={[
                             styles.friendAction,
-                            (selectedShare || selectedSharePass?.status === "used") && styles.friendActionDisabled,
+                            (!selectedSharePass || selectedSharePass?.status === "used") && styles.friendActionDisabled,
                           ]}
                         >
-                          {selectedShare ? "Cancel first" : selectedSharePass?.status === "used" ? "Used" : "Share"}
+                          {!selectedSharePass ? "Unavailable" : selectedSharePass?.status === "used" ? "Used" : "Share"}
                         </Text>
                       </TouchableOpacity>
                     )}

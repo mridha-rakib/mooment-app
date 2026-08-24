@@ -179,6 +179,7 @@ const toTabWalletItems = (item: TicketWalletItem, tab: WalletTab): TicketWalletI
     const paidQuantity = pass.ticketIndex <= (item.paidQuantity ?? item.quantity) ? 1 : 0;
     const freeQuantity = paidQuantity > 0 ? 0 : 1;
     const passCancellation = pass.cancellation ?? null;
+    const walletContextPasses = item.walletContextPasses ?? item.ticketPasses ?? [];
 
     return {
     ...item,
@@ -190,6 +191,7 @@ const toTabWalletItems = (item: TicketWalletItem, tab: WalletTab): TicketWalletI
       totalQuantity: 1,
       totalAmount: passCancellation ? passCancellation.requestedAmountMinor / 100 : paidQuantity > 0 ? item.unitAmount : 0,
       ticketPasses: [pass],
+      walletContextPasses,
       currentShare: pass.currentShare ?? null,
       refund: item.source === "shared" ? null : item.refund,
       walletStatus: pass.status === "cancelled" || tab === "Canceled" ? "cancelled" : pass.status === "used" ? "used" : "active",
@@ -540,6 +542,9 @@ const TicketWalletScreen = () => {
                               currentShareFriendName: item.currentShare?.friend?.name ?? "",
                               currentShareFriendId: item.currentShare?.friend?.id ?? "",
                               ticketPasses: JSON.stringify(item.ticketPasses ?? []),
+                              walletContextPasses: JSON.stringify(item.walletContextPasses ?? item.ticketPasses ?? []),
+                              selectedOrderId: item.ticketPasses?.[0]?.orderId ?? item.orderId,
+                              selectedTicketIndex: String(item.ticketPasses?.[0]?.ticketIndex ?? 1),
                             },
                           })
                         }

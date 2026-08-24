@@ -45,6 +45,16 @@ export default function PublicGoingSummaryRow({
     ) : null;
   }
 
+  if (summary.going <= 0) {
+    return trailingText ? (
+      <View style={[styles.row, style]}>
+        <Text style={[styles.text, textStyle, trailingTextStyle]} numberOfLines={1}>
+          {trailingText}
+        </Text>
+      </View>
+    ) : null;
+  }
+
   const avatars = summary.avatars.slice(0, 3);
 
   const goToGoingList = () => {

@@ -4,7 +4,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, {
+  Easing,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
+import { MAP_MARKER_GLOW_CONFIG } from "@/constants/mapMarkerGlow";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
@@ -241,6 +252,31 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
     [eventEndAt, eventScheduledAt, eventStatus, statusNowMs],
   );
   const eventBadgeLabel = EVENT_STATUS_LABELS[eventBadgeStatus];
+  const isLiveBadge = eventBadgeStatus === "live";
+  const livePulseProgress = useSharedValue(0);
+  const animatedLiveStatusBadgeStyle = useAnimatedStyle(() => {
+    if (!isLiveBadge) {
+      return {
+        opacity: 1,
+        transform: [{ scale: 1 }],
+      };
+    }
+
+    return {
+      opacity: interpolate(livePulseProgress.value, [0, 1], [0.82, 1]),
+      transform: [{ scale: interpolate(livePulseProgress.value, [0, 1], [1, 1.03]) }],
+    };
+  }, [isLiveBadge]);
+  const animatedLiveStatusDotPulseStyle = useAnimatedStyle(() => {
+    if (!isLiveBadge) {
+      return { opacity: 0 };
+    }
+
+    return {
+      opacity: interpolate(livePulseProgress.value, [0, 1], [0.85, 0]),
+      transform: [{ scale: interpolate(livePulseProgress.value, [0, 1], [1, 2]) }],
+    };
+  }, [isLiveBadge]);
 
   const [isFollowing, setIsFollowing] = useState(Boolean(event.host?.isFollowing));
   const [isFollowPending, setIsFollowPending] = useState(false);
@@ -332,6 +368,33 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
       }
     };
   }, [eventEndAt, eventScheduledAt, eventStatus]);
+
+  useEffect(() => {
+    if (!isLiveBadge) {
+      cancelAnimation(livePulseProgress);
+      livePulseProgress.value = 0;
+      return;
+    }
+
+    livePulseProgress.value = withRepeat(
+      withSequence(
+        withTiming(1, {
+          duration: MAP_MARKER_GLOW_CONFIG.livePulseBrightenDurationMs,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        withTiming(0, {
+          duration: MAP_MARKER_GLOW_CONFIG.livePulseDimDurationMs,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ),
+      -1,
+      false,
+    );
+
+    return () => {
+      cancelAnimation(livePulseProgress);
+    };
+  }, [isLiveBadge, livePulseProgress]);
 
   const applyInteractionSummary = (summary: MomentInteractionSummary) => {
     setIsLiked(summary.isLiked);
@@ -757,33 +820,46 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         )}
 
         <View style={styles.statusBadgeGroup} pointerEvents="none">
-          <View
+          <Animated.View
             style={[
               styles.statusBadge,
               eventBadgeStatus === "live" && styles.liveStatusBadge,
               eventBadgeStatus === "upcoming" && styles.upcomingStatusBadge,
               eventBadgeStatus === "ended" && styles.endedStatusBadge,
+              isLiveBadge && animatedLiveStatusBadgeStyle,
             ]}
           >
-            <View
-              style={[
-                styles.statusDot,
-                eventBadgeStatus === "live" && styles.liveStatusDot,
-                eventBadgeStatus === "upcoming" && styles.upcomingStatusDot,
-                eventBadgeStatus === "ended" && styles.endedStatusDot,
-              ]}
-            />
+            <View style={styles.statusDotShell}>
+              {isLiveBadge ? (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.liveStatusDotPulse,
+                    { borderColor: colors.danger },
+                    animatedLiveStatusDotPulseStyle,
+                  ]}
+                />
+              ) : null}
+              <View
+                style={[
+                  styles.statusDot,
+                  eventBadgeStatus === "live" && { backgroundColor: colors.danger },
+                  eventBadgeStatus === "upcoming" && styles.upcomingStatusDot,
+                  eventBadgeStatus === "ended" && styles.endedStatusDot,
+                ]}
+              />
+            </View>
             <Text
               style={[
                 styles.statusText,
-                eventBadgeStatus === "live" && styles.liveStatusText,
+                eventBadgeStatus === "live" && { color: colors.danger },
                 eventBadgeStatus === "upcoming" && styles.upcomingStatusText,
                 eventBadgeStatus === "ended" && styles.endedStatusText,
               ]}
             >
               {eventBadgeLabel}
             </Text>
-          </View>
+          </Animated.View>
           <CrowdStatusBadge eventStatus={event.status} crowdStatus={event.crowdStatus} />
         </View>
 
@@ -1119,7 +1195,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   liveStatusBadge: {
-    backgroundColor: "rgba(8, 45, 22, 0.82)",
+    backgroundColor: "rgba(72, 11, 10, 0.82)",
   },
   upcomingStatusBadge: {
     backgroundColor: "rgba(28, 46, 78, 0.82)",
@@ -1132,8 +1208,18 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-  liveStatusDot: {
-    backgroundColor: "#18D66B",
+  statusDotShell: {
+    width: 6,
+    height: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  liveStatusDotPulse: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 2,
   },
   upcomingStatusDot: {
     backgroundColor: "#8AB4F8",
@@ -1145,9 +1231,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontWeight: "600",
-  },
-  liveStatusText: {
-    color: "#18D66B",
   },
   upcomingStatusText: {
     color: "#8AB4F8",

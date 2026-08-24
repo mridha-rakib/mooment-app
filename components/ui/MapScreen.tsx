@@ -598,6 +598,9 @@ export default function MapScreen({
       ? state.user.currentLocation
       : null,
   );
+  const currentLocationMarkerVisible = useAuthStore((state) =>
+    Boolean(state.user?.currentLocationSharingEnabled),
+  );
   const sharedLongitude = sharedLocation?.longitude;
   const sharedLatitude = sharedLocation?.latitude;
   const storedLocation = React.useMemo(
@@ -1397,7 +1400,7 @@ export default function MapScreen({
           })}
 
           <Mapbox.UserLocation
-            visible={true}
+            visible={currentLocationMarkerVisible}
             renderMode={Mapbox.UserLocationRenderMode.Native}
             onUpdate={(location) => {
               if (location.coords) {

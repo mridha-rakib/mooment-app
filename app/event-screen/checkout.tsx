@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   CheckoutHeader,
   EventCard,
+  AnonymousBuy,
   OrderSummary,
   PaymentMethods,
   SecurityBanner,
@@ -77,6 +78,7 @@ const EventCheckoutScreen = () => {
   const [isQuoteLoading, setIsQuoteLoading] = useState(true);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [applyOffer, setApplyOffer] = useState(false);
+  const [anonymousBuy, setAnonymousBuy] = useState(false);
 
   const eventId = typeof params.eventId === "string" ? params.eventId : "";
   const ticketId = typeof params.ticketId === "string" ? params.ticketId : "";
@@ -153,7 +155,7 @@ const EventCheckoutScreen = () => {
           quantity,
           applyReward: applyOffer,
           rewardId: applyOffer ? rewardId : null,
-          anonymous: false,
+          anonymous: anonymousBuy,
         });
 
         if (!cancelled) {
@@ -176,7 +178,7 @@ const EventCheckoutScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyOffer, eventId, rewardId, ticketId, quantity]);
+  }, [anonymousBuy, applyOffer, eventId, rewardId, ticketId, quantity]);
 
   const handleContinue = async () => {
     if (!agreed) {
@@ -208,7 +210,7 @@ const EventCheckoutScreen = () => {
           quantity,
           applyReward: applyOffer,
           rewardId: applyOffer ? rewardId : null,
-          anonymous: false,
+          anonymous: anonymousBuy,
           acceptedTerms: agreed,
         });
         order = checkout.order;
@@ -222,7 +224,7 @@ const EventCheckoutScreen = () => {
             quantity,
             applyReward: applyOffer,
             rewardId: applyOffer ? rewardId : null,
-            anonymous: false,
+            anonymous: anonymousBuy,
             acceptedTerms: agreed,
           },
           {
@@ -288,6 +290,11 @@ const EventCheckoutScreen = () => {
         <EventCard 
           title={eventName}
           dateTime={eventDateTime}
+        />
+
+        <AnonymousBuy
+          active={anonymousBuy}
+          onToggle={() => setAnonymousBuy((value) => !value)}
         />
 
         <OrderSummary

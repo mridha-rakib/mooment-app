@@ -293,6 +293,7 @@ export type TicketWalletItem = {
   } | null;
   purchasedAt?: string | null;
   ticketPasses?: TicketWalletPass[];
+  walletContextPasses?: TicketWalletPass[];
   currentShare?: TicketShare | null;
   sharedBy?: {
     id: string;
@@ -330,6 +331,7 @@ export type TicketWalletItem = {
         userId: string;
         name: string;
         avatarKey?: string | null;
+        anonymous?: boolean;
       }[];
     };
     // Canonical Event -> Interaction Moment summary, matching the fields
@@ -566,6 +568,7 @@ export type EventTicketStatItem = {
     username?: string;
     avatarKey?: string | null;
     isFollowing?: boolean;
+    anonymous?: boolean;
   } | null;
   ticketName: string;
   amount: number;
@@ -578,6 +581,7 @@ export type EventTicketStatFilter = "going" | "attended" | "canceled" | "noShow"
 export type PublicEventGoingItem = {
   id: string;
   attendee?: EventTicketStatItem["attendee"];
+  ticketCount?: number;
 };
 
 const EVENT_TICKET_STAT_ITEM_STATUSES = new Set<EventTicketStatItemStatus>([
@@ -606,6 +610,15 @@ const parseEventTicketStatAttendee = (value: unknown): EventTicketStatItem["atte
 
   const id = typeof value.id === "string" ? value.id.trim() : "";
   const name = typeof value.name === "string" ? value.name : "";
+  const anonymous = value.anonymous === true;
+
+  if (anonymous) {
+    return {
+      id,
+      name: "Anonymous",
+      anonymous: true,
+    };
+  }
 
   if (!id || !name || typeof value.isFollowing !== "boolean") {
     throw new Error("The event ticket stat item response was incomplete.");
@@ -617,6 +630,7 @@ const parseEventTicketStatAttendee = (value: unknown): EventTicketStatItem["atte
     username: typeof value.username === "string" ? value.username : undefined,
     avatarKey: typeof value.avatarKey === "string" ? value.avatarKey : null,
     isFollowing: value.isFollowing,
+    anonymous: false,
   };
 };
 
@@ -681,6 +695,9 @@ const parsePublicEventGoingItem = (value: unknown): PublicEventGoingItem => {
   return {
     id,
     attendee: parseEventTicketStatAttendee(value.attendee),
+    ticketCount: typeof value.ticketCount === "number" && Number.isFinite(value.ticketCount)
+      ? Math.max(1, Math.trunc(value.ticketCount))
+      : 1,
   };
 };
 

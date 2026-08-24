@@ -254,6 +254,7 @@ export type EventResponse = {
       userId: string;
       name: string;
       avatarKey?: string | null;
+      anonymous?: boolean;
     }[];
   };
   socialContext?: SmartFeedSocialContext;
