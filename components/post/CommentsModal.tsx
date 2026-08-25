@@ -631,24 +631,60 @@ export default function CommentsModal({
     item: CommentType,
     options: {
       isChild?: boolean;
+      isLastChild?: boolean;
+      hasExpandedReplies?: boolean;
       rootParentId: string;
     },
   ) => {
     const isChild = options.isChild ?? false;
+    const isLastChild = options.isLastChild ?? false;
+    const hasExpandedReplies = options.hasExpandedReplies ?? false;
     const avatarSize = isChild ? 30 : 36;
+    const threadLineColor = isDark ? "#4B4B5C" : "#C4C4D0";
     const formattedLikes =
       item.likesCount >= 1000
         ? `${(item.likesCount / 1000).toFixed(0)}K`
         : item.likesCount;
+
+    // Parse leading mention if present (e.g. "@username hello" -> mention: "@username", message: "hello")
+    const mentionMatch = item.text.match(/^(@[a-zA-Z0-9_.-]+)\s*([\s\S]*)$/);
+    const targetMention = mentionMatch ? mentionMatch[1] : null;
+    const messageBody = mentionMatch ? mentionMatch[2] : item.text;
 
     return (
       <View
         key={item.id}
         style={[styles.commentRow, isChild && styles.childCommentRow]}
       >
+        {/* Continuous connector line directly below parent avatar */}
+        {!isChild && hasExpandedReplies && (
+          <View
+            style={[
+              styles.parentThreadConnector,
+              { backgroundColor: threadLineColor },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {/* Curved branch for child reply */}
         {isChild && (
           <View
-            style={[styles.replyBranchConnector, { borderColor: colors.border }]}
+            style={[
+              styles.replyBranchConnector,
+              { borderColor: threadLineColor },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {/* Vertical continuation line to the next child reply (omitted for the last child) */}
+        {isChild && !isLastChild && (
+          <View
+            style={[
+              styles.replyThreadLine,
+              { backgroundColor: threadLineColor },
+            ]}
             pointerEvents="none"
           />
         )}
@@ -670,17 +706,37 @@ export default function CommentsModal({
         </TouchableOpacity>
 
         <View style={styles.commentContent}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => handleProfilePress(item)}
-          >
-            <Text style={[styles.commentName, { color: colors.text }]}>
-              {item.authorName}
+          <View style={styles.commentHeaderRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => handleProfilePress(item)}
+            >
+              <Text style={[styles.commentName, { color: colors.text }]}>
+                {item.authorName}
+              </Text>
+            </TouchableOpacity>
+            {targetMention && (
+              <Text
+                style={[
+                  styles.commentMentionTag,
+                  { color: colors.primary },
+                ]}
+              >
+                {targetMention}
+              </Text>
+            )}
+          </View>
+
+          {messageBody ? (
+            <Text
+              style={[
+                styles.commentText,
+                { color: isDark ? "#FFFFFF" : colors.text },
+              ]}
+            >
+              {messageBody}
             </Text>
-          </TouchableOpacity>
-          <Text style={[styles.commentText, { color: colors.textSecondary }]}>
-            {item.text}
-          </Text>
+          ) : null}
 
           <View style={styles.commentActions}>
             <Text
@@ -730,6 +786,7 @@ export default function CommentsModal({
     }
 
     const isExpanded = expandedReplyThreadIds.has(comment.id);
+    const threadLineColor = isDark ? "#4B4B5C" : "#C4C4D0";
     const label = isExpanded
       ? "Hide replies"
       : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`;
@@ -740,11 +797,31 @@ export default function CommentsModal({
         activeOpacity={0.75}
         onPress={() => toggleReplyThread(comment.id)}
       >
-        <View
-          style={[styles.viewMoreLine, { borderColor: colors.border }]}
-          pointerEvents="none"
-        />
-        <Text style={[styles.viewMoreText, { color: colors.textSecondary }]}>
+        {/* Pass-through vertical line across the toggle row */}
+        {isExpanded && (
+          <View
+            style={[
+              styles.toggleThreadConnector,
+              { backgroundColor: threadLineColor },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {/* Horizontal bar only shown when collapsed */}
+        {!isExpanded && (
+          <View
+            style={[styles.viewMoreLine, { backgroundColor: threadLineColor }]}
+            pointerEvents="none"
+          />
+        )}
+        <Text
+          style={[
+            styles.viewMoreText,
+            { color: colors.textSecondary },
+            isExpanded && styles.viewMoreTextExpanded,
+          ]}
+        >
           {label}
         </Text>
       </TouchableOpacity>
@@ -842,17 +919,17 @@ export default function CommentsModal({
 
                     return (
                       <View key={comment.id} style={styles.threadBlock}>
-                        {renderComment(comment, { rootParentId: comment.id })}
+                        {renderComment(comment, {
+                          rootParentId: comment.id,
+                          hasExpandedReplies: isExpanded && replies.length > 0,
+                        })}
                         {renderReplyToggle(comment)}
                         {isExpanded && replies.length > 0 ? (
                           <View style={styles.repliesContainer}>
-                            <View
-                              style={[styles.replyConnectorLine, { backgroundColor: colors.border }]}
-                              pointerEvents="none"
-                            />
-                            {replies.map((reply) =>
+                            {replies.map((reply, index) =>
                               renderComment(reply, {
                                 isChild: true,
+                                isLastChild: index === replies.length - 1,
                                 rootParentId: comment.id,
                               }),
                             )}
@@ -874,7 +951,7 @@ export default function CommentsModal({
                     paddingBottom:
                       isKeyboardShown
                         ? 8
-                        : Platform.OS === "android"
+                        : insets.bottom > 0
                           ? insets.bottom + 12
                           : 12,
                   },
@@ -1040,12 +1117,13 @@ const styles = StyleSheet.create({
   },
   sheetWrapper: {
     width: "100%",
+    height: "90%",
   },
   modalContainer: {
-    height: "90%",
+    flex: 1,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    paddingBottom: Platform.OS === "ios" ? 24 : 0,
+    paddingBottom: 0,
     overflow: "hidden",
   },
   grabberContainer: {
@@ -1120,11 +1198,22 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 1,
   },
+  commentHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 4,
+  },
   commentName: {
     fontSize: 14,
     lineHeight: 18,
     fontWeight: "700",
-    marginBottom: 4,
+  },
+  commentMentionTag: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
   },
   commentText: {
     fontSize: 13,
@@ -1146,19 +1235,36 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "700",
   },
+  parentThreadConnector: {
+    position: "absolute",
+    left: 17,
+    top: 36,
+    bottom: -16,
+    width: 2,
+    zIndex: 0,
+  },
+  toggleThreadConnector: {
+    position: "absolute",
+    left: -1,
+    top: -4,
+    bottom: -16,
+    width: 2,
+    zIndex: 0,
+  },
   viewMoreRow: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    marginLeft: 48,
+    marginLeft: 18,
     marginTop: -2,
     marginBottom: 12,
     paddingVertical: 2,
     paddingRight: 12,
   },
   viewMoreLine: {
-    width: 24,
-    borderTopWidth: 1,
+    width: 22,
+    height: 2,
     marginRight: 8,
   },
   viewMoreText: {
@@ -1166,28 +1272,31 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "600",
   },
+  viewMoreTextExpanded: {
+    paddingLeft: 30,
+  },
   repliesContainer: {
     position: "relative",
-    marginLeft: 58,
+    marginLeft: 48,
     paddingTop: 2,
-  },
-  replyConnectorLine: {
-    position: "absolute",
-    left: -25,
-    top: -32,
-    bottom: 31,
-    width: StyleSheet.hairlineWidth,
-    zIndex: 0,
   },
   replyBranchConnector: {
     position: "absolute",
-    left: -25,
-    top: 13,
-    width: 25,
-    height: 13,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomLeftRadius: 8,
+    left: -31,
+    top: -4,
+    width: 31,
+    height: 19,
+    borderLeftWidth: 2,
+    borderBottomWidth: 2,
+    borderBottomLeftRadius: 10,
+    zIndex: 0,
+  },
+  replyThreadLine: {
+    position: "absolute",
+    left: -31,
+    top: -4,
+    bottom: -16,
+    width: 2,
     zIndex: 0,
   },
   inputSection: {

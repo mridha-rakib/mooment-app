@@ -9,7 +9,7 @@ const specsDirs = [
 
 const codegenTypesPath = "react-native/Libraries/Types/CodegenTypes";
 const importPattern = new RegExp(
-  String.raw`import\s+(?!type\b)\{([^;]*?)\}\s+from ['"]${codegenTypesPath.replace(/\//g, String.raw`\/`)}['"];`,
+  String.raw`import\s+(?:type\s+)?\{([^;]*?)\}\s+from ['"]${codegenTypesPath.replace(/\//g, String.raw`\/`)}['"];`,
   "g",
 );
 
@@ -29,7 +29,10 @@ for (const specsDir of specsDirs) {
     const source = fs.readFileSync(filePath, "utf8");
     const patched = source.replace(
       importPattern,
-      (_match, imports) => `import type {${imports}} from '${codegenTypesPath}';`,
+      (_match, imports) => {
+        const cleanImports = imports.replace(/\btype\s+/g, "");
+        return `import type {${cleanImports}} from '${codegenTypesPath}';`;
+      },
     );
 
     if (patched !== source) {
