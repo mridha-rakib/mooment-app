@@ -25,8 +25,10 @@ import { createGroup, getDirectMessageConversations } from '@/lib/chat';
 import { safeBack } from '@/lib/navigation';
 import type { DirectMessageConversationResponse } from '@/lib/chat';
 import { uploadFileToStorage } from '@/lib/storage';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function CreateGroupScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [friends, setFriends] = useState<DirectMessageConversationResponse[]>([]);
@@ -170,19 +172,37 @@ export default function CreateGroupScreen() {
 
     return (
       <View style={styles.contactRow}>
-        <UserAvatar uri={item.avatarUrl} name={item.name} size={48} style={[styles.avatar, isSelected && styles.avatarSelected]} />
+        <UserAvatar uri={item.avatarUrl} name={item.name} size={48} style={[styles.avatar, isSelected && { borderColor: colors.primary, borderWidth: 2 }]} />
         <View style={styles.contactInfo}>
-          <Text style={styles.contactName}>{item.name}</Text>
+          <Text style={[styles.contactName, { color: colors.text }]}>{item.name}</Text>
           {item.username ? (
-            <Text style={styles.contactHandle}>@{item.username}</Text>
+            <Text style={[styles.contactHandle, { color: colors.textSecondary }]}>@{item.username}</Text>
           ) : null}
         </View>
         <TouchableOpacity
-          style={[styles.addBtn, isSelected && styles.addBtnSelected]}
+          style={[
+            styles.addBtn,
+            {
+              backgroundColor: isSelected
+                ? (isDark ? '#1F1F27' : '#E5E5EA')
+                : (isDark ? '#2A2A35' : '#F2F2F7'),
+              borderColor: isSelected ? 'transparent' : colors.border,
+              borderWidth: isSelected ? 0 : StyleSheet.hairlineWidth,
+            },
+          ]}
           onPress={() => toggleUser(item.friendId)}
           activeOpacity={0.8}
         >
-          <Text style={[styles.addBtnText, isSelected && styles.addBtnTextSelected]}>
+          <Text
+            style={[
+              styles.addBtnText,
+              {
+                color: isSelected
+                  ? colors.textSecondary
+                  : (isDark ? '#FFFFFF' : '#000000'),
+              },
+            ]}
+          >
             {isSelected ? 'Added' : 'Add'}
           </Text>
         </TouchableOpacity>
@@ -191,23 +211,23 @@ export default function CreateGroupScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#0e0d12" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* Header */}
       <View style={styles.header}>
         <CinematicButton onPress={() => safeBack(router, '/(tabs)/messages')} icon={ArrowLeft01Icon} size={20} />
-        <Text style={styles.headerTitle}>Create Group</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Group</Text>
         <View style={{ width: 36 }} />
       </View>
 
       {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Feather name="search" size={18} color="#8E8E9B" style={styles.searchIcon} />
+      <View style={[styles.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Feather name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search"
-          placeholderTextColor="#8E8E9B"
+          placeholderTextColor={colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -215,7 +235,7 @@ export default function CreateGroupScreen() {
 
       {/* Selected count hint */}
       {selectedIds.length > 0 && (
-        <Text style={styles.selectionHint}>
+        <Text style={[styles.selectionHint, { color: colors.primary }]}>
           {selectedIds.length} {selectedIds.length === 1 ? 'friend' : 'friends'} selected
         </Text>
       )}
@@ -223,13 +243,13 @@ export default function CreateGroupScreen() {
       {/* Friend List */}
       {isFriendsLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color="#D4B0EB" />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : friendsError ? (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{friendsError}</Text>
+          <Text style={[styles.errorText, { color: colors.danger }]}>{friendsError}</Text>
           <TouchableOpacity
-            style={styles.retryBtn}
+            style={[styles.retryBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
             onPress={() => {
               setFriendsError(null);
               setIsFriendsLoading(true);
@@ -239,13 +259,13 @@ export default function CreateGroupScreen() {
                 .finally(() => setIsFriendsLoading(false));
             }}
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={[styles.retryText, { color: colors.text }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : filteredFriends.length === 0 ? (
         <View style={styles.centered}>
-          <Feather name="users" size={40} color="#333" />
-          <Text style={styles.emptyText}>
+          <Feather name="users" size={40} color={colors.textSecondary} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             {searchQuery.trim() ? 'No friends match your search' : 'No mutual friends found'}
           </Text>
         </View>
@@ -255,23 +275,31 @@ export default function CreateGroupScreen() {
           keyExtractor={(item) => item.friendId}
           renderItem={renderFriend}
           contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
           showsVerticalScrollIndicator={false}
         />
       )}
 
       {/* Bottom Action Bar */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomCancelBtn} onPress={() => safeBack(router, '/(tabs)/messages')} activeOpacity={0.8}>
-          <Text style={styles.bottomCancelText}>Cancel</Text>
+      <View style={[styles.bottomBar, { backgroundColor: colors.background, borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+        <TouchableOpacity
+          style={[styles.bottomCancelBtn, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, borderWidth: 1 }]}
+          onPress={() => safeBack(router, '/(tabs)/messages')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.bottomCancelText, { color: colors.text }]}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.bottomContinueBtn, selectedIds.length === 0 && styles.bottomContinueBtnDisabled]}
+          style={[
+            styles.bottomContinueBtn,
+            { backgroundColor: isDark ? '#FFFFFF' : '#000000' },
+            selectedIds.length === 0 && styles.bottomContinueBtnDisabled,
+          ]}
           onPress={handleContinue}
           activeOpacity={0.8}
           disabled={selectedIds.length === 0}
         >
-          <Text style={styles.bottomContinueText}>Continue</Text>
+          <Text style={[styles.bottomContinueText, { color: isDark ? '#000000' : '#FFFFFF' }]}>Continue</Text>
         </TouchableOpacity>
       </View>
 
@@ -292,17 +320,17 @@ export default function CreateGroupScreen() {
             onPress={handleDismissModal}
           />
 
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.dragHandleWrap}>
-              <View style={styles.dragHandle} />
+              <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
             </View>
 
-            <Text style={styles.modalTitle}>Group Name</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Group Name</Text>
 
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, borderWidth: 1, color: colors.text }]}
               placeholder="Name your group"
-              placeholderTextColor="#454555"
+              placeholderTextColor={colors.textSecondary}
               value={groupName}
               onChangeText={setGroupName}
               maxLength={100}
@@ -329,16 +357,16 @@ export default function CreateGroupScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.uploadBtn}
+                style={[styles.uploadBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
                 onPress={isUploadingImage ? undefined : handlePickImage}
                 activeOpacity={0.8}
               >
                 {isUploadingImage ? (
-                  <ActivityIndicator color="#0e0d12" style={{ marginRight: 8 }} />
+                  <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} style={{ marginRight: 8 }} />
                 ) : (
-                  <Feather name="arrow-up-circle" size={18} color="#0e0d12" style={styles.uploadIcon} />
+                  <Feather name="arrow-up-circle" size={18} color={isDark ? '#000000' : '#FFFFFF'} style={styles.uploadIcon} />
                 )}
-                <Text style={styles.uploadBtnText}>
+                <Text style={[styles.uploadBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
                   {isUploadingImage ? 'Uploading...' : 'Upload Image'}
                 </Text>
               </TouchableOpacity>
@@ -346,23 +374,23 @@ export default function CreateGroupScreen() {
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.modalCancelBtn}
+                style={[styles.modalCancelBtn, { backgroundColor: colors.backgroundSecondary, borderRadius: 12, marginRight: 8 }]}
                 onPress={handleDismissModal}
                 activeOpacity={0.8}
                 disabled={isCreating}
               >
-                <Text style={[styles.modalCancelText, isCreating && { opacity: 0.4 }]}>Cancel</Text>
+                <Text style={[styles.modalCancelText, { color: colors.text }, isCreating && { opacity: 0.4 }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalCreateBtn, isCreating && { opacity: 0.7 }]}
+                style={[styles.modalCreateBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }, isCreating && { opacity: 0.7 }]}
                 onPress={handleCreate}
                 activeOpacity={0.8}
                 disabled={isCreating}
               >
                 {isCreating ? (
-                  <ActivityIndicator color="#0e0d12" size="small" />
+                  <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} size="small" />
                 ) : (
-                  <Text style={styles.modalCreateText}>Create</Text>
+                  <Text style={[styles.modalCreateText, { color: isDark ? '#000000' : '#FFFFFF' }]}>Create</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -374,24 +402,22 @@ export default function CreateGroupScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0e0d12', paddingTop: Platform.OS === 'android' ? 32 : 0 },
+  safe: { flex: 1 },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
 
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#333333',
     borderRadius: 12,
     marginHorizontal: 16,
     paddingHorizontal: 16,
@@ -399,38 +425,36 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
+  searchInput: { flex: 1, fontSize: 14 },
 
   selectionHint: {
-    color: '#D4B0EB',
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 8,
   },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  errorText: { color: '#FF6B6B', fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
+  errorText: { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
   retryBtn: {
-    backgroundColor: '#222',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 10,
   },
-  retryText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { color: '#8E8E9B', fontSize: 14, textAlign: 'center' },
+  retryText: { fontSize: 13, fontWeight: '600' },
+  emptyText: { fontSize: 14, textAlign: 'center' },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 120 },
   contactRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
-  avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1A1A2E', marginRight: 14 },
-  avatarSelected: { borderWidth: 2, borderColor: '#D4B0EB' },
+  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 14 },
+  avatarSelected: {},
   contactInfo: { flex: 1 },
-  contactName: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
-  contactHandle: { color: '#8E8E9B', fontSize: 12 },
-  addBtn: { backgroundColor: '#222222', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
-  addBtnSelected: { backgroundColor: '#111111' },
-  addBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
-  addBtnTextSelected: { color: '#8E8E9B' },
-  separator: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', marginLeft: 64 },
+  contactName: { fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
+  contactHandle: { fontSize: 12 },
+  addBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  addBtnSelected: {},
+  addBtnText: { fontSize: 13, fontWeight: 'bold' },
+  addBtnTextSelected: {},
+  separator: { height: 1, marginLeft: 64 },
 
   bottomBar: {
     flexDirection: 'row',
@@ -438,46 +462,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 40,
-    backgroundColor: '#0e0d12',
     gap: 12,
   },
   bottomCancelBtn: {
     flex: 1,
-    backgroundColor: '#111111',
     alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 14,
   },
-  bottomCancelText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  bottomCancelText: { fontSize: 15, fontWeight: 'bold' },
   bottomContinueBtn: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 14,
   },
   bottomContinueBtnDisabled: { opacity: 0.4 },
-  bottomContinueText: { color: '#0e0d12', fontSize: 15, fontWeight: 'bold' },
+  bottomContinueText: { fontSize: 15, fontWeight: 'bold' },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject },
   modalSheet: {
-    backgroundColor: '#13131A',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     paddingBottom: 40,
     borderWidth: 1,
-    borderColor: '#2A2A3A',
   },
   dragHandleWrap: { alignItems: 'center', marginBottom: 20 },
-  dragHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#2A2A3A' },
+  dragHandle: { width: 40, height: 4, borderRadius: 2 },
 
-  modalTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
   modalInput: {
-    backgroundColor: '#1A1A2E',
     borderRadius: 12,
-    color: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 14,
@@ -488,13 +505,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingVertical: 14,
     marginBottom: 32,
   },
   uploadIcon: { marginRight: 8 },
-  uploadBtnText: { color: '#0e0d12', fontSize: 14, fontWeight: '600' },
+  uploadBtnText: { fontSize: 14, fontWeight: '600' },
 
   avatarPreviewWrap: {
     alignSelf: 'center',
@@ -514,15 +530,14 @@ const styles = StyleSheet.create({
 
   modalActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  modalCancelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  modalCancelText: { fontSize: 14, fontWeight: '600' },
   modalCreateBtn: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     paddingVertical: 12,
     borderRadius: 12,
     minHeight: 44,
     justifyContent: 'center',
   },
-  modalCreateText: { color: '#0e0d12', fontSize: 14, fontWeight: 'bold' },
+  modalCreateText: { fontSize: 14, fontWeight: 'bold' },
 });

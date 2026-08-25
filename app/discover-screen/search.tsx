@@ -465,7 +465,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
   },
   headerRow: {
     flexDirection: 'row',

@@ -11,7 +11,8 @@ import { getStorageFileUrl } from '@/lib/storage';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SAVED_POST_VIDEO_VIEWABILITY_THRESHOLD = 60;
 
@@ -283,14 +284,13 @@ export default function SavedPostsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 15,
   },
   backBtn: {

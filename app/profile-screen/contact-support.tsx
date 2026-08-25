@@ -45,7 +45,7 @@ export default function ContactSupportScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? 10 : 0 }]}>
+      <View style={styles.header}>
         <BackButton />
         <Text style={[styles.headerTitle, { color: colors.text }]}>Contact Support</Text>
         <View style={{ width: 40 }} />
@@ -105,13 +105,13 @@ export default function ContactSupportScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    paddingTop: 10,
     paddingBottom: 15,
   },
   headerTitle: {

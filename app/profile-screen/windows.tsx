@@ -155,7 +155,7 @@ export default function ProfileWindowsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 15 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
   headerTitle: { fontSize: 16, fontWeight: "bold" },
   loading: { marginVertical: 48 },
   listContent: { padding: 20, paddingBottom: 100 },

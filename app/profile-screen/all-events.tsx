@@ -281,7 +281,7 @@ export default function AllEventsScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={styles.header}>
         <BackButton />
         <Text style={[styles.headerTitle, { color: colors.text }]}>All Events</Text>
         <View style={{ width: 40 }} />
@@ -404,6 +404,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
+    paddingTop: 10,
     paddingBottom: 10,
   },
   headerTitle: {

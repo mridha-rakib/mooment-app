@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/stores/authStore";
@@ -59,7 +59,12 @@ const getActorDisplayName = (item: NotificationItem, fallback = "Someone") =>
 export default function Explore() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { accessToken } = useAuthStore();
+
+  const cardBg = isDark ? "#16161E" : "#F8F8FB";
+  const cardBorder = isDark ? "#262632" : "#E8E8EE";
+  const accentColor = "#D4B0EB";
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -214,8 +219,7 @@ export default function Explore() {
         key={item.id}
         style={[
           styles.activityCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
-          !item.isRead && styles.unreadCard,
+          { backgroundColor: cardBg, borderColor: cardBorder },
         ]}
       >
         <TouchableOpacity
@@ -244,9 +248,14 @@ export default function Explore() {
               </Text>{" "}
               started following you
             </Text>
-            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
-              {formatTime(item.createdAt)}
-            </Text>
+            <View style={styles.timeRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {!item.isRead && (
+                <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+              )}
+            </View>
           </View>
         </TouchableOpacity>
         {actorId ? (
@@ -254,20 +263,28 @@ export default function Explore() {
             style={[
               styles.followBtn,
               isFollowing
-                ? { backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)", borderWidth: 0 }
-                : { borderColor: isDark ? "#AC86D4" : colors.primary },
+                ? {
+                    backgroundColor: isDark ? "rgba(212, 176, 235, 0.08)" : "rgba(212, 176, 235, 0.12)",
+                    borderColor: "rgba(212, 176, 235, 0.35)",
+                    borderWidth: 1,
+                  }
+                : {
+                    backgroundColor: isDark ? "rgba(212, 176, 235, 0.16)" : "rgba(212, 176, 235, 0.22)",
+                    borderColor: accentColor,
+                    borderWidth: 1,
+                  },
             ]}
             activeOpacity={0.8}
             onPress={() => handleFollow(actorId)}
             disabled={isLoadingFollow}
           >
             {isLoadingFollow ? (
-              <ActivityIndicator size="small" color={isFollowing ? colors.textSecondary : isDark ? "#AC86D4" : colors.primary} />
+              <ActivityIndicator size="small" color={isDark ? accentColor : "#7A4E96"} />
             ) : (
               <Text
                 style={[
                   styles.followBtnText,
-                  { color: isFollowing ? colors.textSecondary : isDark ? "#AC86D4" : colors.primary },
+                  { color: isDark ? (isFollowing ? "rgba(212, 176, 235, 0.75)" : accentColor) : "#7A4E96" },
                   isFollowing && styles.followingBtnText,
                 ]}
               >
@@ -288,8 +305,7 @@ export default function Explore() {
         key={item.id}
         style={[
           styles.activityCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
-          !item.isRead && styles.unreadCard,
+          { backgroundColor: cardBg, borderColor: cardBorder },
         ]}
         activeOpacity={0.7}
         onPress={() => handleNotificationPress(item, () => {
@@ -339,9 +355,14 @@ export default function Explore() {
                 </Text>
               </Text>
             )}
-            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
-              {formatTime(item.createdAt)}
-            </Text>
+            <View style={styles.timeRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {!item.isRead && (
+                <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+              )}
+            </View>
           </View>
         </View>
         <Feather name="chevron-right" size={20} color={colors.textSecondary} />
@@ -354,8 +375,7 @@ export default function Explore() {
       key={item.id}
       style={[
         styles.activityCard,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        !item.isRead && styles.unreadCard,
+        { backgroundColor: cardBg, borderColor: cardBorder },
       ]}
       activeOpacity={0.7}
       onPress={() => handleNotificationPress(item, () => {
@@ -379,9 +399,14 @@ export default function Explore() {
               </>
             ) : null}
           </Text>
-          <Text style={[styles.timeText, { color: colors.textSecondary }]}>
-            {formatTime(item.createdAt)}
-          </Text>
+          <View style={styles.timeRow}>
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+            {!item.isRead && (
+              <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+            )}
+          </View>
         </View>
       </View>
       <Feather name="chevron-right" size={20} color={colors.textSecondary} />
@@ -393,8 +418,7 @@ export default function Explore() {
       key={item.id}
       style={[
         styles.activityCard,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        !item.isRead && styles.unreadCard,
+        { backgroundColor: cardBg, borderColor: cardBorder },
       ]}
       activeOpacity={0.7}
       onPress={() => handleNotificationPress(item, () => {
@@ -420,9 +444,14 @@ export default function Explore() {
             </Text>
             {". You're now eligible to join and purchase tickets. Tap to view the event and secure your spot."}
           </Text>
-          <Text style={[styles.timeText, { color: colors.textSecondary }]}>
-            {formatTime(item.createdAt)}
-          </Text>
+          <View style={styles.timeRow}>
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+            {!item.isRead && (
+              <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+            )}
+          </View>
         </View>
       </View>
       <Feather name="chevron-right" size={20} color={colors.textSecondary} />
@@ -449,8 +478,7 @@ export default function Explore() {
         key={item.id}
         style={[
           styles.activityCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
-          !item.isRead && styles.unreadCard,
+          { backgroundColor: cardBg, borderColor: cardBorder },
         ]}
         activeOpacity={0.7}
         onPress={() => handleNotificationPress(item, () => {
@@ -474,9 +502,14 @@ export default function Explore() {
               </Text>{" "}
               {interactionVerb(item.type)} your {targetLabel}.
             </Text>
-            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
-              {formatTime(item.createdAt)}
-            </Text>
+            <View style={styles.timeRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {!item.isRead && (
+                <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+              )}
+            </View>
           </View>
         </View>
         <Feather name="chevron-right" size={20} color={colors.textSecondary} />
@@ -550,7 +583,10 @@ export default function Explore() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(88, 76 + insets.bottom) },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -612,7 +648,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
   },
   emptyScrollContent: {
     flexGrow: 1,
@@ -628,11 +663,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     borderRadius: 16,
+    borderWidth: 1,
     marginBottom: 12,
-  },
-  unreadCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: "rgba(212, 176, 235, 0.6)",
   },
   cardContent: {
     flexDirection: "row",
@@ -670,26 +702,34 @@ const styles = StyleSheet.create({
   boldText: {
     fontWeight: "bold",
   },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 3,
+  },
   timeText: {
     fontSize: 12,
-    marginTop: 2,
+  },
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   followBtn: {
     alignItems: "center",
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 20,
+    borderRadius: 15,
+    height: 30,
     justifyContent: "center",
-    paddingHorizontal: 4,
-    paddingVertical: 0,
+    paddingHorizontal: 14,
   },
   followBtnText: {
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
     lineHeight: 16,
   },
   followingBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   loadingContainer: {

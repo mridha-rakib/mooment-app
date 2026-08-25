@@ -221,7 +221,7 @@ export default function ProfileWindowPostsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 15 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
   headerTitle: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: "bold", marginHorizontal: 8 },
   loading: { marginVertical: 48 },
   content: { padding: 16, paddingBottom: 100 },

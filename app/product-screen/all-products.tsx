@@ -124,7 +124,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0e0d12',
-    paddingTop: 60,
   },
   header: {
     flexDirection: 'row',
