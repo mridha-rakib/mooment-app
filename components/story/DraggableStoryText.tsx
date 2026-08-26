@@ -50,7 +50,7 @@ export default function DraggableStoryText({
   x: initialX,
   y: initialY,
   rotation: initialRotation,
-  scale,
+  scale: initialScale,
   canvasWidth,
   canvasHeight,
   shadowEnabled = true,
@@ -59,13 +59,13 @@ export default function DraggableStoryText({
   onFinishEditing,
   onTransformEnd,
 }: DraggableStoryTextProps) {
-  const { gesture: dragRotateGesture, x, y, rotation } = useDraggableStoryTransform({
-    initialTransform: { x: initialX, y: initialY, scale, rotation: initialRotation },
+  const { gesture: dragRotateGesture, x, y, scale, rotation } = useDraggableStoryTransform({
+    initialTransform: { x: initialX, y: initialY, scale: initialScale, rotation: initialRotation },
     canvasWidth,
     canvasHeight,
     minScale: MIN_TEXT_SCALE,
     maxScale: MAX_TEXT_SCALE,
-    enablePinch: false,
+    enablePinch: true,
     enableRotation: true,
     onTransformEnd,
   });
@@ -102,7 +102,7 @@ export default function DraggableStoryText({
     transform: [
       { translateX: (x.value - 0.5) * canvasWidth - 140 },
       { translateY: (y.value - 0.5) * canvasHeight - 30 },
-      { scale },
+      { scale: scale.value },
       { rotate: `${rotation.value}deg` },
     ],
   }));

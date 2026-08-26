@@ -403,6 +403,7 @@ export default function AddStoryScreen() {
   const [overlayColor, setOverlayColor] = useState(TEXT_COLOR_PALETTE[0]);
   const [overlayX, setOverlayX] = useState(0.5);
   const [overlayY, setOverlayY] = useState(0.5);
+  const [overlayScale, setOverlayScale] = useState<number>(STANDARD_TEXT_SCALE);
   const [overlayRotation, setOverlayRotation] = useState(0);
   const [overlayFontWeight, setOverlayFontWeight] = useState<StoryTextOverlay['fontWeight']>('700');
   const [overlayTextAlign, setOverlayTextAlign] = useState<StoryTextOverlay['textAlign']>('center');
@@ -470,12 +471,12 @@ export default function AddStoryScreen() {
       overlayX,
       overlayY,
       overlayColor,
-      STANDARD_TEXT_SCALE,
+      overlayScale,
       overlayRotation,
       overlayFontWeight,
       overlayTextAlign,
     ),
-    [overlayColor, overlayText, overlayX, overlayY, overlayRotation, overlayFontWeight, overlayTextAlign],
+    [overlayColor, overlayText, overlayX, overlayY, overlayScale, overlayRotation, overlayFontWeight, overlayTextAlign],
   );
   const isPreviewing = Boolean(draft);
 
@@ -488,6 +489,7 @@ export default function AddStoryScreen() {
     if (!overlayText.trim()) {
       setOverlayX(0.5);
       setOverlayY(0.5);
+      setOverlayScale(STANDARD_TEXT_SCALE);
       setOverlayRotation(0);
     }
     setIsEditingOverlayText(true);
@@ -678,6 +680,7 @@ export default function AddStoryScreen() {
     setOverlayColor(TEXT_COLOR_PALETTE[0]);
     setOverlayX(0.5);
     setOverlayY(0.5);
+    setOverlayScale(STANDARD_TEXT_SCALE);
     setOverlayRotation(0);
     setOverlayFontWeight('700');
     setOverlayTextAlign('center');
@@ -724,6 +727,7 @@ export default function AddStoryScreen() {
     setOverlayColor(nextDraft.textOverlay?.color ?? TEXT_COLOR_PALETTE[0]);
     setOverlayX(nextDraft.textOverlay?.x ?? 0.5);
     setOverlayY(nextDraft.textOverlay?.y ?? 0.5);
+    setOverlayScale(nextDraft.textOverlay?.scale ?? STANDARD_TEXT_SCALE);
     setOverlayRotation(nextDraft.textOverlay?.rotation ?? 0);
     setOverlayFontWeight(nextDraft.textOverlay?.fontWeight ?? '700');
     setOverlayTextAlign(nextDraft.textOverlay?.textAlign ?? 'center');
@@ -1308,7 +1312,7 @@ export default function AddStoryScreen() {
             x={overlayX}
             y={overlayY}
             rotation={overlayRotation}
-            scale={STANDARD_TEXT_SCALE}
+            scale={overlayScale}
             canvasWidth={canvasSize.width}
             canvasHeight={canvasSize.height}
             isEditing={isEditingOverlayText}
@@ -1317,6 +1321,7 @@ export default function AddStoryScreen() {
             onTransformEnd={(transform) => {
               setOverlayX(transform.x);
               setOverlayY(transform.y);
+              setOverlayScale(transform.scale);
               setOverlayRotation(transform.rotation);
             }}
           />

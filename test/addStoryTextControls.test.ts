@@ -8,11 +8,11 @@ import test from "node:test";
 // test library installed, so behavior is verified by asserting on the exact
 // add-story.tsx / DraggableStoryText.tsx source text rather than by mounting
 // components.
-const addStorySource = readFileSync(join(process.cwd(), "app/post-screen/add-story.tsx"), "utf8");
+const addStorySource = readFileSync(join(process.cwd(), "app/post-screen/add-story.tsx"), "utf8").replace(/\r\n/g, "\n");
 const draggableStoryTextSource = readFileSync(
   join(process.cwd(), "components/story/DraggableStoryText.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 test("DraggableStoryImage and DraggableStoryText use role-prefixed keys off the same draftKey (never collide)", () => {
   assert.match(addStorySource, /<DraggableStoryImage\s*\n\s*key=\{`image-\$\{draftKey\}`\}/);
@@ -35,9 +35,8 @@ test("Top/Middle/Bottom position controls are removed", () => {
   assert.doesNotMatch(addStorySource, /label:\s*'Bottom'/);
 });
 
-test("S/M/L size controls are removed", () => {
+test("S/M/L discrete size button controls remain removed in favor of freeform pinch-to-scale", () => {
   assert.doesNotMatch(addStorySource, /OVERLAY_SCALES/);
-  assert.doesNotMatch(addStorySource, /setOverlayScale/);
   assert.doesNotMatch(addStorySource, /label:\s*'S'/);
   assert.doesNotMatch(addStorySource, /label:\s*'L'/);
   // "M" is also a hex-color initial letter risk (#... colors), so check the
@@ -45,16 +44,17 @@ test("S/M/L size controls are removed", () => {
   assert.doesNotMatch(addStorySource, /\{\s*label:\s*'M',\s*value:\s*1\s*\}/);
 });
 
-test("new Story text uses the existing canonical/default scale, not a newly-invented value", () => {
+test("new Story text initializes to canonical scale and supports freeform pinch-to-scale", () => {
   assert.match(addStorySource, /const STANDARD_TEXT_SCALE = 1;/);
-  // buildOverlay's call site (used for the publish payload) passes the
-  // standard constant, not a variable state a removed control could drive.
+  // buildOverlay's call site passes the dynamic overlayScale state
   assert.match(
     addStorySource,
-    /buildOverlay\(\s*overlayText,\s*overlayX,\s*overlayY,\s*overlayColor,\s*STANDARD_TEXT_SCALE,\s*overlayRotation,\s*overlayFontWeight,\s*overlayTextAlign,\s*\)/,
+    /buildOverlay\(\s*overlayText,\s*overlayX,\s*overlayY,\s*overlayColor,\s*overlayScale,\s*overlayRotation,\s*overlayFontWeight,\s*overlayTextAlign,\s*\)/,
   );
-  // The on-canvas object is also always given the same standard constant.
-  assert.match(addStorySource, /<DraggableStoryText[\s\S]{0,500}scale=\{STANDARD_TEXT_SCALE\}/);
+  // The on-canvas object is given the dynamic overlayScale state and enables pinch
+  assert.match(addStorySource, /<DraggableStoryText[\s\S]{0,500}scale=\{overlayScale\}/);
+  assert.match(draggableStoryTextSource, /enablePinch:\s*true/);
+  assert.match(draggableStoryTextSource, /scale:\s*scale\.value/);
 });
 
 test("only ONE overlay-text rendering/editing path exists — no separate toolbar TextInput duplicating it", () => {

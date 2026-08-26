@@ -125,8 +125,8 @@ test("groupStoriesByAuthor preserves a non-default imageTransform on each storyI
 
   const groups = groupStoriesByAuthor(stories);
 
-  assert.deepEqual(groups[0].storyItems[0].imageTransform, transform);
-  assert.deepEqual(groups[0].imageTransform, transform);
+  assert.deepEqual(groups[0]?.storyItems?.[0]?.imageTransform, transform);
+  assert.deepEqual(groups[0]?.imageTransform, transform);
 });
 
 test("groupStoriesByAuthor preserves textOverlay alongside imageTransform", () => {
@@ -143,7 +143,7 @@ test("groupStoriesByAuthor preserves textOverlay alongside imageTransform", () =
 
   const groups = groupStoriesByAuthor(stories);
 
-  assert.deepEqual(groups[0].storyItems[0].textOverlay, overlay);
+  assert.deepEqual(groups[0]?.storyItems?.[0]?.textOverlay, overlay);
 });
 
 test("groupStoriesByAuthor leaves imageTransform undefined for a legacy Story that never set one", () => {
@@ -153,5 +153,5 @@ test("groupStoriesByAuthor leaves imageTransform undefined for a legacy Story th
 
   const groups = groupStoriesByAuthor(stories);
 
-  assert.equal(groups[0].storyItems[0].imageTransform, undefined);
+  assert.equal(groups[0]?.storyItems?.[0]?.imageTransform, undefined);
 });
