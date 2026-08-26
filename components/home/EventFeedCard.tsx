@@ -19,6 +19,7 @@ import { MAP_MARKER_GLOW_CONFIG } from "@/constants/mapMarkerGlow";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
+import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
 import { cancelEvent, type EventResponse } from "@/lib/events";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -243,6 +244,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const eventScheduledAt = event.scheduledAt;
   const eventEndAt = event.endAt;
   const [statusNowMs, setStatusNowMs] = useState(() => Date.now());
+  const eventEndedByPersistedTime = isEventEndedByTime(eventEndAt, statusNowMs);
   const eventBadgeStatus = useMemo(
     () => getEventBadgeStatus({
       status: eventStatus,
@@ -488,7 +490,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
   const handleEditEvent = () => {
     setShowMoreMenu(false);
 
-    if (eventStatus === "completed" || eventStatus === "cancelled") {
+    if (eventStatus === "completed" || eventStatus === "cancelled" || eventEndedByPersistedTime) {
       return;
     }
 
@@ -947,7 +949,6 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
           onSharePress={() => setShareVisible(true)}
           likeDisabled={isLikePending || !event.interactionMomentId}
           commentDisabled={!event.interactionMomentId}
-          shareDisabled={!event.interactionMomentId}
         />
         {canViewEventStats && (
           <>
@@ -975,7 +976,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
       <ShareModal
         visible={shareVisible}
         onClose={() => setShareVisible(false)}
-        onRepost={handleRepost}
+        onRepost={event.interactionMomentId ? handleRepost : undefined}
         shareUrl={`https://mooment.app/events/${event.id}`}
         item={{
           type: "event",
@@ -995,7 +996,7 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         onClose={() => setShowMoreMenu(false)}
         showDelete={isOwnEvent}
         deleteLabel="Cancel Event"
-        showEdit={isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled"}
+        showEdit={isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled" && !eventEndedByPersistedTime}
         onEdit={isOwnEvent ? handleEditEvent : undefined}
         onReport={!isOwnEvent ? handleOpenReport : undefined}
         reported={hasReported}

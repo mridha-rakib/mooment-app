@@ -32,6 +32,8 @@ type EventDraftState = {
   draftId: string | null;
   isEditingPublishedEvent: boolean;
   isExistingEventSession: boolean;
+  originalScheduledAt: string | null;
+  persistedEndAt: string | null;
   publishedEventBaseline: string | null;
   publishedEventBaselineEvent: EventResponse | null;
   name: string;
@@ -95,6 +97,8 @@ const createInitialState = () => {
     draftId: null,
     isEditingPublishedEvent: false,
     isExistingEventSession: false,
+    originalScheduledAt: null,
+    persistedEndAt: null,
     publishedEventBaseline: null,
     publishedEventBaselineEvent: null,
     name: "",
@@ -194,6 +198,7 @@ const getEventSyncState = (event: EventResponse, currentTickets: EventDraftTicke
   isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
   publishedEventBaseline: getPublishedEventBaseline(event),
   publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
+  persistedEndAt: event.endAt ?? null,
   bannerImageKey: event.bannerImageKey ?? null,
   bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
   bannerImageDisplay: event.bannerImageDisplay ?? null,
@@ -570,6 +575,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       isExistingEventSession: true,
       publishedEventBaseline: getPublishedEventBaseline(event),
       publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
+      originalScheduledAt: event.scheduledAt ?? null,
+      persistedEndAt: event.endAt ?? null,
       name: event.name ?? "",
       description: event.description ?? "",
       bannerImageUri,

@@ -79,14 +79,11 @@ export default function PostInteractionBar({
         >
           <Animated.View style={likeIconStyle}>
             <Ionicons
-              name={isLiked ? 'heart' : 'heart-outline'}
+              name={isLiked ? 'flame' : 'flame-outline'}
               size={compact ? 20 : 22}
-              color={isLiked ? '#F2245C' : resolvedIconColor}
+              color={isLiked ? colors.danger : resolvedIconColor}
             />
           </Animated.View>
-          {likesCount !== undefined && (
-            <Text style={countStyles}>{likesCount}</Text>
-          )}
         </TouchableOpacity>
       )}
 
@@ -99,7 +96,6 @@ export default function PostInteractionBar({
           hitSlop={ACTION_HIT_SLOP}
         >
           <HugeiconsIcon icon={Comment02Icon} size={20} color={resolvedIconColor} />
-          <Text style={countStyles}>{commentsCount}</Text>
         </TouchableOpacity>
       )}
 
@@ -112,7 +108,6 @@ export default function PostInteractionBar({
           hitSlop={ACTION_HIT_SLOP}
         >
           <HugeiconsIcon icon={Share01Icon} size={20} color={resolvedIconColor} />
-          <Text style={countStyles}>{sharesCount}</Text>
         </TouchableOpacity>
       )}
 

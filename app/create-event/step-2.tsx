@@ -2,7 +2,11 @@ import BackButton from '@/components/ui/BackButton';
 import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constants/eventCategories';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
-import { combineLocalDateAndTime, getEventDateRangeError } from '@/lib/eventDateRange';
+import { combineLocalDateAndTime } from '@/lib/eventDateRange';
+import {
+  getEventStepTwoScheduleErrors,
+  isOngoingPublishedEventEdit,
+} from '@/lib/eventStepTwoValidation';
 import { fromAgeRestriction, toAgeRestriction, useEventDraftStore } from '@/stores/eventDraftStore';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -55,35 +59,6 @@ const createEventStepTwoSchema = z.object({
   endDate: requiredDate('End date is required'),
   startTime: requiredDate('Start time is required'),
   endTime: requiredDate('End time is required'),
-}).superRefine((value, ctx) => {
-  if (![value.startDate, value.endDate, value.startTime, value.endTime].every(
-    (date) => date instanceof Date && !Number.isNaN(date.getTime()),
-  )) {
-    return;
-  }
-
-  const scheduledAt = combineLocalDateAndTime(value.startDate, value.startTime);
-  const endAt = combineLocalDateAndTime(value.endDate, value.endTime);
-  const now = new Date();
-
-  if (scheduledAt < now) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Start date and time cannot be in the past.',
-      path: ['startDate'],
-    });
-    return;
-  }
-
-  const message = getEventDateRangeError(scheduledAt, endAt);
-
-  if (message) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message,
-      path: ['endDate'],
-    });
-  }
 });
 
 type CreateEventStepTwoValues = z.infer<typeof createEventStepTwoSchema>;
@@ -97,6 +72,8 @@ export default function CreateEventStep2() {
   const draftCategories = useEventDraftStore((state) => state.categories);
   const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
   const draftEndAt = useEventDraftStore((state) => state.endAt);
+  const originalScheduledAt = useEventDraftStore((state) => state.originalScheduledAt);
+  const persistedEndAt = useEventDraftStore((state) => state.persistedEndAt);
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
@@ -133,6 +110,11 @@ export default function CreateEventStep2() {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [errors, setErrors] = useState<CreateEventStepTwoErrors>({});
+  const isOngoingEdit = isOngoingPublishedEventEdit({
+    isEditingPublishedEvent: isEditingPublished,
+    originalScheduledAt,
+    persistedEndAt,
+  });
   const pickerButtonColors = {
     negativeButton: { label: 'Cancel', textColor: colors.textSecondary },
     positiveButton: { label: 'OK', textColor: colors.primary },
@@ -250,11 +232,16 @@ export default function CreateEventStep2() {
   };
 
   const persistStepTwo = (values?: CreateEventStepTwoValues) => {
-    const scheduledAt = values
-      ? combineLocalDateAndTime(values.startDate, values.startTime).toISOString()
-      : startDate && startTime
-        ? combineLocalDateAndTime(startDate, startTime).toISOString()
-        : null;
+    let scheduledAt: string | null = null;
+
+    if (isOngoingEdit && originalScheduledAt) {
+      scheduledAt = originalScheduledAt;
+    } else if (values) {
+      scheduledAt = combineLocalDateAndTime(values.startDate, values.startTime).toISOString();
+    } else if (startDate && startTime) {
+      scheduledAt = combineLocalDateAndTime(startDate, startTime).toISOString();
+    }
+
     const eventEndAt = values
       ? combineLocalDateAndTime(values.endDate, values.endTime).toISOString()
       : endDate && endTime
@@ -293,8 +280,7 @@ export default function CreateEventStep2() {
     Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
   };
 
-  const handleSaveAndExit = async () => {
-    if (isSaving || isSavingAndExiting) return;
+  const validateStepTwo = (): CreateEventStepTwoValues | null => {
     const result = createEventStepTwoSchema.safeParse({
       ageRestriction: selectedAge,
       categories: selectedCategories,
@@ -316,11 +302,30 @@ export default function CreateEventStep2() {
         endTime: fieldErrors.endTime?.[0],
       });
 
-      return;
+      return null;
+    }
+
+    const scheduleErrors = getEventStepTwoScheduleErrors(result.data, {
+      isOngoingEdit,
+      originalScheduledAt,
+    });
+
+    if (Object.keys(scheduleErrors).length > 0) {
+      setErrors(scheduleErrors);
+      return null;
     }
 
     setErrors({});
-    persistStepTwo(result.data);
+    return result.data;
+  };
+
+  const handleSaveAndExit = async () => {
+    if (isSaving || isSavingAndExiting) return;
+    const values = validateStepTwo();
+
+    if (!values) return;
+
+    persistStepTwo(values);
     setIsSavingAndExiting(true);
 
     try {
@@ -340,32 +345,11 @@ export default function CreateEventStep2() {
 
   const handleNext = async () => {
     if (isSaving || isSavingAndExiting || isAdvancingRef.current) return;
-    const result = createEventStepTwoSchema.safeParse({
-      ageRestriction: selectedAge,
-      categories: selectedCategories,
-      startDate,
-      endDate,
-      startTime,
-      endTime,
-    });
+    const values = validateStepTwo();
 
-    if (!result.success) {
-      const fieldErrors = result.error.flatten().fieldErrors;
+    if (!values) return;
 
-      setErrors({
-        ageRestriction: fieldErrors.ageRestriction?.[0],
-        categories: fieldErrors.categories?.[0],
-        startDate: fieldErrors.startDate?.[0],
-        endDate: fieldErrors.endDate?.[0],
-        startTime: fieldErrors.startTime?.[0],
-        endTime: fieldErrors.endTime?.[0],
-      });
-
-      return;
-    }
-
-    setErrors({});
-    persistStepTwo(result.data);
+    persistStepTwo(values);
 
     if (!isEditingPublished) {
       isAdvancingRef.current = true;
@@ -485,11 +469,13 @@ export default function CreateEventStep2() {
                 style={[
                   styles.selector,
                   { backgroundColor: colors.card, borderColor: errors.startDate ? colors.danger : 'transparent' },
+                  isOngoingEdit ? styles.disabledControl : null,
                 ]}
                 onPress={() => setShowStartDatePicker(true)}
+                disabled={isOngoingEdit}
               >
                 <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.compactSelectorText, { color: startDate ? colors.text : colors.textSecondary }]} numberOfLines={1}>
+                <Text style={[styles.compactSelectorText, { color: startDate && !isOngoingEdit ? colors.text : colors.textSecondary }]} numberOfLines={1}>
                   {startDate ? formatDate(startDate) : 'Select date'}
                 </Text>
               </TouchableOpacity>
@@ -521,11 +507,13 @@ export default function CreateEventStep2() {
                 style={[
                   styles.selector,
                   { backgroundColor: colors.card, borderColor: errors.startTime ? colors.danger : 'transparent' },
+                  isOngoingEdit ? styles.disabledControl : null,
                 ]}
                 onPress={() => setShowStartTimePicker(true)}
+                disabled={isOngoingEdit}
               >
                 <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: startTime ? colors.text : colors.textSecondary }]}>
+                <Text style={[styles.selectorText, { color: startTime && !isOngoingEdit ? colors.text : colors.textSecondary }]}>
                   {startTime ? formatTime(startTime) : 'Select time'}
                 </Text>
               </TouchableOpacity>
@@ -551,7 +539,7 @@ export default function CreateEventStep2() {
           </View>
         </View>
 
-        {showStartDatePicker && (
+        {showStartDatePicker && !isOngoingEdit && (
           <DateTimePicker
             value={startDate ?? new Date()}
             mode="date"
@@ -577,7 +565,7 @@ export default function CreateEventStep2() {
           />
         )}
 
-        {showStartTimePicker && (
+        {showStartTimePicker && !isOngoingEdit && (
           <DateTimePicker
             value={startTime ?? new Date()}
             mode="time"
@@ -759,6 +747,9 @@ const styles = StyleSheet.create({
   selectorLeft: {
     alignItems: 'center',
     flexDirection: 'row',
+  },
+  disabledControl: {
+    opacity: 0.55,
   },
   errorText: {
     fontSize: 12,

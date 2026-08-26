@@ -60,6 +60,7 @@ import {
     getEventCategoryMapDestination,
 } from "@/lib/eventCategoryNavigation";
 import { normalizeEventCategoryFilter } from "@/lib/eventFilters";
+import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
 import { isTicketCreationCutoffReached } from "@/lib/ticketAvailability";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -722,6 +723,8 @@ const EventScreen = () => {
   const isDraftPreview = Boolean(event && event.status === "draft" && isEventOwner);
   const eventStartMs = getDateTimeMs(event?.scheduledAt);
   const eventEndMs = getDateTimeMs(event?.endAt);
+  const isEventEndedByPersistedTime = isEventEndedByTime(event?.endAt, currentTimeMs);
+  const isEventEditBlocked = Boolean(isEventCompleted || isEventCancelled || isEventEndedByPersistedTime);
   useEffect(() => {
     if (eventStartMs === null || eventStartMs <= currentTimeMs) {
       return;
@@ -1282,7 +1285,7 @@ const EventScreen = () => {
       return;
     }
 
-    if (isEventCompleted || isEventCancelled) {
+    if (isEventEditBlocked) {
       return;
     }
 
@@ -2385,7 +2388,7 @@ const EventScreen = () => {
           >
             {isHostMode ? (
               <>
-                {!isEventCompleted && !isEventCancelled && (
+                {!isEventEditBlocked && (
                   <>
                     <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
                       <Feather name="edit-3" size={20} color={isDark ? "#FFF" : colors.text} />
