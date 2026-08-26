@@ -33,8 +33,8 @@ export const MAX_IMAGE_SCALE = 4;
 // Text keeps using its existing S/M/L preset range (0.85–1.2) as the
 // practical default, but the gesture-driven ceiling/floor are kept wider so
 // a manual pinch-adjacent rotation gesture never feels clamped mid-gesture.
-export const MIN_TEXT_SCALE = 0.5;
-export const MAX_TEXT_SCALE = 2;
+export const MIN_TEXT_SCALE = 0.4;
+export const MAX_TEXT_SCALE = 3;
 
 // How far an object's center may be dragged past the canvas edge before
 // being clamped, expressed as a fraction of canvas size. 0.6 lets a user
