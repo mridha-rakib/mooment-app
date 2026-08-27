@@ -23,6 +23,7 @@ import type {
   EventTicketRequestPayload,
 } from "@/lib/events";
 import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
+import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
 
 export type EventDraftTicket = EventTicketPayload & {
   localId: string;
@@ -495,6 +496,10 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
           bannerImageDisplay: event.bannerImageDisplay ?? get().bannerImageDisplay,
         });
 
+        if (state.isEditingPublishedEvent) {
+          await refreshHostedEventEligibility();
+        }
+
         return event;
       });
 
@@ -553,6 +558,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       bannerImageDisplay: event.bannerImageDisplay ?? state.bannerImageDisplay,
       lastPublishedDraftId: state.draftId,
     });
+
+    await refreshHostedEventEligibility();
 
     return event;
   },

@@ -73,6 +73,7 @@ export default function UserProfileScreen() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [feedLoading, setFeedLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const hasLoadedIdentityRef = useRef(false);
   const hasLoadedStatsRef = useRef(false);
   const hasLoadedFeedRef = useRef(false);
@@ -150,6 +151,7 @@ export default function UserProfileScreen() {
         getProfileEvents(targetUserId, { filter: "past", page: 1, limit: PAGE_SIZE }),
       ]);
       hasLoadedEventsRef.current = true;
+      setEventsError(null);
       setProfileEvents({ active: activeEvents.active, past: pastEvents.past });
       setEventPages({ active: 1, past: 1 });
       setHasMoreEvents({
@@ -163,8 +165,8 @@ export default function UserProfileScreen() {
           events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
         },
       }));
-    } catch {
-      // First load: the empty-state UI already covers this. Refresh: keep the visible events.
+    } catch (error) {
+      setEventsError(getAuthErrorMessage(error, "Unable to load profile events."));
     } finally {
       setEventsLoading(false);
     }
@@ -176,6 +178,7 @@ export default function UserProfileScreen() {
       setStatsLoading(false);
       setFeedLoading(false);
       setEventsLoading(false);
+      setEventsError(null);
       return;
     }
 
@@ -229,6 +232,7 @@ export default function UserProfileScreen() {
       setHasMoreFeed(false);
       setEventPages({ active: 1, past: 1 });
       setHasMoreEvents({ active: false, past: false });
+      setEventsError(null);
       setIdentityLoading(false);
       setStatsLoading(false);
       setFeedLoading(false);
@@ -296,6 +300,11 @@ export default function UserProfileScreen() {
       })
       .finally(() => setIsEventsLoadingMore(false));
   }, [eventPages, hasMoreEvents, isEventsLoadingMore, userId]);
+
+  const retryProfileEvents = useCallback(() => {
+    if (!userId) return;
+    void fetchEvents(userId);
+  }, [fetchEvents, userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -369,6 +378,8 @@ export default function UserProfileScreen() {
         statsLoading={statsLoading || eventsLoading}
         feedLoading={feedLoading}
         eventsLoading={eventsLoading}
+        eventsError={eventsError}
+        onRetryEvents={retryProfileEvents}
       />
     </View>
   );

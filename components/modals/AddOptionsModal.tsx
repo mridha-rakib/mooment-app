@@ -1,8 +1,8 @@
 import { useTheme } from "@/hooks/useTheme";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
-import { getMyProfileEvents } from "@/lib/events";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
+import { useHostedEventEligibilityStore } from "@/stores/hostedEventEligibilityStore";
 import {
   ChevronRight,
   PencilEdit01Icon,
@@ -31,7 +31,7 @@ interface AddOptionsModalProps {
   onOpenComplete?: () => void;
 }
 
-const OPTIONS = [
+const BASE_OPTIONS = [
   {
     id: "moment",
     label: "New Post",
@@ -51,15 +51,21 @@ const OPTIONS = [
     bg: "#DE7777",
     route: "/create-event",
   },
-  {
-    id: "scan",
-    label: "Scan QR",
-    description: "Scan event ticket QR codes",
-    icon: QrCodeIcon,
-    color: "#0C447C",
-    bg: "#85B7EB",
-    route: "/event-screen/scan-qr",
-  },
+];
+
+const SCAN_QR_OPTION = {
+  id: "scan",
+  label: "Scan QR",
+  description: "Scan event ticket QR codes",
+  icon: QrCodeIcon,
+  color: "#0C447C",
+  bg: "#85B7EB",
+  route: "/event-screen/scan-qr",
+};
+
+const getVisibleOptions = (hasActiveHostedEvent: boolean | null) => [
+  ...BASE_OPTIONS,
+  ...(hasActiveHostedEvent === true ? [SCAN_QR_OPTION] : []),
 ];
 
 const AnimatedTouchableOpacity =
@@ -74,6 +80,9 @@ export default function AddOptionsModal({
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
+  const hasActiveHostedEvent = useHostedEventEligibilityStore(
+    (state) => state.hasActiveHostedEvent,
+  );
 
   const translateY = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = React.useMemo(
@@ -94,6 +103,10 @@ export default function AddOptionsModal({
   const startCreateSession = useEventDraftStore((state) => state.startCreateSession);
   const [optionsEnabled, setOptionsEnabled] = React.useState(false);
   const optionPressLockRef = React.useRef(true);
+  const visibleOptions = React.useMemo(
+    () => getVisibleOptions(hasActiveHostedEvent),
+    [hasActiveHostedEvent],
+  );
 
   React.useEffect(() => {
     optionPressLockRef.current = true;
@@ -112,22 +125,6 @@ export default function AddOptionsModal({
 
     optionPressLockRef.current = true;
     setOptionsEnabled(false);
-
-    if (optionId === "scan") {
-      try {
-        const profileEvents = await getMyProfileEvents();
-
-        if (profileEvents.active.length === 0) {
-          optionPressLockRef.current = false;
-          setOptionsEnabled(true);
-          return;
-        }
-      } catch {
-        optionPressLockRef.current = false;
-        setOptionsEnabled(true);
-        return;
-      }
-    }
 
     if (optionId === "event") {
       onClose();
@@ -242,7 +239,7 @@ export default function AddOptionsModal({
           </View>
 
           <View style={styles.optionsList}>
-            {OPTIONS.map((opt) => (
+            {visibleOptions.map((opt) => (
               <TouchableOpacity
                 key={opt.id}
                 style={[

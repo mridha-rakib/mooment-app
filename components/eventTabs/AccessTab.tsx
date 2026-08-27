@@ -394,7 +394,13 @@ const AccessTab = ({
         <View style={styles.ticketFooter}>
           <View style={styles.priceContainer}>
             <Text style={styles.ticketPrice}>{formatPrice(ticket)}</Text>
-            {!isFreeTicket && (
+            {isFreeTicket ? (
+              alreadyPurchased > 0 ? (
+                <Text style={styles.perTicketText}>
+                  {alreadyPurchased} claimed • {isLimitReached ? "Limit reached" : `${remainingAllowed} left`}
+                </Text>
+              ) : null
+            ) : (
               alreadyPurchased > 0 && !isLimitReached ? (
                 <Text style={styles.perTicketText}>
                   {alreadyPurchased} purchased • {remainingAllowed} left
@@ -461,7 +467,7 @@ const AccessTab = ({
         {((!isLocked && !isPrivate) || hasAcceptedRequest || (isPrivate && (isHostMode || isMember))) && (
           <View style={styles.alertBanner}>
             <Feather name="info" size={24} color="#BB5E30" />
-            <Text style={styles.alertText}>You can only buy maximum of 2 tickets</Text>
+            <Text style={styles.alertText}>You can buy up to 2 tickets per ticket type</Text>
           </View>
         )}
 

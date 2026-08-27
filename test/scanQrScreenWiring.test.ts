@@ -9,13 +9,11 @@ import test from "node:test";
 // can't be unit-tested in isolation (React effects, navigation focus, camera)
 // is verified against the exact scan-qr.tsx / AddOptionsModal.tsx source text.
 //
-// Manual Check-In no longer requires a selected event (see scan-qr audit +
-// implementation): the ticket code alone determines its event server-side, so
-// the per-screen hosted-events fetch/snapshot/chip-selector was removed
-// entirely from this screen. AddOptionsModal's own active-hosted-event
-// pre-check is kept, because it independently gates whether "Scan QR" is
-// reachable at all (for a user hosting zero active events) -- that gate is
-// unrelated to the removed manual event selector, so it stays.
+// Manual Check-In no longer requires a selected event: the ticket code alone
+// determines its event server-side, so the per-screen hosted-events
+// fetch/snapshot/chip-selector was removed entirely from this screen.
+// AddOptionsModal now consumes preloaded hosted-event eligibility for rendering
+// instead of fetching when Scan QR is tapped.
 const readSourceNormalized = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
 const scanQrSource = readSourceNormalized(join(process.cwd(), "app/event-screen/scan-qr.tsx"));
@@ -38,20 +36,17 @@ const handleOptionSource = sliceBetween(
 );
 const manualPanelSource = sliceBetween(scanQrSource, "const manualPanel = (", "if (!permission)");
 
-// ── AddOptionsModal still gates "Scan QR" on active hosted events ──────────
-// (independent of the manual event selector, which lived inside scan-qr.tsx)
+// ── AddOptionsModal gates "Scan QR" from preloaded hosted-event state ───────
 
-test("AddOptionsModal still performs its existing active-hosted-event pre-check before navigating", () => {
-  assert.match(handleOptionSource, /const profileEvents = await getMyProfileEvents\(\);/);
-  assert.match(handleOptionSource, /if \(profileEvents\.active\.length === 0\)/);
+test("AddOptionsModal consumes preloaded hosted-event eligibility instead of fetching on tap", () => {
+  assert.match(addOptionsModalSource, /useHostedEventEligibilityStore/);
+  assert.doesNotMatch(addOptionsModalSource, /getMyProfileEvents/);
+  assert.match(addOptionsModalSource, /hasActiveHostedEvent === true \? \[SCAN_QR_OPTION\] : \[\]/);
 });
 
-test("no active events still returns without navigating and without redesigning the modal", () => {
-  const preCheckSource = sliceBetween(handleOptionSource, 'if (optionId === "scan")', 'if (optionId === "event")');
-  assert.match(
-    preCheckSource,
-    /if \(profileEvents\.active\.length === 0\) \{\s*optionPressLockRef\.current = false;\s*setOptionsEnabled\(true\);\s*return;\s*\}/,
-  );
+test("Scan QR navigation still uses the existing scanner route when the option is rendered", () => {
+  assert.match(addOptionsModalSource, /route: "\/event-screen\/scan-qr"/);
+  assert.match(handleOptionSource, /router\.push\(route as any\);/);
 });
 
 test("the now-dead scanner hosted-events handoff was removed from AddOptionsModal", () => {

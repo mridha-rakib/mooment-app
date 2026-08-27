@@ -91,6 +91,10 @@ const EventCheckoutScreen = () => {
   const tax = quote ? formatCurrency(quote.taxAmount, quote.currency) : "";
   const total = quote ? (quote.totalAmount <= 0 ? "Free" : formatCurrency(quote.totalAmount, quote.currency)) : "";
   const isFreeCheckout = quote !== null && quote.totalAmount <= 0;
+  // Payment-specific UI must only appear once a loaded quote confirms a paid
+  // total. While the quote is loading (quote === null) this stays false so the
+  // Card / Apple Pay methods never flash before the free total resolves.
+  const isPaidCheckout = quote !== null && quote.totalAmount > 0;
   const ticketLineItem = quote?.lineItems.find(
     (item) => item.itemType === "ticket" && item.itemId === ticketId,
   );
@@ -281,7 +285,7 @@ const EventCheckoutScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {!isFreeCheckout ? (
+        {isPaidCheckout ? (
           <>
             <PaymentMethods
               payWith={payWith}

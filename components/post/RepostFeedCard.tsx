@@ -146,9 +146,19 @@ function RepostFeedCard({
 
   if (isEvent) {
     if (eventLoading) {
-      return showLoadingIndicator
-        ? <ActivityIndicator style={styles.loading} color={colors.primary} />
-        : <View style={styles.loadingSpacer} />;
+      return (
+        <View
+          style={[
+            styles.repostCard,
+            { backgroundColor: colors.card },
+            !isDark && { borderWidth: 1, borderColor: colors.border },
+          ]}
+        >
+          {header}
+          <EventRepostLoadingPlaceholder showLoadingIndicator={showLoadingIndicator} />
+          {editModal}
+        </View>
+      );
     }
 
     return (
@@ -325,6 +335,35 @@ function UnavailableCard() {
   );
 }
 
+function EventRepostLoadingPlaceholder({ showLoadingIndicator }: { showLoadingIndicator: boolean }) {
+  const { colors, isDark } = useTheme();
+  const blockColor = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
+
+  return (
+    <View
+      style={[styles.eventLoadingCard, !isDark && { borderColor: colors.border }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <View style={styles.eventLoadingHeader}>
+        <View style={[styles.eventLoadingAvatar, { backgroundColor: blockColor }]} />
+        <View style={styles.eventLoadingHeaderText}>
+          <View style={[styles.eventLoadingTitle, { backgroundColor: blockColor }]} />
+          <View style={[styles.eventLoadingSubtitle, { backgroundColor: blockColor }]} />
+        </View>
+      </View>
+      <View style={[styles.eventLoadingImage, { backgroundColor: blockColor }]}>
+        {showLoadingIndicator ? <ActivityIndicator color={colors.primary} /> : null}
+      </View>
+      <View style={styles.eventLoadingActions}>
+        <View style={[styles.eventLoadingAction, { backgroundColor: blockColor }]} />
+        <View style={[styles.eventLoadingAction, { backgroundColor: blockColor }]} />
+        <View style={[styles.eventLoadingAction, { backgroundColor: blockColor }]} />
+      </View>
+    </View>
+  );
+}
+
 const TIME_AGO_FORMATTER = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
 const formatTimeAgo = (dateStr?: string | Date | null): string => {
@@ -347,8 +386,6 @@ const getTaggedFriendName = (friend: MomentAuthor) =>
   friend.name?.trim() || friend.username?.trim() || 'Mooment user';
 
 const styles = StyleSheet.create({
-  loading: { marginVertical: 36 },
-  loadingSpacer: { height: 72 },
   repostCard: {
     marginHorizontal: 16,
     marginBottom: 20,
@@ -402,4 +439,55 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   message: { fontSize: 13 },
+  eventLoadingCard: {
+    minHeight: 362,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 0,
+  },
+  eventLoadingHeader: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  eventLoadingAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  eventLoadingHeaderText: {
+    flex: 1,
+    gap: 8,
+  },
+  eventLoadingTitle: {
+    width: '46%',
+    height: 12,
+    borderRadius: 6,
+  },
+  eventLoadingSubtitle: {
+    width: '28%',
+    height: 10,
+    borderRadius: 5,
+  },
+  eventLoadingImage: {
+    height: 250,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventLoadingActions: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 18,
+  },
+  eventLoadingAction: {
+    width: 42,
+    height: 14,
+    borderRadius: 7,
+  },
 });

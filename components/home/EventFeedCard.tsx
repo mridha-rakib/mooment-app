@@ -29,6 +29,7 @@ import { submitReport } from "@/lib/reports";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
+import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
 import MoreMenuModal from "@/components/post/MoreMenuModal";
 import ReportModal from "@/components/modals/ReportModal";
 import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
@@ -516,6 +517,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
     setIsCancellingEvent(true);
     try {
       await cancelEvent(event.id, payload);
+      await refreshHostedEventEligibility();
       setCancelReasonVisible(false);
       onEventCancelled?.(event.id);
       Alert.alert("Event cancelled", "Refunds are being processed for attendees.");

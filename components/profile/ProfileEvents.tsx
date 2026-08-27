@@ -21,6 +21,8 @@ type ProfileEventsProps = {
   onLoadMore?: (filter: ProfileEventsFilter) => void;
   isLoadingMore?: boolean;
   isLoading?: boolean;
+  errorMessage?: string | null;
+  onRetry?: () => void;
   filter: ProfileEventsFilter;
   onFilterChange: (filter: ProfileEventsFilter) => void;
 };
@@ -45,6 +47,8 @@ export default function ProfileEvents({
   onLoadMore,
   isLoadingMore = false,
   isLoading = false,
+  errorMessage,
+  onRetry,
   filter,
   onFilterChange,
 }: ProfileEventsProps) {
@@ -67,6 +71,17 @@ export default function ProfileEvents({
       onEventCancelled={handleEventCancelled}
     />
   ), [handleEventCancelled]);
+
+  const inlineError = errorMessage && visibleEvents.length > 0 ? (
+    <View style={[styles.inlineError, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.inlineErrorText, { color: colors.textSecondary }]}>{errorMessage}</Text>
+      {onRetry ? (
+        <TouchableOpacity onPress={onRetry}>
+          <Text style={[styles.inlineErrorAction, { color: colors.primary }]}>Retry</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  ) : null;
 
   const header = (
     <>
@@ -95,6 +110,7 @@ export default function ProfileEvents({
           </TouchableOpacity>
         </BlurView>
       </View>
+      {inlineError}
     </>
   );
 
@@ -111,6 +127,19 @@ export default function ProfileEvents({
       renderItem={renderEvent}
       ListEmptyComponent={isLoading ? (
         <ProfileEventsSkeletonList />
+      ) : errorMessage ? (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{errorMessage}</Text>
+          {onRetry ? (
+            <TouchableOpacity
+              style={[styles.retryButton, { borderColor: colors.border }]}
+              onPress={onRetry}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.retryText, { color: colors.text }]}>Retry</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -179,6 +208,40 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: "center",
+  },
+  retryButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  inlineError: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  inlineErrorText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  inlineErrorAction: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   footerLoader: {
     paddingVertical: 18,

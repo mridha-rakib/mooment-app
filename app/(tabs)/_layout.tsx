@@ -5,11 +5,12 @@ import { getStorageFileUrl } from "@/lib/storage";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatUnreadStore } from "@/stores/chatUnreadStore";
+import { useHostedEventEligibilityStore } from "@/stores/hostedEventEligibilityStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { Feather } from "@expo/vector-icons";
 import { Tabs as ExpoTabs } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Path, Svg } from "react-native-svg";
 import AddOptionsModal from "../../components/modals/AddOptionsModal";
@@ -46,6 +47,8 @@ export default function TabLayout() {
   const NAV_BAR_ICON_INACTIVE = isDark ? NAV_BAR_ICON_INACTIVE_DARK : colors.textSecondary;
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const refreshHostedEventEligibility = useHostedEventEligibilityStore((state) => state.refresh);
+  const resetHostedEventEligibility = useHostedEventEligibilityStore((state) => state.reset);
   const tabAvatarUri = user?.avatarKey ? getStorageFileUrl(user.avatarKey) : null;
   const tabAvatarName = user?.name ?? user?.username;
   const unreadCount = useNotificationStore((state) => state.unreadCount);
@@ -128,6 +131,25 @@ export default function TabLayout() {
     setDirectUnreadCountsFromConversations,
     setUnreadCount,
   ]);
+
+  useEffect(() => {
+    if (!accessToken || !user?.id) {
+      resetHostedEventEligibility();
+      return;
+    }
+
+    void refreshHostedEventEligibility().catch(() => undefined);
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void useHostedEventEligibilityStore.getState().refresh().catch(() => undefined);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [accessToken, refreshHostedEventEligibility, resetHostedEventEligibility, user?.id]);
 
   const tabBarHeight = NAV_BAR_BASE_HEIGHT + insets.bottom;
 

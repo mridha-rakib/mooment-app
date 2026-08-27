@@ -45,6 +45,7 @@ import { buildStoryRow, groupStoriesByAuthor, SELF_TILE_ID } from "@/lib/storyRo
 import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
+import { isLatestFeedRefreshCommit, shouldDeferFeedRefreshCommit, type FeedRefreshCommit } from "@/lib/feedRefreshCommit";
 import {
   getEventFilterSectionEvents,
   getEventFilterSectionHeading,
@@ -83,6 +84,8 @@ type FeedItem =
   // Purely a visual boundary between the filtered Event section above and the
   // normal Smart Feed content below — carries no data of its own.
   | { type: 'your_feed_header'; id: string };
+
+type PendingFeedRefreshCommit = FeedRefreshCommit<PostData[], EventResponse[], MomentTimelineItem[]>;
 
 // A server Moment whose video is still `queued`/`processing` renders the
 // same skeleton as a local pending upload instead of FeedPost's own black
@@ -396,6 +399,9 @@ export default function HomeFeed() {
   const feedLoadingRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRefreshingRef = useRef(false);
   const feedScrollRef = useRef<FlatList>(null);
+  const isFeedScrollingRef = useRef(false);
+  const feedScrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingFeedRefreshCommitRef = useRef<PendingFeedRefreshCommit | null>(null);
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
   const appliedEventFiltersRef = useRef(appliedEventFilters);
   const appliedNearbyFilterKeyRef = useRef(getEventLocationFilterKey(appliedEventFilters.nearby));
@@ -511,8 +517,68 @@ export default function HomeFeed() {
     setActiveFeedVideoItemId(itemId);
   }, []);
 
+  const applyFeedRefreshCommit = useCallback((commit: PendingFeedRefreshCommit) => {
+    if (commit.posts) {
+      setFeedMomentPosts(commit.posts);
+    }
+
+    if (commit.events) {
+      setFeedEvents(commit.events);
+    }
+
+    if (commit.reposts) {
+      setFeedReposts(commit.reposts);
+    }
+
+    if (commit.hasAnyFreshData) {
+      setHasFeedLoadedOnce(true);
+    }
+  }, []);
+
+  const flushPendingFeedRefreshCommit = useCallback(() => {
+    const pendingCommit = pendingFeedRefreshCommitRef.current;
+
+    if (!isLatestFeedRefreshCommit(pendingCommit, feedRequestIdRef.current)) {
+      pendingFeedRefreshCommitRef.current = null;
+      return;
+    }
+
+    pendingFeedRefreshCommitRef.current = null;
+    applyFeedRefreshCommit(pendingCommit);
+  }, [applyFeedRefreshCommit]);
+
+  const clearFeedScrollIdleTimer = useCallback(() => {
+    if (feedScrollIdleTimerRef.current) {
+      clearTimeout(feedScrollIdleTimerRef.current);
+      feedScrollIdleTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearFeedScrollIdleTimer, [clearFeedScrollIdleTimer]);
+
+  const handleFeedScrollActive = useCallback(() => {
+    clearFeedScrollIdleTimer();
+    isFeedScrollingRef.current = true;
+  }, [clearFeedScrollIdleTimer]);
+
+  const handleFeedScrollIdle = useCallback(() => {
+    clearFeedScrollIdleTimer();
+    feedScrollIdleTimerRef.current = setTimeout(() => {
+      feedScrollIdleTimerRef.current = null;
+      isFeedScrollingRef.current = false;
+      flushPendingFeedRefreshCommit();
+    }, 80);
+  }, [clearFeedScrollIdleTimer, flushPendingFeedRefreshCommit]);
+
+  const handleFeedMomentumScrollEnd = useCallback(() => {
+    clearFeedScrollIdleTimer();
+    isFeedScrollingRef.current = false;
+    flushPendingFeedRefreshCommit();
+  }, [clearFeedScrollIdleTimer, flushPendingFeedRefreshCommit]);
+
   const beginAudienceTransition = useCallback(() => {
     const requestId = ++feedRequestIdRef.current;
+    pendingFeedRefreshCommitRef.current = null;
     setActiveFeedVideoItemIdIfChanged(null);
     setIsFeedLoading(true);
     armFeedLoadingRecoveryTimer(requestId);
@@ -675,33 +741,33 @@ export default function HomeFeed() {
         return;
       }
 
-      if (momentsResult.status === "fulfilled") {
-        setFeedMomentPosts(
-          momentsResult.value
-            .map((moment) => mapMomentToPost(moment, {
-              storageUrlResolver: getStorageFileUrl,
-            }))
-            .filter((post): post is PostData => Boolean(post)),
-        );
-      }
+      const nextCommit: PendingFeedRefreshCommit = {
+        requestId,
+        hasAnyFreshData: (
+          momentsResult.status === "fulfilled" ||
+          eventsResult.status === "fulfilled" ||
+          repostsResult.status === 'fulfilled'
+        ),
+        ...(momentsResult.status === "fulfilled"
+          ? {
+              posts: momentsResult.value
+                .map((moment) => mapMomentToPost(moment, {
+                  storageUrlResolver: getStorageFileUrl,
+                }))
+                .filter((post): post is PostData => Boolean(post)),
+            }
+          : {}),
+        ...(eventsResult.status === "fulfilled" && isLatestEventRequest(eventRequestId, eventRequestIdRef.current)
+          ? { events: eventsResult.value }
+          : {}),
+        ...(repostsResult.status === 'fulfilled' ? { reposts: repostsResult.value } : {}),
+      };
 
-      if (
-        eventsResult.status === "fulfilled" &&
-        isLatestEventRequest(eventRequestId, eventRequestIdRef.current)
-      ) {
-        setFeedEvents(eventsResult.value);
-      }
-
-      if (repostsResult.status === 'fulfilled') {
-        setFeedReposts(repostsResult.value);
-      }
-
-      if (
-        momentsResult.status === "fulfilled" ||
-        eventsResult.status === "fulfilled" ||
-        repostsResult.status === 'fulfilled'
-      ) {
-        setHasFeedLoadedOnce(true);
+      if (shouldDeferFeedRefreshCommit(isFeedScrollingRef.current, nextCommit.hasAnyFreshData)) {
+        pendingFeedRefreshCommitRef.current = nextCommit;
+      } else {
+        pendingFeedRefreshCommitRef.current = null;
+        applyFeedRefreshCommit(nextCommit);
       }
     } finally {
       const isLatestFinally = isLatestEventRequest(requestId, feedRequestIdRef.current);
@@ -729,7 +795,7 @@ export default function HomeFeed() {
         setIsEventFilterLoading(false);
       }
     }
-  }, [armFeedLoadingRecoveryTimer, clearFeedLoadingRecoveryTimer]);
+  }, [applyFeedRefreshCommit, armFeedLoadingRecoveryTimer, clearFeedLoadingRecoveryTimer]);
 
   useEffect(() => {
     if (!didMountEventFilterEffectRef.current) {
@@ -869,11 +935,14 @@ export default function HomeFeed() {
             feedAudience,
           });
         }
+        clearFeedScrollIdleTimer();
+        isFeedScrollingRef.current = false;
+        pendingFeedRefreshCommitRef.current = null;
         setActiveFeedVideoItemIdIfChanged(null);
         isRefreshingRef.current = false;
         setIsRefreshing(false);
       };
-    }, [feedAudience, loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged]),
+    }, [clearFeedScrollIdleTimer, feedAudience, loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged]),
   );
 
   useEffect(() => {
@@ -1345,6 +1414,10 @@ export default function HomeFeed() {
             windowSize={7}
             viewabilityConfig={feedViewabilityConfig}
             onViewableItemsChanged={onViewableFeedItemsChanged}
+            onScrollBeginDrag={handleFeedScrollActive}
+            onMomentumScrollBegin={handleFeedScrollActive}
+            onScrollEndDrag={handleFeedScrollIdle}
+            onMomentumScrollEnd={handleFeedMomentumScrollEnd}
             removeClippedSubviews={Platform.OS === 'android'}
             refreshControl={
               <RefreshControl

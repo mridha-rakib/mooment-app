@@ -35,6 +35,8 @@ type ProfileContentProps = {
   isEventsLoadingMore?: boolean;
   feedLoading?: boolean;
   eventsLoading?: boolean;
+  eventsError?: string | null;
+  onRetryEvents?: () => void;
 };
 
 const PROFILE_VIDEO_VIEWABILITY_THRESHOLD = 60;
@@ -71,6 +73,8 @@ export default function ProfileContent({
   isEventsLoadingMore = false,
   feedLoading = false,
   eventsLoading = false,
+  eventsError,
+  onRetryEvents,
 }: ProfileContentProps) {
   const { colors } = useTheme();
   const [activeVideoItemId, setActiveVideoItemId] = useState<string | null>(null);
@@ -192,6 +196,8 @@ export default function ProfileContent({
           onLoadMore={onLoadMoreEvents}
           isLoadingMore={isEventsLoadingMore}
           isLoading={eventsLoading}
+          errorMessage={eventsError}
+          onRetry={onRetryEvents}
           filter={eventsFilter}
           onFilterChange={setEventsFilter}
         />

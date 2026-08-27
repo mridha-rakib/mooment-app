@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+
+import {
+  isLatestFeedRefreshCommit,
+  shouldDeferFeedRefreshCommit,
+  type FeedRefreshCommit,
+} from "../lib/feedRefreshCommit";
+
+const homeSource = readFileSync(join(process.cwd(), "app/(tabs)/home.tsx"), "utf8");
+const repostFeedCardSource = readFileSync(join(process.cwd(), "components/post/RepostFeedCard.tsx"), "utf8");
+const smartFeedSource = readFileSync(join(process.cwd(), "lib/smartFeedDiversity.ts"), "utf8");
+const eventFeedCardSource = readFileSync(join(process.cwd(), "components/home/EventFeedCard.tsx"), "utf8");
+
+test("event repost loading reserves substantial embedded event-card geometry", () => {
+  assert.match(repostFeedCardSource, /function EventRepostLoadingPlaceholder/);
+  assert.match(repostFeedCardSource, /eventLoadingCard:\s*\{\s*minHeight:\s*362,/);
+  assert.match(repostFeedCardSource, /eventLoadingImage:\s*\{\s*height:\s*250,/);
+  assert.match(repostFeedCardSource, /eventLoadingActions:\s*\{\s*minHeight:\s*48,/);
+});
+
+test("event repost final rendered EventFeedCard remains unchanged", () => {
+  assert.match(repostFeedCardSource, /<EventFeedCard event=\{event\} onRepostSuccess=\{onRepostSuccess\} embedded \/>/);
+});
+
+test("event repost loading no longer collapses to a tiny spinner-only placeholder", () => {
+  assert.doesNotMatch(repostFeedCardSource, /return showLoadingIndicator\s*\?\s*<ActivityIndicator/);
+  assert.doesNotMatch(repostFeedCardSource, /loadingSpacer:\s*\{\s*height:\s*72\s*\}/);
+  assert.match(repostFeedCardSource, /\{header\}\s*<EventRepostLoadingPlaceholder showLoadingIndicator=\{showLoadingIndicator\} \/>/);
+});
+
+test("feed refresh while not scrolling applies immediately", () => {
+  assert.equal(shouldDeferFeedRefreshCommit(false, true), false);
+});
+
+test("feed refresh while scrolling does not immediately replace visible arrays", () => {
+  assert.equal(shouldDeferFeedRefreshCommit(true, true), true);
+  assert.match(homeSource, /if \(shouldDeferFeedRefreshCommit\(isFeedScrollingRef\.current, nextCommit\.hasAnyFreshData\)\) \{/);
+  assert.match(homeSource, /pendingFeedRefreshCommitRef\.current = nextCommit;/);
+});
+
+test("latest pending refresh is applied once scroll becomes idle", () => {
+  const pending: FeedRefreshCommit<string[], string[], string[]> = {
+    requestId: 7,
+    posts: ["fresh-post"],
+    events: ["fresh-event"],
+    reposts: ["fresh-repost"],
+    hasAnyFreshData: true,
+  };
+
+  assert.equal(isLatestFeedRefreshCommit(pending, 7), true);
+  assert.match(homeSource, /const flushPendingFeedRefreshCommit = useCallback/);
+  assert.match(homeSource, /pendingFeedRefreshCommitRef\.current = null;\s*applyFeedRefreshCommit\(pendingCommit\);/);
+});
+
+test("multiple refreshes while scrolling use latest-result-wins semantics", () => {
+  assert.equal(isLatestFeedRefreshCommit({ requestId: 1, hasAnyFreshData: true }, 2), false);
+  assert.match(homeSource, /const requestId = \+\+feedRequestIdRef\.current;/);
+  assert.match(homeSource, /if \(!isLatestFeedRefreshCommit\(pendingCommit, feedRequestIdRef\.current\)\) \{/);
+});
+
+test("feed refresh commit replaces arrays and does not append duplicate items", () => {
+  const applyCommitBody = homeSource.slice(
+    homeSource.indexOf("const applyFeedRefreshCommit = useCallback"),
+    homeSource.indexOf("const flushPendingFeedRefreshCommit = useCallback"),
+  );
+
+  assert.match(applyCommitBody, /setFeedMomentPosts\(commit\.posts\);/);
+  assert.match(applyCommitBody, /setFeedEvents\(commit\.events\);/);
+  assert.match(applyCommitBody, /setFeedReposts\(commit\.reposts\);/);
+  assert.doesNotMatch(applyCommitBody, /\[\.\.\.current/);
+});
+
+test("Smart Feed sorting function remains untouched by Phase 1", () => {
+  assert.match(smartFeedSource, /export const applySmartFeedAuthorDiversity = <T>/);
+  assert.match(smartFeedSource, /const remaining = \[\.\.\.items\];/);
+  assert.match(smartFeedSource, /result\.push\(picked\);/);
+});
+
+test("Feed keys remain unchanged", () => {
+  assert.match(homeSource, /id: `moment-\$\{post\.id\}`/);
+  assert.match(homeSource, /id: `event-\$\{event\.id\}`/);
+  assert.match(homeSource, /id: `repost-\$\{share\.id\}`/);
+  assert.match(homeSource, /keyExtractor=\{\(item\) => item\.id\}/);
+});
+
+test("FlatList batch/window configuration remains unchanged", () => {
+  assert.match(homeSource, /initialNumToRender=\{3\}/);
+  assert.match(homeSource, /maxToRenderPerBatch=\{3\}/);
+  assert.match(homeSource, /updateCellsBatchingPeriod=\{40\}/);
+  assert.match(homeSource, /windowSize=\{7\}/);
+  assert.match(homeSource, /removeClippedSubviews=\{Platform\.OS === 'android'\}/);
+  assert.doesNotMatch(homeSource, /FlashList/);
+});
+
+test("existing reactions, comments, share, and repost wiring remains present", () => {
+  assert.match(homeSource, /onInteractionChange=\{applyInteractionSummary\}/);
+  assert.match(homeSource, /onCommentPress=\{handleCommentPress\}/);
+  assert.match(homeSource, /onSharePress=\{handleSharePress\}/);
+  assert.match(homeSource, /onRepostSuccess=\{refreshFeedAfterRepost\}/);
+});
+
+test("LIVE animation and EventFeedCard code remain outside Phase 1 refresh changes", () => {
+  assert.match(eventFeedCardSource, /withRepeat\(\s*withSequence\(/);
+  assert.match(eventFeedCardSource, /cancelAnimation\(livePulseProgress\);/);
+  assert.doesNotMatch(homeSource, /livePulseProgress/);
+});
+
+test("video extraData behavior remains unchanged", () => {
+  assert.match(homeSource, /const feedListExtraData = useMemo\(\s*\(\) => \(\{ activeFeedVideoItemId, activeTheme \}\),/);
+  assert.match(homeSource, /extraData=\{feedListExtraData\}/);
+  assert.match(homeSource, /isActiveVideo=\{activeFeedVideoItemId === item\.id\}/);
+});

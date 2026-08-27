@@ -28,13 +28,22 @@ test("checkout classifies free state only from a loaded final quote", () => {
 });
 
 test("free checkout hides only payment-specific UI while preserving checkout content", () => {
-  assert.match(renderSection, /\{!isFreeCheckout \? \(/);
+  assert.match(renderSection, /\{isPaidCheckout \? \(/);
   assert.match(renderSection, /<PaymentMethods\s*\n\s*payWith=\{payWith\}\s*\n\s*onMethodChange=\{setPayWith\}\s*\n\s*\/>/);
   assert.match(renderSection, /<SecurityBanner \/>/);
   assert.match(renderSection, /<EventCard/);
   assert.match(renderSection, /<AnonymousBuy\s*\n\s*active=\{anonymousBuy\}/);
   assert.match(renderSection, /<OrderSummary/);
   assert.match(renderSection, /<TermsAgreement/);
+});
+
+test("payment-specific UI is gated on a loaded paid quote, never on quote-not-loaded", () => {
+  // Three distinct states: (1) loading/null, (2) loaded free, (3) loaded paid.
+  assert.match(checkoutSource, /const isPaidCheckout = quote !== null && quote\.totalAmount > 0;/);
+  // The Card / Apple Pay + SecurityBanner block must be driven by isPaidCheckout,
+  // so quote === null (loading) renders neither — no payment flash.
+  assert.match(renderSection, /\{isPaidCheckout \? \(\s*\n\s*<>\s*\n\s*<PaymentMethods/);
+  assert.doesNotMatch(renderSection, /\{!isFreeCheckout \? \(/);
 });
 
 test("free checkout CTA says Join Event while paid checkout keeps Continue to payment", () => {

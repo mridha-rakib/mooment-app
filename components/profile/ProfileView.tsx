@@ -117,6 +117,8 @@ type ProfileViewProps = {
   statsLoading?: boolean;
   feedLoading?: boolean;
   eventsLoading?: boolean;
+  eventsError?: string | null;
+  onRetryEvents?: () => void;
 };
 
 export default function ProfileView({
@@ -141,6 +143,8 @@ export default function ProfileView({
   statsLoading = false,
   feedLoading = false,
   eventsLoading = false,
+  eventsError,
+  onRetryEvents,
 }: ProfileViewProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -801,6 +805,8 @@ export default function ProfileView({
         isEventsLoadingMore={isEventsLoadingMore}
         feedLoading={feedLoading}
         eventsLoading={eventsLoading}
+        eventsError={eventsError}
+        onRetryEvents={onRetryEvents}
       />
 
       <CommentsModal

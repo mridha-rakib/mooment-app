@@ -24,6 +24,7 @@ test("own profile has independent statsLoading/feedLoading/eventsLoading state, 
   assert.match(ownProfileSource, /const \[statsLoading, setStatsLoading\] = useState\(true\)/);
   assert.match(ownProfileSource, /const \[feedLoading, setFeedLoading\] = useState\(true\)/);
   assert.match(ownProfileSource, /const \[eventsLoading, setEventsLoading\] = useState\(true\)/);
+  assert.match(ownProfileSource, /const \[eventsError, setEventsError\] = useState<string \| null>\(null\)/);
 });
 
 test("other profile has independent identityLoading/statsLoading/feedLoading/eventsLoading state", () => {
@@ -31,6 +32,7 @@ test("other profile has independent identityLoading/statsLoading/feedLoading/eve
   assert.match(otherProfileSource, /const \[statsLoading, setStatsLoading\] = useState\(true\)/);
   assert.match(otherProfileSource, /const \[feedLoading, setFeedLoading\] = useState\(true\)/);
   assert.match(otherProfileSource, /const \[eventsLoading, setEventsLoading\] = useState\(true\)/);
+  assert.match(otherProfileSource, /const \[eventsError, setEventsError\] = useState<string \| null>\(null\)/);
 });
 
 test("own profile identity is never network-gated: no identityLoading is ever passed for it", () => {
@@ -65,11 +67,15 @@ test("stats/feed/events fetches are three independent try/catch/finally blocks, 
   for (const source of [ownProfileSource, otherProfileSource]) {
     const { fetchStatsBody, fetchFeedBody, fetchEventsBody } = sliceFetchBodies(source);
 
-    for (const body of [fetchStatsBody, fetchFeedBody, fetchEventsBody]) {
+    for (const body of [fetchStatsBody, fetchFeedBody]) {
       assert.match(body, /try \{/);
       assert.match(body, /\} catch \{/);
       assert.match(body, /\} finally \{/);
     }
+
+    assert.match(fetchEventsBody, /try \{/);
+    assert.match(fetchEventsBody, /\} catch \(error\) \{/);
+    assert.match(fetchEventsBody, /\} finally \{/);
   }
 });
 
@@ -88,6 +94,30 @@ test("a section's catch block never clears data from a different section (no sha
     // fetchEvents's catch must not touch posts/reposts/stats-only state.
     const eventsCatchBody = fetchEventsBody.slice(fetchEventsBody.indexOf("catch"), fetchEventsBody.indexOf("finally"));
     assert.doesNotMatch(eventsCatchBody, /setPosts|setReposts/);
+    assert.match(eventsCatchBody, /setEventsError\(getAuthErrorMessage\(error, "Unable to load profile events\."\)\)/);
+  }
+});
+
+test("profile event fetch success clears errors while failure preserves existing event arrays", () => {
+  for (const source of [ownProfileSource, otherProfileSource]) {
+    const { fetchEventsBody } = sliceFetchBodies(source);
+    const successBody = fetchEventsBody.slice(fetchEventsBody.indexOf("try {"), fetchEventsBody.indexOf("} catch"));
+    const catchBody = fetchEventsBody.slice(fetchEventsBody.indexOf("catch"), fetchEventsBody.indexOf("finally"));
+
+    assert.match(successBody, /setEventsError\(null\)/);
+    assert.match(successBody, /setProfileEvents\(\{ active: activeEvents\.active, past: pastEvents\.past \}\)/);
+    assert.doesNotMatch(catchBody, /setProfileEvents\(EMPTY_PROFILE_EVENTS\)|setProfileEvents\(\{ active: \[\], past: \[\] \}\)/);
+  }
+});
+
+test("profile events expose retry without refetching profile feed or stats", () => {
+  for (const source of [ownProfileSource, otherProfileSource]) {
+    const retryStart = source.indexOf("const retryProfileEvents");
+    const retryBody = source.slice(retryStart, source.indexOf("useFocusEffect", retryStart));
+    assert.match(retryBody, /void fetchEvents\(/);
+    assert.doesNotMatch(retryBody, /fetchFeed|fetchStats|getProfileTimeline|getUserProfileStats/);
+    assert.match(source, /eventsError=\{eventsError\}/);
+    assert.match(source, /onRetryEvents=\{retryProfileEvents\}/);
   }
 });
 

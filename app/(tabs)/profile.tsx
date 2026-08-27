@@ -10,6 +10,7 @@ import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getUserProfileStats } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
+import { useHostedEventEligibilityStore } from "@/stores/hostedEventEligibilityStore";
 import { Alert, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
@@ -46,6 +47,9 @@ const formatHandle = (username?: string | null, email?: string | null) => {
 export default function ProfileTab() {
   const { colors } = useTheme();
   const user = useAuthStore((state) => state.user);
+  const setHostedEventEligibilityFromProfileEvents = useHostedEventEligibilityStore(
+    (state) => state.setFromProfileEvents,
+  );
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [posts, setPosts] = useState<PostData[]>([]);
   const [reposts, setReposts] = useState<MomentTimelineItem[]>([]);
@@ -61,6 +65,7 @@ export default function ProfileTab() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [feedLoading, setFeedLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const hasLoadedStatsRef = useRef(false);
   const hasLoadedFeedRef = useRef(false);
   const hasLoadedEventsRef = useRef(false);
@@ -138,7 +143,9 @@ export default function ProfileTab() {
         getProfileEvents(userId, { filter: "past", page: 1, limit: PAGE_SIZE }),
       ]);
       hasLoadedEventsRef.current = true;
+      setEventsError(null);
       setProfileEvents({ active: activeEvents.active, past: pastEvents.past });
+      setHostedEventEligibilityFromProfileEvents({ active: activeEvents.active });
       setEventPages({ active: 1, past: 1 });
       setHasMoreEvents({
         active: Boolean(activeEvents.pagination && activeEvents.pagination.page < activeEvents.pagination.totalPages),
@@ -148,12 +155,12 @@ export default function ProfileTab() {
         ...current,
         events: (activeEvents.pagination?.total ?? activeEvents.active.length) + (pastEvents.pagination?.total ?? pastEvents.past.length),
       }));
-    } catch {
-      // First load: the empty-state UI already covers this. Refresh: keep the visible events.
+    } catch (error) {
+      setEventsError(getAuthErrorMessage(error, "Unable to load profile events."));
     } finally {
       setEventsLoading(false);
     }
-  }, []);
+  }, [setHostedEventEligibilityFromProfileEvents]);
 
   const fetchWalletEvents = useCallback(async (userId: string) => {
     try {
@@ -171,6 +178,7 @@ export default function ProfileTab() {
       setProfileEvents(EMPTY_PROFILE_EVENTS);
       setProfileFeedEvents([]);
       setProfileStats(PROFILE_STATS);
+      setEventsError(null);
       setStatsLoading(false);
       setFeedLoading(false);
       setEventsLoading(false);
@@ -217,6 +225,11 @@ export default function ProfileTab() {
       })
       .finally(() => setIsEventsLoadingMore(false));
   }, [eventPages, hasMoreEvents, isEventsLoadingMore, user?.id]);
+
+  const retryProfileEvents = useCallback(() => {
+    if (!user?.id) return;
+    void fetchEvents(user.id);
+  }, [fetchEvents, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -315,6 +328,8 @@ export default function ProfileTab() {
         statsLoading={statsLoading || eventsLoading}
         feedLoading={feedLoading}
         eventsLoading={eventsLoading}
+        eventsError={eventsError}
+        onRetryEvents={retryProfileEvents}
       />
     </View>
   );

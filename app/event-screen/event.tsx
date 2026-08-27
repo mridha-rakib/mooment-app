@@ -54,6 +54,7 @@ import { submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
 import { submitReport } from "@/lib/reports";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
+import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
 import type { EventCategory } from "@/constants/eventCategories";
 import {
     getEventCategoryFeedDestination,
@@ -1312,6 +1313,7 @@ const EventScreen = () => {
       const payload = buildPublishPayloadFromEvent(event);
       const updated = await publishSavedEventDraft(payload, event.id);
       mergeUpdatedEvent(updated);
+      await refreshHostedEventEligibility();
       setActiveTab("About");
     } catch (error) {
       Alert.alert("Unable to publish event", getAuthErrorMessage(error, "Please check the event details and try again."));
@@ -1381,6 +1383,7 @@ const EventScreen = () => {
     try {
       const updated = await cancelEvent(event.id, payload);
       mergeUpdatedEvent(updated);
+      await refreshHostedEventEligibility();
       setCancelReasonVisible(false);
       Alert.alert("Event cancelled", "Refunds are being processed for attendees.");
     } catch (error) {
