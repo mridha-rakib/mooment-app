@@ -132,6 +132,7 @@ export type MapMarkerData = MapCarouselMarker & {
   category?: string | null;
   categories?: string[];
   scheduledAt?: string | null;
+  endAt?: string | null;
   hostName?: string | null;
   distance?: string | null;
   distanceMeters?: number | null;
@@ -141,12 +142,15 @@ export type MapMarkerData = MapCarouselMarker & {
   checkedInCount?: number;
   eventDate?: string | null;
   eventTime?: string | null;
+  eventEndDate?: string | null;
+  eventEndTime?: string | null;
   location?: string | null;
   attendeesCount?: number;
   ageLimit?: string | null;
   price?: string | null;
   ticketsAvailable?: string | null;
   ticketSalesEndDate?: string | null;
+  ticketTypeCount?: string | null;
 };
 
 type MapScreenProps = {
@@ -1168,12 +1172,15 @@ export default function MapScreen({
       crowdStatus: marker.crowdStatus ?? null,
       eventDate: marker.eventDate ?? undefined,
       eventTime: marker.eventTime ?? undefined,
+      eventEndDate: marker.eventEndDate ?? undefined,
+      eventEndTime: marker.eventEndTime ?? undefined,
       location: marker.location ?? undefined,
       attendeesCount: marker.attendeesCount,
       ageLimit: marker.ageLimit ?? undefined,
       price: marker.price ?? undefined,
       ticketsAvailable: marker.ticketsAvailable ?? undefined,
       ticketSalesEndDate: marker.ticketSalesEndDate ?? undefined,
+      ticketTypeCount: marker.ticketTypeCount ?? undefined,
     })),
     [activeCategory, carouselMarkers],
   );
@@ -1460,16 +1467,20 @@ export default function MapScreen({
         crowdStatus={selectedMarker?.crowdStatus ?? null}
         eventDate={selectedMarker?.eventDate ?? undefined}
         eventTime={selectedMarker?.eventTime ?? undefined}
+        eventEndDate={selectedMarker?.eventEndDate ?? undefined}
+        eventEndTime={selectedMarker?.eventEndTime ?? undefined}
         location={selectedMarker?.location ?? undefined}
         attendeesCount={selectedMarker?.attendeesCount}
         ageLimit={selectedMarker?.ageLimit ?? undefined}
         price={selectedMarker?.price ?? undefined}
         ticketsAvailable={selectedMarker?.ticketsAvailable ?? undefined}
         ticketSalesEndDate={selectedMarker?.ticketSalesEndDate ?? undefined}
+        ticketTypeCount={selectedMarker?.ticketTypeCount ?? undefined}
         onAddToCalendar={handleAddToCalendar}
         onViewEvent={handleViewEvent}
         isAddedToCalendar={!!existingPlan}
         onViewInCalendar={handleViewInCalendar}
+        livePulseProgress={livePulseProgress}
       />
     </View>
   );

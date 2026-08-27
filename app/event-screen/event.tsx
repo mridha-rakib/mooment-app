@@ -2319,7 +2319,7 @@ const EventScreen = () => {
                     { color: selectedTicket && !selectedTicketSalesEnded ? colors.background : colors.textSecondary },
                   ]}
                 >
-                  {selectedTicketSalesEnded ? "Sales Ended" : selectedTicket ? "Buy Now" : "Select Ticket"}
+                  {selectedTicketSalesEnded ? "Sales Ended" : selectedTicket ? "Join Event" : "Select Ticket"}
                 </Text>
               </TouchableOpacity>
             </>
