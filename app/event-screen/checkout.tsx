@@ -90,6 +90,7 @@ const EventCheckoutScreen = () => {
   const fee = quote ? formatCurrency(quote.platformFeeAmount, quote.currency) : "";
   const tax = quote ? formatCurrency(quote.taxAmount, quote.currency) : "";
   const total = quote ? (quote.totalAmount <= 0 ? "Free" : formatCurrency(quote.totalAmount, quote.currency)) : "";
+  const isFreeCheckout = quote !== null && quote.totalAmount <= 0;
   const ticketLineItem = quote?.lineItems.find(
     (item) => item.itemType === "ticket" && item.itemId === ticketId,
   );
@@ -280,12 +281,16 @@ const EventCheckoutScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <PaymentMethods
-          payWith={payWith}
-          onMethodChange={setPayWith}
-        />
+        {!isFreeCheckout ? (
+          <>
+            <PaymentMethods
+              payWith={payWith}
+              onMethodChange={setPayWith}
+            />
 
-        <SecurityBanner />
+            <SecurityBanner />
+          </>
+        ) : null}
 
         <EventCard 
           title={eventName}
@@ -369,7 +374,7 @@ const EventCheckoutScreen = () => {
 
       <View style={styles.footerWrapper}>
         <CheckoutFooter 
-          buttonText="Continue to payment"
+          buttonText={isFreeCheckout ? "Join Event" : "Continue to payment"}
           onPress={handleContinue}
           disabled={!agreed || isPaying || isQuoteLoading || !quote}
           loading={isPaying}

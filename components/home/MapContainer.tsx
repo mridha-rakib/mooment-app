@@ -16,6 +16,7 @@ import {
   type EventMapViewport,
 } from "@/lib/mapEventRequests";
 import { getStorageFileUrl } from "@/lib/storage";
+import { getMapTicketSummary } from "@/lib/mapTicketSummary";
 import { getCategoryMarkerColor } from "@/constants/categoryColors";
 import type { EventCategory } from "@/constants/eventCategories";
 import { isValidLocationCoordinate } from "@/lib/locationSharing";
@@ -123,57 +124,6 @@ const formatAgeLimit = (ageRestriction: EventResponse["ageRestriction"]) => {
   return "All Ages";
 };
 
-const formatPrice = (event: EventResponse) => {
-  const prices = event.tickets
-    .map((ticket) => (ticket.type === "free" ? 0 : ticket.price))
-    .filter((price) => Number.isFinite(price));
-
-  if (prices.length === 0 || Math.min(...prices) <= 0) {
-    return "Free";
-  }
-
-  const price = Math.min(...prices);
-  const fractionDigits = Number.isInteger(price) ? 0 : 2;
-
-  return `$${price.toLocaleString("en-US", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  })}`;
-};
-
-const formatTicketsAvailable = (event: EventResponse) => {
-  const ticketsLeft = event.tickets.reduce((total, ticket) => total + Math.max(0, ticket.capacity), 0);
-
-  if (event.tickets.length === 0) {
-    return "Tickets TBA";
-  }
-
-  if (ticketsLeft === 0) {
-    return "Sold out";
-  }
-
-  return `${ticketsLeft} ${ticketsLeft === 1 ? "ticket" : "tickets"} left`;
-};
-
-const formatTicketSalesEndDate = (event: EventResponse) => {
-  const salesEndTimes = event.tickets
-    .map((ticket) => (ticket.salesEndAt ? new Date(ticket.salesEndAt).getTime() : NaN))
-    .filter((time) => Number.isFinite(time));
-
-  if (salesEndTimes.length === 0) {
-    return "Sales end TBA";
-  }
-
-  const lastSalesEndDate = new Date(Math.max(...salesEndTimes));
-  const formattedDate = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(lastSalesEndDate);
-
-  return `Buy by ${formattedDate}`;
-};
-
 const getHostName = (event: EventResponse) =>
   (event.host?.username || event.host?.name || `user-${event.userId.slice(-4)}`).replace(/^@/, "");
 
@@ -192,6 +142,7 @@ const toMapMarker = (
   const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
   const primaryCategory = categories[0] ?? null;
   const distanceMiles = userLocation ? getDistanceMiles(userLocation, [longitude, latitude]) : null;
+  const ticketSummary = getMapTicketSummary(event.tickets);
 
   return {
     id: event.id,
@@ -203,6 +154,7 @@ const toMapMarker = (
     category: primaryCategory,
     categories,
     scheduledAt: event.scheduledAt ?? null,
+    endAt: event.endAt ?? null,
     hostName: getHostName(event),
     distance: formatDistanceFromMiles(distanceMiles),
     distanceMeters: distanceMiles === null ? null : distanceMiles * 1609.344,
@@ -212,12 +164,15 @@ const toMapMarker = (
     checkedInCount: typeof event.checkedInCount === "number" ? event.checkedInCount : 0,
     eventDate: formatEventDate(event.scheduledAt),
     eventTime: formatEventTime(event.scheduledAt),
+    eventEndDate: formatEventDate(event.endAt),
+    eventEndTime: formatEventTime(event.endAt),
     location: formatLocation(event),
     attendeesCount: 0,
     ageLimit: formatAgeLimit(event.ageRestriction),
-    price: formatPrice(event),
-    ticketsAvailable: formatTicketsAvailable(event),
-    ticketSalesEndDate: formatTicketSalesEndDate(event),
+    price: ticketSummary.priceLabel,
+    ticketsAvailable: ticketSummary.ticketsAvailableLabel,
+    ticketSalesEndDate: ticketSummary.salesEndLabel,
+    ticketTypeCount: ticketSummary.ticketTypeCountLabel,
   };
 };
 
@@ -240,7 +195,10 @@ const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
         marker.distance === nextMarker.distance &&
         marker.distanceMeters === nextMarker.distanceMeters &&
         marker.checkedInCount === nextMarker.checkedInCount &&
-        marker.isLive === nextMarker.isLive,
+        marker.isLive === nextMarker.isLive &&
+        marker.endAt === nextMarker.endAt &&
+        marker.eventEndDate === nextMarker.eventEndDate &&
+        marker.eventEndTime === nextMarker.eventEndTime,
     );
   });
 };

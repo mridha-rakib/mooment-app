@@ -12,6 +12,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
 import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 import CrowdStatusBadge from '@/components/events/CrowdStatusBadge';
@@ -28,12 +33,15 @@ export type EventPreviewModalItem = {
   crowdStatus?: CrowdStatus | null;
   eventDate?: string;
   eventTime?: string;
+  eventEndDate?: string;
+  eventEndTime?: string;
   location?: string;
   attendeesCount?: number;
   ageLimit?: string;
   price?: string;
   ticketsAvailable?: string;
   ticketSalesEndDate?: string;
+  ticketTypeCount?: string;
 };
 
 type EventPreviewModalProps = {
@@ -51,16 +59,20 @@ type EventPreviewModalProps = {
   crowdStatus?: CrowdStatus | null;
   eventDate?: string;
   eventTime?: string;
+  eventEndDate?: string;
+  eventEndTime?: string;
   location?: string;
   attendeesCount?: number;
   ageLimit?: string;
   price?: string;
   ticketsAvailable?: string;
   ticketSalesEndDate?: string;
+  ticketTypeCount?: string;
   onAddToCalendar?: () => void;
   onViewEvent?: () => void;
   isAddedToCalendar?: boolean;
   onViewInCalendar?: () => void;
+  livePulseProgress?: SharedValue<number>;
 };
 
 const clampIndex = (index: number, length: number) => {
@@ -86,21 +98,47 @@ export default function EventPreviewModal({
   crowdStatus = null,
   eventDate = "Date TBA",
   eventTime = "Time TBA",
+  eventEndDate = "Date TBA",
+  eventEndTime = "Time TBA",
   location = "Location TBA",
   attendeesCount = 0,
   ageLimit = "All Ages",
   price = "Free",
   ticketsAvailable = "Tickets TBA",
   ticketSalesEndDate = "Sales end TBA",
+  ticketTypeCount,
   onAddToCalendar,
   onViewEvent,
   isAddedToCalendar = false,
   onViewInCalendar,
+  livePulseProgress,
 }: EventPreviewModalProps) {
   const { colors, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const listRef = useRef<FlatList<EventPreviewModalItem>>(null);
   const showCalendarAction = false;
+  const liveBadgePulseStyle = useAnimatedStyle(() => {
+    if (!livePulseProgress) {
+      return { opacity: 1 };
+    }
+
+    return {
+      opacity: interpolate(livePulseProgress.value, [0, 1], [0.76, 1]),
+    };
+  }, [livePulseProgress]);
+  const liveDotPulseStyle = useAnimatedStyle(() => {
+    if (!livePulseProgress) {
+      return {
+        opacity: 1,
+        transform: [{ scale: 1 }],
+      };
+    }
+
+    return {
+      opacity: interpolate(livePulseProgress.value, [0, 1], [0.55, 1]),
+      transform: [{ scale: interpolate(livePulseProgress.value, [0, 1], [1, 1.35]) }],
+    };
+  }, [livePulseProgress]);
   const fallbackItem = useMemo<EventPreviewModalItem>(() => ({
     id: "single-event-preview",
     themeColor,
@@ -112,17 +150,22 @@ export default function EventPreviewModal({
     crowdStatus,
     eventDate,
     eventTime,
+    eventEndDate,
+    eventEndTime,
     location,
     attendeesCount,
     ageLimit,
     price,
     ticketsAvailable,
     ticketSalesEndDate,
+    ticketTypeCount,
   }), [
     ageLimit,
     attendeesCount,
     distance,
     eventDate,
+    eventEndDate,
+    eventEndTime,
     eventTime,
     eventTitle,
     hostName,
@@ -134,6 +177,7 @@ export default function EventPreviewModal({
     themeColor,
     ticketSalesEndDate,
     ticketsAvailable,
+    ticketTypeCount,
   ]);
   const previewItems = useMemo(
     () => eventItems?.length ? eventItems : [fallbackItem],
@@ -179,6 +223,7 @@ export default function EventPreviewModal({
     const itemThemeColor = item.themeColor ?? themeColor;
     const itemDistance = item.distance ?? "nearby";
     const distanceLabel = itemDistance === "nearby" ? "nearby" : `${itemDistance} away`;
+    const itemIsLive = item.isLive || item.eventStatus === "live";
 
     return (
       <View style={[styles.previewSlide, { width: itemWidth }]}>
@@ -201,12 +246,12 @@ export default function EventPreviewModal({
         </View>
 
         {/* Status Badge */}
-        {(item.isLive || item.eventStatus === "live") && (
+        {itemIsLive && (
           <View style={styles.statusRow}>
-            <View style={[styles.liveBadge, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
-              <View style={[styles.liveDot, { backgroundColor: '#22C55E' }]} />
-              <Text style={styles.liveText}>Live</Text>
-            </View>
+            <Animated.View style={[styles.liveBadge, styles.liveBadgeActive, liveBadgePulseStyle]}>
+              <Animated.View style={[styles.liveDot, { backgroundColor: colors.danger }, liveDotPulseStyle]} />
+              <Text style={[styles.liveText, { color: colors.danger }]}>Live</Text>
+            </Animated.View>
             <CrowdStatusBadge eventStatus={item.eventStatus} crowdStatus={item.crowdStatus} />
           </View>
         )}
@@ -216,11 +261,21 @@ export default function EventPreviewModal({
         {/* Details */}
         <View style={styles.detailsContainer}>
           <View style={styles.detailItem}>
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Start</Text>
             <Feather name="calendar" size={16} color={colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.text }]}>{item.eventDate ?? "Date TBA"}</Text>
             <Text style={[styles.dot, { color: colors.textSecondary }]}>•</Text>
             <Feather name="clock" size={16} color={colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.text }]}>{item.eventTime ?? "Time TBA"}</Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>End</Text>
+            <Feather name="calendar" size={16} color={colors.textSecondary} />
+            <Text style={[styles.detailText, { color: colors.text }]}>{item.eventEndDate ?? "Date TBA"}</Text>
+            <Text style={[styles.dot, { color: colors.textSecondary }]}>•</Text>
+            <Feather name="clock" size={16} color={colors.textSecondary} />
+            <Text style={[styles.detailText, { color: colors.text }]}>{item.eventEndTime ?? "Time TBA"}</Text>
           </View>
 
           <View style={styles.detailItem}>
@@ -244,6 +299,12 @@ export default function EventPreviewModal({
         </View>
 
         <View style={styles.ticketInfoRow}>
+          {item.ticketTypeCount ? (
+            <View style={styles.ticketInfoItem}>
+              <MaterialCommunityIcons name="ticket-outline" size={15} color={colors.textSecondary} />
+              <Text style={[styles.ticketInfoText, { color: colors.text }]}>{item.ticketTypeCount}</Text>
+            </View>
+          ) : null}
           <View style={styles.ticketInfoItem}>
             <Feather name="tag" size={15} color={colors.textSecondary} />
             <Text style={[styles.ticketInfoText, { color: colors.text }]}>{item.ticketsAvailable ?? "Tickets TBA"}</Text>
@@ -385,6 +446,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 20,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+  },
+  liveBadgeActive: {
+    backgroundColor: 'rgba(255, 59, 48, 0.16)',
+    borderColor: 'rgba(255, 59, 48, 0.28)',
   },
   liveDot: {
     width: 6,
@@ -393,7 +459,6 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   liveText: {
-    color: '#22C55E',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -414,6 +479,11 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
+  },
+  detailLabel: {
+    width: 34,
+    fontSize: 12,
+    fontWeight: '700',
   },
   dot: {
     marginHorizontal: 4,
