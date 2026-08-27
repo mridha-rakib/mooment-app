@@ -27,7 +27,7 @@ type Props = {
   isActiveVideo?: boolean;
 };
 
-export default function RepostFeedCard({
+function RepostFeedCard({
   share,
   labelOverride,
   onRepostSuccess,
@@ -180,19 +180,21 @@ export default function RepostFeedCard({
       {post ? (
         <>
           <FeedPost post={post} onSharePress={() => setShareVisible(true)} embedded isActiveVideo={isActiveVideo} />
-          <ShareModal
-            visible={shareVisible}
-            onClose={() => setShareVisible(false)}
-            onRepost={handlePostRepost}
-            shareUrl={`https://mooment.app/moments/${post.id}`}
-            item={{
-              type: 'post',
-              id: post.id,
-              preview: post.caption,
-              imageUrl: post.mediaItems?.[0]?.uri ?? post.mediaUris?.[0],
-              authorName: post.authorName,
-            }}
-          />
+          {shareVisible && (
+            <ShareModal
+              visible={shareVisible}
+              onClose={() => setShareVisible(false)}
+              onRepost={handlePostRepost}
+              shareUrl={`https://mooment.app/moments/${post.id}`}
+              item={{
+                type: 'post',
+                id: post.id,
+                preview: post.caption,
+                imageUrl: post.mediaItems?.[0]?.uri ?? post.mediaUris?.[0],
+                authorName: post.authorName,
+              }}
+            />
+          )}
         </>
       ) : (
         <UnavailableCard />
@@ -202,7 +204,9 @@ export default function RepostFeedCard({
   );
 }
 
-function RepostHeader({
+export default React.memo(RepostFeedCard);
+
+const RepostHeader = React.memo(function RepostHeader({
   reposterId,
   reposterName,
   reposterAvatar,
@@ -296,18 +300,20 @@ function RepostHeader({
           <TouchableOpacity ref={moreBtnRef} style={styles.moreBtn} activeOpacity={0.75} onPress={handleMorePress}>
             <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
-          <MoreMenuModal
-            visible={showMoreMenu}
-            onClose={() => setShowMoreMenu(false)}
-            showEdit
-            onEdit={onEditPress}
-            top={menuTop}
-          />
+          {showMoreMenu && (
+            <MoreMenuModal
+              visible={showMoreMenu}
+              onClose={() => setShowMoreMenu(false)}
+              showEdit
+              onEdit={onEditPress}
+              top={menuTop}
+            />
+          )}
         </>
       )}
     </View>
   );
-}
+});
 
 function UnavailableCard() {
   const { colors } = useTheme();
@@ -318,6 +324,8 @@ function UnavailableCard() {
     </View>
   );
 }
+
+const TIME_AGO_FORMATTER = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
 const formatTimeAgo = (dateStr?: string | Date | null): string => {
   if (!dateStr) return '';
@@ -332,7 +340,7 @@ const formatTimeAgo = (dateStr?: string | Date | null): string => {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+  return TIME_AGO_FORMATTER.format(date);
 };
 
 const getTaggedFriendName = (friend: MomentAuthor) =>

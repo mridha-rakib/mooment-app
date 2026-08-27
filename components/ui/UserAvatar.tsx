@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
-import { Image, ImageStyle, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from "react-native";
+import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 
 type UserAvatarProps = {
@@ -22,7 +23,7 @@ const getInitial = (name?: string | null) => {
   return trimmedName.charAt(0).toUpperCase();
 };
 
-export default function UserAvatar({ uri, name, size, style, textStyle, iconSize }: UserAvatarProps) {
+function UserAvatar({ uri, name, size, style, textStyle, iconSize }: UserAvatarProps) {
   const { colors, isDark } = useTheme();
   const [imageFailed, setImageFailed] = useState(false);
   const imageUri = uri?.trim() || null;
@@ -44,10 +45,12 @@ export default function UserAvatar({ uri, name, size, style, textStyle, iconSize
 
   if (imageUri && !imageFailed) {
     return (
-      <Image
+      <ExpoImage
         source={{ uri: imageUri }}
-        style={avatarStyle as StyleProp<ImageStyle>}
-        resizeMode="cover"
+        style={avatarStyle}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={imageUri}
         onError={() => setImageFailed(true)}
       />
     );
@@ -75,6 +78,8 @@ export default function UserAvatar({ uri, name, size, style, textStyle, iconSize
   );
 }
 
+export default React.memo(UserAvatar);
+
 const styles = StyleSheet.create({
   avatar: {
     overflow: "hidden",
@@ -87,3 +92,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+

@@ -2225,51 +2225,61 @@ function FeedPost({
           </View>
         )}
 
-        <MoreMenuModal
-          visible={showMoreMenu}
-          onClose={() => setShowMoreMenu(false)}
-          showDelete={canDeletePost}
-          deleteLabel={post.postType === 'event' ? 'Cancel Event' : 'Delete'}
-          onReport={!isPostByCurrentUser ? handleOpenReport : undefined}
-          reported={hasReported}
-          onSave={!isPostByCurrentUser ? handleSave : undefined}
-          isSaved={!isPostByCurrentUser ? isSaved : undefined}
-          onBlock={!isPostByCurrentUser && Boolean(post.authorId) ? handleBlock : undefined}
-          showEdit={canEditPost}
-          onEdit={canEditPost ? () => setShowEditModal(true) : undefined}
-          onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
-          top={menuTop}
-        />
+        {showMoreMenu && (
+          <MoreMenuModal
+            visible={showMoreMenu}
+            onClose={() => setShowMoreMenu(false)}
+            showDelete={canDeletePost}
+            deleteLabel={post.postType === 'event' ? 'Cancel Event' : 'Delete'}
+            onReport={!isPostByCurrentUser ? handleOpenReport : undefined}
+            reported={hasReported}
+            onSave={!isPostByCurrentUser ? handleSave : undefined}
+            isSaved={!isPostByCurrentUser ? isSaved : undefined}
+            onBlock={!isPostByCurrentUser && Boolean(post.authorId) ? handleBlock : undefined}
+            showEdit={canEditPost}
+            onEdit={canEditPost ? () => setShowEditModal(true) : undefined}
+            onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
+            top={menuTop}
+          />
+        )}
 
-        <EditPostModal
-          visible={showEditModal}
-          onClose={() => setShowEditModal(false)}
-          postId={post.id}
-          initialCaption={post.caption}
-          onSaved={(updated) => onPostUpdated?.(updated)}
-        />
+        {showEditModal && (
+          <EditPostModal
+            visible={showEditModal}
+            onClose={() => setShowEditModal(false)}
+            postId={post.id}
+            initialCaption={post.caption}
+            onSaved={(updated) => onPostUpdated?.(updated)}
+          />
+        )}
 
-        <ReportModal
-          visible={showReportModal}
-          onClose={() => setShowReportModal(false)}
-          onReport={handleReportReasonSelected}
-        />
+        {showReportModal && (
+          <ReportModal
+            visible={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            onReport={handleReportReasonSelected}
+          />
+        )}
 
-        <ReportDetailsModal
-          visible={showReportDetailsModal}
-          onClose={handleReportDetailsClose}
-          onDone={handleSubmitReport}
-          isSubmitting={isReportSubmitting}
-          showBlockToggle
-        />
+        {showReportDetailsModal && (
+          <ReportDetailsModal
+            visible={showReportDetailsModal}
+            onClose={handleReportDetailsClose}
+            onDone={handleSubmitReport}
+            isSubmitting={isReportSubmitting}
+            showBlockToggle
+          />
+        )}
 
-        <FullScreenMediaModal
-          visible={showFullScreenMedia}
-          onClose={() => setShowFullScreenMedia(false)}
-          onIndexChange={setCurrentMediaIndex}
-          mediaItems={fullScreenMediaItems}
-          initialIndex={currentMediaIndex}
-        />
+        {showFullScreenMedia && (
+          <FullScreenMediaModal
+            visible={showFullScreenMedia}
+            onClose={() => setShowFullScreenMedia(false)}
+            onIndexChange={setCurrentMediaIndex}
+            mediaItems={fullScreenMediaItems}
+            initialIndex={currentMediaIndex}
+          />
+        )}
       </View>
     </View>
   );

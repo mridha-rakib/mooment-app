@@ -17,7 +17,7 @@ interface HomeHeaderProps {
   overlay?: boolean;
 }
 
-export default function HomeHeader({
+function HomeHeader({
   selectedType,
   setSelectedType,
   activeFilters,
@@ -226,3 +226,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
   },
 });
+
+export default React.memo(HomeHeader);
+

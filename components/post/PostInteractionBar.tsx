@@ -39,7 +39,7 @@ type PostInteractionBarProps = {
   countColor?: string;
 };
 
-export default function PostInteractionBar({
+function PostInteractionBar({
   likesCount,
   commentsCount,
   sharesCount,
@@ -169,3 +169,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
+
+export default React.memo(PostInteractionBar);
+

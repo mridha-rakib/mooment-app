@@ -41,7 +41,7 @@ type DraggableStoryTextProps = {
 // re-enters editing). The outer Animated.View — and the shared
 // x/y/rotation values driving its transform — never unmounts between the
 // two modes, so switching modes never resets position/rotation.
-export default function DraggableStoryText({
+function DraggableStoryText({
   text,
   onChangeText,
   color,
@@ -92,9 +92,15 @@ export default function DraggableStoryText({
     };
   }, [isEditing, onFinishEditing]);
 
-  const tapGesture = Gesture.Tap().onEnd(() => {
-    runOnJS(onStartEditing)();
-  });
+  const tapGesture = Gesture.Tap()
+    .maxDuration(250)
+    .maxDistance(8)
+    .onEnd((_event, success) => {
+      "worklet";
+      if (success) {
+        runOnJS(onStartEditing)();
+      }
+    });
 
   const composedGesture = Gesture.Race(dragRotateGesture, tapGesture);
 
@@ -110,7 +116,10 @@ export default function DraggableStoryText({
   const shadowStyle = shadowEnabled ? styles.overlayTextShadow : undefined;
 
   return (
-    <Animated.View style={[styles.overlayTextWrap, animatedStyle]}>
+    <Animated.View
+      style={[styles.overlayTextWrap, animatedStyle]}
+      renderToHardwareTextureAndroid
+    >
       {isEditing ? (
         <TextInput
           value={text}
@@ -139,6 +148,8 @@ export default function DraggableStoryText({
     </Animated.View>
   );
 }
+
+export default React.memo(DraggableStoryText);
 
 // Mirrors add-story.tsx's previous static overlayTextWrap/overlayText
 // styles (280 anchor width, same type scale) so the object's appearance is

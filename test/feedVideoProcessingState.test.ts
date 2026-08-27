@@ -36,7 +36,7 @@ test("queued and processing videos render the placeholder branch, never VideoFee
   // VideoFeedMedia is only reachable from the non-placeholder branch.
   const videoFeedMediaCallSites = mediaRenderBranchSource.match(/<VideoFeedMedia/g) ?? [];
   assert.equal(videoFeedMediaCallSites.length, 1);
-  assert.match(mediaRenderBranchSource, /\) : item\.type === 'video' \? \(\s*<VideoFeedMedia/);
+  assert.match(mediaRenderBranchSource, /\) : item\.type === 'video' \? \(\s*(?:VIDEO_PLAYBACK_ENABLED \? \(\s*)?<VideoFeedMedia/);
 });
 
 test("VideoProcessingPlaceholder never mounts a real video player", () => {

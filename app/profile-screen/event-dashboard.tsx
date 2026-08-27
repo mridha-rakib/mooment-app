@@ -305,7 +305,7 @@ export default function EventDashboardScreen() {
                   <View style={styles.attendanceAvatarStack}>
                     {attendanceAvatars.map((avatar, index) => (
                       <UserAvatar
-                        key={avatar.userId}
+                        key={`${avatar.userId || "avatar"}-${index}`}
                         uri={avatar.avatarUrl ?? null}
                         name={avatar.name}
                         size={20}

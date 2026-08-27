@@ -24,7 +24,7 @@ export const hasValidPublicGoingSummary = (summary?: PublicGoingSummary): summar
   Number.isFinite(summary.going) &&
   Array.isArray(summary.avatars);
 
-export default function PublicGoingSummaryRow({
+function PublicGoingSummaryRow({
   eventId,
   eventName,
   summary,
@@ -96,7 +96,7 @@ export default function PublicGoingSummaryRow({
 
               return (
                 <View
-                  key={avatar.userId}
+                  key={`${avatar.userId || "avatar"}-${index}`}
                   style={[
                     styles.avatarItem,
                     index > 0 ? styles.avatarOverlap : null,
@@ -169,3 +169,6 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
 });
+
+export default React.memo(PublicGoingSummaryRow);
+

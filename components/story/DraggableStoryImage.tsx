@@ -35,7 +35,7 @@ type DraggableStoryImageProps = {
 // image's natural dimensions at all, so the viewer can reproduce it byte
 // for byte from just canvasWidth/canvasHeight + the same four transform
 // numbers (see renderStoryImage/renderCurrentStoryImage in view-story.tsx).
-export default function DraggableStoryImage({
+function DraggableStoryImage({
   uri,
   initialTransform = DEFAULT_IMAGE_TRANSFORM,
   canvasWidth,
@@ -69,13 +69,18 @@ export default function DraggableStoryImage({
     <GestureDetector gesture={gesture}>
       <Animated.View
         style={[StyleSheet.absoluteFillObject, style, animatedStyle]}
+        renderToHardwareTextureAndroid
       >
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFillObject}
           contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={0}
         />
       </Animated.View>
     </GestureDetector>
   );
 }
+
+export default React.memo(DraggableStoryImage);

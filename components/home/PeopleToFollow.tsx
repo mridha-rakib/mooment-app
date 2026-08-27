@@ -25,7 +25,7 @@ type PeopleToFollowProps = {
 
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
-export default function PeopleToFollow({ users, onFollowChange }: PeopleToFollowProps) {
+function PeopleToFollow({ users, onFollowChange }: PeopleToFollowProps) {
   const router = useRouter();
   const { colors } = useTheme();
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
@@ -241,3 +241,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default React.memo(PeopleToFollow);
+

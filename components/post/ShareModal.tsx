@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -20,6 +21,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
+import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { getDirectMessageConversations, sendDirectMessage, type DirectMessageConversationResponse } from '@/lib/chat';
 import type { RepostPayload } from '@/lib/moments';
@@ -106,6 +108,26 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
       onClose();
     }
   };
+
+  const composerScrollOffsetYRef = useRef(0);
+
+  const {
+    sheetTranslateY,
+    dragPanHandlers,
+    contentPanHandlers,
+  } = useBottomSheetDragDismiss({
+    visible,
+    onClose,
+    canStartContentDrag: () => {
+      if (isKeyboardVisible) return false;
+      if (showRepostComposer) {
+        return composerScrollOffsetYRef.current <= 0;
+      }
+      return true;
+    },
+    captureContentDrag: false,
+  });
+
   const shareRequestIds = useRef(new Map<string, string>());
   const repostRequestId = useRef<string | null>(null);
   const repostSubmittingRef = useRef(false);
@@ -322,11 +344,31 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleRequestClose}>
       <View style={styles.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: sheetBottomPadding + keyboardHeight }]}>
-          <View style={[styles.grabber, { backgroundColor: colors.border }]} />
-          <Text style={[styles.title, { color: colors.text }]}>{isEditMode ? 'Edit Repost' : showRepostComposer ? 'Repost' : 'Share to...'}</Text>
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.card,
+              paddingBottom: sheetBottomPadding + keyboardHeight,
+              transform: [{ translateY: sheetTranslateY }],
+            },
+          ]}
+          {...contentPanHandlers}
+        >
+          <View style={styles.dragHeader} {...dragPanHandlers}>
+            <View style={[styles.grabber, { backgroundColor: colors.border }]} />
+            <Text style={[styles.title, { color: colors.text }]}>{isEditMode ? 'Edit Repost' : showRepostComposer ? 'Repost' : 'Share to...'}</Text>
+          </View>
           {showRepostComposer ? (
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.composer, { paddingBottom: composerBottomPadding }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                composerScrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
+              }}
+              contentContainerStyle={[styles.composer, { paddingBottom: composerBottomPadding }]}
+            >
               <TextInput
                 value={repostCaption}
                 onChangeText={setRepostCaption}
@@ -426,7 +468,7 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
             ))}
           </ScrollView>
           </>}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -435,6 +477,7 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.68)' },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 11, maxHeight: '84%' },
+  dragHeader: { width: '100%', alignItems: 'center' },
   grabber: { width: 44, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
   title: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 24 },
   search: { flexDirection: 'row', alignItems: 'center', height: 52, borderWidth: 1, borderRadius: 12, marginHorizontal: 24, paddingHorizontal: 14, gap: 10 },

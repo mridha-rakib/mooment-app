@@ -41,6 +41,10 @@ import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
 import CrowdStatusBadge from "@/components/events/CrowdStatusBadge";
 import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
 
+const TIME_AGO_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
+const TIME_FORMATTER = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
 const timeAgo = (dateStr?: string | Date | null): string => {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr as string).getTime();
@@ -51,7 +55,7 @@ const timeAgo = (dateStr?: string | Date | null): string => {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(dateStr as string));
+  return TIME_AGO_FORMATTER.format(new Date(dateStr as string));
 };
 
 const formatLikedByContext = (event: EventResponse) => {
@@ -74,14 +78,14 @@ const formatDate = (scheduledAt?: string | Date | null): string => {
   if (!scheduledAt) return "";
   const d = new Date(scheduledAt as string);
   if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(d);
+  return DATE_FORMATTER.format(d);
 };
 
 const formatTime = (scheduledAt?: string | Date | null): string => {
   if (!scheduledAt) return "";
   const d = new Date(scheduledAt as string);
   if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+  return TIME_FORMATTER.format(d);
 };
 
 const getLocation = (event: EventResponse): string =>
@@ -174,7 +178,7 @@ type Props = {
   embedded?: boolean;
 };
 
-export default function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, onHostFollowChange, embedded = false }: Props) {
+function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = [], onRepostSuccess, onEventCancelled, onSaveChange, onHostBlocked, onHostFollowChange, embedded = false }: Props) {
   const { colors, isDark } = useTheme();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUser = useAuthStore((s) => s.user);
@@ -964,71 +968,83 @@ export default function EventFeedCard({ event, headerLabel, repostCaption, tagge
         )}
       </View>
 
-      <CommentsModal
-        visible={commentsVisible}
-        onClose={() => setCommentsVisible(false)}
-        momentId={event.interactionMomentId}
-        likesCount={likesCount}
-        sharesCount={sharesCount}
-        onInteractionChange={applyInteractionSummary}
-      />
+      {commentsVisible && (
+        <CommentsModal
+          visible={commentsVisible}
+          onClose={() => setCommentsVisible(false)}
+          momentId={event.interactionMomentId}
+          likesCount={likesCount}
+          sharesCount={sharesCount}
+          onInteractionChange={applyInteractionSummary}
+        />
+      )}
 
-      <ShareModal
-        visible={shareVisible}
-        onClose={() => setShareVisible(false)}
-        onRepost={event.interactionMomentId ? handleRepost : undefined}
-        shareUrl={`https://mooment.app/events/${event.id}`}
-        item={{
-          type: "event",
-          id: event.id,
-          preview: event.name,
-          imageUrl: bannerUri,
-          authorName: hostName,
-          canShareToChat: event.privacy === "public",
-          categoryLabels: displayCategories,
-          dateTimeLabel: [eventDate, eventTime].filter(Boolean).join(" · "),
-          locationLabel: location,
-        }}
-      />
+      {shareVisible && (
+        <ShareModal
+          visible={shareVisible}
+          onClose={() => setShareVisible(false)}
+          onRepost={event.interactionMomentId ? handleRepost : undefined}
+          shareUrl={`https://mooment.app/events/${event.id}`}
+          item={{
+            type: "event",
+            id: event.id,
+            preview: event.name,
+            imageUrl: bannerUri,
+            authorName: hostName,
+            canShareToChat: event.privacy === "public",
+            categoryLabels: displayCategories,
+            dateTimeLabel: [eventDate, eventTime].filter(Boolean).join(" · "),
+            locationLabel: location,
+          }}
+        />
+      )}
 
-      <MoreMenuModal
-        visible={showMoreMenu}
-        onClose={() => setShowMoreMenu(false)}
-        showDelete={isOwnEvent}
-        deleteLabel="Cancel Event"
-        showEdit={isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled" && !eventEndedByPersistedTime}
-        onEdit={isOwnEvent ? handleEditEvent : undefined}
-        onReport={!isOwnEvent ? handleOpenReport : undefined}
-        reported={hasReported}
-        onSave={!isOwnEvent ? handleSave : undefined}
-        isSaved={!isOwnEvent ? isSaved : undefined}
-        onBlock={!isOwnEvent && Boolean(hostId) ? handleBlock : undefined}
-        onDelete={isOwnEvent ? handleCancelEvent : undefined}
-        top={menuTop}
-      />
+      {showMoreMenu && (
+        <MoreMenuModal
+          visible={showMoreMenu}
+          onClose={() => setShowMoreMenu(false)}
+          showDelete={isOwnEvent}
+          deleteLabel="Cancel Event"
+          showEdit={isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled" && !eventEndedByPersistedTime}
+          onEdit={isOwnEvent ? handleEditEvent : undefined}
+          onReport={!isOwnEvent ? handleOpenReport : undefined}
+          reported={hasReported}
+          onSave={!isOwnEvent ? handleSave : undefined}
+          isSaved={!isOwnEvent ? isSaved : undefined}
+          onBlock={!isOwnEvent && Boolean(hostId) ? handleBlock : undefined}
+          onDelete={isOwnEvent ? handleCancelEvent : undefined}
+          top={menuTop}
+        />
+      )}
 
-      <EventCancellationReasonModal
-        visible={cancelReasonVisible}
-        pending={isCancellingEvent}
-        onClose={() => {
-          if (!isCancellingEvent) setCancelReasonVisible(false);
-        }}
-        onSubmit={submitEventCancellation}
-      />
+      {cancelReasonVisible && (
+        <EventCancellationReasonModal
+          visible={cancelReasonVisible}
+          pending={isCancellingEvent}
+          onClose={() => {
+            if (!isCancellingEvent) setCancelReasonVisible(false);
+          }}
+          onSubmit={submitEventCancellation}
+        />
+      )}
 
-      <ReportModal
-        visible={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        onReport={handleReportReasonSelected}
-      />
+      {showReportModal && (
+        <ReportModal
+          visible={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          onReport={handleReportReasonSelected}
+        />
+      )}
 
-      <ReportDetailsModal
-        visible={showReportDetailsModal}
-        onClose={handleReportDetailsClose}
-        onDone={handleSubmitReport}
-        isSubmitting={isReportSubmitting}
-        showBlockToggle
-      />
+      {showReportDetailsModal && (
+        <ReportDetailsModal
+          visible={showReportDetailsModal}
+          onClose={handleReportDetailsClose}
+          onDone={handleSubmitReport}
+          isSubmitting={isReportSubmitting}
+          showBlockToggle
+        />
+      )}
     </View>
   );
 }
@@ -1391,3 +1407,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.08,
   },
 });
+
+export default React.memo(EventFeedCard);
+

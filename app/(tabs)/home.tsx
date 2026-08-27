@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Animated, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
+import { Alert, Animated, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -912,10 +912,14 @@ export default function HomeFeed() {
     ));
   }, []);
 
-  const handleCommentPress = (post: PostData) => {
+  const handleCommentPress = useCallback((post: PostData) => {
     setSelectedCommentPost(post);
     setCommentModalVisible(true);
-  };
+  }, []);
+
+  const handleViewMapPress = useCallback(() => {
+    setSelectedType('Map');
+  }, []);
 
   const handleSharePress = useCallback((post: PostData) => {
     if (shareModalVisible && selectedSharePost?.id === post.id) {
@@ -1232,6 +1236,73 @@ export default function HomeFeed() {
     [activeFeedVideoItemId, activeTheme],
   );
 
+  const renderFeedItem = useCallback(({ item }: { item: FeedItem }) => {
+    if (item.type === 'post') {
+      return (
+        <FeedPost
+          post={item.data}
+          onCommentPress={handleCommentPress}
+          onSharePress={handleSharePress}
+          onViewMapPress={handleViewMapPress}
+          onAuthorFollowChange={handleAuthorFollowChange}
+          onInteractionChange={applyInteractionSummary}
+          onDeletePress={handleDeletePost}
+          onPostUpdated={handlePostUpdated}
+          onAuthorBlocked={handleUserBlockedFromReport}
+          isActiveVideo={activeFeedVideoItemId === item.id}
+        />
+      );
+    }
+    if (item.type === 'pending_video_upload' || item.type === 'video_processing') {
+      return <PendingVideoPostSkeleton />;
+    }
+    if (item.type === 'event') {
+      return (
+        <EventFeedCard
+          event={item.data}
+          onRepostSuccess={refreshFeedAfterRepost}
+          onHostBlocked={handleUserBlockedFromReport}
+          onHostFollowChange={handleAuthorFollowChange}
+        />
+      );
+    }
+    if (item.type === 'repost') {
+      return (
+        <RepostFeedCard
+          share={item.data}
+          onRepostSuccess={refreshFeedAfterRepost}
+          onShareUpdated={handleShareUpdated}
+          isActiveVideo={activeFeedVideoItemId === item.id}
+        />
+      );
+    }
+    if (item.type === 'suggested_users') {
+      return <PeopleToFollow users={item.data} onFollowChange={handleAuthorFollowChange} />;
+    }
+    if (item.type === 'your_feed_header') {
+      return (
+        <View style={styles.yourFeedHeaderSection}>
+          <View style={[styles.yourFeedDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.yourFeedTitle, { color: '#B3B3B3' }]}>Your Feed</Text>
+        </View>
+      );
+    }
+    return null;
+  }, [
+    activeFeedVideoItemId,
+    applyInteractionSummary,
+    colors.border,
+    handleAuthorFollowChange,
+    handleCommentPress,
+    handleDeletePost,
+    handlePostUpdated,
+    handleSharePress,
+    handleShareUpdated,
+    handleUserBlockedFromReport,
+    handleViewMapPress,
+    refreshFeedAfterRepost,
+  ]);
+
   return (
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1270,10 +1341,11 @@ export default function HomeFeed() {
             showsVerticalScrollIndicator={false}
             initialNumToRender={3}
             maxToRenderPerBatch={3}
-            windowSize={5}
+            updateCellsBatchingPeriod={40}
+            windowSize={7}
             viewabilityConfig={feedViewabilityConfig}
             onViewableItemsChanged={onViewableFeedItemsChanged}
-            removeClippedSubviews
+            removeClippedSubviews={Platform.OS === 'android'}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -1320,69 +1392,7 @@ export default function HomeFeed() {
             )}
             ListEmptyComponent={shouldShowFeedSkeleton ? <FeedSkeletonList /> : null}
             ListFooterComponent={shouldShowFeedSkeleton ? null : <View style={{ height: 100 }} />}
-            renderItem={({ item }) => {
-              if (item.type === 'post') {
-                if (__DEV__) {
-                  console.log('[XENOG_FEED_ROW]', {
-                    id: item.id,
-                    type: item.type,
-                    activeTheme,
-                    hasMedia: Boolean(item.data.mediaItems?.length || item.data.mediaUris?.length),
-                    mediaCount: item.data.mediaItems?.length ?? item.data.mediaUris?.length ?? 0,
-                  });
-                }
-
-                return (
-                  <FeedPost
-                    post={item.data}
-                    onCommentPress={handleCommentPress}
-                    onSharePress={handleSharePress}
-                    onViewMapPress={() => setSelectedType('Map')}
-                    onAuthorFollowChange={handleAuthorFollowChange}
-                    onInteractionChange={applyInteractionSummary}
-                    onDeletePress={handleDeletePost}
-                    onPostUpdated={handlePostUpdated}
-                    onAuthorBlocked={handleUserBlockedFromReport}
-                    isActiveVideo={activeFeedVideoItemId === item.id}
-                  />
-                );
-              }
-              if (item.type === 'pending_video_upload' || item.type === 'video_processing') {
-                return <PendingVideoPostSkeleton />;
-              }
-              if (item.type === 'event') {
-                return (
-                  <EventFeedCard
-                    event={item.data}
-                    onRepostSuccess={refreshFeedAfterRepost}
-                    onHostBlocked={handleUserBlockedFromReport}
-                    onHostFollowChange={handleAuthorFollowChange}
-                  />
-                );
-              }
-              if (item.type === 'repost') {
-                return (
-                  <RepostFeedCard
-                    share={item.data}
-                    onRepostSuccess={refreshFeedAfterRepost}
-                    onShareUpdated={handleShareUpdated}
-                    isActiveVideo={activeFeedVideoItemId === item.id}
-                  />
-                );
-              }
-              if (item.type === 'suggested_users') {
-                return <PeopleToFollow users={item.data} onFollowChange={handleAuthorFollowChange} />;
-              }
-              if (item.type === 'your_feed_header') {
-                return (
-                  <View style={styles.yourFeedHeaderSection}>
-                    <View style={[styles.yourFeedDivider, { backgroundColor: colors.border }]} />
-                    <Text style={[styles.yourFeedTitle, { color: '#B3B3B3' }]}>Your Feed</Text>
-                  </View>
-                );
-              }
-              return null;
-            }}
+            renderItem={renderFeedItem}
           />
         ) : (
           <MapContainer
