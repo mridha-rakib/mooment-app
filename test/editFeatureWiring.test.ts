@@ -89,7 +89,10 @@ test("home.tsx wires onPostUpdated into FeedPost and patches the existing Feed i
 // ---------------------------------------------------------------------------
 
 test("EventFeedCard gates Edit on event ownership and non-terminal status, alongside the unchanged Cancel Event action", () => {
-  assert.match(eventFeedCardSource, /showEdit=\{isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled"\}/);
+  assert.match(
+    eventFeedCardSource,
+    /showEdit=\{isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled"(?: && !eventEndedByPersistedTime)?\}/,
+  );
   assert.match(eventFeedCardSource, /onEdit=\{isOwnEvent \? handleEditEvent : undefined\}/);
   assert.match(eventFeedCardSource, /showDelete=\{isOwnEvent\}/);
   assert.match(eventFeedCardSource, /deleteLabel="Cancel Event"/);
@@ -133,16 +136,19 @@ test("RepostFeedCard gates repost Edit visibility on the SHARE owner (share.shar
 
 test("RepostFeedCard wires its own Edit entry point (not the embedded card's menu) into a real update call", () => {
   assert.match(repostFeedCardSource, /showEdit/);
+  assert.match(repostFeedCardSource, /showDelete/);
   assert.match(repostFeedCardSource, /onEdit=\{onEditPress\}/);
-  assert.match(repostFeedCardSource, /onUpdateCaption=\{handleUpdateCaption\}/);
-  assert.match(repostFeedCardSource, /editing=\{\{ shareId: share\.id, caption: share\.repostCaption \?\? null \}\}/);
-  assert.match(repostFeedCardSource, /const updated = await updateShareCaption\(shareId, caption\);/);
+  assert.match(repostFeedCardSource, /onDelete=\{onDeletePress\}/);
+  assert.match(repostFeedCardSource, /onUpdateShare=\{handleUpdateShare\}/);
+  assert.match(repostFeedCardSource, /taggedFriends: \(share\.taggedFriends \?\? \[\]\)\.map\(\(friend\) => toTaggedFriend\(friend\)\)/);
+  assert.match(repostFeedCardSource, /const updated = await updateMomentShare\(shareId, payload\);/);
 });
 
-test("ShareModal's edit-mode submit branches to the update path and never calls the create/repost path", () => {
+test("ShareModal's edit-mode submit branches to the share-update path and never calls the create/repost path", () => {
   assert.match(shareModalSource, /const isEditMode = Boolean\(editing\);/);
   assert.match(shareModalSource, /if \(isEditMode\) \{/);
-  assert.match(shareModalSource, /await onUpdateCaption\(editing\.shareId, repostCaption\.trim\(\) \|\| null\);/);
+  assert.match(shareModalSource, /await onUpdateShare\(editing\.shareId, \{/);
+  assert.match(shareModalSource, /taggedFriendIds: selectedTaggedFriends\.map\(\(friend\) => friend\.id\)/);
   // The edit-mode branch must never call onRepost/shareMoment's create path.
   const editBranch = shareModalSource.slice(
     shareModalSource.indexOf("if (isEditMode) {"),
@@ -151,13 +157,13 @@ test("ShareModal's edit-mode submit branches to the update path and never calls 
   assert.doesNotMatch(editBranch, /onRepost\(/);
 });
 
-test("ShareModal hides tag-friend editing in edit mode and never sends taggedFriendIds through the update call", () => {
-  assert.match(shareModalSource, /\{!isEditMode && \(/);
-  const updateCallLine = shareModalSource
-    .split("\n")
-    .find((line) => line.includes("await onUpdateCaption("));
-  assert.ok(updateCallLine);
-  assert.doesNotMatch(updateCallLine as string, /taggedFriendIds/);
+test("ShareModal edit mode hydrates and edits tagged friends through PeopleTagModal", () => {
+  assert.match(shareModalSource, /import PeopleTagModal, \{ type TaggedFriend \} from '@\/components\/post\/PeopleTagModal';/);
+  assert.match(shareModalSource, /taggedFriends: TaggedFriend\[\];/);
+  assert.match(shareModalSource, /setTaggedFriendIds\(new Set\(editing\?\.taggedFriends\.map\(\(friend\) => friend\.id\) \?\? \[\]\)\);/);
+  assert.match(shareModalSource, /setSelectedTaggedFriends\(editing\?\.taggedFriends \?\? \[\]\);/);
+  assert.match(shareModalSource, /<PeopleTagModal/);
+  assert.match(shareModalSource, /onSelect=\{handleEditTaggedFriendsSelection\}/);
 });
 
 test("ShareModal edit mode does not regenerate/use a create-time idempotency key", () => {
@@ -174,6 +180,12 @@ test("home.tsx wires onShareUpdated into RepostFeedCard and patches the existing
   assert.match(homeSource, /share\.id === updatedShare\.id \? updatedShare : share/);
 });
 
+test("home.tsx wires onShareDeleted into RepostFeedCard and removes only the repost wrapper by share id", () => {
+  assert.match(homeSource, /onShareDeleted=\{handleShareDeleted\}/);
+  assert.match(homeSource, /const handleShareDeleted = useCallback\(\(shareId: string\) => \{/);
+  assert.match(homeSource, /current\.filter\(\(share\) => share\.id !== shareId\)/);
+});
+
 // ---------------------------------------------------------------------------
 // Mobile API client: real update endpoints, matching the backend contract
 // ---------------------------------------------------------------------------
@@ -183,9 +195,14 @@ test("lib/moments.ts exposes updateMoment against PATCH /moments/:id", () => {
   assert.match(momentsLibSource, /api\.patch\(`\/moments\/\$\{encodeURIComponent\(momentId\)\}`, \{ caption \}\);/);
 });
 
-test("lib/moments.ts exposes updateShareCaption against PATCH /moments/shares/:shareId", () => {
-  assert.match(momentsLibSource, /export const updateShareCaption = async \(shareId: string, caption: string \| null\): Promise<MomentTimelineItem> => \{/);
-  assert.match(momentsLibSource, /api\.patch\(`\/moments\/shares\/\$\{encodeURIComponent\(shareId\)\}`, \{ caption \}\);/);
+test("lib/moments.ts exposes updateMomentShare against PATCH /moments/shares/:shareId", () => {
+  assert.match(momentsLibSource, /export const updateMomentShare = async \(\s*shareId: string,\s*payload: UpdateMomentSharePayload,/);
+  assert.match(momentsLibSource, /api\.patch\(`\/moments\/shares\/\$\{encodeURIComponent\(shareId\)\}`, payload\);/);
+});
+
+test("lib/moments.ts exposes deleteMomentShare against DELETE /moments/shares/:shareId", () => {
+  assert.match(momentsLibSource, /export const deleteMomentShare = async \(shareId: string\): Promise<void> => \{/);
+  assert.match(momentsLibSource, /api\.delete\(`\/moments\/shares\/\$\{encodeURIComponent\(shareId\)\}`\);/);
 });
 
 // ---------------------------------------------------------------------------

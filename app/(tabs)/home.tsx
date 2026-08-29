@@ -1151,6 +1151,10 @@ export default function HomeFeed() {
     )));
   }, []);
 
+  const handleShareDeleted = useCallback((shareId: string) => {
+    setFeedReposts((current) => current.filter((share) => share.id !== shareId));
+  }, []);
+
   useEffect(() => {
     const succeededUploads = pendingVideoUploads.filter((upload) => upload.status === 'succeeded' && upload.moment);
 
@@ -1361,6 +1365,7 @@ export default function HomeFeed() {
           share={item.data}
           onRepostSuccess={refreshFeedAfterRepost}
           onShareUpdated={handleShareUpdated}
+          onShareDeleted={handleShareDeleted}
           // Disabled alongside FeedPost — see the FeedPost isActiveVideo note above.
           isActiveVideo={VIDEO_PLAYBACK_ENABLED && activeFeedVideoItemId === item.id}
         />
@@ -1388,6 +1393,7 @@ export default function HomeFeed() {
     handlePostUpdated,
     handleSharePress,
     handleShareUpdated,
+    handleShareDeleted,
     handleUserBlockedFromReport,
     handleViewMapPress,
     refreshFeedAfterRepost,

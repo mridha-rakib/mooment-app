@@ -1,15 +1,16 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EventFeedCard from '@/components/home/EventFeedCard';
 import { useTheme } from '@/hooks/useTheme';
 import { getEventByIdCached, type EventResponse } from '@/lib/events';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
-import { shareMoment, updateShareCaption, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
+import { deleteMomentShare, shareMoment, updateMomentShare, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { getStorageFileUrl } from '@/lib/storage';
 import { useAuthStore } from '@/stores/authStore';
+import type { TaggedFriend } from './PeopleTagModal';
 import UserAvatar from '../ui/UserAvatar';
 import FeedPost from './FeedPost';
 import MoreMenuModal from './MoreMenuModal';
@@ -23,15 +24,16 @@ type Props = {
   // commentary (never the original content). Lets the Feed screen patch its
   // local list by share id instead of refetching.
   onShareUpdated?: (share: MomentTimelineItem) => void;
+  onShareDeleted?: (shareId: string) => void;
   showLoadingIndicator?: boolean;
   isActiveVideo?: boolean;
 };
 
 function RepostFeedCard({
   share,
-  labelOverride,
   onRepostSuccess,
   onShareUpdated,
+  onShareDeleted,
   showLoadingIndicator = true,
   isActiveVideo = false,
 }: Props) {
@@ -55,7 +57,7 @@ function RepostFeedCard({
     return share.sharedBy?.avatarUrl ?? null;
   }, [share.sharedBy?.avatarKey, share.sharedBy?.avatarUrl]);
   const sharedTime = formatTimeAgo(share.sharedAt ?? share.createdAt);
-  const contextLabel = labelOverride ?? 'Shared';
+  const contextLabel = isEvent ? 'shared an event' : 'shared a post';
 
   useEffect(() => {
     const eventId = isEvent ? share.originalItem?.id : null;
@@ -89,9 +91,33 @@ function RepostFeedCard({
     onRepostSuccess?.();
   };
 
-  const handleUpdateCaption = async (shareId: string, caption: string | null) => {
-    const updated = await updateShareCaption(shareId, caption);
+  const handleUpdateShare = async (shareId: string, payload: { caption: string | null; taggedFriendIds: string[] }) => {
+    const updated = await updateMomentShare(shareId, payload);
     onShareUpdated?.(updated);
+  };
+
+  const handleDeleteShare = () => {
+    Alert.alert(
+      'Delete repost?',
+      'This will remove your shared post/event. The original content will remain.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteMomentShare(share.id);
+                onShareDeleted?.(share.id);
+              } catch {
+                Alert.alert('Unable to delete repost', 'Please try again.');
+              }
+            })();
+          },
+        },
+      ],
+    );
   };
 
   // Preview shown inside the edit-composer for context only — mirrors the
@@ -129,9 +155,13 @@ function RepostFeedCard({
     <ShareModal
       visible={editCaptionVisible}
       onClose={() => setEditCaptionVisible(false)}
-      onUpdateCaption={handleUpdateCaption}
+      onUpdateShare={handleUpdateShare}
       item={editPreviewItem}
-      editing={{ shareId: share.id, caption: share.repostCaption ?? null }}
+      editing={{
+        shareId: share.id,
+        caption: share.repostCaption ?? null,
+        taggedFriends: (share.taggedFriends ?? []).map((friend) => toTaggedFriend(friend)),
+      }}
     />
   );
 
@@ -143,10 +173,10 @@ function RepostFeedCard({
       reposterAvatar={reposterAvatar}
       contextLabel={contextLabel}
       sharedTime={sharedTime}
-      caption={share.repostCaption}
       taggedFriends={share.taggedFriends ?? []}
       isOwnRepost={isOwnRepost}
       onEditPress={() => setEditCaptionVisible(true)}
+      onDeletePress={handleDeleteShare}
     />
   );
 
@@ -173,7 +203,7 @@ function RepostFeedCard({
         <View style={styles.shareHeaderArea}>
           {header}
           {share.repostCaption?.trim() ? (
-            <Text style={[styles.repostCaption, { color: colors.text }]}>{share.repostCaption.trim()}</Text>
+            <Text style={[styles.sharedEventMessage, { color: colors.text }]}>{share.repostCaption.trim()}</Text>
           ) : null}
         </View>
         {eventUnavailable || !event ? (
@@ -191,8 +221,17 @@ function RepostFeedCard({
   }
 
   return (
-    <View style={[styles.repostCard, { backgroundColor: colors.card }]}>
+    <View
+      style={[
+        styles.repostCard,
+        { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.035)' : colors.card },
+        !isDark && { borderWidth: 1, borderColor: colors.border },
+      ]}
+    >
       {header}
+      {share.repostCaption?.trim() ? (
+        <Text style={[styles.sharedPostMessage, { color: colors.text }]}>{share.repostCaption.trim()}</Text>
+      ) : null}
       {post ? (
         <>
           <FeedPost post={post} onSharePress={() => setShareVisible(true)} embedded isActiveVideo={isActiveVideo} />
@@ -229,10 +268,10 @@ const RepostHeader = React.memo(function RepostHeader({
   reposterAvatar,
   contextLabel,
   sharedTime,
-  caption,
   taggedFriends,
   isOwnRepost,
   onEditPress,
+  onDeletePress,
 }: {
   variant?: 'event' | 'post';
   reposterId?: string | null;
@@ -240,10 +279,10 @@ const RepostHeader = React.memo(function RepostHeader({
   reposterAvatar?: string | null;
   contextLabel: string;
   sharedTime: string;
-  caption?: string | null;
   taggedFriends: MomentAuthor[];
   isOwnRepost: boolean;
   onEditPress: () => void;
+  onDeletePress: () => void;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -289,7 +328,9 @@ const RepostHeader = React.memo(function RepostHeader({
           visible={showMoreMenu}
           onClose={() => setShowMoreMenu(false)}
           showEdit
+          showDelete
           onEdit={onEditPress}
+          onDelete={onDeletePress}
           top={menuTop}
         />
       )}
@@ -311,7 +352,7 @@ const RepostHeader = React.memo(function RepostHeader({
         <View style={styles.shareHeaderText}>
           <Text style={[styles.shareHeaderLine, { color: colors.text }]} numberOfLines={2}>
             <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
-            <Text style={{ color: colors.textSecondary }}> shared an event</Text>
+            <Text style={{ color: colors.textSecondary }}>{` ${contextLabel}`}</Text>
             {validTaggedFriends.length > 0 ? (
               <Text style={{ color: colors.textSecondary }}>
                 {' with '}
@@ -342,17 +383,17 @@ const RepostHeader = React.memo(function RepostHeader({
   }
 
   return (
-    <View style={styles.repostHeader}>
+    <View style={styles.shareHeaderRow}>
       <TouchableOpacity activeOpacity={0.7} onPress={openReposterProfile} disabled={!reposterId}>
-        <UserAvatar uri={reposterAvatar} name={reposterName} size={40} style={styles.reposterAvatar} />
+        <UserAvatar uri={reposterAvatar} name={reposterName} size={36} style={styles.shareHeaderAvatar} />
       </TouchableOpacity>
-      <View style={styles.repostHeaderText}>
-        <Text style={[styles.contextLabel, { color: colors.textSecondary }]}>{contextLabel}</Text>
-        <Text style={[styles.reposterLine, { color: colors.text }]} numberOfLines={2}>
+      <View style={styles.shareHeaderText}>
+        <Text style={[styles.shareHeaderLine, { color: colors.text }]} numberOfLines={2}>
           <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
+          <Text style={{ color: colors.textSecondary }}>{` ${contextLabel}`}</Text>
           {validTaggedFriends.length > 0 ? (
             <Text style={{ color: colors.textSecondary }}>
-              {' is with '}
+              {' with '}
               {validTaggedFriends.map((friend, index) => (
                 <React.Fragment key={friend.id ?? `${getTaggedFriendName(friend)}-${index}`}>
                   {index > 0 ? (
@@ -373,24 +414,8 @@ const RepostHeader = React.memo(function RepostHeader({
           ) : null}
         </Text>
         {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
-        {caption?.trim() ? <Text style={[styles.repostCaption, { color: colors.text }]}>{caption.trim()}</Text> : null}
       </View>
-      {isOwnRepost && (
-        <>
-          <TouchableOpacity ref={moreBtnRef} style={styles.moreBtn} activeOpacity={0.75} onPress={handleMorePress}>
-            <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-          {showMoreMenu && (
-            <MoreMenuModal
-              visible={showMoreMenu}
-              onClose={() => setShowMoreMenu(false)}
-              showEdit
-              onEdit={onEditPress}
-              top={menuTop}
-            />
-          )}
-        </>
-      )}
+      {moreMenu}
     </View>
   );
 });
@@ -455,11 +480,19 @@ const formatTimeAgo = (dateStr?: string | Date | null): string => {
 const getTaggedFriendName = (friend: MomentAuthor) =>
   friend.name?.trim() || friend.username?.trim() || 'Mooment user';
 
+const toTaggedFriend = (friend: MomentAuthor): TaggedFriend => ({
+  id: friend.id,
+  name: getTaggedFriendName(friend),
+  username: friend.username,
+  handle: friend.username ? `@${friend.username}` : `@${getTaggedFriendName(friend).replace(/\s+/g, '').toLowerCase()}`,
+  avatar: friend.avatarUrl ?? null,
+});
+
 const styles = StyleSheet.create({
   repostCard: {
     marginHorizontal: 16,
     marginBottom: 20,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
   },
   // Shared-event presentation: transparent, no outer card fill/border. The
@@ -496,45 +529,31 @@ const styles = StyleSheet.create({
     paddingTop: 1,
   },
   shareHeaderLine: {
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  repostHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingBottom: 12,
-  },
-  reposterAvatar: {
-    marginTop: 1,
-  },
-  repostHeaderText: {
-    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
   },
   moreBtn: {
     padding: 4,
     marginLeft: 4,
-  },
-  contextLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  reposterLine: {
-    fontSize: 14,
-    lineHeight: 19,
   },
   reposterName: {
     fontWeight: '700',
   },
   sharedTime: {
     fontSize: 12,
-    marginTop: 1,
+    lineHeight: 16,
+    marginTop: 2,
   },
-  repostCaption: {
+  sharedEventMessage: {
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
+  },
+  sharedPostMessage: {
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 10,
+    marginBottom: 14,
   },
   unavailable: {
     minHeight: 112,

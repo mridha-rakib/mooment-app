@@ -68,7 +68,9 @@ test("selected-category / filtering wiring is untouched", () => {
 });
 
 test("map base style constants are untouched by the chip fix", () => {
-  assert.match(mapScreenSource, /import \{ APP_MAP_STYLE_URL, APP_MAP_STYLE_URL_LIGHT, SATELLITE_MAP_STYLE_URL \} from "@\/lib\/mapStyles";/);
+  assert.match(mapScreenSource, /APP_MAP_STYLE_URL_NO_TRAFFIC/);
+  assert.match(mapScreenSource, /APP_MAP_STYLE_URL_LIGHT_NO_TRAFFIC/);
+  assert.match(mapScreenSource, /SATELLITE_MAP_STYLE_URL/);
 });
 
 test("marker and live-marker source is untouched by the chip fix", () => {

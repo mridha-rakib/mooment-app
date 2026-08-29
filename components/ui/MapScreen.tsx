@@ -2,7 +2,11 @@ import { getCategoryColor, getCategoryMarkerColor } from "@/constants/categoryCo
 import { EVENT_CATEGORIES, type EventCategory } from "@/constants/eventCategories";
 import { useTheme } from "@/hooks/useTheme";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
-import { APP_MAP_STYLE_URL, APP_MAP_STYLE_URL_LIGHT, SATELLITE_MAP_STYLE_URL } from "@/lib/mapStyles";
+import {
+  APP_MAP_STYLE_URL_LIGHT_NO_TRAFFIC,
+  APP_MAP_STYLE_URL_NO_TRAFFIC,
+  SATELLITE_MAP_STYLE_URL,
+} from "@/lib/mapStyles";
 import type { EventMapViewport } from "@/lib/mapEventRequests";
 import {
   getCarouselIndexByMarkerId,
@@ -647,8 +651,8 @@ export default function MapScreen({
   const currentMapStyle = isSatellite
     ? SATELLITE_MAP_STYLE_URL
     : isDark
-      ? APP_MAP_STYLE_URL
-      : APP_MAP_STYLE_URL_LIGHT;
+      ? APP_MAP_STYLE_URL_NO_TRAFFIC
+      : APP_MAP_STYLE_URL_LIGHT_NO_TRAFFIC;
 
   // Reset the loaded flag whenever the style URL changes so markers are
   // held back until Mapbox has fully applied the new style.
@@ -664,11 +668,6 @@ export default function MapScreen({
     traffic: TrafficIncidentIcon,
     satellite: SatelliteIcon,
   }[mapMode];
-  const mapShadeStyle = isSatellite
-    ? styles.mapShadeSatellite
-    : isDark
-      ? styles.mapShadeTraffic
-      : styles.mapShadeTrafficLight;
   const lastReportedLocationRef = React.useRef<string | null>(null);
   const [selectedThemeColor, setSelectedThemeColor] = useState("#8E54E9");
 
@@ -1426,8 +1425,6 @@ export default function MapScreen({
           />
         </Mapbox.MapView>
 
-        <View pointerEvents="none" style={[styles.mapShade, mapShadeStyle]} />
-
         <View pointerEvents="box-none" style={[styles.mapControlsLeft, { bottom: tabBarHeight + 20 }]}>
           <CinematicButton icon={Add01Icon} onPress={handleZoomIn} />
           <CinematicButton icon={Remove01Icon} onPress={handleZoomOut} />
@@ -1673,18 +1670,6 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
     backgroundColor: "#000000",
-  },
-  mapShade: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapShadeTraffic: {
-    backgroundColor: "rgba(0,0,0,0.48)",
-  },
-  mapShadeTrafficLight: {
-    backgroundColor: "rgba(0,0,0,0.26)",
-  },
-  mapShadeSatellite: {
-    backgroundColor: "rgba(0,0,0,0.26)",
   },
   categoriesScroll: {
     paddingHorizontal: 16,

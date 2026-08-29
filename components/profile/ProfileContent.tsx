@@ -18,6 +18,8 @@ type ProfileContentProps = {
   onCommentPress: (post: PostData) => void;
   onSharePress: (post: PostData) => void;
   onDeletePost?: (post: PostData) => void;
+  onShareUpdated?: (share: MomentTimelineItem) => void;
+  onShareDeleted?: (shareId: string) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
   isOwnProfile?: boolean;
   profileUserId: string;
@@ -56,6 +58,8 @@ export default function ProfileContent({
   onCommentPress, 
   onSharePress,
   onDeletePost,
+  onShareUpdated,
+  onShareDeleted,
   onInteractionChange,
   isOwnProfile = true,
   profileUserId,
@@ -110,6 +114,8 @@ export default function ProfileContent({
           share={item.share}
           labelOverride={isOwnProfile ? 'Shared by you' : undefined}
           onRepostSuccess={onRepostSuccess}
+          onShareUpdated={onShareUpdated}
+          onShareDeleted={onShareDeleted}
           showLoadingIndicator={item.share.originalItem?.type !== 'event' || item.id === firstEventRepostId}
           isActiveVideo={activeVideoItemId === `repost-${item.id}`}
         />
@@ -125,7 +131,18 @@ export default function ProfileContent({
         onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile}
         isActiveVideo={activeVideoItemId === `post-${item.id}`} />
     );
-  }, [activeVideoItemId, firstEventRepostId, isOwnProfile, onCommentPress, onDeletePost, onInteractionChange, onRepostSuccess, onSharePress]);
+  }, [
+    activeVideoItemId,
+    firstEventRepostId,
+    isOwnProfile,
+    onCommentPress,
+    onDeletePost,
+    onInteractionChange,
+    onRepostSuccess,
+    onShareDeleted,
+    onSharePress,
+    onShareUpdated,
+  ]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: PROFILE_VIDEO_VIEWABILITY_THRESHOLD,

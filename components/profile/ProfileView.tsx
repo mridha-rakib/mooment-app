@@ -99,6 +99,8 @@ type ProfileViewProps = {
   isOwnProfile?: boolean;
   onRepost?: (post: PostData, payload: RepostPayload) => Promise<void> | void;
   onDeletePost?: (post: PostData) => void;
+  onShareUpdated?: (share: MomentTimelineItem) => void;
+  onShareDeleted?: (shareId: string) => void;
   onInteractionChange?: (
     postId: string,
     summary: MomentInteractionSummary,
@@ -128,6 +130,8 @@ export default function ProfileView({
   isOwnProfile = true,
   onRepost,
   onDeletePost,
+  onShareUpdated,
+  onShareDeleted,
   onInteractionChange,
   onFollowChange,
   onRefresh,
@@ -788,6 +792,8 @@ export default function ProfileView({
         onCommentPress={handleCommentPress}
         onSharePress={handleSharePress}
         onDeletePost={onDeletePost}
+        onShareUpdated={onShareUpdated}
+        onShareDeleted={onShareDeleted}
         onInteractionChange={handleFeedInteractionChange}
         isOwnProfile={isOwnProfile}
         profileUserId={user.id}

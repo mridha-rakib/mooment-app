@@ -5,7 +5,6 @@ import {
   Alert,
   Animated,
   Keyboard,
-  KeyboardAvoidingView,
   Linking,
   Image,
   Modal,
@@ -20,6 +19,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PeopleTagModal, { type TaggedFriend } from '@/components/post/PeopleTagModal';
 import { useTheme } from '@/hooks/useTheme';
 import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -49,16 +49,17 @@ const feedback = (message: string) => {
 export type EditingShare = {
   shareId: string;
   caption: string | null;
+  taggedFriends: TaggedFriend[];
 };
 
-export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption, shareUrl, item, editing }: {
+export default function ShareModal({ visible, onClose, onRepost, onUpdateShare, shareUrl, item, editing }: {
   visible: boolean;
   onClose: () => void;
   onRepost?: (payload: RepostPayload) => Promise<void> | void;
-  // Edit mode only: updates ONLY the authenticated user's own repost
-  // commentary via PATCH /moments/shares/:shareId — never calls onRepost/the
-  // create endpoint, never touches tagged friends or the original content.
-  onUpdateCaption?: (shareId: string, caption: string | null) => Promise<void> | void;
+  // Edit mode only: updates ONLY the authenticated user's own repost row via
+  // PATCH /moments/shares/:shareId — never calls onRepost/the create
+  // endpoint, and never touches the original content.
+  onUpdateShare?: (shareId: string, payload: { caption: string | null; taggedFriendIds: string[] }) => Promise<void> | void;
   shareUrl?: string;
   item?: ShareItem;
   editing?: EditingShare | null;
@@ -76,6 +77,8 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
   const [repostCaption, setRepostCaption] = useState('');
   const [tagQuery, setTagQuery] = useState('');
   const [taggedFriendIds, setTaggedFriendIds] = useState<Set<string>>(new Set());
+  const [selectedTaggedFriends, setSelectedTaggedFriends] = useState<TaggedFriend[]>([]);
+  const [showPeopleTagModal, setShowPeopleTagModal] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -152,7 +155,9 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
     setQuery('');
     setTagQuery('');
     setRepostCaption(editing?.caption ?? '');
-    setTaggedFriendIds(new Set());
+    setTaggedFriendIds(new Set(editing?.taggedFriends.map((friend) => friend.id) ?? []));
+    setSelectedTaggedFriends(editing?.taggedFriends ?? []);
+    setShowPeopleTagModal(false);
     setShowRepostComposer(Boolean(editing));
     setSentFriendIds(new Set());
     // Edit mode never creates a new repost, so no create-time idempotency key
@@ -237,11 +242,14 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
     // and NEVER calls onRepost/the create endpoint — editing an existing repost
     // must never create a second one.
     if (isEditMode) {
-      if (!editing || !onUpdateCaption) return;
+      if (!editing || !onUpdateShare) return;
       repostSubmittingRef.current = true;
       setIsReposting(true);
       try {
-        await onUpdateCaption(editing.shareId, repostCaption.trim() || null);
+        await onUpdateShare(editing.shareId, {
+          caption: repostCaption.trim() || null,
+          taggedFriendIds: selectedTaggedFriends.map((friend) => friend.id),
+        });
         feedback('Repost updated');
         onClose();
       } catch (error) {
@@ -279,6 +287,11 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
       else next.add(friendId);
       return next;
     });
+  };
+
+  const handleEditTaggedFriendsSelection = (friends: TaggedFriend[]) => {
+    setSelectedTaggedFriends(friends);
+    setTaggedFriendIds(new Set(friends.map((friend) => friend.id)));
   };
 
   const handleFriendPress = async (friend: DirectMessageConversationResponse) => {
@@ -391,7 +404,35 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
                   {!!item?.categoryLabels?.length && <Text style={[styles.previewMeta, { color: colors.textSecondary }]} numberOfLines={1}>{item.categoryLabels.join(' · ')}</Text>}
                 </View>
               </View>
-              {!isEditMode && (
+              {isEditMode ? (
+                <>
+                  <Text style={[styles.tagTitle, { color: colors.text }]}>Tagged friends</Text>
+                  {selectedTaggedFriends.length > 0 ? (
+                    <View style={styles.editTagList}>
+                      {selectedTaggedFriends.map((friend) => (
+                        <View
+                          key={friend.id}
+                          style={[styles.editTagChip, { borderColor: colors.border, backgroundColor: colors.background }]}
+                        >
+                          <Text style={[styles.editTagChipText, { color: colors.text }]} numberOfLines={1}>
+                            {friend.username ? `@${friend.username}` : friend.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={[styles.tagEmptyText, { color: colors.textSecondary }]}>No tagged friends</Text>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.editTagButton, { borderColor: colors.border }]}
+                    activeOpacity={0.75}
+                    onPress={() => setShowPeopleTagModal(true)}
+                  >
+                    <Feather name="user-plus" size={16} color={colors.text} />
+                    <Text style={[styles.editTagButtonText, { color: colors.text }]}>Tag Friends</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
                 <>
                   <Text style={[styles.tagTitle, { color: colors.text }]}>Tag friends</Text>
                   <View style={[styles.search, styles.tagSearch, { borderColor: colors.border }]}>
@@ -469,6 +510,12 @@ export default function ShareModal({ visible, onClose, onRepost, onUpdateCaption
           </ScrollView>
           </>}
         </Animated.View>
+        <PeopleTagModal
+          visible={showPeopleTagModal}
+          onClose={() => setShowPeopleTagModal(false)}
+          onSelect={handleEditTaggedFriendsSelection}
+          selected={selectedTaggedFriends}
+        />
       </View>
     </Modal>
   );
@@ -502,6 +549,12 @@ const styles = StyleSheet.create({
   previewTitle: { fontSize: 14, fontWeight: '700' },
   previewMeta: { fontSize: 11, lineHeight: 15 },
   tagTitle: { fontSize: 14, fontWeight: '700' },
+  editTagList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  editTagChip: { maxWidth: '100%', borderWidth: 1, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 8 },
+  editTagChipText: { fontSize: 12, fontWeight: '500' },
+  tagEmptyText: { fontSize: 13 },
+  editTagButton: { height: 44, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  editTagButtonText: { fontSize: 14, fontWeight: '600' },
   tagSearch: { marginHorizontal: 0, marginBottom: 0, height: 44 },
   tagRow: { gap: 8, paddingRight: 8 },
   tagChip: { height: 40, maxWidth: 150, borderWidth: 1, borderRadius: 20, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', gap: 6 },

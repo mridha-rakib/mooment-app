@@ -26,6 +26,17 @@ test("a light-mode counterpart style is exported from the same Mapbox style fami
   );
 });
 
+test("non-traffic map style constants are exported for the home map surface", () => {
+  assert.match(
+    mapStylesSource,
+    /export const APP_MAP_STYLE_URL_NO_TRAFFIC = "mapbox:\/\/styles\/mapbox\/dark-v11";/,
+  );
+  assert.match(
+    mapStylesSource,
+    /export const APP_MAP_STYLE_URL_LIGHT_NO_TRAFFIC = "mapbox:\/\/styles\/mapbox\/streets-v12";/,
+  );
+});
+
 test("satellite style constant is unchanged and independent of theme", () => {
   assert.match(
     mapStylesSource,
@@ -36,7 +47,7 @@ test("satellite style constant is unchanged and independent of theme", () => {
 test("MapScreen resolves the base style from isDark, satellite mode taking precedence", () => {
   assert.match(
     mapScreenSource,
-    /const currentMapStyle = isSatellite\s*\n\s*\? SATELLITE_MAP_STYLE_URL\s*\n\s*: isDark\s*\n\s*\? APP_MAP_STYLE_URL\s*\n\s*: APP_MAP_STYLE_URL_LIGHT;/,
+    /const currentMapStyle = isSatellite\s*\n\s*\? SATELLITE_MAP_STYLE_URL\s*\n\s*: isDark\s*\n\s*\? APP_MAP_STYLE_URL_NO_TRAFFIC\s*\n\s*: APP_MAP_STYLE_URL_LIGHT_NO_TRAFFIC;/,
   );
 });
 
@@ -44,15 +55,10 @@ test("MapScreen destructures isDark from the existing useTheme hook (no new them
   assert.match(mapScreenSource, /const \{ colors, isDark \} = useTheme\(\);/);
 });
 
-test("map shade overlay stays dark-mode-exact and only gains a light-mode counterpart", () => {
-  assert.match(mapScreenSource, /mapShadeTraffic: \{\s*\n\s*backgroundColor: "rgba\(0,0,0,0\.48\)",\s*\n\s*\},/);
-  assert.match(mapScreenSource, /mapShadeTrafficLight: \{\s*\n\s*backgroundColor: "rgba\(0,0,0,0\.26\)",\s*\n\s*\},/);
-  assert.match(mapScreenSource, /mapShadeSatellite: \{\s*\n\s*backgroundColor: "rgba\(0,0,0,0\.26\)",\s*\n\s*\},/);
-
-  assert.match(
-    mapScreenSource,
-    /const mapShadeStyle = isSatellite\s*\n\s*\? styles\.mapShadeSatellite\s*\n\s*: isDark\s*\n\s*\? styles\.mapShadeTraffic\s*\n\s*: styles\.mapShadeTrafficLight;/,
-  );
+test("map shade overlay is not rendered above the Mapbox map", () => {
+  assert.doesNotMatch(mapScreenSource, /\bmapShade\b/);
+  assert.doesNotMatch(mapScreenSource, /StyleSheet\.absoluteFillObject/);
+  assert.doesNotMatch(mapScreenSource, /rgba\(0,0,0,0\.48\)/);
 });
 
 test("style-loaded gate still keys off currentMapStyle, so theme switches re-arm marker rendering", () => {

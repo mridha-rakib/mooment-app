@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from "react-native";
+import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle, type ImageStyle } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 
 type UserAvatarProps = {
@@ -42,12 +42,13 @@ function UserAvatar({ uri, name, size, style, textStyle, iconSize }: UserAvatarP
     },
     style,
   ];
+  const imageStyle = avatarStyle as StyleProp<ImageStyle>;
 
   if (imageUri && !imageFailed) {
     return (
       <ExpoImage
         source={{ uri: imageUri }}
-        style={avatarStyle}
+        style={imageStyle}
         contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={imageUri}

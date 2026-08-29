@@ -278,6 +278,16 @@ export default function ProfileTab() {
     )));
   }, []);
 
+  const handleShareUpdated = useCallback((updatedShare: MomentTimelineItem) => {
+    setReposts((current) => current.map((share) => (
+      share.id === updatedShare.id ? updatedShare : share
+    )));
+  }, []);
+
+  const handleShareDeleted = useCallback((shareId: string) => {
+    setReposts((current) => current.filter((share) => share.id !== shareId));
+  }, []);
+
   const handleDeletePost = useCallback((post: PostData) => {
     Alert.alert(
       'Delete post',
@@ -310,6 +320,8 @@ export default function ProfileTab() {
         reposts={reposts}
         onRepost={handleRepost}
         onDeletePost={handleDeletePost}
+        onShareUpdated={handleShareUpdated}
+        onShareDeleted={handleShareDeleted}
         onInteractionChange={handleInteractionChange}
         onRefresh={loadTimeline}
         profileEvents={profileEvents}

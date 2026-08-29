@@ -103,6 +103,11 @@ export type RepostPayload = {
   clientRequestId?: string | null;
 };
 
+export type UpdateMomentSharePayload = {
+  caption?: string | null;
+  taggedFriendIds?: string[];
+};
+
 export type ProfileTimeline = {
   items: MomentTimelineItem[];
   stats: {
@@ -268,10 +273,13 @@ export const updateMoment = async (momentId: string, caption: string | null): Pr
   return moment;
 };
 
-// Edits ONLY the authenticated user's own repost/share commentary. Never
-// touches the original Post/Event, tagged friends, or any other share field.
-export const updateShareCaption = async (shareId: string, caption: string | null): Promise<MomentTimelineItem> => {
-  const response = await api.patch(`/moments/shares/${encodeURIComponent(shareId)}`, { caption });
+// Edits ONLY the authenticated user's own repost/share row. Never touches the
+// original Post/Event, and only updates the supported mutable share fields.
+export const updateMomentShare = async (
+  shareId: string,
+  payload: UpdateMomentSharePayload,
+): Promise<MomentTimelineItem> => {
+  const response = await api.patch(`/moments/shares/${encodeURIComponent(shareId)}`, payload);
   const share = response.data?.data?.share as MomentTimelineItem | undefined;
 
   if (!share) {
@@ -279,6 +287,10 @@ export const updateShareCaption = async (shareId: string, caption: string | null
   }
 
   return share;
+};
+
+export const deleteMomentShare = async (shareId: string): Promise<void> => {
+  await api.delete(`/moments/shares/${encodeURIComponent(shareId)}`);
 };
 
 // Owner-only manual retry for a Moment's failed video processing. The

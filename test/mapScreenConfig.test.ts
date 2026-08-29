@@ -52,7 +52,7 @@ test("mobile map does not use pan-mode props unsupported by the installed rnmapb
 
 test("mobile map avoids full-screen overlay and marker decoration touch capture", () => {
   assert.match(mapScreenSource, /<View pointerEvents="box-none" style=\{styles\.topHeader\}>/);
-  assert.match(mapScreenSource, /<View pointerEvents="none" style=\{\[styles\.mapShade, mapShadeStyle\]\} \/>/);
+  assert.doesNotMatch(mapScreenSource, /\bmapShade\b/);
   assert.match(mapScreenSource, /<View pointerEvents="box-none" style=\{\[styles\.mapControlsLeft,/);
   assert.match(mapScreenSource, /<View pointerEvents="box-none" style=\{\[styles\.mapControlsRight,/);
 
