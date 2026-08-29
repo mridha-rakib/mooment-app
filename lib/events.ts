@@ -2,6 +2,12 @@ import { api } from "@/lib/api";
 import type { EventCategory } from "@/constants/eventCategories";
 import { getMyTicketWallet, type TicketWalletItem } from "@/lib/payments";
 import type { FeedAudience } from "@/lib/moments";
+import {
+  EVENT_BY_ID_CACHE_TTL_MS,
+  clearEventByIdCache,
+  getEventByIdCached as getEventByIdCachedInternal,
+  invalidateCachedEventById,
+} from "@/lib/eventByIdCache";
 
 export type EventStatus = "draft" | "published" | "live" | "completed" | "cancelled";
 export type EventAgeRestriction = "all_ages" | "18_plus" | "21_plus";
@@ -441,18 +447,24 @@ export const publishEvent = async (payload: PublishedEventPayload, eventId?: str
     ? await api.post(`/events/${encodeURIComponent(eventId)}/publish`, payload)
     : await api.post("/events/publish", payload);
 
-  return getEventFromResponse(response);
+  const event = getEventFromResponse(response);
+  if (event.id) {
+    invalidateCachedEventById(event.id);
+  }
+  return event;
 };
 
 export const updateEvent = async (eventId: string, payload: EventPayload): Promise<EventResponse> => {
   const response = await api.patch(`/events/${encodeURIComponent(eventId)}`, payload);
 
+  invalidateCachedEventById(eventId);
   return getEventFromResponse(response);
 };
 
 export const deleteEvent = async (eventId: string): Promise<EventResponse> => {
   const response = await api.delete(`/events/${encodeURIComponent(eventId)}`);
 
+  invalidateCachedEventById(eventId);
   return getEventFromResponse(response);
 };
 
@@ -589,6 +601,23 @@ export const getEventById = async (eventId: string): Promise<EventResponse> => {
 
   return normalizeEventMediaUrls(getEventFromResponse(response));
 };
+
+// ── Event-by-id read cache (Phase 2A) ──────────────────────────────────────
+// Stops `getEventById` from re-hitting GET /events/:id every time an event
+// repost card unmounts/remounts while the Feed scrolls (FlatList drops
+// off-window cards), and collapses two reposts of the same event that mount
+// together into one request.
+//
+// The cache/dedupe mechanics live in the dependency-free ./eventByIdCache
+// module (unit-testable without React Native, imported at the top of this
+// file). Here we only bind them to the real `getEventById` fetcher and
+// re-export the surface. ONLY RepostFeedCard calls `getEventByIdCached` —
+// every other `getEventById` caller is unchanged, so no other screen gains
+// cache semantics.
+export { EVENT_BY_ID_CACHE_TTL_MS, clearEventByIdCache, invalidateCachedEventById };
+
+export const getEventByIdCached = (eventId: string): Promise<EventResponse> =>
+  getEventByIdCachedInternal(eventId, getEventById);
 
 export const addEventMedia = async (
   eventId: string,
@@ -883,6 +912,7 @@ export const cancelEvent = async (
   payload: { reasonType: EventCancellationReasonType; customReason?: string | null },
 ): Promise<EventResponse> => {
   const response = await api.post(`/events/${encodeURIComponent(eventId)}/cancel`, payload);
+  invalidateCachedEventById(eventId);
   return getEventFromResponse(response);
 };
 

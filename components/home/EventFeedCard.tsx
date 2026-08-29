@@ -365,7 +365,15 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
       }, delayMs);
     };
 
-    setStatusNowMs(Date.now());
+    // `statusNowMs` is already seeded with the current wall clock by
+    // `useState(() => Date.now())` above, so the first render's badge status is
+    // correct without any mount-time state update. Re-sampling the clock here
+    // only differed from that seed by a few milliseconds yet forced a
+    // guaranteed second full render of this (heavy) card on every mount —
+    // multiplied by FlatList mount/unmount churn during scroll. Real
+    // Upcoming→Live→Ended transitions stay driven by the boundary timer below,
+    // which updates `statusNowMs` when an actual scheduledAt/endAt boundary is
+    // reached.
     scheduleNextBoundary();
 
     return () => {

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import EventFeedCard from '@/components/home/EventFeedCard';
 import { useTheme } from '@/hooks/useTheme';
-import { getEventById, type EventResponse } from '@/lib/events';
+import { getEventByIdCached, type EventResponse } from '@/lib/events';
 import { mapMomentToPost } from '@/lib/momentPostMapper';
 import { shareMoment, updateShareCaption, type MomentAuthor, type MomentTimelineItem, type RepostPayload } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
@@ -63,7 +63,12 @@ function RepostFeedCard({
     let mounted = true;
     setEventLoading(true);
     setEventUnavailable(false);
-    getEventById(eventId)
+    // Cached + in-flight-deduped read (see getEventByIdCached in lib/events):
+    // a repost card that scrolls out of the FlatList window and back reuses
+    // the already-fetched event instead of re-issuing GET /events/:id, and two
+    // reposts of the same event share one request. Same resolved event shape,
+    // same unavailable/error handling below, same mounted guard.
+    getEventByIdCached(eventId)
       .then((value) => { if (mounted) setEvent(value); })
       .catch(() => { if (mounted) setEventUnavailable(true); })
       .finally(() => { if (mounted) setEventLoading(false); });
@@ -132,6 +137,7 @@ function RepostFeedCard({
 
   const header = (
     <RepostHeader
+      variant={isEvent ? 'event' : 'post'}
       reposterId={share.sharedBy?.id}
       reposterName={reposterName}
       reposterAvatar={reposterAvatar}
@@ -147,13 +153,7 @@ function RepostFeedCard({
   if (isEvent) {
     if (eventLoading) {
       return (
-        <View
-          style={[
-            styles.repostCard,
-            { backgroundColor: colors.card },
-            !isDark && { borderWidth: 1, borderColor: colors.border },
-          ]}
-        >
+        <View style={styles.sharedEventLoadingWrapper}>
           {header}
           <EventRepostLoadingPlaceholder showLoadingIndicator={showLoadingIndicator} />
           {editModal}
@@ -161,21 +161,27 @@ function RepostFeedCard({
       );
     }
 
+    // Premium shared-event presentation: a lightweight, transparent wrapper
+    // (no competing card background / outer border / heavy padding) so the
+    // reused EventFeedCard below reads as the single card surface instead of
+    // a card nested inside another card. The share header + optional share
+    // message sit directly on the feed background above it. The EventFeedCard
+    // itself — including its engagement row, which already targets the
+    // ORIGINAL event's moment — is rendered untouched.
     return (
-      <View
-        style={[
-          styles.repostCard,
-          { backgroundColor: colors.card },
-          // Light mode: colors.card === colors.background (both white), so
-          // without a border the repost card is invisible against the page.
-          // Dark mode is untouched (colors.card already differs from the
-          // dark page background).
-          !isDark && { borderWidth: 1, borderColor: colors.border },
-        ]}
-      >
-        {header}
+      <View style={styles.sharedEventWrapper}>
+        <View style={styles.shareHeaderArea}>
+          {header}
+          {share.repostCaption?.trim() ? (
+            <Text style={[styles.repostCaption, { color: colors.text }]}>{share.repostCaption.trim()}</Text>
+          ) : null}
+        </View>
         {eventUnavailable || !event ? (
-          <UnavailableCard />
+          // Light mode: colors.card === colors.background (both white), so the
+          // fallback needs its own border to be visible against the page.
+          <View style={[styles.sharedEventFallbackFrame, !isDark && { borderWidth: 1, borderColor: colors.border }]}>
+            <UnavailableCard />
+          </View>
         ) : (
           <EventFeedCard event={event} onRepostSuccess={onRepostSuccess} embedded />
         )}
@@ -217,6 +223,7 @@ function RepostFeedCard({
 export default React.memo(RepostFeedCard);
 
 const RepostHeader = React.memo(function RepostHeader({
+  variant = 'post',
   reposterId,
   reposterName,
   reposterAvatar,
@@ -227,6 +234,7 @@ const RepostHeader = React.memo(function RepostHeader({
   isOwnRepost,
   onEditPress,
 }: {
+  variant?: 'event' | 'post';
   reposterId?: string | null;
   reposterName: string;
   reposterAvatar?: string | null;
@@ -270,6 +278,68 @@ const RepostHeader = React.memo(function RepostHeader({
       isFollowing: Boolean(friend.isFollowing),
     });
   };
+
+  const moreMenu = isOwnRepost ? (
+    <>
+      <TouchableOpacity ref={moreBtnRef} style={styles.moreBtn} activeOpacity={0.75} onPress={handleMorePress}>
+        <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+      {showMoreMenu && (
+        <MoreMenuModal
+          visible={showMoreMenu}
+          onClose={() => setShowMoreMenu(false)}
+          showEdit
+          onEdit={onEditPress}
+          top={menuTop}
+        />
+      )}
+    </>
+  ) : null;
+
+  // Compact, premium share attribution for a shared event:
+  //   [avatar]  **K Mbappe** shared an event
+  //             1d ago
+  // Name carries the emphasis; "shared an event" is muted. No separate
+  // "Shared" heading. The optional share message is rendered by the wrapper
+  // directly beneath this header (not indented under the name).
+  if (variant === 'event') {
+    return (
+      <View style={styles.shareHeaderRow}>
+        <TouchableOpacity activeOpacity={0.7} onPress={openReposterProfile} disabled={!reposterId}>
+          <UserAvatar uri={reposterAvatar} name={reposterName} size={36} style={styles.shareHeaderAvatar} />
+        </TouchableOpacity>
+        <View style={styles.shareHeaderText}>
+          <Text style={[styles.shareHeaderLine, { color: colors.text }]} numberOfLines={2}>
+            <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
+            <Text style={{ color: colors.textSecondary }}> shared an event</Text>
+            {validTaggedFriends.length > 0 ? (
+              <Text style={{ color: colors.textSecondary }}>
+                {' with '}
+                {validTaggedFriends.map((friend, index) => (
+                  <React.Fragment key={friend.id ?? `${getTaggedFriendName(friend)}-${index}`}>
+                    {index > 0 ? (
+                      <Text style={{ color: colors.textSecondary }}>
+                        {index === validTaggedFriends.length - 1 ? ' and ' : ', '}
+                      </Text>
+                    ) : null}
+                    <Text
+                      style={[styles.reposterName, { color: colors.text }]}
+                      onPress={() => openTaggedProfile(friend)}
+                      suppressHighlighting
+                    >
+                      {getTaggedFriendName(friend)}
+                    </Text>
+                  </React.Fragment>
+                ))}
+              </Text>
+            ) : null}
+          </Text>
+          {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
+        </View>
+        {moreMenu}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.repostHeader}>
@@ -391,6 +461,43 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 16,
     padding: 12,
+  },
+  // Shared-event presentation: transparent, no outer card fill/border. The
+  // reused EventFeedCard supplies its own card surface + horizontal margin
+  // (16) + bottom margin (20), so the wrapper only positions the share
+  // header above it.
+  sharedEventWrapper: {
+    marginBottom: 0,
+  },
+  sharedEventLoadingWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  shareHeaderArea: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  sharedEventFallbackFrame: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  shareHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  shareHeaderAvatar: {
+    marginTop: 1,
+  },
+  shareHeaderText: {
+    flex: 1,
+    paddingTop: 1,
+  },
+  shareHeaderLine: {
+    fontSize: 14,
+    lineHeight: 19,
   },
   repostHeader: {
     flexDirection: 'row',

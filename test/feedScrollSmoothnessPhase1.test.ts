@@ -108,8 +108,23 @@ test("LIVE animation and EventFeedCard code remain outside Phase 1 refresh chang
   assert.doesNotMatch(homeSource, /livePulseProgress/);
 });
 
-test("video extraData behavior remains unchanged", () => {
-  assert.match(homeSource, /const feedListExtraData = useMemo\(\s*\(\) => \(\{ activeFeedVideoItemId, activeTheme \}\),/);
+// Phase 2B intentionally changed this wiring: while Feed video playback is
+// disabled (VIDEO_PLAYBACK_ENABLED in FeedPost) the Feed no longer tracks the
+// active video on scroll, so inactive video state is gated out of the
+// FlatList extraData / renderItem identity. The video implementation is
+// preserved (gated), not deleted. Phase 1's scroll-deferral behaviour — the
+// actual subject of this file — is unaffected; see the other tests here.
+test("video viewability wiring is gated off VIDEO_PLAYBACK_ENABLED (Phase 2B)", () => {
+  assert.match(homeSource, /import FeedPost, \{ PostData, VIDEO_PLAYBACK_ENABLED \} from "@\/components\/post\/FeedPost";/);
+  assert.match(
+    homeSource,
+    /const feedListExtraData = useMemo\(\s*\(\) => \(VIDEO_PLAYBACK_ENABLED \? \{ activeFeedVideoItemId, activeTheme \} : \{ activeTheme \}\),/,
+  );
   assert.match(homeSource, /extraData=\{feedListExtraData\}/);
-  assert.match(homeSource, /isActiveVideo=\{activeFeedVideoItemId === item\.id\}/);
+  assert.match(homeSource, /isActiveVideo=\{VIDEO_PLAYBACK_ENABLED && activeFeedVideoItemId === item\.id\}/);
+  assert.match(homeSource, /onViewableItemsChanged=\{VIDEO_PLAYBACK_ENABLED \? onViewableFeedItemsChanged : undefined\}/);
+  assert.match(homeSource, /viewabilityConfig=\{VIDEO_PLAYBACK_ENABLED \? feedViewabilityConfig : undefined\}/);
+  // Implementation kept for future re-enable, not removed.
+  assert.match(homeSource, /const onViewableFeedItemsChanged = useRef\(/);
+  assert.match(homeSource, /const feedViewabilityConfig = useRef\(/);
 });

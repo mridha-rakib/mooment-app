@@ -123,7 +123,12 @@ export type ProductDetails = {
 // chat-detail.tsx. This is a static module-level constant (not a prop/state),
 // so gating on it inside VideoFeedMedia never changes hook call order between
 // renders.
-const VIDEO_PLAYBACK_ENABLED = false;
+//
+// Exported so the Feed screen (home.tsx) can gate its video *viewability
+// tracking* off the same single source of truth while playback is disabled —
+// see the "Feed video playback is intentionally disabled" notes there. Flip
+// this one constant back to `true` to restore both playback and tracking.
+export const VIDEO_PLAYBACK_ENABLED = false;
 
 export type MediaDisplayCrop = {
   crop?: {

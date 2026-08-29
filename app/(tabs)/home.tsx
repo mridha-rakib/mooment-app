@@ -15,7 +15,7 @@ import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow"
 import StoryCarousel, { HomeTabsRow, StoryData } from "@/components/home/StoryCarousel";
 import ParticipatedWindowsList from "@/components/home/ParticipatedWindowsList";
 import CommentsModal from "@/components/post/CommentsModal";
-import FeedPost, { PostData } from "@/components/post/FeedPost";
+import FeedPost, { PostData, VIDEO_PLAYBACK_ENABLED } from "@/components/post/FeedPost";
 import ShareModal from "@/components/post/ShareModal";
 import RepostFeedCard from "@/components/post/RepostFeedCard";
 
@@ -593,7 +593,19 @@ export default function HomeFeed() {
     minimumViewTime: 120,
   }).current;
 
+  // Feed video playback is intentionally disabled for now (VIDEO_PLAYBACK_ENABLED
+  // in FeedPost). Keep this implementation for future video-feature work: it
+  // picks the top-most viewable video item so the player can autoplay it. While
+  // playback is disabled it must not run on every viewability crossing during a
+  // scroll — that only churned activeFeedVideoItemId / extraData / renderItem
+  // for zero benefit. The FlatList below simply does not wire
+  // onViewableItemsChanged while disabled, and this body no-ops as a second
+  // guard so it stays correct if it is ever re-wired first.
   const onViewableFeedItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (!VIDEO_PLAYBACK_ENABLED) {
+      return;
+    }
+
     const nextActiveVideoPost = viewableItems
       .filter((viewToken) => (
         viewToken.isViewable &&
@@ -1300,8 +1312,13 @@ export default function HomeFeed() {
     feedItems.length,
     shouldShowFeedSkeleton,
   ]);
+  // While Feed video playback is disabled (VIDEO_PLAYBACK_ENABLED in FeedPost),
+  // activeFeedVideoItemId is never tracked, so it must not sit in the list's
+  // extraData — otherwise it would still be part of the identity FlatList
+  // diffs windowed cells against. Restore the `activeFeedVideoItemId` field
+  // here when the video feature is picked back up.
   const feedListExtraData = useMemo(
-    () => ({ activeFeedVideoItemId, activeTheme }),
+    () => (VIDEO_PLAYBACK_ENABLED ? { activeFeedVideoItemId, activeTheme } : { activeTheme }),
     [activeFeedVideoItemId, activeTheme],
   );
 
@@ -1318,7 +1335,10 @@ export default function HomeFeed() {
           onDeletePress={handleDeletePost}
           onPostUpdated={handlePostUpdated}
           onAuthorBlocked={handleUserBlockedFromReport}
-          isActiveVideo={activeFeedVideoItemId === item.id}
+          // Feed video playback is intentionally disabled for now
+          // (VIDEO_PLAYBACK_ENABLED in FeedPost); while it is off no card is
+          // ever the "active video", so this never influences render output.
+          isActiveVideo={VIDEO_PLAYBACK_ENABLED && activeFeedVideoItemId === item.id}
         />
       );
     }
@@ -1341,7 +1361,8 @@ export default function HomeFeed() {
           share={item.data}
           onRepostSuccess={refreshFeedAfterRepost}
           onShareUpdated={handleShareUpdated}
-          isActiveVideo={activeFeedVideoItemId === item.id}
+          // Disabled alongside FeedPost — see the FeedPost isActiveVideo note above.
+          isActiveVideo={VIDEO_PLAYBACK_ENABLED && activeFeedVideoItemId === item.id}
         />
       );
     }
@@ -1412,8 +1433,17 @@ export default function HomeFeed() {
             maxToRenderPerBatch={3}
             updateCellsBatchingPeriod={40}
             windowSize={7}
-            viewabilityConfig={feedViewabilityConfig}
-            onViewableItemsChanged={onViewableFeedItemsChanged}
+            // Feed video playback is intentionally disabled for now
+            // (VIDEO_PLAYBACK_ENABLED in FeedPost). Keep the viewability config
+            // + callback above for future video-feature work, but do not wire
+            // them while playback is off: viewability tracking existed only to
+            // pick the autoplay target, and running it on every scroll
+            // crossing churned activeFeedVideoItemId -> HomeFeed render ->
+            // extraData/renderItem for no benefit. VIDEO_PLAYBACK_ENABLED is a
+            // module constant, so this prop pair is stable across renders (no
+            // "changing onViewableItemsChanged on the fly" issue).
+            viewabilityConfig={VIDEO_PLAYBACK_ENABLED ? feedViewabilityConfig : undefined}
+            onViewableItemsChanged={VIDEO_PLAYBACK_ENABLED ? onViewableFeedItemsChanged : undefined}
             onScrollBeginDrag={handleFeedScrollActive}
             onMomentumScrollBegin={handleFeedScrollActive}
             onScrollEndDrag={handleFeedScrollIdle}
