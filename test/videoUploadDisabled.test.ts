@@ -57,8 +57,24 @@ test("Moment/Post: video creation is disabled by a single flag, not deleted", ()
 
 test("Moment/Post: video toolbar entry and both video modals are gated", () => {
   assert.match(createPostSource, /\{VIDEO_MOMENT_CREATION_ENABLED \? \(\s*<TouchableOpacity style=\{styles\.toolbarItem\} onPress=\{\(\) => setShowVideoPicker\(true\)\}/);
-  assert.match(createPostSource, /visible=\{VIDEO_MOMENT_CREATION_ENABLED && showVideoPicker\}/);
-  assert.match(createPostSource, /visible=\{VIDEO_MOMENT_CREATION_ENABLED && showVideoCamera\}/);
+
+  // While disabled the sheets are not mounted at all — the mount gate, not just
+  // a `visible={false}` prop. Exactly one occurrence of each, each inside a
+  // `{VIDEO_MOMENT_CREATION_ENABLED && ( ... )}` block.
+  assert.equal((createPostSource.match(/<VideoPickerSheet[\s\n]/g) ?? []).length, 1);
+  assert.equal((createPostSource.match(/<VideoCameraSheet[\s\n]/g) ?? []).length, 1);
+  assert.match(createPostSource, /\{VIDEO_MOMENT_CREATION_ENABLED && \(\s*<VideoPickerSheet\s/);
+  assert.match(createPostSource, /\{VIDEO_MOMENT_CREATION_ENABLED && \(\s*<VideoCameraSheet\s/);
+
+  // CameraSheet (image capture) and AudioPickerSheet are NOT behind the video
+  // flag — they still mount unconditionally exactly as before.
+  assert.match(createPostSource, /<CameraSheet\s+visible=\{showCamera\}/);
+  assert.match(createPostSource, /<AudioPickerSheet\s+visible=\{showAudioPicker\}/);
+  const beforeCamera = createPostSource.slice(0, createPostSource.indexOf("<CameraSheet"));
+  assert.doesNotMatch(
+    beforeCamera.slice(beforeCamera.lastIndexOf("{/* ── Modals ── */}")),
+    /VIDEO_MOMENT_CREATION_ENABLED/,
+  );
 });
 
 test("Moment/Post: the actual video upload network call is refused when disabled, even if reached directly", () => {

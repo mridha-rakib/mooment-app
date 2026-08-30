@@ -1120,9 +1120,18 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   }, [imageSize.height, imageSize.width, resolvedUri]);
 
   useEffect(() => {
-    setImageSize({
-      width: item.displayCrop?.imageWidth ?? 0,
-      height: item.displayCrop?.imageHeight ?? 0,
+    const nextWidth = item.displayCrop?.imageWidth ?? 0;
+    const nextHeight = item.displayCrop?.imageHeight ?? 0;
+
+    setImageSize((current) => {
+      if (current.width === nextWidth && current.height === nextHeight) {
+        return current;
+      }
+
+      return {
+        width: nextWidth,
+        height: nextHeight,
+      };
     });
   }, [item.displayCrop?.imageHeight, item.displayCrop?.imageWidth, resolvedUri]);
 

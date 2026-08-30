@@ -1789,6 +1789,10 @@ export default function CreateMomentScreen() {
   const isSubmittingRef = useRef(false);
   const isAudioPickerOpeningRef = useRef(false);
   const isVideoPickerOpeningRef = useRef(false);
+  const isImagePickerOpeningRef = useRef(false);
+  // Synchronous one-shot guard for the header X / close action. The screen is
+  // leaving on the first press, so this is intentionally never reset.
+  const isClosingRef = useRef(false);
 
   // Modal states
   const [showCamera, setShowCamera] = useState(false);
@@ -2061,6 +2065,12 @@ export default function CreateMomentScreen() {
   };
 
   const handlePickImage = async () => {
+    if (isImagePickerOpeningRef.current) {
+      return;
+    }
+
+    isImagePickerOpeningRef.current = true;
+
     try {
       const selectedImageCount = selectedMediaType === 'image' ? selectedImages.length : 0;
 
@@ -2098,6 +2108,8 @@ export default function CreateMomentScreen() {
       );
     } catch (error) {
       Alert.alert('Unable to choose image', getAuthErrorMessage(error, 'Please choose another image.'));
+    } finally {
+      isImagePickerOpeningRef.current = false;
     }
   };
 
@@ -2318,6 +2330,13 @@ export default function CreateMomentScreen() {
       });
 
       setPendingNewMoment(newMoment);
+      // Success: hold the submit lock until the screen leaves. handleDone runs
+      // its existing delayed navigation after this returns, and during that
+      // window the Done button would otherwise re-enable and allow a second
+      // POST /moments (and a second media upload). The backend has no
+      // duplicate-create idempotency for this flow, so the lock stays held on
+      // this path and is only released on failure (in `finally`) for retry.
+      shouldReleaseSubmitLock = false;
       return 'created';
     } catch (error) {
       Alert.alert(
@@ -2333,14 +2352,26 @@ export default function CreateMomentScreen() {
     }
   };
 
+  // Single navigation choke point for leaving Create Post. Synchronous one-shot
+  // guard: rapid X taps (or an X tap racing the post-success auto-navigation)
+  // can only trigger safeBack once. safeBack itself is unchanged.
+  const handleClose = () => {
+    if (isClosingRef.current) {
+      return;
+    }
+
+    isClosingRef.current = true;
+    safeBack(router, '/(tabs)/home');
+  };
+
   const handleDone = async () => {
     const result = await publishMoment();
 
     if (result === 'pending') {
-      safeBack(router, '/(tabs)/home');
+      handleClose();
     } else if (result === 'created') {
       setTimeout(() => {
-        safeBack(router, '/(tabs)/home');
+        handleClose();
       }, 1500);
     }
   };
@@ -2358,7 +2389,7 @@ export default function CreateMomentScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <CreateMomentCloseButton onPress={() => safeBack(router, '/(tabs)/home')} />
+        <CreateMomentCloseButton onPress={handleClose} />
         <Text style={styles.headerTitle}>Create Post</Text>
         <TouchableOpacity style={[styles.doneBtn, isSubmitting && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isSubmitting}>
           <Text style={styles.doneBtnText}>Done</Text>
@@ -2564,20 +2595,28 @@ export default function CreateMomentScreen() {
           },
         ])}
       />
-      <VideoPickerSheet
-        visible={VIDEO_MOMENT_CREATION_ENABLED && showVideoPicker}
-        onClose={() => setShowVideoPicker(false)}
-        onRecordVideo={() => {
-          setShowVideoPicker(false);
-          setShowVideoCamera(true);
-        }}
-        onPickVideo={handlePickVideo}
-      />
-      <VideoCameraSheet
-        visible={VIDEO_MOMENT_CREATION_ENABLED && showVideoCamera}
-        onClose={() => setShowVideoCamera(false)}
-        onRecorded={(uri, contentType, name, durationSeconds) => handleVideoSelect(uri, 'camera', contentType, name, durationSeconds)}
-      />
+      {/* Video is hard-disabled (VIDEO_MOMENT_CREATION_ENABLED). While disabled
+          the dormant Video sheets are not mounted at all, so their camera /
+          microphone permission hooks and hook/effect work never run on a
+          Create Post open. Flip the flag to restore the existing behaviour. */}
+      {VIDEO_MOMENT_CREATION_ENABLED && (
+        <VideoPickerSheet
+          visible={showVideoPicker}
+          onClose={() => setShowVideoPicker(false)}
+          onRecordVideo={() => {
+            setShowVideoPicker(false);
+            setShowVideoCamera(true);
+          }}
+          onPickVideo={handlePickVideo}
+        />
+      )}
+      {VIDEO_MOMENT_CREATION_ENABLED && (
+        <VideoCameraSheet
+          visible={showVideoCamera}
+          onClose={() => setShowVideoCamera(false)}
+          onRecorded={(uri, contentType, name, durationSeconds) => handleVideoSelect(uri, 'camera', contentType, name, durationSeconds)}
+        />
+      )}
       <AudioPickerSheet
         visible={showAudioPicker}
         onClose={() => setShowAudioPicker(false)}
