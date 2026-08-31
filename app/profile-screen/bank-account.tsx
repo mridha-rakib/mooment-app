@@ -51,6 +51,7 @@ export default function BankAccountScreen() {
   const [connectedAccount, setConnectedAccount] = useState<StripeConnectAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const primaryPayoutAccount = useMemo(
     () =>
@@ -62,11 +63,15 @@ export default function BankAccountScreen() {
 
   const loadAccount = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
 
     try {
       setConnectedAccount(await getStripeConnectAccount());
     } catch {
-      setConnectedAccount(null);
+      // A thrown request (offline, timeout, 5xx, failed auth refresh) is not the
+      // same as "no account" — surface a retryable error instead of the
+      // not-connected empty state.
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -119,6 +124,22 @@ export default function BankAccountScreen() {
       {isLoading ? (
         <View style={styles.center}>
           <Spinner color={colors.primary} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.errorState}>
+          <Text style={[styles.errorTitle, { color: colors.text }]}>
+            Unable to load bank account
+          </Text>
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+            We could not load your payout account. Check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={loadAccount}
+            disabled={isLoading}
+          >
+            <Text style={[styles.retryBtnText, { color: colors.text }]}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <ScrollView
@@ -396,4 +417,20 @@ const styles = StyleSheet.create({
   },
   connectBtnDisabled: { opacity: 0.6 },
   connectBtnText: { fontSize: 15, fontWeight: "700" },
+  errorState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    gap: 10,
+  },
+  errorTitle: { fontSize: 18, fontWeight: "800", textAlign: "center" },
+  errorText: { fontSize: 13, textAlign: "center", lineHeight: 20, marginBottom: 6 },
+  retryBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  retryBtnText: { fontSize: 14, fontWeight: "600" },
 });

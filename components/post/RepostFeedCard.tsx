@@ -39,12 +39,20 @@ function RepostFeedCard({
 }: Props) {
   const { colors, isDark } = useTheme();
   const currentUserId = useAuthStore((state) => state.user?.id);
+  const isEvent = share.originalItem?.type === 'event';
   const [event, setEvent] = useState<EventResponse | null>(null);
-  const [eventLoading, setEventLoading] = useState(false);
+  // Seed loading=true up front for an event repost that has an original event
+  // id to resolve, so the FIRST committed render is the loading placeholder —
+  // not the transient "unavailable" frame the old `false`→effect flip briefly
+  // rendered before the fetch effect ran (it also re-flashed on every Android
+  // virtualization remount). A malformed event repost with no original id
+  // still starts `false` and lands on the real UnavailableCard, unchanged.
+  const [eventLoading, setEventLoading] = useState(
+    () => isEvent && Boolean(share.originalItem?.id),
+  );
   const [eventUnavailable, setEventUnavailable] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
   const [editCaptionVisible, setEditCaptionVisible] = useState(false);
-  const isEvent = share.originalItem?.type === 'event';
   // Edit visibility is the SHARE owner, never the original content's author —
   // a user may always edit their own repost commentary even when they don't
   // own the original Post/Event.
@@ -180,11 +188,26 @@ function RepostFeedCard({
     />
   );
 
+  // Identical header + caption flow block for EVERY event-repost state
+  // (loading, loaded, unavailable) so the row's top region contributes the
+  // exact same vertical space before and after the event resolves. The
+  // caption is the real `share.repostCaption` — already present in the list
+  // payload — rendered with its real style, so its height/wrapping is
+  // reserved during loading with no placeholder text.
+  const eventHeaderArea = (
+    <View style={styles.shareHeaderArea}>
+      {header}
+      {share.repostCaption?.trim() ? (
+        <Text style={[styles.sharedEventMessage, { color: colors.text }]}>{share.repostCaption.trim()}</Text>
+      ) : null}
+    </View>
+  );
+
   if (isEvent) {
     if (eventLoading) {
       return (
-        <View style={styles.sharedEventLoadingWrapper}>
-          {header}
+        <View style={styles.sharedEventWrapper}>
+          {eventHeaderArea}
           <EventRepostLoadingPlaceholder showLoadingIndicator={showLoadingIndicator} />
           {editModal}
         </View>
@@ -200,12 +223,7 @@ function RepostFeedCard({
     // ORIGINAL event's moment — is rendered untouched.
     return (
       <View style={styles.sharedEventWrapper}>
-        <View style={styles.shareHeaderArea}>
-          {header}
-          {share.repostCaption?.trim() ? (
-            <Text style={[styles.sharedEventMessage, { color: colors.text }]}>{share.repostCaption.trim()}</Text>
-          ) : null}
-        </View>
+        {eventHeaderArea}
         {eventUnavailable || !event ? (
           // Light mode: colors.card === colors.background (both white), so the
           // fallback needs its own border to be visible against the page.
@@ -502,10 +520,6 @@ const styles = StyleSheet.create({
   sharedEventWrapper: {
     marginBottom: 0,
   },
-  sharedEventLoadingWrapper: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
   shareHeaderArea: {
     paddingHorizontal: 16,
     paddingBottom: 10,
@@ -565,8 +579,20 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   message: { fontSize: 13 },
+  // Reserves the embedded EventFeedCard's real in-flow (border-box) height so
+  // the loading→loaded swap causes no vertical jump. Derived from the current
+  // EventFeedCard styles for the embedded-repost path (no headerLabel and no
+  // "liked by" row — GET /events/:id carries no socialContext):
+  //   1 top border + header 64 (padV 12·2 + avatar 40)
+  //   + imageContainer 250
+  //   + actionBar 68 (padV 12·2 + PostInteractionBar action minHeight 44)
+  //   + 1 bottom border  = 384
+  // marginHorizontal/marginBottom mirror EventFeedCard's own `card` style so
+  // the skeleton occupies the identical box the real card will.
   eventLoadingCard: {
-    minHeight: 362,
+    minHeight: 384,
+    marginHorizontal: 16,
+    marginBottom: 20,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 0,
@@ -604,7 +630,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eventLoadingActions: {
-    minHeight: 48,
+    // Matches EventFeedCard's actionBar: paddingVertical 12·2 + the
+    // PostInteractionBar row (action minHeight 44) = 68.
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,

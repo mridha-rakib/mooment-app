@@ -38,6 +38,17 @@ type ExpoConstantsWithDevHost = typeof Constants & {
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
+// Hosts that are only reachable from a developer machine or the Android
+// emulator. A release build (APK/AAB — including EAS "preview" and
+// "production", where __DEV__ is false) must never use one of these as its API
+// target: resolveApiBaseUrl() discards such a value so the request layer fails
+// clearly (see the "Missing EXPO_PUBLIC_API_BASE_URL." guards) instead of
+// silently calling localhost.
+const DEV_ONLY_API_HOSTS = new Set([...LOCAL_HOSTS, "10.0.2.2"]);
+
+const isDevOnlyApiHost = (hostname: string | null | undefined) =>
+  Boolean(hostname) && DEV_ONLY_API_HOSTS.has(hostname as string);
+
 const getHostFromUri = (uri: string | undefined) => {
   if (!uri) {
     return null;
@@ -97,8 +108,17 @@ const resolveApiBaseUrl = () => {
       }
     }
 
+    // Never let a release build fall back to a developer-only API host.
+    if (!__DEV__ && isDevOnlyApiHost(url.hostname)) {
+      return undefined;
+    }
+
     return url.toString().replace(/\/$/, "");
   } catch {
+    if (!__DEV__ && isDevOnlyApiHost(getHostFromUri(configuredUrl))) {
+      return undefined;
+    }
+
     return configuredUrl.replace(/\/$/, "");
   }
 };

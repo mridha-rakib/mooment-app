@@ -88,7 +88,7 @@ module.exports = ({ config }) => {
         ],
         "./plugins/withAndroidGradleMemorySettings",
         "./plugins/withAndroidAdbReverse",
-        "./plugins/withUsesCleartextTraffic",
+        ...(appVariant === "production" ? [] : ["./plugins/withUsesCleartextTraffic"]), // dev/preview only — production must not globally allow cleartext HTTP (AUDIT-002)
         "expo-secure-store",
       ],
       extra: {

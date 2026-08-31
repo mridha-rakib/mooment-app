@@ -125,7 +125,9 @@ test("11. Phase 1 scroll deferral + repost loading geometry are unchanged", () =
   assert.match(homeSource, /pendingFeedRefreshCommitRef\.current = nextCommit;/);
   assert.match(homeSource, /const flushPendingFeedRefreshCommit = useCallback/);
   assert.match(homeSource, /feedScrollIdleTimerRef\.current = setTimeout\(/);
-  assert.match(repostSource, /eventLoadingCard:\s*\{\s*minHeight:\s*362,/);
+  // Event-repost loading card reserves the embedded EventFeedCard's real
+  // in-flow height (updated 362 -> 384 by the row-height stabilization pass).
+  assert.match(repostSource, /eventLoadingCard:\s*\{\s*minHeight:\s*384,/);
 });
 
 // 12 ────────────────────────────────────────────────────────────────────────

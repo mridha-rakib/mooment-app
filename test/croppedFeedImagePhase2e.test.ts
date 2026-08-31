@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-const feedPostSource = readFileSync(join(process.cwd(), "components/post/FeedPost.tsx"), "utf8");
+// Normalize CRLF so the exact-`\n` substring anchors below match regardless of
+// the source file's line endings (this repo mixes LF and CRLF files).
+const feedPostSource = readFileSync(join(process.cwd(), "components/post/FeedPost.tsx"), "utf8").replace(/\r\n/g, "\n");
 
 const croppedFeedImageSource = feedPostSource.slice(
   feedPostSource.indexOf("function CroppedFeedImage"),

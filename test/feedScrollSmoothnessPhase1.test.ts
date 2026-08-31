@@ -16,9 +16,13 @@ const eventFeedCardSource = readFileSync(join(process.cwd(), "components/home/Ev
 
 test("event repost loading reserves substantial embedded event-card geometry", () => {
   assert.match(repostFeedCardSource, /function EventRepostLoadingPlaceholder/);
-  assert.match(repostFeedCardSource, /eventLoadingCard:\s*\{\s*minHeight:\s*362,/);
+  // Row-height stabilization: the placeholder now reserves the embedded
+  // EventFeedCard's real in-flow height (1 + 64 + 250 + 68 + 1 = 384) instead
+  // of the old shorter 362, and its action block matches the real 68px
+  // actionBar instead of 48.
+  assert.match(repostFeedCardSource, /eventLoadingCard:\s*\{\s*minHeight:\s*384,/);
   assert.match(repostFeedCardSource, /eventLoadingImage:\s*\{\s*height:\s*250,/);
-  assert.match(repostFeedCardSource, /eventLoadingActions:\s*\{\s*minHeight:\s*48,/);
+  assert.match(repostFeedCardSource, /eventLoadingActions:\s*\{[\s\S]*?minHeight:\s*68,/);
 });
 
 test("event repost final rendered EventFeedCard remains unchanged", () => {
@@ -28,7 +32,9 @@ test("event repost final rendered EventFeedCard remains unchanged", () => {
 test("event repost loading no longer collapses to a tiny spinner-only placeholder", () => {
   assert.doesNotMatch(repostFeedCardSource, /return showLoadingIndicator\s*\?\s*<ActivityIndicator/);
   assert.doesNotMatch(repostFeedCardSource, /loadingSpacer:\s*\{\s*height:\s*72\s*\}/);
-  assert.match(repostFeedCardSource, /\{header\}\s*<EventRepostLoadingPlaceholder showLoadingIndicator=\{showLoadingIndicator\} \/>/);
+  // The loading branch now renders the shared `eventHeaderArea` block (header
+  // + real caption) above the placeholder — same block the loaded branch uses.
+  assert.match(repostFeedCardSource, /\{eventHeaderArea\}\s*<EventRepostLoadingPlaceholder showLoadingIndicator=\{showLoadingIndicator\} \/>/);
 });
 
 test("feed refresh while not scrolling applies immediately", () => {

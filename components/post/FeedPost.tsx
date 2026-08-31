@@ -1416,7 +1416,24 @@ function FeedPost({
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-  const [mediaFrameWidth, setMediaFrameWidth] = useState(() => Math.max(windowWidth - 64, 1));
+  // Seed the media frame width with the width `handleMediaLayout` will actually
+  // measure, so the ordinary mount/remount does not render one frame at a wrong
+  // width and then snap once onLayout corrects it.
+  //   - non-normal cards (event/product): styles.postCard keeps its 16px
+  //     horizontal margin AND 16px inner padding -> windowWidth - 32 - 32.
+  //   - standard ("normal") standalone cards: styles.normalPostCard sets
+  //     padding:0, so only the 16px margin applies -> windowWidth - 32.
+  //   - embedded (repost) cards live inside RepostFeedCard's own padded wrapper,
+  //     whose geometry FeedPost cannot see here, so they keep the legacy
+  //     assumption and let handleMediaLayout do the (small) correction.
+  // The light-mode 1px card border is not subtracted here; the residual is
+  // <=2px and handleMediaLayout still trims it, exactly as before.
+  const [mediaFrameWidth, setMediaFrameWidth] = useState(() =>
+    Math.max(
+      post.postType === 'standard' && !embedded ? windowWidth - 32 : windowWidth - 64,
+      1,
+    ),
+  );
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
