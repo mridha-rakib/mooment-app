@@ -2,8 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import BackButton from "@/components/ui/BackButton";
 import { Spinner } from "@/components/ui/spinner";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, AppState, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import { setTheme } from "@/redux/slice/preference";
@@ -11,6 +11,24 @@ import { useTheme } from "@/hooks/useTheme";
 import { writeThemePreference } from "@/lib/themePreference";
 import { useAuthStore } from "@/stores/authStore";
 import { useLocationSharingStore } from "@/stores/locationSharingStore";
+
+type ExpoNotificationsModule = typeof import("expo-notifications");
+type NotificationPermissionResponse = Awaited<ReturnType<ExpoNotificationsModule["getPermissionsAsync"]>>;
+type NotificationPermissionState = "unknown" | "granted" | "denied" | "blocked";
+
+const isNotificationPermissionGranted = (permission: NotificationPermissionResponse) =>
+  permission.granted || permission.status === "granted";
+
+const getNotificationPermissionState = (
+  permission: NotificationPermissionResponse,
+): NotificationPermissionState => {
+  if (isNotificationPermissionGranted(permission)) {
+    return "granted";
+  }
+
+  return permission.canAskAgain === false ? "blocked" : "denied";
+};
+
 type SettingItemProps = {
   icon: string;
   label: string;
@@ -68,14 +86,45 @@ export default function SettingsScreen() {
 
   // Settings states
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
+  const [notificationPermissionState, setNotificationPermissionState] =
+    useState<NotificationPermissionState>("unknown");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const notificationUpdateRef = useRef(false);
   // Transient, display-only value: lets the Switch move the instant the user taps it
   // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
   const [pendingLocationValue, setPendingLocationValue] = useState<boolean | null>(null);
   const locationEnabled = pendingLocationValue !== null
     ? pendingLocationValue
     : Boolean(user?.currentLocationSharingEnabled);
-  const notificationEnabled = user?.notificationsEnabled ?? true;
+  const backendNotificationsEnabled = user?.notificationsEnabled ?? true;
+  const notificationOsPermissionGranted = notificationPermissionState === "granted";
+  const notificationEnabled = backendNotificationsEnabled && notificationOsPermissionGranted;
+
+  const refreshNotificationPermission = useCallback(async () => {
+    try {
+      const Notifications = await import("expo-notifications");
+      const permission = await Notifications.getPermissionsAsync();
+      setNotificationPermissionState(getNotificationPermissionState(permission));
+    } catch {
+      setNotificationPermissionState("unknown");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshNotificationPermission();
+  }, [refreshNotificationPermission]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshNotificationPermission();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshNotificationPermission]);
 
   const handleLocationSharingChange = async (nextValue: boolean) => {
     if (isLocationSyncing) {
@@ -110,22 +159,69 @@ export default function SettingsScreen() {
   };
 
   const handleNotificationChange = async (nextValue: boolean) => {
-    if (isUpdatingNotifications) {
+    if (notificationUpdateRef.current) {
       return;
     }
 
+    notificationUpdateRef.current = true;
     setIsUpdatingNotifications(true);
 
     try {
-      await updateProfile({
-        notificationsEnabled: nextValue,
-      });
+      if (!nextValue) {
+        await updateProfile({
+          notificationsEnabled: false,
+        });
+        return;
+      }
+
+      const Notifications = await import("expo-notifications");
+      let permission = await Notifications.getPermissionsAsync();
+      let nextPermissionState = getNotificationPermissionState(permission);
+
+      if (nextPermissionState === "denied" && permission.canAskAgain !== false) {
+        permission = await Notifications.requestPermissionsAsync();
+        nextPermissionState = getNotificationPermissionState(permission);
+      }
+
+      setNotificationPermissionState(nextPermissionState);
+
+      if (nextPermissionState === "granted") {
+        await updateProfile({
+          notificationsEnabled: true,
+        });
+        return;
+      }
+
+      if (backendNotificationsEnabled) {
+        await updateProfile({
+          notificationsEnabled: false,
+        });
+      }
+
+      if (nextPermissionState === "blocked") {
+        Alert.alert(
+          "Notifications Disabled",
+          "Enable notifications in your device settings to receive alerts.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Open Settings",
+              onPress: () => {
+                void Linking.openSettings().catch(() => {
+                  Alert.alert("Notifications", "Unable to open device settings.");
+                });
+              },
+            },
+          ],
+        );
+      }
     } catch (error) {
       Alert.alert(
         "Notifications",
         error instanceof Error ? error.message : "Unable to update notification preference.",
       );
     } finally {
+      notificationUpdateRef.current = false;
       setIsUpdatingNotifications(false);
     }
   };
@@ -206,6 +302,7 @@ export default function SettingsScreen() {
             value={notificationEnabled}
             onValueChange={handleNotificationChange}
             disabled={isUpdatingNotifications}
+            loading={isUpdatingNotifications}
             colors={colors}
           />
           <SettingItem 

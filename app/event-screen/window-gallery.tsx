@@ -107,7 +107,7 @@ export default function WindowGalleryScreen() {
       // The backend independently re-verifies access here
       // (ensureCanViewWindowPosts) regardless of what the participation
       // list showed — a 403 surfaces as this same error state, not a crash.
-      setLoadError(getAuthErrorMessage(error, "Unable to load this window's gallery."));
+      setLoadError(getAuthErrorMessage(error, "Unable to load this scene's gallery."));
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -131,7 +131,7 @@ export default function WindowGalleryScreen() {
           <Feather name="chevron-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-          {params.title?.trim() || "Window gallery"}
+          {params.title?.trim() || "Scene gallery"}
         </Text>
         <View style={styles.headerPlaceholder} />
       </View>

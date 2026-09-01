@@ -19,8 +19,8 @@ const eventWindowsLibSource = readFileSync(join(process.cwd(), "lib/eventWindows
 // 1 & 2 — tab rename
 // ============================================================
 
-test("Event Details tab label is \"Window\", not \"Mooments\"", () => {
-  assert.match(eventScreenSource, /const EVENT_WINDOW_TAB = "Window";/);
+test("Event Details tab label is \"Scene\", not \"Mooments\"", () => {
+  assert.match(eventScreenSource, /const EVENT_WINDOW_TAB = "Scene";/);
   assert.doesNotMatch(eventScreenSource, /"Mooments"/);
 });
 
@@ -107,7 +107,7 @@ test("attendee UI gates posting on isEligibleToPost (server-computed), not on ha
 
 test("ticket_holders mode shows a ticket-required message, not a check-in message, when ineligible", () => {
   assert.match(attendeeWindowsSource, /window\.postingEligibility === "ticket_holders" \? "Ticket required" : "Check-in required"/);
-  assert.match(attendeeWindowsSource, /You need a valid ticket for this event to post in this window\./);
+  assert.match(attendeeWindowsSource, /You need a valid ticket for this event to post in this scene\./);
 });
 
 test("checked_in_attendees mode still shows the check-in-required message when ineligible", () => {

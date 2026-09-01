@@ -49,7 +49,7 @@ export default function ProfileWindowsScreen() {
       setPage(nextPage);
       setHasMore(Boolean(result.pagination && result.pagination.page < result.pagination.totalPages));
     } catch (error) {
-      setLoadError(getAuthErrorMessage(error, "Unable to load Profile Windows."));
+      setLoadError(getAuthErrorMessage(error, "Unable to load Profile Scenes."));
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -100,7 +100,7 @@ export default function ProfileWindowsScreen() {
           </Text>
           {dateLabel ? <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>{dateLabel}</Text> : null}
           <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
-            {item.windowCount} {item.windowCount === 1 ? "Window" : "Windows"}
+            {item.windowCount} {item.windowCount === 1 ? "Scene" : "Scenes"}
           </Text>
         </View>
         <Feather name="chevron-right" size={20} color={colors.textSecondary} />
@@ -112,7 +112,7 @@ export default function ProfileWindowsScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <BackButton iconName={Cancel01Icon} size={18} />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Windows</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Scenes</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -121,7 +121,7 @@ export default function ProfileWindowsScreen() {
       ) : loadError ? (
         <View style={styles.emptyState}>
           <Feather name="alert-circle" size={28} color={colors.danger} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Windows unavailable</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Scenes unavailable</Text>
           <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>{loadError}</Text>
           <TouchableOpacity style={[styles.retryButton, { borderColor: colors.border }]} onPress={() => void load()}>
             <Feather name="refresh-cw" size={16} color={colors.text} />
@@ -143,7 +143,7 @@ export default function ProfileWindowsScreen() {
           ListEmptyComponent={(
             <View style={styles.emptyState}>
               <Feather name="clock" size={30} color={colors.textSecondary} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Window activity yet.</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Scene activity yet.</Text>
             </View>
           )}
           ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.textSecondary} style={styles.footerLoader} /> : null}

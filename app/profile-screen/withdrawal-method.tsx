@@ -2,7 +2,13 @@ import { Feather } from "@expo/vector-icons";
 import BackButton from "@/components/ui/BackButton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/hooks/useTheme";
-import { getPayoutSettings, updatePayoutSettings } from "@/lib/payoutSettings";
+import {
+  formatEligibleInstantDebitCardLabel,
+  getInstantPayoutUnavailableMessage,
+  getPayoutSettings,
+  isInstantDebitCardSelectable,
+  updatePayoutSettings,
+} from "@/lib/payoutSettings";
 import type { PayoutSettings, WithdrawalMethod } from "@/lib/payoutSettings";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -75,7 +81,7 @@ export default function WithdrawalMethodScreen() {
   }, [loadSettings]);
 
   const handleSelect = (value: WithdrawalMethod) => {
-    if (value === "instant_debit_card" && !settings?.instantPayoutEligible) return;
+    if (value === "instant_debit_card" && !isInstantDebitCardSelectable(settings)) return;
     setSelected(value);
   };
 
@@ -135,9 +141,20 @@ export default function WithdrawalMethodScreen() {
 
             {OPTIONS.map((option) => {
               const isInstant = option.value === "instant_debit_card";
-              const isEligible = !isInstant || (settings?.instantPayoutEligible ?? false);
+              const isInstantSelectable = isInstantDebitCardSelectable(settings);
+              const cardLabel = formatEligibleInstantDebitCardLabel(settings?.eligibleInstantDebitCard);
+              const isEligible = !isInstant || isInstantSelectable;
               const isActive = selected === option.value;
               const isDisabled = !isEligible;
+              const arrivalTime =
+                isInstant && !isInstantSelectable ? "Instant payout unavailable" : option.arrivalTime;
+              const description =
+                isInstant && !isInstantSelectable
+                  ? getInstantPayoutUnavailableMessage(settings?.instantPayoutUnavailableReason)
+                  : isInstant && cardLabel
+                    ? cardLabel
+                    : option.description;
+              const note = isInstant && !isInstantSelectable ? null : option.note;
 
               return (
                 <TouchableOpacity
@@ -168,22 +185,22 @@ export default function WithdrawalMethodScreen() {
                         {option.label}
                       </Text>
                       {isInstant && !isEligible && (
-                        <View style={[styles.comingSoonBadge, { backgroundColor: colors.backgroundSecondary }]}>
-                          <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>
-                            Coming Soon
+                        <View style={[styles.availabilityBadge, { backgroundColor: colors.backgroundSecondary }]}>
+                          <Text style={[styles.availabilityBadgeText, { color: colors.textSecondary }]}>
+                            Unavailable
                           </Text>
                         </View>
                       )}
                     </View>
                     <Text style={[styles.arrivalTime, { color: isDisabled ? colors.textSecondary : colors.success }]}>
-                      {option.arrivalTime}
+                      {arrivalTime}
                     </Text>
                     <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
-                      {option.description}
+                      {description}
                     </Text>
-                    {option.note ? (
+                    {note ? (
                       <Text style={[styles.noteText, { color: colors.warning }]}>
-                        {option.note}
+                        {note}
                       </Text>
                     ) : null}
                   </View>
@@ -265,12 +282,12 @@ const styles = StyleSheet.create({
   optionText: { flex: 1 },
   optionLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
   optionLabel: { fontSize: 15, fontWeight: "600" },
-  comingSoonBadge: {
+  availabilityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 99,
   },
-  comingSoonText: { fontSize: 10, fontWeight: "700" },
+  availabilityBadgeText: { fontSize: 10, fontWeight: "700" },
   arrivalTime: { fontSize: 12, fontWeight: "600", marginBottom: 3 },
   optionDesc: { fontSize: 12, lineHeight: 18 },
   noteText: { fontSize: 11, marginTop: 4, fontStyle: "italic" },

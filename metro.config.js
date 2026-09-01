@@ -43,6 +43,20 @@ const config = getDefaultConfig(__dirname);
 const defaultResolveRequest = config.resolver.resolveRequest;
 const hugeiconsPrefix = '@hugeicons/core-free-icons/';
 
+const projectRootPattern = path.resolve(__dirname).replace(/[/\\]+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const blockListPaths = [
+  'android',
+  'ios',
+  '.expo',
+  '.git',
+  'coverage',
+  'dist',
+  'scratch',
+  'test',
+].map((entry) => new RegExp(`${projectRootPattern}[\\\\/]${entry}[\\\\/].*`));
+
+config.resolver.blockList = new RegExp(blockListPaths.map((pattern) => pattern.source).join('|'));
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName.startsWith(hugeiconsPrefix)) {
     const iconName = moduleName.slice(hugeiconsPrefix.length);

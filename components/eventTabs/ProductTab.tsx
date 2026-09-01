@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -13,7 +13,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { getPublishedProductsByUser, type Product } from "@/lib/products";
 import { getStorageFileUrl } from "@/lib/storage";
 import type { EventHost } from "@/lib/events";
-import MoreMenuModal from "../post/MoreMenuModal";
 import UserAvatar from "../ui/UserAvatar";
 
 const FALLBACK_PRODUCT_IMAGE =
@@ -70,22 +69,12 @@ const getHostAvatar = (host?: EventHost | null) => {
 const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) => {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const moreBtnRef = useRef<View>(null);
-  const [menuTop, setMenuTop] = useState(0);
   const imageUri = useMemo(
     () => resolveStorageUrl(product.imageKeys[0], FALLBACK_PRODUCT_IMAGE),
     [product.imageKeys],
   );
   const hostAvatarUri = getHostAvatar(host);
   const imageCount = Math.max(1, product.imageKeys.length);
-
-  const handleMorePress = () => {
-    moreBtnRef.current?.measure((x, y, measuredWidth, height, pageX, pageY) => {
-      setMenuTop(pageY + height);
-      setShowMoreMenu(true);
-    });
-  };
 
   return (
     <View style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -106,13 +95,6 @@ const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) =>
               <Text style={[styles.followBtnText, { color: colors.primary }]}>Follow</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            ref={moreBtnRef}
-            style={styles.moreBtn}
-            onPress={handleMorePress}
-          >
-            <Feather name="more-horizontal" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -147,13 +129,6 @@ const ProductCard = ({ product, host, isHostMode = false }: ProductCardProps) =>
         </TouchableOpacity>
       </View>
 
-      <MoreMenuModal
-        visible={showMoreMenu}
-        onClose={() => setShowMoreMenu(false)}
-        top={menuTop}
-        onReport={() => console.log("Report product")}
-        onSave={() => console.log("Save product")}
-      />
     </View>
   );
 };
@@ -295,9 +270,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     flexDirection: "row",
     justifyContent: "space-between",
-  },
-  moreBtn: {
-    padding: 4,
   },
   postHeaderActions: {
     alignItems: "center",

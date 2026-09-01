@@ -166,14 +166,14 @@ const getWindowMessage = (window: EventWindow) => {
   }
   if (!window.isEligibleToPost) {
     return window.postingEligibility === "ticket_holders"
-      ? "A valid event ticket is required to post in this window."
+      ? "A valid event ticket is required to post in this scene."
       : "Check in at event to unlock posting.";
   }
-  if (window.computedStatus === "open" && window.remainingSlots > 0) return "Post to unlock this window.";
-  if (window.computedStatus === "scheduled") return "Posting opens when this window starts.";
-  if (window.computedStatus === "cancelled") return "This window was cancelled.";
-  if (window.remainingSlots === 0) return "This window is full.";
-  return "This window is closed.";
+  if (window.computedStatus === "open" && window.remainingSlots > 0) return "Post to unlock this scene.";
+  if (window.computedStatus === "scheduled") return "Posting opens when this scene starts.";
+  if (window.computedStatus === "cancelled") return "This scene was cancelled.";
+  if (window.remainingSlots === 0) return "This scene is full.";
+  return "This scene is closed.";
 };
 
 const POSTING_ELIGIBILITY_SUMMARY: Record<EventWindow["postingEligibility"], string> = {
@@ -559,7 +559,7 @@ function RecordVoiceSheet({
             <View style={[recordSheetStyles.handle, { backgroundColor: colors.border }]} />
             <Text style={[recordSheetStyles.title, { color: colors.text }]}>Record voice</Text>
             <Text style={[recordSheetStyles.subtitle, { color: colors.textSecondary }]}>
-              {previewUri ? "Review your recording before posting" : "Record a voice clip for this window"}
+              {previewUri ? "Review your recording before posting" : "Record a voice clip for this scene"}
             </Text>
           </View>
 
@@ -659,7 +659,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     try {
       setWindows(await getEventWindows(eventId));
     } catch (error) {
-      setLoadError(getAuthErrorMessage(error, "Unable to load event windows."));
+      setLoadError(getAuthErrorMessage(error, "Unable to load event scenes."));
     } finally {
       if (showLoader) setIsLoading(false);
     }
@@ -723,7 +723,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       Alert.alert(
         window.postingEligibility === "ticket_holders" ? "Ticket required" : "Check-in required",
         window.postingEligibility === "ticket_holders"
-          ? "You need a valid ticket for this event to post in this window."
+          ? "You need a valid ticket for this event to post in this scene."
           : "Check in at event to unlock posting.",
       );
       return;
@@ -894,7 +894,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       setSelectedMedia(null);
       setText("");
     } catch (error) {
-      setPostError(getAuthErrorMessage(error, "Unable to post in this window."));
+      setPostError(getAuthErrorMessage(error, "Unable to post in this scene."));
       requestAnimationFrame(() => formScrollRef.current?.scrollToEnd({ animated: true }));
     } finally {
       setIsSubmitting(false);
@@ -945,7 +945,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
     return (
       <View key={window.id} style={[styles.windowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <View style={styles.windowHeader}>
-          <Text style={[styles.windowTitle, { color: colors.text }]} numberOfLines={2}>{window.title?.trim() || "Event window"}</Text>
+          <Text style={[styles.windowTitle, { color: colors.text }]} numberOfLines={2}>{window.title?.trim() || "Event scene"}</Text>
           <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
             <Text style={[styles.statusText, { color: statusColor }]}>{window.computedStatus[0].toUpperCase() + window.computedStatus.slice(1)}</Text>
@@ -1020,8 +1020,8 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
   return (
     <View style={styles.container}>
       <View style={styles.headingRow}>
-        <Text style={[styles.heading, { color: colors.text }]}>Event windows</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={() => void loadWindows()} accessibilityLabel="Refresh event windows">
+        <Text style={[styles.heading, { color: colors.text }]}>Event scenes</Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={() => void loadWindows()} accessibilityLabel="Refresh event scenes">
           <Feather name="refresh-cw" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -1031,14 +1031,14 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       ) : loadError ? (
         <View style={[styles.emptyState, { borderColor: colors.border }]}>
           <Feather name="alert-circle" size={28} color={colors.danger} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Windows unavailable</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Scenes unavailable</Text>
           <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>{loadError}</Text>
           <TouchableOpacity style={[styles.retryButton, { borderColor: colors.border }]} onPress={() => void loadWindows()}><Text style={[styles.retryText, { color: colors.text }]}>Retry</Text></TouchableOpacity>
         </View>
       ) : windows.length === 0 ? (
         <View style={[styles.emptyState, { borderColor: colors.border }]}>
           <Feather name="clock" size={30} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting windows are currently available for this event.</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting scenes are currently available for this event.</Text>
         </View>
       ) : windows.map(renderWindow)}
 
@@ -1056,7 +1056,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
         >
           <View style={[styles.modalHeader, { borderBottomColor: colors.border, paddingTop: Math.max(insets.top, 8) }]}>
             <TouchableOpacity style={styles.headerIcon} onPress={closePostForm} disabled={isSubmitting} accessibilityLabel="Close post form"><Feather name="x" size={24} color={colors.text} /></TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Post to window</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Post to scene</Text>
             <View style={styles.headerIcon} />
           </View>
           <View style={[styles.formBody, { paddingBottom: formBodyBottomPadding }]}>
@@ -1069,7 +1069,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
               keyboardShouldPersistTaps="always"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={[styles.formWindowTitle, { color: colors.text }]}>{selectedWindow?.title?.trim() || "Event window"}</Text>
+              <Text style={[styles.formWindowTitle, { color: colors.text }]}>{selectedWindow?.title?.trim() || "Event scene"}</Text>
               <Text style={[styles.formLabel, { color: colors.textSecondary }]}>POST TYPE</Text>
               <View style={styles.typeSelector}>
                 {postableContentTypes(selectedWindow?.allowedContentTypes ?? []).map((type) => {
