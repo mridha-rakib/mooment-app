@@ -74,11 +74,11 @@ export default function ParticipatedWindowsScreen() {
         if (match) {
           setEvent(match);
         } else {
-          setLoadError("This event's participated Windows are no longer available.");
+          setLoadError("This event's participated Scenes are no longer available.");
         }
       })
       .catch((error) => {
-        if (!cancelled) setLoadError(getAuthErrorMessage(error, "Unable to load this event's Windows."));
+        if (!cancelled) setLoadError(getAuthErrorMessage(error, "Unable to load this event's Scenes."));
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -116,7 +116,7 @@ export default function ParticipatedWindowsScreen() {
           <Feather name="chevron-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-          {event?.name || "Participated Windows"}
+          {event?.name || "Participated Scenes"}
         </Text>
         <View style={styles.headerPlaceholder} />
       </View>
@@ -136,7 +136,7 @@ export default function ParticipatedWindowsScreen() {
           ) : null}
 
           <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-            {event.participatedWindows.length} participated {event.participatedWindows.length === 1 ? "Window" : "Windows"}
+            {event.participatedWindows.length} participated {event.participatedWindows.length === 1 ? "Scene" : "Scenes"}
           </Text>
 
           {event.participatedWindows.map((window) => {
@@ -152,7 +152,7 @@ export default function ParticipatedWindowsScreen() {
               >
                 <View style={styles.cardHeader}>
                   <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>
-                    {window.title?.trim() || "Untitled window"}
+                    {window.title?.trim() || "Untitled scene"}
                   </Text>
                   <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
                     <View style={[styles.statusDot, { backgroundColor: statusColor }]} />

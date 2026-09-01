@@ -249,7 +249,7 @@ export default function ProfileHeader({
                     <Text
                       style={[styles.statLabel, { color: colors.textSecondary }]}
                     >
-                      Windows
+                      Scenes
                     </Text>
                     <View style={styles.chevronWrapper}>
                       <ChevronRightIcon />

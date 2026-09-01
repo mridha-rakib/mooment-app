@@ -11,9 +11,9 @@ const homeWindowsSource = readFileSync(join(process.cwd(), "components/home/Part
 const eventWindowGallerySource = readFileSync(join(process.cwd(), "app/event-screen/window-gallery.tsx"), "utf8");
 const eventWindowsLibSource = readFileSync(join(process.cwd(), "lib/eventWindows.ts"), "utf8");
 
-test("ProfileHeader adds Windows after Friends without changing Friends aggregation", () => {
+test("ProfileHeader adds Scenes after Friends without changing Friends aggregation", () => {
   const friendsIndex = profileHeaderSource.indexOf("Friends");
-  const windowsIndex = profileHeaderSource.indexOf("Windows");
+  const windowsIndex = profileHeaderSource.indexOf("Scenes");
   assert.notEqual(friendsIndex, -1);
   assert.notEqual(windowsIndex, -1);
   assert.ok(friendsIndex < windowsIndex);

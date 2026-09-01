@@ -97,7 +97,9 @@ export default function WithdrawScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [amountText, setAmountText] = useState("");
+  const [isConfirming, setIsConfirming] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
 
   const availableBalance = summary?.eligibleAmount ?? 0;
@@ -115,6 +117,7 @@ export default function WithdrawScreen() {
     parsedAmount > 0 &&
     parsedAmount <= availableBalance &&
     !amountError &&
+    !isConfirming &&
     !isSubmitting;
 
   const load = useCallback(async (silent = false) => {
@@ -157,20 +160,40 @@ export default function WithdrawScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!canWithdraw || isSubmitting) return;
+    if (!canWithdraw || submitLockRef.current) return;
+
+    submitLockRef.current = true;
+    setIsConfirming(true);
 
     const amount = parseFloat(amountText);
     const isWithdrawAll = Math.abs(amount - availableBalance) < 0.001;
+    let confirmationHandled = false;
+
+    const releaseSubmitLock = () => {
+      submitLockRef.current = false;
+      setIsConfirming(false);
+    };
 
     Alert.alert(
       "Confirm Withdrawal",
       `Withdraw ${fmt(amount)} via ${METHOD_LABELS[settings?.withdrawalMethod ?? "bank_transfer"] ?? "Bank Transfer"}?\n\nEstimated arrival: ${ARRIVAL_TIMES[settings?.withdrawalMethod ?? "bank_transfer"]}`,
       [
-        { text: "Cancel", style: "cancel" },
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => {
+            confirmationHandled = true;
+            releaseSubmitLock();
+          },
+        },
         {
           text: "Withdraw",
           style: "default",
           onPress: async () => {
+            if (!submitLockRef.current) return;
+
+            confirmationHandled = true;
+            setIsConfirming(false);
             setIsSubmitting(true);
 
             try {
@@ -189,11 +212,20 @@ export default function WithdrawScreen() {
               const msg = err instanceof Error ? err.message : "Withdrawal failed. Please try again.";
               Alert.alert("Withdrawal Failed", msg);
             } finally {
+              submitLockRef.current = false;
               setIsSubmitting(false);
             }
           },
         },
       ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          if (!confirmationHandled) {
+            releaseSubmitLock();
+          }
+        },
+      },
     );
   };
 
@@ -304,13 +336,13 @@ export default function WithdrawScreen() {
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="decimal-pad"
                 returnKeyType="done"
-                editable={!isSubmitting}
+                editable={!isConfirming && !isSubmitting}
               />
             </View>
             <TouchableOpacity
               style={[styles.withdrawAllBtn, { borderColor: colors.primary }]}
               onPress={handleWithdrawAll}
-              disabled={availableBalance <= 0 || isSubmitting}
+              disabled={availableBalance <= 0 || isConfirming || isSubmitting}
             >
               <Text style={[styles.withdrawAllText, { color: colors.primary }]}>Withdraw All</Text>
             </TouchableOpacity>
@@ -336,7 +368,7 @@ export default function WithdrawScreen() {
           {/* Fee note */}
           <View style={[styles.feeRow, { borderTopColor: colors.border }]}>
             <Text style={[styles.feeLabel, { color: colors.textSecondary }]}>Processing Fee</Text>
-            <Text style={[styles.feeValue, { color: colors.text }]}>None</Text>
+            <Text style={[styles.feeValue, { color: colors.text }]}>May apply</Text>
           </View>
 
           {/* Submit */}

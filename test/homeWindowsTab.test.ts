@@ -23,10 +23,10 @@ const getFunctionSource = (source: string, name: string, nextMarker: string) => 
   return source.slice(start, end);
 };
 
-// 1 — Home tabs render Discover / Friends / Windows
-test("Home renders a third \"Windows\" pill alongside the existing Discover/Friends pills", () => {
+// 1 — Home tabs render Discover / Friends / Scenes
+test("Home renders a third \"Scenes\" pill alongside the existing Discover/Friends pills", () => {
   assert.match(storyCarouselSource, /showWindowsTab \? \(/);
-  assert.match(storyCarouselSource, />\s*Windows\s*</);
+  assert.match(storyCarouselSource, />\s*Scenes\s*</);
   assert.match(homeSource, /showWindowsTab/);
   assert.match(homeSource, /onWindowsPress=\{\(\) => handleHomeAudienceChange\('windows'\)\}/);
 });
@@ -114,8 +114,8 @@ test("selecting Discover or Friends still routes through handleAudienceChange un
 
 // 4 — Windows empty state
 test("Windows tab shows a clean empty state when the user has never participated", () => {
-  assert.match(participatedListSource, /No participated Windows yet\./);
-  assert.match(participatedListSource, /Events will appear here after you post in one of their Windows\./);
+  assert.match(participatedListSource, /No participated Scenes yet\./);
+  assert.match(participatedListSource, /Events will appear here after you post in one of their Scenes\./);
 });
 
 // 5 & 6 — only participated events render, each event appears once

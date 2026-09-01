@@ -72,7 +72,7 @@ const POSTING_ELIGIBILITY_LABELS: Record<EventWindowPostingEligibility, { title:
 const PARTICIPANT_VISIBILITY_LABELS: Record<EventWindowParticipantPostVisibility, { title: string; description: string }> = {
   instant: {
     title: "Instant",
-    description: "After posting, participants can immediately view posts in this window.",
+    description: "After posting, participants can immediately view posts in this scene.",
   },
   end_of_event: {
     title: "End of event",
@@ -227,7 +227,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
     try {
       setWindows(await getEventWindows(eventId));
     } catch (error) {
-      setLoadError(getAuthErrorMessage(error, "Unable to load event windows."));
+      setLoadError(getAuthErrorMessage(error, "Unable to load event scenes."));
     } finally {
       if (showLoader) setIsLoading(false);
     }
@@ -333,10 +333,10 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
     const maxPosts = Number(form.maxPosts);
     if (form.allowedContentTypes.length === 0) return "Select at least one allowed content type.";
     if (!Number.isInteger(maxPosts) || maxPosts < 1 || maxPosts > 10000) return "Maximum posts must be between 1 and 10,000.";
-    if (form.startsAt >= form.endsAt) return "Window end time must be after its start time.";
+    if (form.startsAt >= form.endsAt) return "Scene end time must be after its start time.";
     // The window may start before the event does, but it can never outlast
     // it — endsAt is a hard ceiling at the event's own end time.
-    if (form.endsAt > eventEnd) return "Window cannot end after the event ends.";
+    if (form.endsAt > eventEnd) return "Scene cannot end after the event ends.";
     if (editingWindow && maxPosts < editingWindow.acceptedPostCount) {
       return `Maximum posts cannot be lower than ${editingWindow.acceptedPostCount} accepted posts.`;
     }
@@ -384,7 +384,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
       });
       setIsFormVisible(false);
     } catch (error) {
-      setFormError(getAuthErrorMessage(error, "Unable to save this window."));
+      setFormError(getAuthErrorMessage(error, "Unable to save this scene."));
       scrollFormToEnd();
     } finally {
       setIsSaving(false);
@@ -394,12 +394,12 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
   const confirmCancel = (window: EventWindow) => {
     if (!canManageWindows) return;
     Alert.alert(
-      "Cancel window?",
-      "This window will stop accepting posts. This action cannot be undone.",
+      "Cancel scene?",
+      "This scene will stop accepting posts. This action cannot be undone.",
       [
-        { text: "Keep Window", style: "cancel" },
+        { text: "Keep Scene", style: "cancel" },
         {
-          text: "Cancel Window",
+          text: "Cancel Scene",
           style: "destructive",
           onPress: async () => {
             setCancellingWindowId(window.id);
@@ -407,7 +407,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
               const cancelled = await cancelEventWindow(eventId, window.id);
               setWindows((current) => current.map((item) => item.id === cancelled.id ? cancelled : item));
             } catch (error) {
-              Alert.alert("Unable to cancel window", getAuthErrorMessage(error));
+              Alert.alert("Unable to cancel scene", getAuthErrorMessage(error));
             } finally {
               setCancellingWindowId(null);
             }
@@ -426,7 +426,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleGroup}>
             <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>
-              {window.title?.trim() || "Untitled window"}
+              {window.title?.trim() || "Untitled scene"}
             </Text>
             <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
               <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
@@ -440,7 +440,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
               style={styles.iconButton}
               onPress={() => openEditForm(window)}
               accessibilityRole="button"
-              accessibilityLabel={`Edit ${window.title || "window"}`}
+              accessibilityLabel={`Edit ${window.title || "scene"}`}
             >
               <Feather name="edit-2" size={18} color={colors.text} />
             </TouchableOpacity>
@@ -476,7 +476,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
             {cancellingWindowId === window.id
               ? <ActivityIndicator size="small" color={colors.danger} />
               : <Feather name="x-circle" size={16} color={colors.danger} />}
-            <Text style={[styles.cancelActionText, { color: colors.danger }]}>Cancel window</Text>
+            <Text style={[styles.cancelActionText, { color: colors.danger }]}>Cancel scene</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -490,7 +490,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
     <View style={styles.container}>
       <View style={styles.headingRow}>
         <View style={styles.headingText}>
-          <Text style={[styles.heading, { color: colors.text }]}>Posting windows</Text>
+          <Text style={[styles.heading, { color: colors.text }]}>Posting scenes</Text>
         </View>
         {canManageWindows ? (
           <TouchableOpacity style={[styles.createButton, { backgroundColor: colors.text }]} onPress={openCreateForm}>
@@ -505,7 +505,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
       ) : loadError ? (
         <View style={styles.emptyState}>
           <Feather name="alert-circle" size={28} color={colors.danger} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Windows unavailable</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Scenes unavailable</Text>
           <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>{loadError}</Text>
           <TouchableOpacity style={[styles.retryButton, { borderColor: colors.border }]} onPress={() => void loadWindows()}>
             <Feather name="refresh-cw" size={16} color={colors.text} />
@@ -515,7 +515,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
       ) : windows.length === 0 ? (
         <View style={[styles.emptyState, { borderColor: colors.border }]}>
           <Feather name="clock" size={30} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting windows have been created for this event.</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No posting scenes have been created for this event.</Text>
         </View>
       ) : windows.map(renderWindow)}
 
@@ -539,10 +539,10 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
               },
             ]}
           >
-            <TouchableOpacity style={styles.iconButton} onPress={closeForm} disabled={isSaving} accessibilityLabel="Close window form">
+            <TouchableOpacity style={styles.iconButton} onPress={closeForm} disabled={isSaving} accessibilityLabel="Close scene form">
               <Feather name="x" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{editingWindow ? "Edit window" : "Create window"}</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{editingWindow ? "Edit scene" : "Create scene"}</Text>
             <View style={styles.iconButton} />
           </View>
 
@@ -562,7 +562,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
               {isOpenEdit ? (
                 <View style={[styles.notice, { backgroundColor: isDark ? "#172033" : "#EFF6FF" }]}>
                   <Feather name="info" size={17} color="#3B82F6" />
-                  <Text style={[styles.noticeText, { color: colors.text }]}>This window is open. Its start time and content types can no longer be changed.</Text>
+                  <Text style={[styles.noticeText, { color: colors.text }]}>This scene is open. Its start time and content types can no longer be changed.</Text>
                 </View>
               ) : null}
 
@@ -580,7 +580,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
               <TextInput
                 value={form.details}
                 onChangeText={(details) => setForm((current) => ({ ...current, details }))}
-                placeholder="Add window details"
+                placeholder="Add scene details"
                 placeholderTextColor={colors.textSecondary}
                 style={[styles.input, styles.detailsInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
                 maxLength={500}
@@ -698,7 +698,7 @@ const HostEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, HostE
                 </View>
               )}
               {editingWindow ? (
-                <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>Set when the window was created — cannot be changed afterward.</Text>
+                <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>Set when the scene was created — cannot be changed afterward.</Text>
               ) : null}
 
               {formError ? (

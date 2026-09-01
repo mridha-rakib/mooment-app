@@ -45,9 +45,10 @@ test("EventFeedCard calls submitReportWithOptionalBlock with targetType event an
   assert.match(eventFeedCardSource, /reportedUserId: event\.userId/);
 });
 
-// --- Product report remains explicitly out of scope ---
-test("Product report remains unchanged/out of scope", () => {
-  assert.match(productTabSource, /onReport=\{\(\) => console\.log\("Report product"\)\}/);
+// --- Product report remains unsupported until the backend contract includes products ---
+test("Product report remains hidden/unsupported instead of exposing a console.log stub", () => {
+  assert.doesNotMatch(productTabSource, /onReport=\{\(\) => console\.log\("Report product"\)\}/);
+  assert.doesNotMatch(productTabSource, /onSave=\{\(\) => console\.log\("Save product"\)\}/);
   assert.doesNotMatch(productTabSource, /submitReportWithOptionalBlock/);
   assert.doesNotMatch(productTabSource, /createReport/);
 });

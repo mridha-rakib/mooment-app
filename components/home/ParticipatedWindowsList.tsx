@@ -43,7 +43,7 @@ function ParticipatedWindowsList() {
     try {
       setEvents(await getParticipatedEvents());
     } catch (error) {
-      setLoadError(getAuthErrorMessage(error, "Unable to load your participated Windows."));
+      setLoadError(getAuthErrorMessage(error, "Unable to load your participated Scenes."));
     } finally {
       if (showLoader) setIsLoading(false);
     }
@@ -83,7 +83,7 @@ function ParticipatedWindowsList() {
     return (
       <View style={styles.emptyState}>
         <Feather name="alert-circle" size={28} color={colors.danger} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>Windows unavailable</Text>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>Scenes unavailable</Text>
         <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>{loadError}</Text>
         <TouchableOpacity style={[styles.retryButton, { borderColor: colors.border }]} onPress={() => void load()}>
           <Feather name="refresh-cw" size={16} color={colors.text} />
@@ -97,9 +97,9 @@ function ParticipatedWindowsList() {
     return (
       <View style={[styles.emptyState, { borderColor: colors.border }]}>
         <Feather name="clock" size={30} color={colors.textSecondary} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>No participated Windows yet.</Text>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>No participated Scenes yet.</Text>
         <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
-          Events will appear here after you post in one of their Windows.
+          Events will appear here after you post in one of their Scenes.
         </Text>
       </View>
     );
@@ -135,7 +135,7 @@ function ParticipatedWindowsList() {
               <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>{event.name || "Untitled event"}</Text>
               {dateLabel ? <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>{dateLabel}</Text> : null}
               <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
-                {windowCount} participated {windowCount === 1 ? "Window" : "Windows"}
+                {windowCount} participated {windowCount === 1 ? "Scene" : "Scenes"}
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={colors.textSecondary} />

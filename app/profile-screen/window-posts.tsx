@@ -102,7 +102,7 @@ export default function ProfileWindowPostsScreen() {
 
   const load = useCallback(async (nextPage = 1, append = false) => {
     if (!params.userId || !params.eventId) {
-      setLoadError("Profile Windows unavailable.");
+      setLoadError("Profile Scenes unavailable.");
       setIsLoading(false);
       return;
     }
@@ -116,7 +116,7 @@ export default function ProfileWindowPostsScreen() {
       setPage(nextPage);
       setHasMore(Boolean(result.pagination && result.pagination.page < result.pagination.totalPages));
     } catch (error) {
-      setLoadError(getAuthErrorMessage(error, "Unable to load Window posts."));
+      setLoadError(getAuthErrorMessage(error, "Unable to load Scene posts."));
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -157,7 +157,7 @@ export default function ProfileWindowPostsScreen() {
         </View>
         <View style={[styles.windowContext, { borderColor: colors.border }]}>
           <Text style={[styles.windowTitle, { color: colors.text }]} numberOfLines={1}>
-            {item.window.title?.trim() || "Untitled window"}
+            {item.window.title?.trim() || "Untitled scene"}
           </Text>
           {windowTime ? <Text style={[styles.windowTime, { color: colors.textSecondary }]}>{windowTime}</Text> : null}
         </View>
@@ -183,7 +183,7 @@ export default function ProfileWindowPostsScreen() {
       <View style={styles.header}>
         <BackButton iconName={Cancel01Icon} size={18} />
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-          {params.title?.trim() || "Window posts"}
+          {params.title?.trim() || "Scene posts"}
         </Text>
         <View style={{ width: 40 }} />
       </View>

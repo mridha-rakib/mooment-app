@@ -566,7 +566,7 @@ export function HomeTabsRow({
               isWindowsActive && styles.activeTabText,
             ]}
           >
-            Windows
+            Scenes
           </Text>
         </TouchableOpacity>
       ) : null}

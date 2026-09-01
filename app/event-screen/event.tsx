@@ -505,7 +505,7 @@ const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
 // Single source of truth for the posting-windows tab's label/identifier —
 // used as both the displayed tab text and the activeTab comparison key, so
 // renaming it never requires touching more than this one constant.
-const EVENT_WINDOW_TAB = "Window";
+const EVENT_WINDOW_TAB = "Scene";
 
 const EventScreen = () => {
   const router = useRouter();
