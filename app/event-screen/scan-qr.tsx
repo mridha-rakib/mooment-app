@@ -23,6 +23,7 @@ import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '@/components/ui/CinematicButton';
 import { ArrowLeft01Icon, FlashIcon, FlashOffIcon } from "@hugeicons/core-free-icons";
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { errorFeedback, successFeedback } from '@/lib/microFeedback';
 import { scanTicketQrCode } from '@/lib/payments';
 import { safeBack } from '@/lib/navigation';
 
@@ -52,6 +53,7 @@ export default function ScanQRScreen() {
       const scannedTicket = await scanTicketQrCode(checkInCode, eventId);
 
       if (manual) setManualTicketNo('');
+      successFeedback();
       Alert.alert(
         'Check-in successful',
         `${scannedTicket.ticketName}\n${scannedTicket.ticketNo}\nHolder: ${scannedTicket.holderName}`,
@@ -65,6 +67,7 @@ export default function ScanQRScreen() {
         { cancelable: false },
       );
     } catch (error) {
+      errorFeedback();
       Alert.alert(
         'Check-in failed',
         getAuthErrorMessage(error, 'This ticket could not be accepted.'),

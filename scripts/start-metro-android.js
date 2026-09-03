@@ -153,6 +153,10 @@ function clearCorruptMetroFileMapCache() {
 const env = {
   ...process.env,
   REACT_NATIVE_PACKAGER_HOSTNAME: DEV_SERVER_HOST,
+  // Bundling this app pushes ~8k modules through Metro's serializer in one Node
+  // process. V8's default ~4 GB old-space cap is exceeded and Metro crashes with
+  // "Ineffective mark-compacts near heap limit". Give the Metro process headroom.
+  NODE_OPTIONS: `${process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} ` : ""}--max-old-space-size=8192`,
 };
 
 clearCorruptMetroFileMapCache();

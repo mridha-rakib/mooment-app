@@ -64,8 +64,16 @@ export default function LegalDocumentScreen({ type, title }: LegalDocumentScreen
     <View style={[styles.safe, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{title}</Text>
+        <BackButton
+          accessibilityLabel="Go back"
+          accessibilityHint={`Returns to the screen before ${title}`}
+        />
+        <Text
+          accessibilityRole="header"
+          style={[styles.headerTitle, { color: colors.text }]}
+        >
+          {title}
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -80,6 +88,9 @@ export default function LegalDocumentScreen({ type, title }: LegalDocumentScreen
             <Text style={[styles.messageText, { color: colors.danger }]}>{error}</Text>
             <TouchableOpacity
               style={[styles.retryButton, { borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Retry"
+              accessibilityHint="Reloads this document"
               onPress={() => {
                 void loadDocument();
               }}
@@ -93,8 +104,18 @@ export default function LegalDocumentScreen({ type, title }: LegalDocumentScreen
           </View>
         ) : (
           clauses.map((clause) => (
-            <View key={clause.id} style={[styles.clauseCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.clauseTitle, { color: colors.text }]}>{clause.title}</Text>
+            <View
+              key={clause.id}
+              accessible
+              accessibilityLabel={`${clause.title}. ${htmlToPlainText(clause.body)}`}
+              style={[styles.clauseCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <Text
+                accessibilityRole="header"
+                style={[styles.clauseTitle, { color: colors.text }]}
+              >
+                {clause.title}
+              </Text>
               <Text style={[styles.clauseBody, { color: colors.textSecondary }]}>
                 {htmlToPlainText(clause.body)}
               </Text>

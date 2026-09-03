@@ -38,14 +38,20 @@ type SettingItemProps = {
   onPress?: () => void;
   disabled?: boolean;
   loading?: boolean;
+  accessibilityRole?: 'link' | 'button';
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 };
 
-const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, disabled, loading, colors }: SettingItemProps & { colors: any }) => (
+const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, disabled, loading, accessibilityRole, accessibilityLabel, accessibilityHint, colors }: SettingItemProps & { colors: any }) => (
   <TouchableOpacity
     style={[styles.settingItem, { backgroundColor: colors.card, borderColor: colors.border }, disabled && styles.settingItemDisabled]}
     onPress={onPress}
     disabled={disabled}
     activeOpacity={type === 'toggle' ? 1 : 0.7}
+    accessibilityRole={type === 'toggle' ? undefined : (accessibilityRole ?? 'button')}
+    accessibilityLabel={accessibilityLabel ?? label}
+    accessibilityHint={accessibilityHint}
   >
     <View style={styles.settingItemLeft}>
       <Feather name={icon as any} size={18} color={colors.textSecondary} />
@@ -79,7 +85,7 @@ export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const user = useAuthStore((state) => state.user);
   const updateProfile = useAuthStore((state) => state.updateProfile);
-  const deleteAccount = useAuthStore((state) => state.deleteAccount);
+  const logout = useAuthStore((state) => state.logout);
   const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
   const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
   const isLocationSyncing = useLocationSharingStore((state) => state.isSyncing);
@@ -88,7 +94,7 @@ export default function SettingsScreen() {
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
   const [notificationPermissionState, setNotificationPermissionState] =
     useState<NotificationPermissionState>("unknown");
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const notificationUpdateRef = useRef(false);
   // Transient, display-only value: lets the Switch move the instant the user taps it
   // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
@@ -226,41 +232,37 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleConfirmDeleteAccount = async () => {
-    if (isDeletingAccount) {
+  const handleSignOut = async () => {
+    if (isSigningOut) {
       return;
     }
 
-    setIsDeletingAccount(true);
+    setIsSigningOut(true);
 
     try {
-      await deleteAccount();
+      await logout();
+      if (router.canDismiss()) {
+        router.dismissAll();
+      }
       router.replace('/auth-screen/onboarding');
     } catch (error) {
+      setIsSigningOut(false);
       Alert.alert(
-        "Delete Account",
-        error instanceof Error ? error.message : "Unable to delete your account. Please try again.",
+        "Sign Out",
+        error instanceof Error ? error.message : "Unable to sign out. Please try again.",
       );
-    } finally {
-      setIsDeletingAccount(false);
     }
   };
 
+  const handleSignOutPress = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out", style: "destructive", onPress: () => void handleSignOut() },
+    ]);
+  };
+
   const handleDeleteAccountPress = () => {
-    Alert.alert(
-      "Delete Account",
-      "This will permanently delete your account access and sign you out. This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void handleConfirmDeleteAccount();
-          },
-        },
-      ],
-    );
+    router.push('/profile-screen/delete-account');
   };
 
   return (
@@ -357,13 +359,54 @@ export default function SettingsScreen() {
         {/* TERMS & POLICIES Section */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TERMS & POLICIES</Text>
         <View style={styles.sectionGroup}>
-          <SettingItem icon="file-text" label="Terms & Conditions" onPress={() => router.push('/profile-screen/terms')} colors={colors} />
-          <SettingItem icon="shield" label="Privacy & Policy" onPress={() => router.push('/profile-screen/privacy')} colors={colors} />
-          <SettingItem 
-            icon="headphones" 
-            label="Contact Support" 
-            onPress={() => router.push('/profile-screen/contact-support')} 
-            colors={colors} 
+          <SettingItem
+            icon="file-text"
+            label="Terms & Conditions"
+            onPress={() => router.push('/profile-screen/terms')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Terms and Conditions"
+            accessibilityHint="Opens the Terms and Conditions document"
+          />
+          <SettingItem
+            icon="shield"
+            label="Privacy & Policy"
+            onPress={() => router.push('/profile-screen/privacy')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Privacy Policy"
+            accessibilityHint="Opens the Privacy Policy document"
+          />
+          <SettingItem
+            icon="rotate-ccw"
+            label="Refund Policy"
+            onPress={() => router.push('/profile-screen/refund')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Refund Policy"
+            accessibilityHint="Opens the Refund Policy document"
+          />
+          <SettingItem
+            icon="headphones"
+            label="Contact Support"
+            onPress={() => router.push('/profile-screen/contact-support')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Support"
+            accessibilityHint="Opens the support request screen"
+          />
+        </View>
+
+        {/* ACCOUNT Section */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
+        <View style={styles.sectionGroup}>
+          <SettingItem
+            icon="log-out"
+            label="Sign Out"
+            onPress={handleSignOutPress}
+            disabled={isSigningOut}
+            loading={isSigningOut}
+            colors={colors}
           />
         </View>
 
@@ -372,16 +415,13 @@ export default function SettingsScreen() {
           style={[
             styles.deleteAccountBtn,
             { backgroundColor: colors.card, borderColor: colors.border },
-            isDeletingAccount && styles.settingItemDisabled,
           ]}
           onPress={handleDeleteAccountPress}
-          disabled={isDeletingAccount}
+          accessibilityRole="button"
+          accessibilityLabel="Delete Account"
+          accessibilityHint="Opens the account deletion screen"
         >
-          {isDeletingAccount ? (
-            <Spinner color={colors.danger} />
-          ) : (
-            <Text style={[styles.deleteAccountText, { color: colors.danger }]}>Delete Account</Text>
-          )}
+          <Text style={[styles.deleteAccountText, { color: colors.danger }]}>Delete Account</Text>
         </TouchableOpacity>
 
       </ScrollView>

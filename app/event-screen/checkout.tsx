@@ -24,6 +24,7 @@ import {
 import { useTheme } from "@/hooks/useTheme";
 import { createCheckoutIntent, emitTicketWalletChanged, getCheckoutQuote, type CheckoutOrder, type CheckoutQuote } from "@/lib/payments";
 import { startStripeCheckout } from "@/lib/stripeCheckout";
+import { notifySuccess } from "@/lib/successFeedback";
 
 const parsePositiveInteger = (value: string | string[] | undefined, fallback = 1) => {
   const source = Array.isArray(value) ? value[0] : value;
@@ -261,6 +262,8 @@ const EventCheckoutScreen = () => {
       if (order.totalAmount <= 0) {
         emitTicketWalletChanged();
       }
+
+      notifySuccess(order.totalAmount <= 0 ? "Ticket confirmed" : "Payment complete");
 
       router.replace({
         pathname: "/event-screen/event",

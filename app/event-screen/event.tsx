@@ -24,6 +24,7 @@ import {
     getEventById,
     getJoinRequests,
     getMyEventRewardClaims,
+    getMyHostedEventsCount,
     publishEvent as publishSavedEventDraft,
     saveEventDraft,
     submitJoinRequest,
@@ -52,6 +53,8 @@ import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
 import { submitReport } from "@/lib/reports";
+import { notifySuccess } from "@/lib/successFeedback";
+import { tapFeedback } from "@/lib/microFeedback";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
 import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
@@ -494,6 +497,15 @@ const isSameId = (left?: string | null, right?: string | null) =>
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
+  // While logged out (or mid-logout) never step back into the stack — a
+  // previous entry could be another protected screen. Go straight to
+  // onboarding instead. Authenticated behavior is unchanged.
+  const { isAuthenticated, isLoggingOut } = useAuthStore.getState();
+  if (!isAuthenticated || isLoggingOut) {
+    router.replace("/auth-screen/onboarding");
+    return;
+  }
+
   if (router.canGoBack()) {
     router.back();
     return;
@@ -771,6 +783,14 @@ const EventScreen = () => {
     navigateOnError?: boolean;
     isActive?: () => boolean;
   } = {}) => {
+    // Logout in progress (or already signed out): do not fetch, do not
+    // surface "Unable to load event", do not navigate. The auth gate owns
+    // the redirect to onboarding. Authenticated loads are unaffected.
+    const { isAuthenticated, isLoggingOut } = useAuthStore.getState();
+    if (isLoggingOut || !isAuthenticated) {
+      return null;
+    }
+
     if (!eventId) {
       if (navigateOnError) {
         Alert.alert("Unable to load event", "Missing event id.");
@@ -1271,6 +1291,9 @@ const EventScreen = () => {
       const summary = await toggleMomentSave(interactionMomentId);
       setLocalIsSaved(summary.isSaved);
       setEvent((currentEvent) => currentEvent ? { ...currentEvent, isSaved: summary.isSaved } : currentEvent);
+      if (summary.isSaved) {
+        notifySuccess("Saved");
+      }
     } catch (error) {
       setLocalIsSaved(wasSaved);
       Alert.alert("Unable to save event", getAuthErrorMessage(error, "Please try again."));
@@ -1315,6 +1338,12 @@ const EventScreen = () => {
       mergeUpdatedEvent(updated);
       await refreshHostedEventEligibility();
       setActiveTab("About");
+      const hostedEventCount = await getMyHostedEventsCount();
+      notifySuccess(
+        hostedEventCount === 1
+          ? "Congratulations - your first event is live."
+          : "Event published",
+      );
     } catch (error) {
       Alert.alert("Unable to publish event", getAuthErrorMessage(error, "Please check the event details and try again."));
     } finally {
@@ -1800,11 +1829,13 @@ const EventScreen = () => {
       return;
     }
 
+    tapFeedback();
     setSubmittingJoinRequest(true);
 
     try {
       const result = await submitJoinRequest(event.id);
       setMyJoinRequestStatus(result.status);
+      notifySuccess("Request sent");
     } catch {
       Alert.alert("Unable to submit request", "Please try again.");
     } finally {
@@ -1824,6 +1855,7 @@ const EventScreen = () => {
       setJoinRequests((prev) =>
         prev.map((r) => (r.userId === userId ? { ...r, status: "accepted" as JoinRequestStatus } : r)),
       );
+      notifySuccess("Request accepted");
     } catch {
       Alert.alert("Unable to accept request", "Please try again.");
     } finally {
@@ -1843,6 +1875,7 @@ const EventScreen = () => {
       setJoinRequests((prev) =>
         prev.map((r) => (r.userId === userId ? { ...r, status: "declined" as JoinRequestStatus } : r)),
       );
+      notifySuccess("Request declined");
     } catch {
       Alert.alert("Unable to decline request", "Please try again.");
     } finally {

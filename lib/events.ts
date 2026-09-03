@@ -771,6 +771,24 @@ export const getProfileEventsCount = (events: ProfileEventGroups): number => {
   return eventIds.size;
 };
 
+/**
+ * Read-only count of the current host account's own non-draft events
+ * (published / live / completed / cancelled), deduped. Sourced from the
+ * existing `GET /events/mine/profile` flow, so it reflects the account's
+ * server-side event history across devices and reinstalls.
+ *
+ * UI-messaging only. Never throws — returns `null` if the count cannot be
+ * determined (e.g. the request failed), and callers must treat `null` as
+ * "unknown".
+ */
+export const getMyHostedEventsCount = async (): Promise<number | null> => {
+  try {
+    return getProfileEventsCount(await getMyProfileEvents());
+  } catch {
+    return null;
+  }
+};
+
 export const getMyTicketWalletEvents = async (): Promise<EventResponse[]> => {
   const walletItems = await getMyTicketWallet();
   const eventById = new Map<string, EventResponse>();

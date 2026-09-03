@@ -2,6 +2,8 @@ import CommentsModal from "@/components/post/CommentsModal";
 import PostInteractionBar from "@/components/post/PostInteractionBar";
 import ShareModal from "@/components/post/ShareModal";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { usePopAnimation } from "@/hooks/usePopAnimation";
+import { tapFeedback } from "@/lib/microFeedback";
 import { safeBack } from "@/lib/navigation";
 import {
   deleteStory,
@@ -402,6 +404,7 @@ export default function ViewStoryScreen() {
     isReacted: false,
   });
   const [isReactionSubmitting, setIsReactionSubmitting] = useState(false);
+  const { style: reactionPopStyle, pop: popReaction } = usePopAnimation({ scale: 1.3 });
   const [isShareSubmitting, setIsShareSubmitting] = useState(false);
   const [isDeletingStory, setIsDeletingStory] = useState(false);
   const advanceLockRef = useRef(false);
@@ -1709,6 +1712,9 @@ export default function ViewStoryScreen() {
   const handleReactionPress = () => {
     if (!currentStory || isReactionSubmitting) return;
 
+    tapFeedback();
+    popReaction();
+
     const previous = interaction;
     setIsReactionSubmitting(true);
     setInteraction({
@@ -2272,6 +2278,7 @@ export default function ViewStoryScreen() {
             onLikePress={handleReactionPress}
             onCommentPress={() => openOverlay("comments")}
             onSharePress={() => openOverlay("share")}
+            likeIconStyle={reactionPopStyle}
             likeDisabled={
               !currentStory || isReactionSubmitting || isDeletingStory
             }

@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { create } from "zustand";
 import { api, configureApiAuth } from "@/lib/api";
 import { getAuthErrorDetails, getAuthErrorMessage } from "@/lib/authErrors";
+import { clearEventByIdCache } from "@/lib/eventByIdCache";
 import { removeFcmToken } from "@/lib/notifications";
 
 const AUTH_TOKEN_KEY = "xenog.mobile.accessToken";
@@ -49,6 +50,8 @@ type RegisterPayload = {
   email: string;
   password: string;
   accountType: "personal" | "business";
+  acceptedLegal: true;
+  locale: string;
 };
 
 type VerifyEmailPayload = {
@@ -115,7 +118,7 @@ type AuthState = {
   validatePasswordResetCode: (payload: ValidatePasswordResetCodePayload) => Promise<void>;
   resetPassword: (payload: ResetPasswordPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<AuthUser>;
-  deleteAccount: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AuthUser | null) => Promise<void>;
   setToken: (accessToken: string | null) => Promise<void>;
@@ -341,7 +344,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  register: async ({ name, username, email, password, accountType }) => {
+  register: async ({ name, username, email, password, accountType, acceptedLegal, locale }) => {
     set({ isLoading: true, error: null, authErrorCode: null });
 
     try {
@@ -355,6 +358,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           email: normalizedEmail,
           password,
           accountType,
+          acceptedLegal,
+          locale,
         },
         {
           skipAuthHeader: true,
@@ -575,21 +580,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  deleteAccount: async () => {
+  deleteAccount: async (password: string) => {
     set({ isLoading: true, error: null, authErrorCode: null });
 
     try {
       await api.delete("/auth/me", {
+        data: { password },
         skipAuthRedirect: true,
+        skipAuthRefresh: true,
       });
-      await setStoredPendingVerificationEmail(null);
-      await get().clearAuthState();
-      set({ pendingVerificationEmail: null, isLoading: false, isRestoring: false, hasRestored: true });
     } catch (error) {
+      // Password / obligation failures (401, 409) surface here with the
+      // server's message and leave the local session untouched.
       const message = getAuthErrorMessage(error, "Unable to delete your account. Please try again.");
       set({ isLoading: false, error: message });
       throw new Error(message);
     }
+
+    // Deletion succeeded — reuse the same local teardown as logout:
+    // drop this device's push token, clear caches and secure storage.
+    try {
+      const Notifications = await import("expo-notifications");
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      const token = tokenData.data as string | undefined;
+      if (token) {
+        await removeFcmToken(token);
+      }
+    } catch {
+      // Best-effort only — the account is already gone.
+    }
+
+    clearEventByIdCache();
+    await setStoredPendingVerificationEmail(null);
+    await get().clearAuthState();
+    set({
+      pendingVerificationEmail: null,
+      isLoading: false,
+      isRestoring: false,
+      hasRestored: true,
+    });
   },
 
   logout: async () => {
@@ -621,6 +650,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // The local session should still be cleared when the server is unavailable.
     } finally {
+      // Drop the in-memory event-by-id read cache so a signed-out session's
+      // event data can never bleed into the next account. Logout-only — the
+      // cache mechanics for normal use are untouched.
+      clearEventByIdCache();
       await setStoredPendingVerificationEmail(null);
       await get().clearAuthState();
       set({

@@ -58,6 +58,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { safeBack } from '@/lib/navigation';
+import { notifySuccess } from '@/lib/successFeedback';
 import { createMoment, setPendingNewMoment } from '@/lib/moments';
 import type { MomentAudience, MomentMediaItem, MomentMediaSource } from '@/lib/moments';
 import { startPendingVideoMomentUpload } from '@/lib/pendingMomentUploads';
@@ -1590,7 +1591,7 @@ function AudioPickerSheet({
             <View style={audioStyles.header}>
               <View>
                 <Text style={audioStyles.title}>Audio</Text>
-                <Text style={audioStyles.subtitle}>Record or choose audio for your moment</Text>
+                <Text style={audioStyles.subtitle}>Record or choose audio for your post</Text>
               </View>
             </View>
           </View>
@@ -1966,7 +1967,7 @@ export default function CreateMomentScreen() {
     setSelectedMediaDurationSeconds(null);
 
     if (images.length > availableSlots) {
-      Alert.alert('Image limit reached', `Only ${MAX_MEDIA_ITEMS} images can be attached to a moment.`);
+      Alert.alert('Image limit reached', `Only ${MAX_MEDIA_ITEMS} images can be attached to a post.`);
     }
   };
 
@@ -2277,7 +2278,7 @@ export default function CreateMomentScreen() {
     const trimmedCaption = caption.trim();
 
     if (!trimmedCaption && selectedImages.length === 0 && !selectedImage) {
-      Alert.alert('Create Mooment', 'Write a stitch or add media before creating a moment.');
+      Alert.alert('Create Mooment', 'Write a stitch or add media before creating a post.');
       isSubmittingRef.current = false;
       setIsSubmitting(false);
       return false;
@@ -2340,8 +2341,8 @@ export default function CreateMomentScreen() {
       return 'created';
     } catch (error) {
       Alert.alert(
-        'Unable to create moment',
-        getAuthErrorMessage(error, 'Please check the moment details and try again.'),
+        'Unable to create post',
+        getAuthErrorMessage(error, 'Please check the post details and try again.'),
       );
       return false;
     } finally {
@@ -2370,6 +2371,7 @@ export default function CreateMomentScreen() {
     if (result === 'pending') {
       handleClose();
     } else if (result === 'created') {
+      notifySuccess('Post created');
       setTimeout(() => {
         handleClose();
       }, 1500);

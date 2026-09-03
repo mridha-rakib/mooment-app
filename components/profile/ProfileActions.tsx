@@ -6,8 +6,11 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { usePopAnimation } from "@/hooks/usePopAnimation";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { checkDirectMessageAccess } from "@/lib/chat";
+import { tapFeedback } from "@/lib/microFeedback";
 import { followUser, unfollowUser } from "@/lib/users";
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 import { useAuthStore } from "@/stores/authStore";
@@ -41,6 +44,7 @@ export default function ProfileActions({
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const isChatLoadingRef = useRef(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const { style: followPopStyle, pop: popFollow } = usePopAnimation({ scale: 1.1 });
 
   useEffect(() => {
     if (initialIsFollowing !== undefined) {
@@ -56,6 +60,8 @@ export default function ProfileActions({
 
     const previous = isFollowing;
     const next = !previous;
+    tapFeedback();
+    popFollow();
     setIsFollowing(next);
     onFollowChange?.(next);
     setIsFollowLoading(true);
@@ -133,7 +139,7 @@ export default function ProfileActions({
         disabled={!userId || isFollowLoading || !hasLoadedFollowStatus}
         onPress={handleToggleFollow}
       >
-        <View style={styles.followBtnContent}>
+        <Animated.View style={[styles.followBtnContent, followPopStyle]}>
           {isFollowLoading || !hasLoadedFollowStatus ? (
             <ActivityIndicator size="small" color={isFollowing ? colors.text : buttonForeground(colors)} />
           ) : isFollowing && (
@@ -148,7 +154,7 @@ export default function ProfileActions({
               {isFollowing ? 'Following' : 'Follow'}
             </Text>
           )}
-        </View>
+        </Animated.View>
       </TouchableOpacity>
     </>
   );

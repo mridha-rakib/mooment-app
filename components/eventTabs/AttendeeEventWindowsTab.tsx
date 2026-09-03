@@ -1,5 +1,6 @@
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { notifySuccess } from "@/lib/successFeedback";
 import {
   createEventWindowPost,
   getEventWindowPosts,
@@ -893,6 +894,7 @@ const AttendeeEventWindowsTab = React.forwardRef<EventWindowsTabRefreshHandle, A
       setSelectedWindow(null);
       setSelectedMedia(null);
       setText("");
+      notifySuccess("Posted to scene");
     } catch (error) {
       setPostError(getAuthErrorMessage(error, "Unable to post in this scene."));
       requestAnimationFrame(() => formScrollRef.current?.scrollToEnd({ animated: true }));
