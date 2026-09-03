@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   View,
   Text,
   StyleSheet,
   TextInput,
-  ToastAndroid,
   TouchableOpacity,
   Platform,
   StatusBar,
@@ -26,6 +24,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { getAuthErrorDetails, getAuthErrorMessage } from '@/lib/authErrors';
+import { notifySuccess } from '@/lib/successFeedback';
 import {
   getTicketSalesEndEventEndError,
   isTicketCreationCutoffReached,
@@ -133,11 +132,6 @@ const isSameCalendarDay = (first: Date, second: Date) =>
   first.getDate() === second.getDate();
 
 const generateTicketLocalId = () => `ticket-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-const showTicketFeedback = (message: string) => {
-  if (Platform.OS === 'android') ToastAndroid.show(message, ToastAndroid.SHORT);
-  else Alert.alert('', message);
-};
 
 export default function TicketDetailsScreen() {
   const params = useLocalSearchParams<{ localId?: string }>();
@@ -383,7 +377,7 @@ export default function TicketDetailsScreen() {
         salesEndAt: salesEndAt.toISOString(),
         type: savedType,
       });
-      showTicketFeedback(isEditingTicket ? 'Ticket successfully updated' : 'Ticket successfully created');
+      notifySuccess(isEditingTicket ? 'Ticket updated' : 'Ticket created');
       router.back();
     } catch (error) {
       setErrors(parseBackendTicketErrors(error));

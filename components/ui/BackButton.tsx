@@ -9,6 +9,8 @@ interface BackButtonProps {
   size?: number;
   color?: string;
   style?: any;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 const BackButton: React.FC<BackButtonProps> = ({
@@ -16,7 +18,9 @@ const BackButton: React.FC<BackButtonProps> = ({
   iconName = ArrowLeft01Icon,
   size = 20,
   color,
-  style
+  style,
+  accessibilityLabel = "Go back",
+  accessibilityHint = "Returns to the previous screen",
 }) => {
   const router = useRouter();
 
@@ -37,6 +41,8 @@ const BackButton: React.FC<BackButtonProps> = ({
       size={size}
       color={color}
       style={style}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
     />
   );
 };

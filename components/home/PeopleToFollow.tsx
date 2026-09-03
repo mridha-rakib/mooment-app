@@ -4,6 +4,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { tapFeedback } from '@/lib/microFeedback';
 import { followUser, unfollowUser } from '@/lib/users';
 import UserAvatar from '../ui/UserAvatar';
 
@@ -45,6 +46,7 @@ function PeopleToFollow({ users, onFollowChange }: PeopleToFollowProps) {
       ? followedUserIds.filter((id) => id !== user.id)
       : [...followedUserIds, user.id];
 
+    tapFeedback();
     setFollowedUserIds(nextFollowedUserIds);
     onFollowChange?.(user.id, !wasFollowing);
 

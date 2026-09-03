@@ -26,6 +26,7 @@ import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
 import { retryBlockOnly, submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
 import { submitReport } from "@/lib/reports";
+import { notifySuccess } from "@/lib/successFeedback";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
@@ -545,6 +546,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
       const result = await toggleMomentSave(event.interactionMomentId);
       if (mountedRef.current) setIsSaved(result.isSaved);
       onSaveChange?.(event.interactionMomentId, result.isSaved);
+      if (result.isSaved) notifySuccess("Saved");
     } catch {
       if (mountedRef.current) setIsSaved(prev);
     } finally {

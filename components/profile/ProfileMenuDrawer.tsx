@@ -69,7 +69,14 @@ export default function ProfileMenuDrawer({ visible, onClose, onAddProductPress,
   const handleLogout = async () => {
     onClose();
     await logout();
-    router.replace('/auth-screen/login');
+    // Clear the entire navigation stack first — router.replace alone only
+    // swaps the top route and leaves protected screens (e.g. a locked
+    // event) mounted underneath the auth screen. dismissAll pops them so
+    // logout can never reopen a previous protected event.
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+    router.replace('/auth-screen/onboarding');
   };
 
   return (

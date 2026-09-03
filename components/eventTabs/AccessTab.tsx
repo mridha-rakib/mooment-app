@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useTheme } from "@/hooks/useTheme";
 import type { EventPrivacy, EventRewardPayload, EventTicketPayload, JoinRequest, JoinRequestStatus } from "@/lib/events";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -15,6 +16,10 @@ import {
   isTicketCreationCutoffReached,
   TICKET_CREATION_CUTOFF_MESSAGE,
 } from "@/lib/ticketAvailability";
+// Animated variant so the join-request pill can gently fade when its state
+// changes (request -> requested -> declined). Same press behavior/layout.
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
 type TicketStat = { sold: number; available: number; capacity: number };
 
 const resolveAvatarUri = (avatarKey?: string | null, avatarUrl?: string | null) => {
@@ -259,23 +264,25 @@ const AccessTab = ({
   const renderRequestButton = () => {
     if (myJoinRequestStatus === "pending") {
       return (
-        <View style={[styles.requestBtn, styles.requestBtnPending]}>
+        <Animated.View key="jr-pending" entering={FadeIn.duration(220)} style={[styles.requestBtn, styles.requestBtnPending]}>
           <Feather name="clock" size={13} color="#888" />
           <Text style={[styles.requestBtnText, { color: "#888" }]}>Requested</Text>
-        </View>
+        </Animated.View>
       );
     }
 
     if (myJoinRequestStatus === "declined") {
       return (
-        <View style={[styles.requestBtn, styles.requestBtnPending]}>
+        <Animated.View key="jr-declined" entering={FadeIn.duration(220)} style={[styles.requestBtn, styles.requestBtnPending]}>
           <Text style={[styles.requestBtnText, { color: "#888" }]}>Declined</Text>
-        </View>
+        </Animated.View>
       );
     }
 
     return (
-      <TouchableOpacity
+      <AnimatedTouchableOpacity
+        key="jr-request"
+        entering={FadeIn.duration(220)}
         style={[styles.requestBtn, { backgroundColor: buttonBackground(colors), opacity: submittingJoinRequest ? 0.7 : 1 }]}
         disabled={submittingJoinRequest}
         onPress={onSubmitJoinRequest}
@@ -286,7 +293,7 @@ const AccessTab = ({
         ) : (
           <Text style={[styles.requestBtnText, { color: buttonForeground(colors) }]}>Request</Text>
         )}
-      </TouchableOpacity>
+      </AnimatedTouchableOpacity>
     );
   };
 

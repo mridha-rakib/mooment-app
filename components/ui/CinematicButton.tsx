@@ -16,6 +16,8 @@ interface CinematicButtonProps {
   width?: number | string;
   height?: number | string;
   borderRadius?: number;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 const CinematicButton: React.FC<CinematicButtonProps> = ({
@@ -29,6 +31,8 @@ const CinematicButton: React.FC<CinematicButtonProps> = ({
   width = 40,
   height = 40,
   borderRadius = 16,
+  accessibilityLabel,
+  accessibilityHint,
 }) => {
   const { colors, isDark } = useTheme();
   const iconColor = color || colors.text;
@@ -38,6 +42,9 @@ const CinematicButton: React.FC<CinematicButtonProps> = ({
       onPress={onPress}
       style={[{ width, height }, style]}
       activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
     >
       <LinearGradient
         colors={isDark ? ["#18181c", "#c1c0c5", "#18181c"] : ["#e0e0e0", "#a0a0a0", "#e0e0e0"]}

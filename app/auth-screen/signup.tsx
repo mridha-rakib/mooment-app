@@ -21,6 +21,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import { getConsentLocale } from "@/lib/legalConsent";
+import {
+  getFirstPasswordError,
+  getPasswordRuleChecklist,
+} from "@/lib/passwordValidation";
+
+const LEGAL_CONSENT_ERROR =
+  "Please accept the Terms & Conditions and Privacy Policy to continue.";
 // type AccountType = "personal" | "business";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
@@ -57,8 +65,9 @@ const getSignUpValidationError = ({
     return "Enter a valid email address.";
   }
 
-  if (password.length < 8) {
-    return "Password must be at least 8 characters.";
+  const passwordError = getFirstPasswordError(password);
+  if (passwordError) {
+    return passwordError;
   }
 
   return null;
@@ -73,6 +82,7 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedIn] = useState(false);
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const { colors, isDark } = useTheme();
@@ -106,6 +116,11 @@ export default function SignUp() {
       return;
     }
 
+    if (!acceptedLegal) {
+      setFormError(LEGAL_CONSENT_ERROR);
+      return;
+    }
+
     setFormError(null);
 
     try {
@@ -115,6 +130,8 @@ export default function SignUp() {
         email: normalizedEmail,
         password,
         accountType: "business",
+        acceptedLegal: true,
+        locale: getConsentLocale(),
       });
 
       router.push({
@@ -325,6 +342,29 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
 
+          {password.length > 0 && (
+            <View style={styles.passwordChecklist}>
+              {getPasswordRuleChecklist(password).map((rule) => (
+                <View key={rule.id} style={styles.passwordRuleRow}>
+                  <Feather
+                    name={rule.met ? "check-circle" : "circle"}
+                    size={14}
+                    color={rule.met ? colors.primary : colors.textSecondary}
+                    style={styles.passwordRuleIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.passwordRuleText,
+                      { color: rule.met ? colors.text : colors.textSecondary },
+                    ]}
+                  >
+                    {rule.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.optionsContainer}>
             <TouchableOpacity
               style={styles.checkboxContainer}
@@ -350,6 +390,56 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.consentContainer}>
+            <TouchableOpacity
+              style={styles.consentCheckbox}
+              onPress={() => {
+                setAcceptedLegal((previous) => !previous);
+                setFormError(null);
+              }}
+              activeOpacity={0.7}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: acceptedLegal }}
+              disabled={isLoading}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  { backgroundColor: colors.border },
+                  acceptedLegal && { backgroundColor: colors.primary },
+                ]}
+              >
+                {acceptedLegal && (
+                  <Feather name="check" size={12} color={colors.background} />
+                )}
+              </View>
+            </TouchableOpacity>
+            <Text style={[styles.consentText, { color: colors.textSecondary }]}>
+              I agree to the{" "}
+              <Text
+                style={[styles.consentLink, { color: colors.primary }]}
+                onPress={() => router.push("/auth-screen/terms")}
+                accessible
+                accessibilityRole="link"
+                accessibilityLabel="Terms and Conditions"
+                accessibilityHint="Opens the Terms and Conditions document"
+              >
+                Terms &amp; Conditions
+              </Text>{" "}
+              and{" "}
+              <Text
+                style={[styles.consentLink, { color: colors.primary }]}
+                onPress={() => router.push("/auth-screen/privacy")}
+                accessible
+                accessibilityRole="link"
+                accessibilityLabel="Privacy Policy"
+                accessibilityHint="Opens the Privacy Policy document"
+              >
+                Privacy Policy
+              </Text>
+            </Text>
+          </View>
+
           {visibleError && (
             <Text style={[styles.errorText, { color: colors.danger }]}>
               {visibleError}
@@ -365,6 +455,9 @@ export default function SignUp() {
             activeOpacity={0.8}
             onPress={handleSignUp}
             disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Sign Up"
+            accessibilityState={{ disabled: isLoading, busy: isLoading }}
           >
             {isLoading ? (
               <Spinner color={buttonForeground(colors)} />
@@ -384,7 +477,12 @@ export default function SignUp() {
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>
               Already have an account?{" "}
             </Text>
-            <TouchableOpacity onPress={handleLoginPress}>
+            <TouchableOpacity
+              onPress={handleLoginPress}
+              accessibilityRole="link"
+              accessibilityLabel="Log In"
+              accessibilityHint="Goes to the log in screen"
+            >
               <Text style={[styles.loginText, { color: colors.primary }]}>
                 Log In
               </Text>
@@ -501,6 +599,22 @@ const styles = StyleSheet.create({
   eyeBtn: {
     padding: 4,
   },
+  passwordChecklist: {
+    marginTop: -4,
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  passwordRuleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  passwordRuleIcon: {
+    marginRight: 8,
+  },
+  passwordRuleText: {
+    fontSize: 12,
+  },
   optionsContainer: {
     flexDirection: "row",
     justifyContent: "flex-start",
@@ -522,6 +636,23 @@ const styles = StyleSheet.create({
   },
   checkboxText: {
     fontSize: 13,
+  },
+  consentContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 24,
+    marginTop: -8,
+  },
+  consentCheckbox: {
+    paddingTop: 1,
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  consentLink: {
+    fontWeight: "bold",
   },
   signupButton: {
     height: 56,

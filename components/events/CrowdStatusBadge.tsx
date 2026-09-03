@@ -1,5 +1,13 @@
-import React from "react";
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import React, { useEffect } from "react";
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import Animated, {
+  FadeIn,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/useTheme";
 import type { CrowdStatus, EventStatus } from "@/lib/events";
@@ -42,12 +50,39 @@ export default function CrowdStatusBadge({ eventStatus, crowdStatus, style }: Cr
         : colors.success;
 
   return (
-    <View style={[styles.badge, colorStyle, style]} pointerEvents="none">
+    // Keyed on crowdStatus so a transition (not_busy -> busy -> very_busy)
+    // gently crossfades the pill instead of hard-swapping. FadeIn is skipped
+    // automatically when the OS "Reduce Motion" setting is on.
+    <Animated.View
+      key={crowdStatus}
+      entering={FadeIn.duration(220)}
+      style={[styles.badge, colorStyle, style]}
+      pointerEvents="none"
+    >
       <Text style={[styles.text, { color: textColor }]} numberOfLines={1}>
         {CROWD_LABELS[crowdStatus]}
       </Text>
-    </View>
+    </Animated.View>
   );
+}
+
+// Subtle opacity breathing on the "Live" dot. Self-contained hooks so the
+// parent can keep its early `return null`. No-op under Reduce Motion.
+function LiveDot() {
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      pulse.value = 1;
+      return;
+    }
+    pulse.value = withRepeat(withTiming(0.4, { duration: 800 }), -1, true);
+  }, [pulse, reduceMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+
+  return <Animated.View style={[styles.liveDot, animatedStyle]} />;
 }
 
 export function LiveLifecycleBadge({ eventStatus, style }: { eventStatus?: string | null; style?: StyleProp<ViewStyle> }) {
@@ -56,10 +91,10 @@ export function LiveLifecycleBadge({ eventStatus, style }: { eventStatus?: strin
   }
 
   return (
-    <View style={[styles.liveBadge, style]} pointerEvents="none">
-      <View style={styles.liveDot} />
+    <Animated.View entering={FadeIn.duration(220)} style={[styles.liveBadge, style]} pointerEvents="none">
+      <LiveDot />
       <Text style={styles.liveText} numberOfLines={1}>Live</Text>
-    </View>
+    </Animated.View>
   );
 }
 
