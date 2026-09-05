@@ -85,7 +85,7 @@ export type UserProfileData = {
   stats: ProfileStats;
   accountType?: "personal" | "business";
   isFollowing?: boolean;
-  profileAccess?: "open" | "blocked";
+  profileAccess?: "open" | "blocked" | "unavailable";
   viewerHasBlockedTarget?: boolean;
   targetHasBlockedViewer?: boolean;
   blockedTitle?: string;
@@ -160,8 +160,12 @@ export default function ProfileView({
   const [blockedMenuVisible, setBlockedMenuVisible] = useState(false);
   const [hasActiveStory, setHasActiveStory] = useState(false);
   const isBlockedProfile = user.profileAccess === "blocked";
+  // A suspended / banned / deleted account: same "safe unavailable" screen as
+  // a block, but with no identity, no avatar and no report/block actions.
+  const isUnavailableProfile = user.profileAccess === "unavailable";
+  const isRestrictedProfile = isBlockedProfile || isUnavailableProfile;
   const hasProfileBlockRelationship = Boolean(
-    isBlockedProfile || user.viewerHasBlockedTarget || user.targetHasBlockedViewer,
+    isRestrictedProfile || user.viewerHasBlockedTarget || user.targetHasBlockedViewer,
   );
   const profileStoriesRef = useRef<{
     userId: string;
@@ -186,7 +190,7 @@ export default function ProfileView({
   }, []);
 
   const loadProfileStories = useCallback(() => {
-    if (isBlockedProfile) {
+    if (isRestrictedProfile) {
       if (mountedRef.current) {
         setHasActiveStory(false);
       }
@@ -235,7 +239,7 @@ export default function ProfileView({
 
     profileStoriesRequestRef.current = { userId: requestedUserId, request };
     return request;
-  }, [isBlockedProfile, user.id]);
+  }, [isRestrictedProfile, user.id]);
 
   useEffect(() => {
     setAvatarModalMode(null);
@@ -246,7 +250,7 @@ export default function ProfileView({
   }, [loadProfileStories]);
 
   const handleAvatarPress = useCallback(async () => {
-    if (isBlockedProfile) {
+    if (isRestrictedProfile) {
       return;
     }
 
@@ -278,7 +282,7 @@ export default function ProfileView({
     } finally {
       avatarTapInFlightRef.current = false;
     }
-  }, [avatarModalMode, isBlockedProfile, loadProfileStories, user.id]);
+  }, [avatarModalMode, isRestrictedProfile, loadProfileStories, user.id]);
 
   const handleViewProfileStory = useCallback(() => {
     if (storyNavigationInFlightRef.current) {
@@ -679,20 +683,26 @@ export default function ProfileView({
     </>
   );
 
-  if (isBlockedProfile) {
-    const blockedTitle = user.viewerHasBlockedTarget
-      ? "You blocked this account"
-      : (user.blockedTitle ?? "This account isn't available");
-    const blockedDescription = user.viewerHasBlockedTarget
-      ? "Unblock to view this profile, posts, and interact again."
-      : (user.blockedDescription ?? "You can't view this profile or interact with this account.");
+  if (isRestrictedProfile) {
+    // Suspended / banned / deleted accounts: no identity, no avatar, no
+    // report/block actions — just a neutral "unavailable" screen.
+    const blockedTitle = isUnavailableProfile
+      ? "Account unavailable"
+      : user.viewerHasBlockedTarget
+        ? "You blocked this account"
+        : (user.blockedTitle ?? "This account isn't available");
+    const blockedDescription = isUnavailableProfile
+      ? "This account isn't available right now."
+      : user.viewerHasBlockedTarget
+        ? "Unblock to view this profile, posts, and interact again."
+        : (user.blockedDescription ?? "You can't view this profile or interact with this account.");
 
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.blockedHeader}>
           <BackButton size={20} style={styles.blockedHeaderButton} />
-          {!isOwnProfile ? (
+          {!isOwnProfile && !isUnavailableProfile ? (
             <TouchableOpacity
               style={styles.blockedHeaderButton}
               activeOpacity={0.8}
@@ -705,25 +715,27 @@ export default function ProfileView({
           )}
         </View>
 
-        <View style={styles.blockedIdentityRow}>
-          <View style={[styles.blockedAvatarBorder, { borderColor: colors.primary }]}>
-            <UserAvatar
-              uri={user.avatar}
-              name={user.name}
-              size={80}
-              style={styles.blockedAvatar}
-              iconSize={36}
-            />
+        {!isUnavailableProfile ? (
+          <View style={styles.blockedIdentityRow}>
+            <View style={[styles.blockedAvatarBorder, { borderColor: colors.primary }]}>
+              <UserAvatar
+                uri={user.avatar}
+                name={user.name}
+                size={80}
+                style={styles.blockedAvatar}
+                iconSize={36}
+              />
+            </View>
+            <View style={styles.blockedIdentityText}>
+              <Text style={[styles.blockedName, { color: colors.text }]} numberOfLines={1}>
+                {user.name}
+              </Text>
+              <Text style={[styles.blockedHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+                {user.handle}
+              </Text>
+            </View>
           </View>
-          <View style={styles.blockedIdentityText}>
-            <Text style={[styles.blockedName, { color: colors.text }]} numberOfLines={1}>
-              {user.name}
-            </Text>
-            <Text style={[styles.blockedHandle, { color: colors.textSecondary }]} numberOfLines={1}>
-              {user.handle}
-            </Text>
-          </View>
-        </View>
+        ) : null}
 
         <View style={[styles.blockedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.blockedIconCircle}>
@@ -735,7 +747,7 @@ export default function ProfileView({
           <Text style={[styles.blockedCardDescription, { color: colors.textSecondary }]}>
             {blockedDescription}
           </Text>
-          {user.viewerHasBlockedTarget ? (
+          {user.viewerHasBlockedTarget && !isUnavailableProfile ? (
             <TouchableOpacity
               style={[styles.blockedUnblockButton, { borderColor: "#AC86D4" }]}
               activeOpacity={0.85}
@@ -759,25 +771,29 @@ export default function ProfileView({
             {"This content isn't available"}
           </Text>
           <Text style={[styles.blockedUnavailableText, { color: colors.textSecondary }]}>
-            {user.viewerHasBlockedTarget
-              ? "Unblock to see this profile and its content."
-              : "This profile and its content are unavailable."}
+            {isUnavailableProfile
+              ? "This profile and its content are unavailable."
+              : user.viewerHasBlockedTarget
+                ? "Unblock to see this profile and its content."
+                : "This profile and its content are unavailable."}
           </Text>
         </View>
 
-        <MoreMenuModal
-          visible={blockedMenuVisible}
-          onClose={() => setBlockedMenuVisible(false)}
-          showDelete={false}
-          onReport={handleReportPress}
-          reportDisabled={hasProfileBlockRelationship}
-          openReportAfterClose
-          onBlock={user.viewerHasBlockedTarget ? handleProfileBlockMenuPress : undefined}
-          blockLabel="Unblock"
-          blockDisabled={isProfileBlockMutationPending}
-          top={88}
-        />
-        {reportModals}
+        {!isUnavailableProfile ? (
+          <MoreMenuModal
+            visible={blockedMenuVisible}
+            onClose={() => setBlockedMenuVisible(false)}
+            showDelete={false}
+            onReport={handleReportPress}
+            reportDisabled={hasProfileBlockRelationship}
+            openReportAfterClose
+            onBlock={user.viewerHasBlockedTarget ? handleProfileBlockMenuPress : undefined}
+            blockLabel="Unblock"
+            blockDisabled={isProfileBlockMutationPending}
+            top={88}
+          />
+        ) : null}
+        {!isUnavailableProfile ? reportModals : null}
       </SafeAreaView>
     );
   }

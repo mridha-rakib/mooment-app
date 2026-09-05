@@ -570,6 +570,9 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
             setIsHidden(true);
             try {
               await blockUser(targetId);
+              // Same cleanup the Report+Block flow performs: drop every
+              // already-loaded card from this host, not just this one.
+              onHostBlocked?.(targetId);
             } catch {
               if (mountedRef.current) setIsHidden(false);
             }

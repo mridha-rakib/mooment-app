@@ -76,14 +76,14 @@ export type UserResponse = {
   _id?: string;
   id?: string;
   name: string;
-  username?: string;
+  username?: string | null;
   email?: string;
   accountType?: "personal" | "business";
   avatarKey?: string | null;
   avatarUrl?: string | null;
   bio?: string | null;
   isFollowing?: boolean;
-  profileAccess?: "open" | "blocked";
+  profileAccess?: "open" | "blocked" | "unavailable";
   viewerHasBlockedTarget?: boolean;
   targetHasBlockedViewer?: boolean;
   blockedTitle?: string;

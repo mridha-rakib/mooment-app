@@ -1750,6 +1750,9 @@ function FeedPost({
             setIsHidden(true);
             try {
               await blockUser(authorId);
+              // Same cleanup the Report+Block flow performs: drop every
+              // already-loaded card from this author, not just this one.
+              onAuthorBlocked?.(authorId);
             } catch {
               setIsHidden(false);
             }
