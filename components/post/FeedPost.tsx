@@ -7,11 +7,12 @@ import { VideoView,
   type VideoSourceObject } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import * as Haptics from 'expo-haptics';
+import { tapFeedback } from '@/lib/microFeedback';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
+import { usePopAnimation } from '@/hooks/usePopAnimation';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
 import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
@@ -19,6 +20,7 @@ import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, typ
 import { navigateToProfile } from '@/lib/profileNavigation';
 import { retryBlockOnly, submitReportWithOptionalBlock } from '@/lib/reportBlockFlow';
 import { submitReport } from '@/lib/reports';
+import { notifySuccess } from '@/lib/successFeedback';
 import { blockUser, followUser, unfollowUser } from '@/lib/users';
 import { useAuthStore } from '@/stores/authStore';
 import FullScreenMediaModal from '../modals/FullScreenMediaModal';
@@ -31,6 +33,10 @@ import ReportedContentCard, { type ReportedContentOutcome } from './ReportedCont
 import HashtagText from './HashtagText';
 import PostInteractionBar from './PostInteractionBar';
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+// Reanimated-wrapped TouchableOpacity so the header Follow control can carry
+// a subtle scale style without any change to its layout or press behavior.
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
 // Hardcoded visual waveform for Audio posts
 const WAVEFORM_HEIGHTS = [14, 22, 10, 35, 26, 40, 16, 45, 30, 18, 42, 28, 12, 38, 22, 16, 32, 24, 14, 28, 36, 18, 12, 30, 42, 24, 16, 38, 28, 14, 45, 20, 12, 32, 24, 18, 10, 26, 14, 10];
 const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
@@ -1557,12 +1563,11 @@ function FeedPost({
     return () => cancelAnimationFrame(frame);
   }, [post.id]);
 
-  // Reanimated Shared Values
-  const heartScale = useSharedValue(1);
-
-  const heartAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: heartScale.value }]
-  }));
+  // Subtle pop feedback — reduced-motion aware. heartAnimatedStyle is handed
+  // to PostInteractionBar via its existing likeIconStyle prop; followAnimatedStyle
+  // rides on the header Follow control.
+  const { style: heartAnimatedStyle, pop: popHeart } = usePopAnimation({ scale: 1.3 });
+  const { style: followAnimatedStyle, pop: popFollow } = usePopAnimation({ scale: 1.12 });
 
   const handleLike = async () => {
     if (isLikePending) {
@@ -1570,7 +1575,7 @@ function FeedPost({
     }
 
     // Haptic Feedback
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    tapFeedback();
 
     const wasLiked = isLiked;
     const previousLikesCount = likesCount;
@@ -1578,11 +1583,8 @@ function FeedPost({
     setIsLiked(!wasLiked);
     setLikesCount((currentCount) => Math.max(0, currentCount + (wasLiked ? -1 : 1)));
 
-    // Animation: Scale up then back to normal
-    heartScale.value = withSequence(
-      withSpring(1.3, { damping: 10, stiffness: 100 }),
-      withSpring(1, { damping: 10, stiffness: 100 })
-    );
+    // Animation: subtle scale pop (no-op under Reduce Motion)
+    popHeart();
 
     if (!MONGO_OBJECT_ID_PATTERN.test(post.id)) {
       return;
@@ -1614,6 +1616,7 @@ function FeedPost({
 
     const wasSaved = isSaved;
 
+    tapFeedback();
     setIsSaved(!wasSaved);
     setIsSavePending(true);
 
@@ -1622,6 +1625,10 @@ function FeedPost({
 
       setIsSaved(summary.isSaved);
       onSaveChange?.(post.id, summary.isSaved);
+
+      if (summary.isSaved) {
+        notifySuccess('Saved');
+      }
     } catch (error) {
       setIsSaved(wasSaved);
       Alert.alert('Unable to save post', getAuthErrorMessage(error, 'Please try again.'));
@@ -1697,6 +1704,8 @@ function FeedPost({
     const authorId = post.authorId;
     const wasFollowing = isFollowing;
 
+    tapFeedback();
+    popFollow();
     setIsFollowing(!wasFollowing);
     if (authorId) {
       onAuthorFollowChange?.(authorId, !wasFollowing);
@@ -1741,6 +1750,9 @@ function FeedPost({
             setIsHidden(true);
             try {
               await blockUser(authorId);
+              // Same cleanup the Report+Block flow performs: drop every
+              // already-loaded card from this author, not just this one.
+              onAuthorBlocked?.(authorId);
             } catch {
               setIsHidden(false);
             }
@@ -1999,24 +2011,24 @@ function FeedPost({
           <View style={[styles.postHeaderActions, isNormalPost && styles.normalPostHeaderActions]}>
             {!isPostByCurrentUser && (
               isFollowing ? (
-                <TouchableOpacity
-                  style={[styles.followingBtn, styles.normalFollowingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+                <AnimatedTouchableOpacity
+                  style={[styles.followingBtn, styles.normalFollowingBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }, followAnimatedStyle]}
                   activeOpacity={0.8}
                   disabled={isFollowPending}
                   onPress={toggleFollow}
                 >
                   <Text style={[styles.followingBtnText, { color: colors.textSecondary }]}>Following</Text>
-                </TouchableOpacity>
+                </AnimatedTouchableOpacity>
               ) : (
-                <TouchableOpacity
-                  style={[styles.followBtn, styles.normalFollowBtn, { borderColor: isDark ? '#AC86D4' : colors.primary }]}
+                <AnimatedTouchableOpacity
+                  style={[styles.followBtn, styles.normalFollowBtn, { borderColor: isDark ? '#AC86D4' : colors.primary }, followAnimatedStyle]}
                   activeOpacity={0.8}
                   disabled={isFollowPending}
                   onPress={toggleFollow}
                 >
                   <Feather name="plus" size={12} color={isDark ? '#AC86D4' : colors.primary} />
                   <Text style={[styles.followBtnText, styles.normalFollowBtnText, { color: isDark ? '#AC86D4' : colors.primary }]}>Follow</Text>
-                </TouchableOpacity>
+                </AnimatedTouchableOpacity>
               )
             )}
             <TouchableOpacity

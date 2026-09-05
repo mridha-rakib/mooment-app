@@ -1,4 +1,5 @@
 import TicketWalletShortcut from "@/components/ticket/TicketWalletShortcut";
+import SuccessToastHost from "@/components/ui/SuccessToast";
 import { useTheme } from "@/hooks/useTheme";
 import { installLogBoxStackGuard } from "@/lib/installLogBoxStackGuard";
 import { registerFcmToken } from "@/lib/notifications";
@@ -35,15 +36,31 @@ function AuthSessionGate() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isRestoring = useAuthStore((state) => state.isRestoring);
   const hasRestored = useAuthStore((state) => state.hasRestored);
+  const isLoggingOut = useAuthStore((state) => state.isLoggingOut);
   const restoreAuthSession = useAuthStore((state) => state.restoreAuthSession);
 
   useEffect(() => {
     void restoreAuthSession();
   }, [restoreAuthSession]);
 
+  // Authoritative logout reset: the moment a logout starts, tear down the
+  // whole navigation stack and send the user to onboarding — regardless of
+  // the current route. Without this, a protected route (e.g. a locked
+  // event) can survive under an auth screen and be reopened afterwards.
+  useEffect(() => {
+    if (!rootNavigationState?.key) return;
+    if (!isLoggingOut) return;
+
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+    router.replace("/auth-screen/onboarding" as any);
+  }, [isLoggingOut, rootNavigationState, router]);
+
   useEffect(() => {
     if (!rootNavigationState?.key) return;
     if (isRestoring || !hasRestored) return;
+    if (isLoggingOut) return;
 
     const firstSegment = segments[0];
     const secondSegment = segments[1];
@@ -66,6 +83,7 @@ function AuthSessionGate() {
     hasRestored,
     isAuthenticated,
     isRestoring,
+    isLoggingOut,
     rootNavigationState,
     router,
     segments,
@@ -426,6 +444,7 @@ export default function RootLayout() {
         <PushNotificationGate />
         <RealtimeConnectionGate />
         <StatusBar style="auto" />
+        <SuccessToastHost />
       </Provider>
     </GestureHandlerRootView>
   );

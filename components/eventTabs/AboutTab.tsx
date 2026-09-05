@@ -13,6 +13,7 @@ import { navigateToProfile } from "@/lib/profileNavigation";
 import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
 import { APP_MAP_STYLE_URL } from "@/lib/mapStyles";
 import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
+import { tapFeedback } from "@/lib/microFeedback";
 import { followUser, unfollowUser } from "@/lib/users";
 import {
   addEventMedia,
@@ -833,6 +834,7 @@ const AboutTab = ({
     }
 
     const wasFollowing = isHostFollowing;
+    tapFeedback();
     setIsHostFollowing(!wasFollowing);
     setHostFollowerDelta((current) => current + (wasFollowing ? -1 : 1));
     setIsFollowPending(true);

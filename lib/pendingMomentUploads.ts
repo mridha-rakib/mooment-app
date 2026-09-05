@@ -155,7 +155,7 @@ export const startPendingVideoMomentUpload = async ({
         });
         removeOperation(id);
         Alert.alert(
-          "Unable to create moment",
+          "Unable to create post",
           getPendingUploadErrorMessage(error),
         );
       });

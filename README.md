@@ -10,11 +10,32 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the Android development build over USB
+2. Start the Android development build on a running emulator or a USB device
 
    ```bash
    npm run android
    ```
+
+The script detects the current user's Android SDK (including the default Windows
+location `%LOCALAPPDATA%\Android\Sdk`). You can also set `ANDROID_HOME` or
+`ANDROID_SDK_ROOT`, or configure `sdk.dir` in `android/local.properties`.
+It prefers JDK 17 from `JAVA_HOME` or the current user's Gradle/IDE JDK caches,
+then falls back to an installed Android Studio runtime. The selected path is
+printed at startup. Use JDK 17 if a newer Studio runtime fails during native builds.
+
+The first build may download missing SDK platforms, NDK, CMake, and dependencies.
+Let one build finish before starting another. The dependency postinstall hook
+also patches React Native's Foojay resolver for compatibility with Gradle 9.
+
+When your phone and emulator are both available, choose the installation target:
+
+```bash
+bun run android --device
+```
+
+Select the emulator or phone from Expo's device picker. Run it again and select
+the other target to install there too. Start an emulator from Android Studio's
+Device Manager; physical phones need USB debugging enabled and authorized.
 
 This starts Metro for `http://127.0.0.1:8081`, installs or updates the Android
 development build, configures:

@@ -121,7 +121,7 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
     if (!eventHasStarted) {
       Alert.alert(
         "Event not started",
-        "You can post moments once the event begins.",
+        "You can post once the event begins.",
       );
       return;
     }
@@ -129,7 +129,7 @@ const VibeTab = ({ eventId, eventName, isHostMode, isParticipant = false, schedu
     if (!isParticipant && !isHostMode) {
       Alert.alert(
         "Join the event",
-        "Purchase a ticket to share moments from this event.",
+        "Purchase a ticket to share posts from this event.",
       );
       return;
     }

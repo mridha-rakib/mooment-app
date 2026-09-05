@@ -36,6 +36,7 @@ import {
 import { generateStoryThumbnail, setCachedStoryThumbnail } from '@/lib/storyThumbnails';
 import { uploadFileToStorage } from '@/lib/storage';
 import { getAuthErrorMessage } from '@/lib/authErrors';
+import { notifySuccess } from '@/lib/successFeedback';
 import { prepareStoryVideoForUpload } from '@/lib/videoProcessor';
 import { optimizeStoryImageForUpload } from '@/lib/storyImageOptimizer';
 
@@ -1208,6 +1209,9 @@ export default function AddStoryScreen() {
       Alert.alert('Unable to create story', getAuthErrorMessage(error, 'Please check the story and try again.'));
     } finally {
       publishInFlightRef.current = false;
+      if (didSucceed) {
+        notifySuccess('Story added');
+      }
       if (!didSucceed) {
         setIsPublishing(false);
         setPublishStage('');

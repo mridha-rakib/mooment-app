@@ -327,12 +327,21 @@ async function startMetro() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
+  // Bundling this app pulls ~8k modules through Metro's serializer in a single
+  // Node process. V8's default ~4 GB old-space cap is not enough and Metro dies
+  // with "Ineffective mark-compacts near heap limit". Raise the limit for the
+  // Metro process (and its transform workers) without touching anything else.
+  const metroEnv = {
+    ...env,
+    NODE_OPTIONS: `${env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ` : ""}--max-old-space-size=8192`,
+  };
+
   const metro = spawn(
     process.execPath,
     [expoCli, "start", "--dev-client", "--host", "lan", "--port", String(METRO_PORT), "--max-workers", "1"],
     {
       cwd: process.cwd(),
-      env,
+      env: metroEnv,
       stdio: "inherit",
     }
   );

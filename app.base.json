@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Mooments",
-    "slug": "Mooments",
+    "slug": "mooments",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mooments.app"
+      "bundleIdentifier": "dev.mooment",
+       "infoPlist": {
+      "ITSAppUsesNonExemptEncryption": false
+    }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +27,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "predictiveBackGestureEnabled": false,
-      "package": "com.mooments.app"
+      "package": "dev.mooment"
     },
     "web": {
       "output": "static",
@@ -98,10 +101,10 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "extra": {
-        "eas": {
-          "projectId": "96741709-c195-41c9-bd5b-95e1a9755b79"
-        }
+     "extra": {
+      "eas": {
+        "projectId": "5c6ed6d8-c9ef-4171-ac3a-f4ee244a0a41"
       }
+    }
   }
 }

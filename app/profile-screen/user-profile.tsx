@@ -208,18 +208,22 @@ export default function UserProfileScreen() {
       nextAvatar = user.avatarUrl;
     }
 
-    setAvatarUri(nextAvatar);
+    const isUnavailableProfile = user.profileAccess === "unavailable";
 
-    if (user.profileAccess === "blocked") {
+    setAvatarUri(isUnavailableProfile ? null : nextAvatar);
+
+    if (user.profileAccess === "blocked" || isUnavailableProfile) {
       setProfileUser({
         id: resolvedUserId,
-        name: user.name?.trim() || params.name || FALLBACK_PROFILE_NAME,
-        handle: formatHandle(user.username, null),
-        avatar: nextAvatar,
+        name: isUnavailableProfile
+          ? "Unavailable"
+          : (user.name?.trim() || params.name || FALLBACK_PROFILE_NAME),
+        handle: isUnavailableProfile ? "" : formatHandle(user.username, null),
+        avatar: isUnavailableProfile ? null : nextAvatar,
         bio: "",
-        accountType: user.accountType,
+        accountType: isUnavailableProfile ? undefined : user.accountType,
         stats: EMPTY_STATS,
-        profileAccess: "blocked",
+        profileAccess: isUnavailableProfile ? "unavailable" : "blocked",
         viewerHasBlockedTarget: Boolean(user.viewerHasBlockedTarget),
         targetHasBlockedViewer: Boolean(user.targetHasBlockedViewer),
         blockedTitle: user.blockedTitle,

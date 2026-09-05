@@ -15,6 +15,7 @@ import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage, isBusinessAccountRequiredError } from '@/lib/authErrors';
 import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
+import { notifySuccess } from '@/lib/successFeedback';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventPrivacy } from '@/lib/events';
@@ -86,6 +87,7 @@ export default function CreateEventStep5() {
       }
 
       const event = isEditingPublished ? await publishEvent() : await saveDraft();
+      notifySuccess(isEditingPublished ? 'Event updated' : 'Event created');
       resetDraft();
       router.replace({
         pathname: '/event-screen/event',
