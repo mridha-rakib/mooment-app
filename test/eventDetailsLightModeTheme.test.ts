@@ -50,11 +50,15 @@ test("3-dot overflow menu uses theme-aware icon/text colors in light mode", () =
   assert.match(overflowMenuSection, /color=\{isDark \? "#FFF" : colors\.text\}/);
 });
 
-test("3-dot overflow menu distinguishes destructive (Delete) from normal (Edit) actions in light mode", () => {
+test("3-dot overflow menu distinguishes the destructive (Cancel Event) action from normal (Edit) actions in light mode", () => {
+  // Destructive host action is now "Cancel Event" (routes to the existing
+  // cancelEvent() flow, not a hard delete) — still rendered in the
+  // theme-aware destructive color, distinct from the normal Edit row.
   assert.match(
     overflowMenuSection,
-    /icon=\{Delete02Icon\} size=\{20\} color=\{isDark \? "#FFF" : colors\.danger\}/,
+    /<Feather name="x-circle" size=\{20\} color=\{isDark \? "#FFF" : colors\.danger\} \/>/,
   );
+  assert.match(overflowMenuSection, /\{isCancellingEvent \? "Cancelling\.\.\." : "Cancel Event"\}/);
 });
 
 test("Dark-mode overflow menu and privacy dropdown values are preserved", () => {
@@ -81,9 +85,12 @@ test("event action handlers and navigation wiring are unchanged by the theme fix
   assert.match(footerSection, /onPress=\{handlePublishDraft\}/);
   assert.match(footerSection, /onPress=\{handleCancelEvent\}/);
   assert.match(overflowMenuSection, /onPress=\{handleEdit\}/);
-  assert.match(overflowMenuSection, /onPress=\{handleDelete\}/);
+  // Host destructive action routes to the existing cancellation flow, never a hard delete.
+  assert.match(overflowMenuSection, /setMenuVisible\(false\);\s*handleCancelEvent\(\);/);
+  assert.doesNotMatch(overflowMenuSection, /onPress=\{handleDelete\}/);
   assert.match(overflowMenuSection, /onPress=\{handleReportPress\}/);
   assert.match(overflowMenuSection, /onPress=\{handleSave\}/);
+  assert.match(overflowMenuSection, /onPress=\{handleBlock\}/);
   assert.match(privacyDropdownSection, /onPress=\{\(\) => handlePrivacyChange\("public"\)\}/);
   assert.match(privacyDropdownSection, /onPress=\{\(\) => handlePrivacyChange\("locked"\)\}/);
 });

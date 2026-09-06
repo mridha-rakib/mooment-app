@@ -1013,7 +1013,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
             preview: event.name,
             imageUrl: bannerUri,
             authorName: hostName,
-            canShareToChat: event.privacy === "public",
+            canShareToChat: event.privacy !== "private",
             categoryLabels: displayCategories,
             dateTimeLabel: [eventDate, eventTime].filter(Boolean).join(" · "),
             locationLabel: location,
@@ -1028,6 +1028,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
           showDelete={isOwnEvent}
           deleteLabel="Cancel Event"
           showEdit={isOwnEvent && eventStatus !== "completed" && eventStatus !== "cancelled" && !eventEndedByPersistedTime}
+          editLabel="Edit Event"
           onEdit={isOwnEvent ? handleEditEvent : undefined}
           onReport={!isOwnEvent ? handleOpenReport : undefined}
           reported={hasReported}

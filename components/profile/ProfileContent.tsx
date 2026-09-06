@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, View, Text, type ListRenderItem, type RefreshControlProps, type ViewToken } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
-import type { MomentInteractionSummary, MomentTimelineItem } from "@/lib/moments";
+import type { Moment, MomentInteractionSummary, MomentTimelineItem } from "@/lib/moments";
 import type { EventResponse, ProfileEventGroups } from "@/lib/events";
 import EventFeedCard from "../home/EventFeedCard";
 import FeedPost, { PostData } from "../post/FeedPost";
@@ -18,6 +18,7 @@ type ProfileContentProps = {
   onCommentPress: (post: PostData) => void;
   onSharePress: (post: PostData) => void;
   onDeletePost?: (post: PostData) => void;
+  onPostUpdated?: (updatedMoment: Moment) => void;
   onShareUpdated?: (share: MomentTimelineItem) => void;
   onShareDeleted?: (shareId: string) => void;
   onInteractionChange?: (postId: string, summary: MomentInteractionSummary) => void;
@@ -58,6 +59,7 @@ export default function ProfileContent({
   onCommentPress, 
   onSharePress,
   onDeletePost,
+  onPostUpdated,
   onShareUpdated,
   onShareDeleted,
   onInteractionChange,
@@ -128,7 +130,7 @@ export default function ProfileContent({
 
     return (
       <FeedPost key={`post-${item.id}`} post={item.post} onCommentPress={onCommentPress} onSharePress={onSharePress}
-        onDeletePress={onDeletePost} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile}
+        onDeletePress={onDeletePost} onPostUpdated={onPostUpdated} onInteractionChange={onInteractionChange} isOwnPost={isOwnProfile}
         isActiveVideo={activeVideoItemId === `post-${item.id}`} />
     );
   }, [
@@ -137,6 +139,7 @@ export default function ProfileContent({
     isOwnProfile,
     onCommentPress,
     onDeletePost,
+    onPostUpdated,
     onInteractionChange,
     onRepostSuccess,
     onShareDeleted,

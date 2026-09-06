@@ -1477,8 +1477,12 @@ function FeedPost({
   const [menuTop, setMenuTop] = useState(0);
   const canCompareAuthorId = Boolean(post.authorId && currentUserId);
   const isPostByCurrentUser = canCompareAuthorId ? post.authorId === currentUserId : isOwnPost;
-  const canDeletePost = isPostByCurrentUser && Boolean(onDeletePress);
-  const canEditPost = isPostByCurrentUser && Boolean(onPostUpdated);
+  // Standard/audio/product posts only. Events are rendered through
+  // EventFeedCard, never this component's owner menu — guarding on postType
+  // keeps an event from ever routing into the moment delete / caption-edit
+  // paths (deleteMoment / EditPostModal) via this menu.
+  const canDeletePost = isPostByCurrentUser && post.postType !== 'event' && Boolean(onDeletePress);
+  const canEditPost = isPostByCurrentUser && post.postType !== 'event' && Boolean(onPostUpdated);
   const hasMoreMenuActions = !isPostByCurrentUser || canDeletePost || canEditPost;
   const [showEditModal, setShowEditModal] = useState(false);
   const isNormalPost = post.postType === 'standard';
@@ -2279,13 +2283,14 @@ function FeedPost({
             visible={showMoreMenu}
             onClose={() => setShowMoreMenu(false)}
             showDelete={canDeletePost}
-            deleteLabel={post.postType === 'event' ? 'Cancel Event' : 'Delete'}
+            deleteLabel="Delete Post"
             onReport={!isPostByCurrentUser ? handleOpenReport : undefined}
             reported={hasReported}
             onSave={!isPostByCurrentUser ? handleSave : undefined}
             isSaved={!isPostByCurrentUser ? isSaved : undefined}
             onBlock={!isPostByCurrentUser && Boolean(post.authorId) ? handleBlock : undefined}
             showEdit={canEditPost}
+            editLabel="Edit Post"
             onEdit={canEditPost ? () => setShowEditModal(true) : undefined}
             onDelete={canDeletePost ? () => onDeletePress?.(post) : undefined}
             top={menuTop}

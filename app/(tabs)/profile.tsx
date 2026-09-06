@@ -5,7 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getMyTicketWalletEvents, getProfileEvents, type EventResponse, type ProfileEventGroups } from "@/lib/events";
 import { deleteMoment, getProfileTimeline, shareMoment } from "@/lib/moments";
-import type { MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
+import type { Moment, MomentInteractionSummary, MomentTimelineItem, RepostPayload } from "@/lib/moments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import { getUserProfileStats } from "@/lib/users";
@@ -288,6 +288,21 @@ export default function ProfileTab() {
     setReposts((current) => current.filter((share) => share.id !== shareId));
   }, []);
 
+  // Caption-only edit of the authenticated user's own Post — patches the
+  // profile list item by id in place. Mirrors home.tsx's handlePostUpdated so
+  // the existing EditPostModal / updateMoment flow is reused, not rebuilt.
+  const handlePostUpdated = useCallback((updatedMoment: Moment) => {
+    const mappedPost = mapMomentToPost(updatedMoment, { storageUrlResolver: getStorageFileUrl });
+
+    if (!mappedPost) {
+      return;
+    }
+
+    setPosts((current) => current.map((post) => (
+      post.id === mappedPost.id ? mappedPost : post
+    )));
+  }, []);
+
   const handleDeletePost = useCallback((post: PostData) => {
     Alert.alert(
       'Delete post',
@@ -320,6 +335,7 @@ export default function ProfileTab() {
         reposts={reposts}
         onRepost={handleRepost}
         onDeletePost={handleDeletePost}
+        onPostUpdated={handlePostUpdated}
         onShareUpdated={handleShareUpdated}
         onShareDeleted={handleShareDeleted}
         onInteractionChange={handleInteractionChange}

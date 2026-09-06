@@ -41,7 +41,7 @@ test("MoreMenuModal uses the existing icon library for Edit, no new icon package
 // ---------------------------------------------------------------------------
 
 test("FeedPost gates Edit visibility on post ownership and an onPostUpdated callback, mirroring canDeletePost", () => {
-  assert.match(feedPostSource, /const canEditPost = isPostByCurrentUser && Boolean\(onPostUpdated\);/);
+  assert.match(feedPostSource, /const canEditPost = isPostByCurrentUser && post\.postType !== 'event' && Boolean\(onPostUpdated\);/);
   assert.match(feedPostSource, /const hasMoreMenuActions = !isPostByCurrentUser \|\| canDeletePost \|\| canEditPost;/);
   assert.match(feedPostSource, /showEdit=\{canEditPost\}/);
   assert.match(feedPostSource, /onEdit=\{canEditPost \? \(\) => setShowEditModal\(true\) : undefined\}/);

@@ -18,7 +18,6 @@ import {
     declineJoinRequest,
     deleteDraftReward,
     deleteDraftTicket,
-    deleteEvent,
     deleteEventReward,
     deleteEventTicket,
     getEventById,
@@ -69,7 +68,6 @@ import { isTicketCreationCutoffReached } from "@/lib/ticketAvailability";
 import { Feather } from "@expo/vector-icons";
 import {
     Bookmark01Icon,
-    Delete02Icon,
     Flag01Icon,
     MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
@@ -536,7 +534,6 @@ const EventScreen = () => {
   const [isPublishingDraft, setIsPublishingDraft] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowPending, setIsFollowPending] = useState(false);
-  const [isDeletingEvent, setIsDeletingEvent] = useState(false);
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
   const [deletingRewardId, setDeletingRewardId] = useState<string | null>(null);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
@@ -1351,44 +1348,34 @@ const EventScreen = () => {
     }
   };
 
-  const handleDelete = () => {
+  const handleBlock = () => {
     setMenuVisible(false);
 
-    if (!event || isDraftPreview || !isHostMode || isDeletingEvent) {
+    const targetId = event?.host?.id ?? event?.userId;
+
+    if (!event || isHostMode || !targetId) {
       return;
     }
 
-    requireBusinessAccountForEvent({
-      user: currentUser,
-      completedProfileTypes,
-      updateProfile,
-      router,
-      onReady: () => {
-        Alert.alert(
-          "Delete Event",
-          "Are you sure you want to delete this event?",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Delete",
-              style: "destructive",
-              onPress: async () => {
-                setIsDeletingEvent(true);
-
-                try {
-                  await deleteEvent(event.id);
-                  goBackOrHome(router);
-                } catch (error) {
-                  Alert.alert("Unable to delete event", getAuthErrorMessage(error, "Please try again."));
-                } finally {
-                  setIsDeletingEvent(false);
-                }
-              },
-            },
-          ],
-        );
-      },
-    });
+    Alert.alert(
+      "Block User",
+      "You won't see posts from this user in your feed anymore. They won't be notified.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(targetId);
+              goBackOrHome(router);
+            } catch (error) {
+              Alert.alert("Unable to block user", getAuthErrorMessage(error, "Please try again."));
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleCancelEvent = () => {
@@ -2429,7 +2416,7 @@ const EventScreen = () => {
                     <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
                       <Feather name="edit-3" size={20} color={isDark ? "#FFF" : colors.text} />
                       <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.text }]}>
-                        {isDraftPreview ? "Edit Event" : "Edit"}
+                        Edit Event
                       </Text>
                     </TouchableOpacity>
 
@@ -2442,13 +2429,16 @@ const EventScreen = () => {
                 {!isDraftPreview && (
                   <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={handleDelete}
+                    onPress={() => {
+                      setMenuVisible(false);
+                      handleCancelEvent();
+                    }}
                     activeOpacity={0.7}
-                    disabled={isDeletingEvent}
+                    disabled={isCancellingEvent}
                   >
-                    <HugeiconsIcon icon={Delete02Icon} size={20} color={isDark ? "#FFF" : colors.danger} />
+                    <Feather name="x-circle" size={20} color={isDark ? "#FFF" : colors.danger} />
                     <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.danger }]}>
-                      {isDeletingEvent ? "Deleting..." : "Delete"}
+                      {isCancellingEvent ? "Cancelling..." : "Cancel Event"}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -2503,6 +2493,19 @@ const EventScreen = () => {
                     {localIsSaved ? "Saved" : "Save"}
                   </Text>
                 </TouchableOpacity>
+
+                {Boolean(event?.host?.id ?? event?.userId) && (
+                  <>
+                    <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+
+                    <TouchableOpacity style={styles.menuItem} onPress={handleBlock} activeOpacity={0.7}>
+                      <Feather name="slash" size={20} color={isDark ? "#FFF" : colors.text} />
+                      <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.text }]}>
+                        Block
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </>
             )}
           </View>
@@ -2861,7 +2864,7 @@ const EventScreen = () => {
           preview: event.name,
           imageUrl: event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null,
           authorName: event.host?.name ?? null,
-          canShareToChat: event.privacy === "public",
+          canShareToChat: event.privacy !== "private",
           categoryLabels: event.categories?.length ? event.categories : event.category ? [event.category] : [],
           dateTimeLabel: event.scheduledAt ? new Date(event.scheduledAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null,
           locationLabel: event.location?.venue ?? event.location?.address ?? event.location?.searchLabel ?? null,

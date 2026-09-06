@@ -23,6 +23,7 @@ const eventFeedCardSource = readFileSync(join(process.cwd(), "components/home/Ev
 const postInteractionBarSource = readFileSync(join(process.cwd(), "components/post/PostInteractionBar.tsx"), "utf8");
 const shareModalSource = readFileSync(join(process.cwd(), "components/post/ShareModal.tsx"), "utf8");
 const chatSource = readFileSync(join(process.cwd(), "lib/chat.ts"), "utf8");
+const eventDetailSource = readFileSync(join(process.cwd(), "app/event-screen/event.tsx"), "utf8");
 
 test("Test 1 — Share action is no longer gated by interactionMomentId, so it always opens ShareModal", () => {
   assert.doesNotMatch(eventFeedCardSource, /shareDisabled=\{!event\.interactionMomentId\}/);
@@ -71,4 +72,22 @@ test("Test 7 — Feed and Profile share the same EventFeedCard/PostInteractionBa
   assert.match(postInteractionBarSource, /disabled=\{shareDisabled \|\| !onSharePress\}/);
   // shareDisabled still exists as a prop (other callers, e.g. view-story, may use it) but EventFeedCard no longer sets it.
   assert.match(postInteractionBarSource, /shareDisabled\?: boolean;/);
+});
+
+// Covers the "Locked event direct-share blocked" fix. Both event share
+// surfaces gate share-to-chat by `canShareToChat`; the value was widened
+// from `privacy === "public"` to `privacy !== "private"` so Public and
+// Locked events can be DM-shared through the unchanged flow while Private
+// stays blocked. ShareModal's own `canShareToChat === false` guard is
+// untouched — only what feeds it changed.
+test("Test 8 — Feed EventFeedCard allows share-to-chat for public + locked, blocks only private", () => {
+  assert.match(eventFeedCardSource, /canShareToChat: event\.privacy !== "private"/);
+  assert.doesNotMatch(eventFeedCardSource, /canShareToChat: event\.privacy === "public"/);
+});
+
+test("Test 9 — Event detail screen applies the same non-private share-to-chat rule", () => {
+  assert.match(eventDetailSource, /canShareToChat: event\.privacy !== "private"/);
+  assert.doesNotMatch(eventDetailSource, /canShareToChat: event\.privacy === "public"/);
+  // ShareModal still refuses a chat share when the caller marks it unavailable.
+  assert.match(shareModalSource, /if \(item && item\.canShareToChat === false\)/);
 });

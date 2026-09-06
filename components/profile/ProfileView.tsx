@@ -2,6 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import type { EventResponse, ProfileEventGroups } from "@/lib/events";
 import type {
+  Moment,
   MomentInteractionSummary,
   MomentTimelineItem,
   RepostPayload,
@@ -99,6 +100,7 @@ type ProfileViewProps = {
   isOwnProfile?: boolean;
   onRepost?: (post: PostData, payload: RepostPayload) => Promise<void> | void;
   onDeletePost?: (post: PostData) => void;
+  onPostUpdated?: (updatedMoment: Moment) => void;
   onShareUpdated?: (share: MomentTimelineItem) => void;
   onShareDeleted?: (shareId: string) => void;
   onInteractionChange?: (
@@ -130,6 +132,7 @@ export default function ProfileView({
   isOwnProfile = true,
   onRepost,
   onDeletePost,
+  onPostUpdated,
   onShareUpdated,
   onShareDeleted,
   onInteractionChange,
@@ -808,6 +811,7 @@ export default function ProfileView({
         onCommentPress={handleCommentPress}
         onSharePress={handleSharePress}
         onDeletePost={onDeletePost}
+        onPostUpdated={onPostUpdated}
         onShareUpdated={onShareUpdated}
         onShareDeleted={onShareDeleted}
         onInteractionChange={handleFeedInteractionChange}
