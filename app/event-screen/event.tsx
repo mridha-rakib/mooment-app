@@ -64,6 +64,10 @@ import {
 } from "@/lib/eventCategoryNavigation";
 import { normalizeEventCategoryFilter } from "@/lib/eventFilters";
 import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
+import {
+  getPurchasableTicketsRemaining,
+  isTicketSalesEnded as isTicketSalesEndedShared,
+} from "@/lib/mapTicketSummary";
 import { isTicketCreationCutoffReached } from "@/lib/ticketAvailability";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -236,8 +240,11 @@ const formatPrice = (tickets: EventResponse["tickets"]) => {
   })}`;
 };
 
-const getTicketsLeft = (tickets: EventResponse["tickets"]) =>
-  tickets.reduce((total, ticket) => total + Math.max(0, ticket.availableCount ?? ticket.capacity), 0);
+// Purchasable inventory only: excludes tiers whose sales deadline has passed
+// (server-derived `salesEnded`), matching the Map summary and Checkout. Same
+// authoritative field (availableCount, with the legacy capacity fallback).
+const getTicketsLeft = (tickets: EventResponse["tickets"], nowMs = Date.now()) =>
+  getPurchasableTicketsRemaining(tickets ?? [], nowMs);
 
 const getTicketKey = (ticket: EventTicketPayload, index: number) =>
   ticket.id ?? `${ticket.name}-${index}`;
@@ -245,21 +252,10 @@ const getTicketKey = (ticket: EventTicketPayload, index: number) =>
 const clampTicketQuantity = (quantity: number, ticket: EventTicketPayload) =>
   Math.min(Math.max(1, quantity), Math.min(2, Math.max(1, ticket.availableCount ?? ticket.capacity)));
 
-const getTicketSalesEndDate = (ticket?: EventTicketPayload | null) => {
-  if (!ticket?.salesEndAt) {
-    return null;
-  }
-
-  const salesEndAt = new Date(ticket.salesEndAt);
-
-  return Number.isNaN(salesEndAt.getTime()) ? null : salesEndAt;
-};
-
-const isTicketSalesEnded = (ticket?: EventTicketPayload | null, nowMs = Date.now()) => {
-  const salesEndAt = getTicketSalesEndDate(ticket);
-
-  return Boolean(salesEndAt && salesEndAt.getTime() <= nowMs);
-};
+// Prefers the backend server-derived `salesEnded` flag (see mapTicketSummary);
+// only falls back to the device-clock comparison for legacy payloads without it.
+const isTicketSalesEnded = (ticket?: EventTicketPayload | null, nowMs = Date.now()) =>
+  ticket ? isTicketSalesEndedShared(ticket, nowMs) : false;
 
 const getDateTimeMs = (value?: string | null) => {
   if (!value) {
@@ -1058,7 +1054,7 @@ const EventScreen = () => {
     }
   }, [isCategoryDestinationNavigating, pendingCategoryDestination, router]);
 
-  const ticketsLeft = getTicketsLeft(event?.tickets ?? []);
+  const ticketsLeft = getTicketsLeft(event?.tickets ?? [], currentTimeMs);
   const priceLabel = formatPrice(event?.tickets ?? []);
   const selectedTicket = useMemo(() => {
     if (!selectedTicketKey) {

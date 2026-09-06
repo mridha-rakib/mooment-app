@@ -113,24 +113,15 @@ const parseEventTime = (value?: string | Date | null): number | null => {
   return Number.isNaN(time) ? null : time;
 };
 
-const getEventBadgeStatus = (event: EventLifecycleStatus, nowMs: number): EventBadgeStatus => {
-  const endMs = parseEventTime(event.endAt);
-
+// Authoritative status badge follows the persisted backend `event.status`
+// ONLY — never device-clock inference from scheduledAt/endAt, which can
+// contradict Checkout (Checkout gates on event.status, not time).
+const getEventBadgeStatus = (event: EventLifecycleStatus): EventBadgeStatus => {
   if (event.status === "completed" || event.status === "cancelled") {
     return "ended";
   }
 
-  if (endMs !== null && endMs <= nowMs) {
-    return "ended";
-  }
-
   if (event.status === "live") {
-    return "live";
-  }
-
-  const startMs = parseEventTime(event.scheduledAt);
-
-  if (startMs !== null && startMs <= nowMs) {
     return "live";
   }
 
@@ -258,8 +249,8 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
       status: eventStatus,
       scheduledAt: eventScheduledAt,
       endAt: eventEndAt,
-    }, statusNowMs),
-    [eventEndAt, eventScheduledAt, eventStatus, statusNowMs],
+    }),
+    [eventEndAt, eventScheduledAt, eventStatus],
   );
   const eventBadgeLabel = EVENT_STATUS_LABELS[eventBadgeStatus];
   const isLiveBadge = eventBadgeStatus === "live";

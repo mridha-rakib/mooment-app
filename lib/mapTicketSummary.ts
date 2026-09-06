@@ -1,5 +1,8 @@
 export type MapTicketSummaryTicket = {
   salesEndAt?: string | null;
+  // Server-derived (EventResponse ticket): Boolean(salesEndAt && salesEndAt <= serverNow),
+  // the exact rule Checkout enforces. Preferred over the device-clock check below.
+  salesEnded?: boolean | null;
   type?: string | null;
   price?: number | null;
   capacity?: number | null;
@@ -32,11 +35,34 @@ const getTicketSalesEndTime = (ticket: MapTicketSummaryTicket) => {
   return Number.isFinite(time) ? time : null;
 };
 
-const isTicketSalesEnded = (ticket: MapTicketSummaryTicket, nowMs: number) => {
+// Shared sales-ended check. Prefers the server-derived `salesEnded` flag
+// (same rule Checkout's resolveLineItems enforces); only falls back to the
+// device-clock comparison for legacy payloads that don't carry it. A null
+// salesEndAt with no flag means "no explicit deadline" -> not ended.
+export const isTicketSalesEnded = (
+  ticket: MapTicketSummaryTicket,
+  nowMs: number = Date.now(),
+) => {
+  if (typeof ticket.salesEnded === "boolean") {
+    return ticket.salesEnded;
+  }
+
   const salesEndTime = getTicketSalesEndTime(ticket);
 
   return salesEndTime !== null && salesEndTime <= nowMs;
 };
+
+// Single source of truth for "purchasable tickets remaining" across surfaces:
+// sum of availableCount (legacy `?? capacity` fallback) over tiers that still
+// have inventory AND whose sales deadline has not passed. Negative values are
+// clamped; null/undefined availableCount keeps the existing capacity fallback.
+export const getPurchasableTicketsRemaining = (
+  tickets: MapTicketSummaryTicket[],
+  nowMs: number = Date.now(),
+): number =>
+  (tickets ?? [])
+    .filter((ticket) => getTicketAvailability(ticket) > 0 && !isTicketSalesEnded(ticket, nowMs))
+    .reduce((total, ticket) => total + getTicketAvailability(ticket), 0);
 
 const formatMoney = (price: number) =>
   `$${price.toLocaleString("en-US", {

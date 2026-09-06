@@ -13,6 +13,10 @@ import UserAvatar from "../ui/UserAvatar";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 import {
+  getPurchasableTicketsRemaining,
+  isTicketSalesEnded as isTicketSalesEndedShared,
+} from "@/lib/mapTicketSummary";
+import {
   isTicketCreationCutoffReached,
   TICKET_CREATION_CUTOFF_MESSAGE,
 } from "@/lib/ticketAvailability";
@@ -130,21 +134,10 @@ const getTicketKey = (ticket: EventTicketPayload, index: number) =>
 const getTicketAvailability = (ticket: EventTicketPayload) =>
   Math.max(0, ticket.availableCount ?? ticket.capacity);
 
-const getTicketSalesEndDate = (ticket: EventTicketPayload) => {
-  if (!ticket.salesEndAt) {
-    return null;
-  }
-
-  const salesEndAt = new Date(ticket.salesEndAt);
-
-  return Number.isNaN(salesEndAt.getTime()) ? null : salesEndAt;
-};
-
-const isTicketSalesEnded = (ticket: EventTicketPayload, nowMs = Date.now()) => {
-  const salesEndAt = getTicketSalesEndDate(ticket);
-
-  return Boolean(salesEndAt && salesEndAt.getTime() <= nowMs);
-};
+// Prefers the backend server-derived `salesEnded` flag (see mapTicketSummary);
+// only falls back to the device-clock comparison for legacy payloads without it.
+const isTicketSalesEnded = (ticket: EventTicketPayload, nowMs = Date.now()) =>
+  isTicketSalesEndedShared(ticket, nowMs);
 
 const getRewardKey = (reward: EventRewardPayload, index: number) =>
   reward.id ?? `${reward.rewardType}-${reward.name}-${index}`;
@@ -255,9 +248,11 @@ const AccessTab = ({
     onSelectAccessSubTab?.(subTab);
   };
 
+  // Purchasable inventory only: excludes tiers whose sales deadline has passed
+  // (server-derived), matching Event Detail / Map summary / Checkout.
   const totalTicketsLeft = useMemo(
-    () => tickets.reduce((total, ticket) => total + getTicketAvailability(ticket), 0),
-    [tickets],
+    () => getPurchasableTicketsRemaining(tickets, currentTimeMs),
+    [tickets, currentTimeMs],
   );
   const ticketCreationCutoffReached = isTicketCreationCutoffReached(endAt, currentTimeMs);
 
@@ -355,7 +350,10 @@ const AccessTab = ({
 
         <View style={styles.ticketMetaRow}>
           {(() => {
-            const source = ticket.salesEndAt ?? scheduledAt;
+            // Sales deadline only. A null salesEndAt means "no explicit
+            // deadline" — do NOT imply the event start time, which Checkout
+            // does not enforce as a sales cutoff.
+            const source = ticket.salesEndAt ?? null;
             if (!source) {
               return <Text style={styles.expiryText}>Expires in • Date TBA</Text>;
             }
@@ -787,7 +785,8 @@ const AccessTab = ({
                       {ticket.description || ""}
                     </Text>
                     <Text style={[styles.creatorTicketExpiry, { color: isDark ? "#B3B3B3" : colors.textSecondary }]} numberOfLines={1}>
-                      {formatExpiry(ticket.salesEndAt, scheduledAt)}
+                      {/* Sales deadline only — no scheduledAt fallback (Checkout does not treat event start as a cutoff). */}
+                      {formatExpiry(ticket.salesEndAt)}
                     </Text>
                   </View>
 

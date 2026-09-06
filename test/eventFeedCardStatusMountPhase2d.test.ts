@@ -71,34 +71,40 @@ test("2. statusNowMs is still seeded from the current wall clock at initializati
   assert.match(source, /const \[statusNowMs, setStatusNowMs\] = useState\(\(\) => Date\.now\(\)\);/);
 });
 
-test("2b. first-render badge status is derived synchronously from the seeded statusNowMs", () => {
+test("2b. the badge is derived from persisted event.status only, not the device clock", () => {
+  // Data-consistency fix: the authoritative status badge must follow the
+  // backend-persisted event.status (the same field Checkout gates on) and must
+  // NOT be re-inferred from scheduledAt/endAt vs the device clock.
   assert.match(source, /const eventBadgeStatus = useMemo\(/);
-  assert.match(source, /getEventBadgeStatus\(\{[\s\S]*?\}, statusNowMs\)/);
-  assert.match(source, /\[eventEndAt, eventScheduledAt, eventStatus, statusNowMs\],/);
+  // getEventBadgeStatus no longer takes a `nowMs` argument, and statusNowMs is
+  // no longer a dependency of the badge memo.
+  assert.match(source, /getEventBadgeStatus\(\{\s*status: eventStatus,\s*scheduledAt: eventScheduledAt,\s*endAt: eventEndAt,\s*\}\),/);
+  assert.match(source, /\[eventEndAt, eventScheduledAt, eventStatus\],\s*\);\s*const eventBadgeLabel/);
+  assert.doesNotMatch(source, /getEventBadgeStatus\(\{[\s\S]*?\}, statusNowMs\)/);
+  // The function body contains no device-clock comparison at all.
+  assert.doesNotMatch(getBadgeStatusFn, /nowMs/);
+  assert.doesNotMatch(getBadgeStatusFn, /<= *nowMs/);
+});
+
+// ── C. Badge follows event.status: "live" only when status === "live" ────
+
+test("3. badge shows Live only for persisted status \"live\" — never inferred from scheduledAt", () => {
+  assert.match(getBadgeStatusFn, /if \(event\.status === "live"\) \{\s*return "live";\s*\}/);
+  // No scheduledAt-vs-now inference remains in the badge derivation.
+  assert.doesNotMatch(getBadgeStatusFn, /parseEventTime\(event\.scheduledAt\)/);
+  // Anything not completed/cancelled/live (i.e. draft/published) is "upcoming".
+  assert.match(getBadgeStatusFn, /return "upcoming";\s*\};/);
+});
+
+// ── D. Badge follows event.status: "ended" only for completed/cancelled ──
+
+test("4. badge shows Ended only for persisted completed/cancelled — never inferred from endAt", () => {
+  assert.match(getBadgeStatusFn, /if \(event\.status === "completed" \|\| event\.status === "cancelled"\) \{\s*return "ended";\s*\}/);
+  assert.doesNotMatch(getBadgeStatusFn, /parseEventTime\(event\.endAt\)/);
+  // The endAt/scheduledAt boundary timer still exists, but now only re-samples
+  // statusNowMs for the host-side eventEndedByPersistedTime edit guard — never
+  // for the badge.
   assert.match(source, /const eventEndedByPersistedTime = isEventEndedByTime\(eventEndAt, statusNowMs\);/);
-  assert.match(getBadgeStatusFn, /if \(startMs !== null && startMs <= nowMs\) \{\s*return "live";\s*\}\s*return "upcoming";/);
-});
-
-// ── C. Upcoming → Live still works via the boundary timer ────────────────
-
-test("3. Upcoming→Live transition remains driven by the scheduled boundary timer", () => {
-  assert.match(scheduleFn, /const nextBoundary = getNextEventBadgeBoundary\(\{[\s\S]*?\}, nowMs\);/);
-  assert.match(scheduleFn, /if \(nextBoundary === null\) \{\s*return;\s*\}/);
-  assert.match(scheduleFn, /const delayMs = Math\.min\(Math\.max\(nextBoundary - nowMs \+ 250, 0\), 2_147_483_647\);/);
-  assert.match(scheduleFn, /timeoutId = setTimeout\(\(\) => \{[\s\S]*?setStatusNowMs\(Date\.now\(\)\);\s*scheduleNextBoundary\(\);[\s\S]*?\}, delayMs\);/);
-
-  // getEventBadgeStatus flips to "live" once the scheduled start is <= now.
-  assert.match(getBadgeStatusFn, /const startMs = parseEventTime\(event\.scheduledAt\);\s*if \(startMs !== null && startMs <= nowMs\) \{\s*return "live";/);
-
-  // scheduledAt is offered as a future boundary.
-  assert.match(getNextBoundaryFn, /const startMs = parseEventTime\(event\.scheduledAt\);\s*const endMs = parseEventTime\(event\.endAt\);\s*const boundaries = \[startMs, endMs\]\.filter\(\s*\(time\): time is number => time !== null && time > nowMs,\s*\);/);
-});
-
-// ── D. Live → Ended still works via the second boundary ─────────────────
-
-test("4. Live→Ended transition remains driven by the endAt boundary", () => {
-  assert.match(getBadgeStatusFn, /const endMs = parseEventTime\(event\.endAt\);[\s\S]*?if \(endMs !== null && endMs <= nowMs\) \{\s*return "ended";\s*\}/);
-  assert.match(getNextBoundaryFn, /\[startMs, endMs\]\.filter\(/);
   assert.match(getNextBoundaryFn, /return boundaries\.length > 0 \? Math\.min\(\.\.\.boundaries\) : null;/);
 });
 

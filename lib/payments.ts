@@ -1,6 +1,10 @@
 import { api } from "@/lib/api";
 import type { EventCategory } from "@/constants/eventCategories";
 import type { CrowdStatus } from "@/lib/events";
+// Imported from the dependency-free cache module directly (not "@/lib/events")
+// to avoid any import cycle; this is the SAME invalidator the event mutation
+// wrappers use — no new cache.
+import { invalidateCachedEventById } from "@/lib/eventByIdCache";
 import { isAxiosError } from "axios";
 import { DeviceEventEmitter } from "react-native";
 
@@ -367,6 +371,32 @@ export const emitTicketWalletChanged = (payload: TicketWalletChangedEvent = {}) 
   DeviceEventEmitter.emit(TICKET_WALLET_CHANGED_EVENT, payload);
 };
 
+// A ticket purchase / confirm / cancel / refund changes authoritative event
+// inventory (availableCount) and, once paid/refunded, publicGoingSummary.going.
+// Drop the module-cached EventResponse for every affected event so the next
+// read (repost cards especially) re-fetches. Home feed + Event Detail keep
+// relying on their existing useFocusEffect refetch; no polling added.
+const invalidateEventCachesForOrder = (order?: Pick<CheckoutOrder, "lineItems" | "ticketPasses"> | null) => {
+  if (!order) {
+    return;
+  }
+
+  const eventIds = new Set<string>();
+
+  order.lineItems?.forEach((item) => {
+    if (item.itemType === "ticket" && item.eventId) {
+      eventIds.add(item.eventId);
+    }
+  });
+  order.ticketPasses?.forEach((pass) => {
+    if (pass.eventId) {
+      eventIds.add(pass.eventId);
+    }
+  });
+
+  eventIds.forEach((eventId) => invalidateCachedEventById(eventId));
+};
+
 export const isTicketWalletItemExpired = (item: TicketWalletItem, nowMs = Date.now()) => {
   if (!item.event.endAt) {
     return false;
@@ -409,6 +439,11 @@ export const createCheckoutIntent = async (
       throw new Error("The payment response was incomplete.");
     }
 
+    if (payload.kind === "ticket") {
+      invalidateCachedEventById(payload.eventId);
+    }
+    invalidateEventCachesForOrder(checkout.order);
+
     return checkout;
   } catch (error) {
     if (isAxiosError(error)) {
@@ -431,6 +466,7 @@ export const confirmCheckoutOrder = async (orderId: string): Promise<CheckoutOrd
     throw new Error("The payment confirmation response was incomplete.");
   }
 
+  invalidateEventCachesForOrder(order);
   emitTicketWalletChanged();
 
   return order;
@@ -444,6 +480,7 @@ export const cancelCheckoutOrder = async (orderId: string): Promise<CheckoutOrde
     throw new Error("The cancellation response was incomplete.");
   }
 
+  invalidateEventCachesForOrder(order);
   emitTicketWalletChanged();
 
   return order;
@@ -457,6 +494,7 @@ export const refundCheckoutOrder = async (orderId: string): Promise<CheckoutOrde
     throw new Error("The refund response was incomplete.");
   }
 
+  invalidateEventCachesForOrder(order);
   emitTicketWalletChanged();
 
   return order;
@@ -801,6 +839,7 @@ export const cancelTicketPass = async ({
     throw new Error("The ticket cancellation response was incomplete.");
   }
 
+  invalidateCachedEventById(eventId);
   emitTicketWalletChanged();
 
   return cancellation;

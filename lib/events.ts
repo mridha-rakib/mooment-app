@@ -49,6 +49,10 @@ export type EventTicketPayload = {
   name: string;
   description?: string | null;
   salesEndAt?: string | null;
+  // Response-only, server-derived: Boolean(salesEndAt && salesEndAt <= serverNow) —
+  // the exact rule CheckoutPaymentService.resolveLineItems enforces. Consume this
+  // for sales-ended gating instead of comparing salesEndAt to the device clock.
+  salesEnded?: boolean;
   type: EventTicketType;
   price: number;
   capacity: number;
@@ -482,6 +486,10 @@ export const createEventTicket = async (
 ): Promise<EventResponse> => {
   const response = await api.post(`/events/${encodeURIComponent(eventId)}/tickets`, payload);
 
+  // Ticket-tier changes alter capacity / availableCount / salesEndAt — drop the
+  // module-cached EventResponse (parity with updateEvent/publishEvent) so
+  // repost cards don't render stale ticket data.
+  invalidateCachedEventById(eventId);
   return getEventFromResponse(response);
 };
 
@@ -495,6 +503,7 @@ export const updateEventTicket = async (
     payload,
   );
 
+  invalidateCachedEventById(eventId);
   return getEventFromResponse(response);
 };
 
@@ -503,6 +512,7 @@ export const deleteEventTicket = async (eventId: string, ticketId: string): Prom
     `/events/${encodeURIComponent(eventId)}/tickets/${encodeURIComponent(ticketId)}`,
   );
 
+  invalidateCachedEventById(eventId);
   return getEventFromResponse(response);
 };
 

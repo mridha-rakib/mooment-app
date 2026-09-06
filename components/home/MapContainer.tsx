@@ -167,7 +167,10 @@ const toMapMarker = (
     eventEndDate: formatEventDate(event.endAt),
     eventEndTime: formatEventTime(event.endAt),
     location: formatLocation(event),
-    attendeesCount: 0,
+    // Same authoritative source as Feed / Event Detail / Profile:
+    // publicGoingSummary.going (paid, non-cancelled ticket passes). Never
+    // checkedInCount — that has different semantics and stays on the marker glow.
+    attendeesCount: event.publicGoingSummary?.going ?? 0,
     ageLimit: formatAgeLimit(event.ageRestriction),
     price: ticketSummary.priceLabel,
     ticketsAvailable: ticketSummary.ticketsAvailableLabel,
