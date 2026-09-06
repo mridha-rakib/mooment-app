@@ -2,9 +2,11 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useEventListener } from 'expo';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Image as ExpoImage } from 'expo-image';
-import { VideoView,
+import {
+  VideoView,
   useVideoPlayer,
-  type VideoSourceObject } from 'expo-video';
+  type VideoSourceObject
+} from 'expo-video';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { tapFeedback } from '@/lib/microFeedback';
@@ -1027,6 +1029,7 @@ const VideoProcessingPlaceholder = React.memo(function VideoProcessingPlaceholde
 });
 
 function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
+  const { colors } = useTheme();
   const resolvedUri = item.fullUri?.trim() || item.uri.trim();
   const frameStyle = useMemo(() => ({
     width: frameWidth,
@@ -1103,13 +1106,16 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
     if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
       setLoadAttempt(loadAttempt + 1);
-      return;
+    } else {
+      setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
     }
-
-    setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
   }, [resolvedUri, loadAttempt]);
 
   useEffect(() => {
+    if (!crop || !resolvedUri) {
+      return;
+    }
+
     if (imageSize.width > 0 && imageSize.height > 0) {
       return;
     }
@@ -1123,7 +1129,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         setImageSize({ width: 0, height: 0 });
       },
     );
-  }, [imageSize.height, imageSize.width, resolvedUri]);
+  }, [crop, imageSize.height, imageSize.width, resolvedUri]);
 
   useEffect(() => {
     const nextWidth = item.displayCrop?.imageWidth ?? 0;
@@ -1144,20 +1150,21 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   if (!crop || !imageSize.width || !imageSize.height) {
     if (shouldShowFallback) {
       return (
-        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback]}>
+        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: colors.card }]}>
           <Feather name="image" size={28} color="#8E8E9B" />
         </View>
       );
     }
 
     return resolvedUri ? (
-      <View style={[styles.croppedImageFrame, frameStyle]}>
+      <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: colors.card }]}>
         <ExpoImage
           key={imageInstanceKey}
           source={{ uri: resolvedUri }}
           style={[styles.postImage, frameStyle]}
           contentFit="cover"
           cachePolicy="memory-disk"
+          transition={150}
           onLoadStart={handleImageLoadStart}
           onLoad={handleImageLoad}
           onLoadEnd={handleImageLoadEnd}
@@ -1168,7 +1175,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         ) : null}
       </View>
     ) : (
-      <View style={[styles.postImage, frameStyle, styles.imageLoadFallback]}>
+      <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: colors.card }]}>
         <Feather name="image" size={28} color="#8E8E9B" />
       </View>
     );
@@ -1183,9 +1190,9 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   const top = (frameHeight - cropPixelHeight * scale) / 2 - crop.y * imageSize.height * scale;
 
   return (
-    <View style={[styles.croppedImageFrame, frameStyle]}>
+    <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: colors.card }]}>
       {shouldShowFallback ? (
-        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback]}>
+        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: colors.card }]}>
           <Feather name="image" size={28} color="#8E8E9B" />
         </View>
       ) : (
@@ -1203,6 +1210,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
           ]}
           contentFit="fill"
           cachePolicy="memory-disk"
+          transition={150}
           onLoadStart={handleImageLoadStart}
           onLoad={handleImageLoad}
           onLoadEnd={handleImageLoadEnd}
@@ -1946,8 +1954,6 @@ function FeedPost({
       )}
 
       <View
-        // TEMPORARY DIAGNOSTIC (single-turn wrapper-remount test) - revert after test.
-        key={isDark ? 'dark' : 'light'}
         style={[
           styles.postCard,
           { backgroundColor: colors.card },
@@ -2241,7 +2247,7 @@ function FeedPost({
               <Text style={[styles.productFooterTitle, { color: colors.textSecondary }]}>{post.productDetails.title}</Text>
               <Text style={[styles.productFooterPrice, { color: colors.text }]}>{post.productDetails.price}</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.productViewBtn, { backgroundColor: buttonBackground(colors) }]}
               activeOpacity={0.8}
               onPress={() => router.push('/product-screen/product-details')}
@@ -2590,7 +2596,7 @@ const styles = StyleSheet.create({
   imageLoadFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#000000",
+    backgroundColor: "#121212",
   },
   imageLoadingIndicator: {
     ...StyleSheet.absoluteFillObject,
@@ -2604,7 +2610,7 @@ const styles = StyleSheet.create({
   croppedImageFrame: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#000000",
+    backgroundColor: "#121212",
     overflow: "hidden",
     position: "relative",
   },

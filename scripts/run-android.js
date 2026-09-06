@@ -3,7 +3,7 @@ const http = require("http");
 const { join } = require("path");
 const { spawn, spawnSync } = require("child_process");
 const { deserialize } = require("v8");
-const { tmpdir } = require("os");
+const { homedir, tmpdir } = require("os");
 
 const env = { ...process.env };
 const ADB_TIMEOUT_MS = 15000;
@@ -16,6 +16,26 @@ env.REACT_NATIVE_PACKAGER_HOSTNAME = DEV_SERVER_HOST;
 
 function firstExisting(paths) {
   return paths.find((path) => path && existsSync(path));
+}
+
+function javaExecutableFor(javaHome) {
+  return javaHome ? join(javaHome, "bin", process.platform === "win32" ? "java.exe" : "java") : undefined;
+}
+
+function firstJavaHome(paths) {
+  return paths.find((path) => path && existsSync(javaExecutableFor(path)));
+}
+
+function gradleJdkCandidates() {
+  const jdksDirectory = join(homedir(), ".gradle", "jdks");
+
+  if (!existsSync(jdksDirectory)) {
+    return [];
+  }
+
+  return readdirSync(jdksDirectory)
+    .map((entry) => join(jdksDirectory, entry))
+    .filter((entry) => existsSync(javaExecutableFor(entry)));
 }
 
 function prependPath(path) {
@@ -33,10 +53,10 @@ function run(command, args, options = {}) {
   });
 }
 
-const javaHome = firstExisting([
+const javaHome = firstJavaHome([
   env.JAVA_HOME,
   "C:\\Program Files\\Android\\Android Studio\\jbr",
-  "C:\\Users\\rakib\\.gradle\\jdks\\eclipse_adoptium-17-amd64-windows.2",
+  ...gradleJdkCandidates(),
 ]);
 
 if (!javaHome) {
@@ -50,7 +70,7 @@ prependPath(join(javaHome, "bin"));
 const androidHome = firstExisting([
   env.ANDROID_HOME,
   env.ANDROID_SDK_ROOT,
-  "C:\\Users\\rakib\\AppData\\Local\\Android\\Sdk",
+  process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Android", "Sdk") : undefined,
 ]);
 
 if (androidHome) {

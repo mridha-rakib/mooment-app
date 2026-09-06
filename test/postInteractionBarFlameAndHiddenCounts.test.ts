@@ -119,6 +119,22 @@ test("EventFeedCard (Event) still passes real counts and handlers into PostInter
   assert.match(barCall, /onLikePress=\{handleLike\}/);
 });
 
+test("EventFeedCard reuses the normal post reaction pop animation and icon-style path", () => {
+  assert.match(feedPostSource, /usePopAnimation\(\{ scale: 1\.3 \}\)/);
+  assert.match(eventFeedCardSource, /usePopAnimation\(\{ scale: 1\.3 \}\)/);
+  assert.match(eventFeedCardSource, /likeIconStyle=\{reactionAnimatedStyle\}/);
+});
+
+test("EventFeedCard fires the same tap haptic and pop before starting its existing request", () => {
+  const handlerStart = eventFeedCardSource.indexOf("const handleLike = async () => {");
+  const handlerEnd = eventFeedCardSource.indexOf("const handleRepost", handlerStart);
+  const handler = eventFeedCardSource.slice(handlerStart, handlerEnd);
+
+  assert.ok(handler.indexOf("tapFeedback();") < handler.indexOf("setIsLiked(!previousIsLiked);"));
+  assert.ok(handler.indexOf("popReaction();") < handler.indexOf("setIsLikePending(true);"));
+  assert.match(handler, /toggleMomentReaction\(event\.interactionMomentId\)/);
+});
+
 test("view-story (Story) still wires the reaction/comment/share actions through the shared bar", () => {
   const barCallIndex = viewStorySource.indexOf("<PostInteractionBar");
   const barCallEnd = viewStorySource.indexOf("/>", barCallIndex);

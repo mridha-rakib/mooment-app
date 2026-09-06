@@ -51,6 +51,7 @@ function UserAvatar({ uri, name, size, style, textStyle, iconSize }: UserAvatarP
         style={imageStyle}
         contentFit="cover"
         cachePolicy="memory-disk"
+        transition={150}
         recyclingKey={imageUri}
         onError={() => setImageFailed(true)}
       />

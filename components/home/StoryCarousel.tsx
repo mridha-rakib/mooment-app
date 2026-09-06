@@ -156,6 +156,8 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
         source={{ uri: mediaUri }}
         style={styles.storyImage}
         contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={150}
       />
     );
   }
@@ -166,6 +168,8 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
         source={thumbnailSource}
         style={styles.storyImage}
         contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={150}
       />
     );
   }
@@ -278,18 +282,18 @@ function StoryCarousel({
         story.storyItems ??
         (story.mediaUri || story.mediaType === "text"
           ? [
-              {
-                id: story.id,
-                mediaType: story.mediaType ?? "video",
-                mediaUri: story.mediaUri,
-                contentType: null,
-                durationSeconds: 15,
-                textContent: story.textContent,
-                textBackground: story.textBackground,
-                textOverlay: story.textOverlay,
-                imageTransform: story.imageTransform,
-              },
-            ]
+            {
+              id: story.id,
+              mediaType: story.mediaType ?? "video",
+              mediaUri: story.mediaUri,
+              contentType: null,
+              durationSeconds: 15,
+              textContent: story.textContent,
+              textBackground: story.textBackground,
+              textOverlay: story.textOverlay,
+              imageTransform: story.imageTransform,
+            },
+          ]
           : []);
       const sessionId = createStoryViewerSession({
         // Unreachable with activeTab === null in practice — a null activeTab

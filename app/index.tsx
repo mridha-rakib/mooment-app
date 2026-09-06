@@ -9,29 +9,19 @@ export default function Splash() {
   const isRestoring = useAuthStore((state) => state.isRestoring);
   const hasRestored = useAuthStore((state) => state.hasRestored);
 
-  console.log(
-    "Splash screen rendered. isAuthenticated:",
-    isAuthenticated,
-    "isRestoring:",
-    isRestoring,
-    "hasRestored:",
-    hasRestored,
-  );
-
   useEffect(() => {
+    // Redirect as soon as the local auth session has been restored. No
+    // artificial delay — the native splash already covered the very first
+    // frames, and the destination screens render their own loading UI.
     if (isRestoring || !hasRestored) {
       return;
     }
 
-    const timer = setTimeout(() => {
-      router.replace(
-        isAuthenticated
-          ? ("/(tabs)/home" as any)
-          : ("/auth-screen/onboarding" as any),
-      );
-    }, 1200);
-
-    return () => clearTimeout(timer);
+    router.replace(
+      isAuthenticated
+        ? ("/(tabs)/home" as any)
+        : ("/auth-screen/onboarding" as any),
+    );
   }, [hasRestored, isAuthenticated, isRestoring, router]);
 
   return (

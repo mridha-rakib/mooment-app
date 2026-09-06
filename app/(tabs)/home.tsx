@@ -386,7 +386,12 @@ export default function HomeFeed() {
   const [feedReposts, setFeedReposts] = useState<MomentTimelineItem[]>([]);
   const [appliedEventFilters, setAppliedEventFilters] = useState<SharedEventFilters>(() => createEmptyEventFilters());
   const [pendingMapFilterRecenterKey, setPendingMapFilterRecenterKey] = useState<string | null>(null);
-  const [isFeedLoading, setIsFeedLoading] = useState(false);
+  // Starts `true`: the feed is conceptually loading from the very first
+  // render (the initial `loadFeed` runs from useFocusEffect a beat later).
+  // Without this, the first frames have `isFeedLoading === false` +
+  // `feedItems` empty, so `shouldShowFeedSkeleton` was false and the feed
+  // area rendered blank instead of the skeleton on a cold start.
+  const [isFeedLoading, setIsFeedLoading] = useState(true);
   const [hasFeedLoadedOnce, setHasFeedLoadedOnce] = useState(false);
   const [isEventFilterLoading, setIsEventFilterLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);

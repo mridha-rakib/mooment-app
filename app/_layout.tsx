@@ -12,6 +12,12 @@ import {
   OleoScript_400Regular,
   useFonts,
 } from "@expo-google-fonts/oleo-script";
+import {
+  Feather,
+  Ionicons,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
+import { Asset } from "expo-asset";
 import * as NavigationBar from "expo-navigation-bar";
 import {
   Stack,
@@ -28,6 +34,23 @@ import { Provider, useDispatch } from "react-redux";
 import { store } from "../redux/store";
 
 installLogBoxStackGuard();
+
+// Keep the native splash up until the JS side has its *local* essentials
+// ready (fonts + icon fonts). Without this the first frame rendered on a
+// cold start has no icon glyphs loaded yet, which is what made the login
+// checkbox checkmark and the Log In button spinner render as empty boxes
+// only on a fresh launch. Awaited assets are all bundled/local — this is
+// not gated on any network or remote data.
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+// Bundled images that fill an entire above-the-fold screen on the very
+// first routes (onboarding hero + JS splash logo). Preloaded so the cold
+// first paint of onboarding isn't a black rectangle while the image
+// streams in. Non-blocking — see BootSplashGate.
+const CRITICAL_IMAGE_ASSETS = [
+  require("../assets/images/splash.png"),
+  require("../assets/images/Splash-logo.png"),
+];
 
 function AuthSessionGate() {
   const router = useRouter();
@@ -399,24 +422,40 @@ function RealtimeConnectionGate() {
 }
 
 export default function RootLayout() {
-  useFonts({
+  // Critical local UI assets. Icon fonts are bundled with the app, so this
+  // resolves in a few frames on a cold start; it is never blocked on the
+  // network or on auth/remote data. Icons rendered before their font is
+  // ready draw nothing, which is why the login checkbox/spinner only broke
+  // on a fresh launch.
+  const [fontsLoaded, fontError] = useFonts({
     "OleoScript-Regular": OleoScript_400Regular,
+    ...Feather.font,
+    ...Ionicons.font,
+    ...MaterialCommunityIcons.font,
   });
 
+  // Image preload is best-effort and must never hold the splash open on its
+  // own (a slow/missing image would otherwise wedge the whole app), so it
+  // is kicked off here without gating first paint on it.
   useEffect(() => {
-    const hideSplashScreen = () => {
-      SplashScreen.hide();
-    };
-
-    hideSplashScreen();
-    const timers = [250, 1000, 2000].map((delay) =>
-      setTimeout(hideSplashScreen, delay),
-    );
-
-    return () => {
-      timers.forEach(clearTimeout);
-    };
+    Asset.loadAsync(CRITICAL_IMAGE_ASSETS).catch(() => undefined);
   }, []);
+
+  const isBootReady = fontsLoaded || Boolean(fontError);
+
+  useEffect(() => {
+    if (isBootReady) {
+      SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [isBootReady]);
+
+  // Keep the native splash visible (render nothing) until local essentials
+  // are ready. This is the only render gate — everything past this point
+  // (auth restore, theme preference, feed data) loads behind skeletons and
+  // never blocks the UI from mounting.
+  if (!isBootReady) {
+    return null;
+  }
 
   return (
     // Non-visual wrapper required by react-native-gesture-handler's

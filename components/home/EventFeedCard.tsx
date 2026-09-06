@@ -16,12 +16,14 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { MAP_MARKER_GLOW_CONFIG } from "@/constants/mapMarkerGlow";
+import { usePopAnimation } from "@/hooks/usePopAnimation";
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
 import { cancelEvent, type EventResponse } from "@/lib/events";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
+import { tapFeedback } from "@/lib/microFeedback";
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
 import { retryBlockOnly, submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
@@ -321,6 +323,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
   const [shareVisible, setShareVisible] = useState(false);
   const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
   const [isCancellingEvent, setIsCancellingEvent] = useState(false);
+  const { style: reactionAnimatedStyle, pop: popReaction } = usePopAnimation({ scale: 1.3 });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -422,10 +425,13 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
   const handleLike = async () => {
     if (!event.interactionMomentId || isLikePending) return;
 
+    tapFeedback();
+
     const previousIsLiked = isLiked;
     const previousLikesCount = likesCount;
     setIsLiked(!previousIsLiked);
     setLikesCount((count) => Math.max(0, count + (previousIsLiked ? -1 : 1)));
+    popReaction();
     setIsLikePending(true);
 
     try {
@@ -967,6 +973,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
           onCommentPress={() => setCommentsVisible(true)}
           onSharePress={() => setShareVisible(true)}
           likeDisabled={isLikePending || !event.interactionMomentId}
+          likeIconStyle={reactionAnimatedStyle}
           commentDisabled={!event.interactionMomentId}
         />
         {canViewEventStats && (

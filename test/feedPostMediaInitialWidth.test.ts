@@ -84,12 +84,12 @@ test("normalPostMediaContainer stays width/aspect-ratio driven (row height unaff
   );
 });
 
-test("CroppedFeedImage image-resolution + ExpoImage props are untouched", () => {
+test("CroppedFeedImage image-resolution + ExpoImage props are configured", () => {
   assert.match(feedPostSource, /Image\.getSize\(/);
   assert.match(feedPostSource, /cachePolicy="memory-disk"/);
   assert.match(feedPostSource, /contentFit="cover"/);
   assert.match(feedPostSource, /contentFit="fill"/);
-  assert.doesNotMatch(feedPostSource, /transition=\{/);
+  assert.match(feedPostSource, /transition=\{150\}/);
   assert.match(feedPostSource, /const imageInstanceKey = `\$\{resolvedUri\}-\$\{loadAttempt\}`;/);
 });
 
