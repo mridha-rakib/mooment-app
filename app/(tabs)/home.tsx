@@ -45,7 +45,9 @@ import { buildStoryRow, groupStoriesByAuthor, SELF_TILE_ID } from "@/lib/storyRo
 import { getSeenStoryIds } from "@/lib/storySeen";
 import { getSuggestedUsers } from "@/lib/users";
 import { getFeedEvents, type EventResponse } from "@/lib/events";
+import { getSmartFeedRankingLocation } from "@/lib/smartFeedRankingLocation";
 import { isLatestFeedRefreshCommit, shouldDeferFeedRefreshCommit, type FeedRefreshCommit } from "@/lib/feedRefreshCommit";
+import { shouldShowFriendsFeedEmptyState, type FriendsFeedLoadState } from "@/lib/friendsFeedEmptyState";
 import {
   getEventFilterSectionEvents,
   getEventFilterSectionHeading,
@@ -361,6 +363,31 @@ function PendingVideoPostSkeleton() {
   );
 }
 
+// True empty state for the Friends feed only — rendered by the shared feed
+// FlatList's ListEmptyComponent, gated by shouldShowFriendsFeedEmptyState so
+// it can never appear on Discover, during loading, during refresh, or after a
+// (partial) load failure. Styling follows the existing Home empty-state
+// discipline used by ParticipatedWindowsList; the CTA reuses the existing
+// People to Follow route.
+function FriendsFeedEmptyState({ colors }: { colors: { text: string; border: string } }) {
+  return (
+    <View style={styles.friendsFeedEmpty}>
+      <Text style={[styles.friendsFeedEmptyText, { color: colors.text }]}>
+        Follow people to see posts from friends.
+      </Text>
+      <TouchableOpacity
+        style={[styles.friendsFeedEmptyCta, { borderColor: colors.border }]}
+        activeOpacity={0.75}
+        onPress={() => router.push('/discover-screen/people-to-follow')}
+        accessibilityRole="button"
+        accessibilityLabel="People to Follow"
+      >
+        <Text style={[styles.friendsFeedEmptyCtaText, { color: colors.text }]}>People to Follow</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function HomeFeed() {
   const insets = useSafeAreaInsets();
   const { colors, theme: activeTheme } = useTheme();
@@ -393,6 +420,12 @@ export default function HomeFeed() {
   // area rendered blank instead of the skeleton on a cold start.
   const [isFeedLoading, setIsFeedLoading] = useState(true);
   const [hasFeedLoadedOnce, setHasFeedLoadedOnce] = useState(false);
+  // Narrow, local-only lifecycle for the Friends feed, used solely to decide
+  // whether a zero-item Friends result is a truthful "empty" (all three feed
+  // sources fulfilled) vs a failure that must not be shown as the empty
+  // state. Does not affect Discover, the loading skeleton, refresh, ranking,
+  // or the existing partial-result commit behavior.
+  const [friendsFeedLoadState, setFriendsFeedLoadState] = useState<FriendsFeedLoadState>("idle");
   const [isEventFilterLoading, setIsEventFilterLoading] = useState(false);
   const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
   const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
@@ -668,10 +701,14 @@ export default function HomeFeed() {
     const requestId = ++eventRequestIdRef.current;
     setIsEventFilterLoading(true);
     try {
-      const events = await getFeedEvents(buildEventFilterRequestParams(appliedEventFiltersRef.current, {
-        limit: 100,
-        audience,
-      }));
+      const rankingLocation = await getSmartFeedRankingLocation();
+      const events = await getFeedEvents({
+        ...buildEventFilterRequestParams(appliedEventFiltersRef.current, {
+          limit: 100,
+          audience,
+        }),
+        ...rankingLocation,
+      });
 
       if (!isLatestEventRequest(requestId, eventRequestIdRef.current)) return;
 
@@ -711,10 +748,15 @@ export default function HomeFeed() {
       });
     }
     setIsFeedLoading(true);
+    setFriendsFeedLoadState(audience === "friends" ? "loading" : "idle");
     armFeedLoadingRecoveryTimer(requestId);
     try {
       const eventFilters = appliedEventFiltersRef.current;
       const eventRequestParams = buildEventFilterRequestParams(eventFilters, { limit: 100, audience });
+      // Passive ranking-only location: never prompts, never blocks the feed
+      // (short timeout, resolves to {} on failure → backend GeoIP fallback).
+      const rankingLocationPromise = getSmartFeedRankingLocation();
+      const rankingLocation = await rankingLocationPromise;
       const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
         getFeedMoments({
           hashtags: eventFilters.hashtags,
@@ -723,7 +765,7 @@ export default function HomeFeed() {
           longitude: eventRequestParams.longitude,
           radiusKm: eventRequestParams.radiusKm,
         }),
-        getFeedEvents(eventRequestParams),
+        getFeedEvents({ ...eventRequestParams, ...rankingLocation }),
         getFeedReposts(50, audience),
       ]);
       const isLatestSettled = isLatestEventRequest(requestId, feedRequestIdRef.current);
@@ -756,6 +798,20 @@ export default function HomeFeed() {
 
       if (!isLatestSettled) {
         return;
+      }
+
+      // Only for the Friends feed, and only for the latest request: a
+      // zero-item result is a truthful "empty" ONLY when all three feed
+      // sources fulfilled. Any (partial) failure => "error", so the empty
+      // copy is never shown for a network/API failure. The partial-result
+      // commit below is unchanged — successful sources still render.
+      if (audience === "friends") {
+        const allFriendSourcesFulfilled = (
+          momentsResult.status === "fulfilled" &&
+          eventsResult.status === "fulfilled" &&
+          repostsResult.status === "fulfilled"
+        );
+        setFriendsFeedLoadState(allFriendSourcesFulfilled ? "loaded" : "error");
       }
 
       const nextCommit: PendingFeedRefreshCommit = {
@@ -1278,6 +1334,17 @@ export default function HomeFeed() {
     eventCount: feedEvents.length,
   });
   const shouldShowFeedSkeleton = selectedType === 'Feed' && !hasFeedLoadedOnce && isFeedLoading && feedItems.length === 0 && !isRefreshing;
+  // Friends-only true empty state. Mutually exclusive with the skeleton
+  // (skeleton requires isFeedLoading, this requires !isFeedLoading) and
+  // explicitly guarded to feedAudience === 'friends' so Discover is untouched.
+  const shouldShowFriendsEmpty = shouldShowFriendsFeedEmptyState({
+    selectedType,
+    feedAudience,
+    isFeedLoading,
+    isRefreshing,
+    friendsFeedLoadState,
+    itemCount: feedItems.length,
+  });
   feedRuntimeSnapshotRef.current = {
     feedMomentPostsLength: feedMomentPosts.length,
     feedEventsLength: feedEvents.length,
@@ -1439,6 +1506,11 @@ export default function HomeFeed() {
             data={feedItems}
             keyExtractor={(item) => item.id}
             extraData={feedListExtraData}
+            // flexGrow is applied ONLY while the Friends true-empty state is
+            // active so the centered empty view can fill the area below the
+            // header. Non-empty feeds keep the default (undefined) container
+            // geometry — unchanged.
+            contentContainerStyle={shouldShowFriendsEmpty ? styles.friendsFeedEmptyContentContainer : undefined}
             showsVerticalScrollIndicator={false}
             initialNumToRender={3}
             maxToRenderPerBatch={3}
@@ -1504,7 +1576,13 @@ export default function HomeFeed() {
                 ) : null}
               </>
             )}
-            ListEmptyComponent={shouldShowFeedSkeleton ? <FeedSkeletonList /> : null}
+            ListEmptyComponent={
+              shouldShowFeedSkeleton
+                ? <FeedSkeletonList />
+                : shouldShowFriendsEmpty
+                  ? <FriendsFeedEmptyState colors={colors} />
+                  : null
+            }
             ListFooterComponent={shouldShowFeedSkeleton ? null : <View style={{ height: 100 }} />}
             renderItem={renderFeedItem}
           />
@@ -1634,6 +1712,34 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     letterSpacing: -0.08,
     lineHeight: 16,
+  },
+  friendsFeedEmptyContentContainer: {
+    flexGrow: 1,
+  },
+  friendsFeedEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 16,
+  },
+  friendsFeedEmptyText: {
+    fontSize: 15,
+    lineHeight: 21,
+    textAlign: "center",
+    maxWidth: 290,
+  },
+  friendsFeedEmptyCta: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+  },
+  friendsFeedEmptyCtaText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   feedSkeletonList: {
     paddingBottom: 100,

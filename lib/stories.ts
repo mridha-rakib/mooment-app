@@ -15,10 +15,23 @@ export type StoryTextOverlay = {
   y: number;
   scale: number;
   color: string;
-  fontWeight?: "normal" | "600" | "700" | "bold";
+  // "800" is the new "Heavy" value. "bold" is kept only for already-published
+  // overlays / legacy clients — new selections never emit it.
+  fontWeight?: "normal" | "600" | "700" | "800" | "bold";
   textAlign?: "left" | "center" | "right";
   /** Degrees. Optional/nullable so legacy overlays without it still typecheck. */
   rotation?: number;
+  /** User's shadow intent. Absent/null on legacy overlays === shadow on. */
+  shadow?: boolean;
+};
+
+// Minimal persisted style for the text-only Story body (NOT a positioned
+// sticker — no x/y/scale/rotation). Only text Stories carry this.
+export type StoryTextStyle = {
+  fontWeight?: "normal" | "600" | "700" | "800";
+  color?: string;
+  textAlign?: "left" | "center" | "right";
+  shadow?: boolean;
 };
 
 // Normalized Story image placement — see lib/storyTransform.ts for the
@@ -53,6 +66,7 @@ export type Story = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  textStyle?: StoryTextStyle | null;
   imageTransform?: StoryImageTransform | null;
   audience: "connections";
   viewsCount: number;
@@ -96,6 +110,7 @@ export type CreateStoryPayload = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  textStyle?: StoryTextStyle | null;
   imageTransform?: StoryImageTransform | null;
 };
 

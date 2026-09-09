@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Image, View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,14 +6,22 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
-import { getMapEvents, getHashtagEvents, type EventResponse } from '@/lib/events';
+import { getMapEvents, getHashtagEvents, searchEvents, type EventResponse } from '@/lib/events';
+import { normalizeSearchText } from '@/lib/searchText';
 import { getStorageFileUrl } from '@/lib/storage';
-import { getSuggestedUsers } from '@/lib/users';
+import { getSuggestedUsers, searchPeople } from '@/lib/users';
 import { getHashtagMoments, type Moment } from '@/lib/moments';
 import { getHashtagSearchIntent, isSearchSectionVisible, type SearchFilter } from '@/lib/searchHashtagIntent';
+import {
+  getScreenSearchState,
+  getSearchSourceState,
+  selectCurrentRows,
+  type SearchSourceState,
+} from '@/lib/searchViewState';
 import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import { safeBack } from '@/lib/navigation';
 import UserAvatar from '@/components/ui/UserAvatar';
+import SearchStateMessage from '@/components/search/SearchStateMessage';
 
 const HASHTAG_CHECK_DEBOUNCE_MS = 350;
 // Never block hashtag search on a slow/stalled GPS fix — same cap used by the hashtag
@@ -46,6 +54,14 @@ type SearchPost = {
 
 const FILTERS: SearchFilter[] = ['All', 'People', 'Events', 'Hashtags'];
 const SEARCH_RESULT_LIMIT = 50;
+// People results are network-driven (server-ranked). Debounce keystrokes so a
+// query is only sent once typing settles; a stale response can never replace a
+// newer query's results (guarded by peopleRequestRef below).
+const PEOPLE_SEARCH_DEBOUNCE_MS = 250;
+// Events results are network-driven (server-ranked /events/search). Debounce
+// keystrokes; a stale response can never replace a newer query's results
+// (guarded by eventRequestRef below). Kept separate from People/Hashtag.
+const EVENT_SEARCH_DEBOUNCE_MS = 250;
 // Stable reference (not a fresh `[]` literal per render) so the postsSectionList ternary
 // doesn't destabilize the searchSections useMemo's dependency array.
 const EMPTY_SEARCH_POSTS: SearchPost[] = [];
@@ -129,31 +145,74 @@ export default function SearchScreen() {
   const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<SearchFilter>('All');
+  // Bumped by Retry and by a real re-focus (§ background revalidation). Added to
+  // every network-driven search effect's dependency list so the CURRENT derived
+  // query is re-fetched without touching `searchQuery` / `activeFilter`.
+  const [retryToken, setRetryToken] = useState(0);
   const [people, setPeople] = useState<SearchPerson[]>([]);
+  const [peopleResults, setPeopleResults] = useState<SearchPerson[]>([]);
+  // The query string the currently-applied People rows were fetched for. Rows
+  // are only rendered while this still matches the derived People query, so a
+  // slower older query can never flash its rows under a newer visible query.
+  const [peopleResultsQuery, setPeopleResultsQuery] = useState('');
+  // Non-null => the latest settled People request for this exact query failed.
+  const [peopleErrorQuery, setPeopleErrorQuery] = useState<string | null>(null);
+  const [isPeopleSearching, setIsPeopleSearching] = useState(false);
+  const peopleRequestRef = useRef(0);
   const [events, setEvents] = useState<SearchEvent[]>([]);
+  const [eventResults, setEventResults] = useState<SearchEvent[]>([]);
+  const [eventResultsQuery, setEventResultsQuery] = useState('');
+  const [eventErrorQuery, setEventErrorQuery] = useState<string | null>(null);
+  const [isEventSearching, setIsEventSearching] = useState(false);
+  const eventRequestRef = useRef(0);
+  // `isLoading` now means ONLY the cold first load (no data yet). Re-focus
+  // refreshes run in the background and never flip it back to true, so returning
+  // to a populated Search screen no longer flashes a full-screen spinner.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const hasLoadedRef = useRef(false);
   const [hashtagMatchedPosts, setHashtagMatchedPosts] = useState<SearchPost[]>([]);
   const [hashtagMatchedEvents, setHashtagMatchedEvents] = useState<SearchEvent[]>([]);
+  const [hashtagResultsQuery, setHashtagResultsQuery] = useState('');
+  const [hashtagErrorQuery, setHashtagErrorQuery] = useState<string | null>(null);
   const [isHashtagChecking, setIsHashtagChecking] = useState(false);
 
   const query = searchQuery.trim().toLowerCase();
+  // Non-empty => People results come from the server-ranked /users/search
+  // endpoint; empty => keep showing the existing recommendation list. Mirrors
+  // the server's leading-'@' + whitespace normalization for the "is there a
+  // real query?" decision only.
+  const peopleQuery = searchQuery.trim().replace(/^@+/, '').trim();
   // Selecting a tab is the user's explicit search-scope choice — it must never be changed
   // by typing. getHashtagSearchIntent only reads `activeFilter` to decide search BEHAVIOR
   // (does this tab's section treat plain text as a hashtag keyword?); it never calls
   // setActiveFilter.
   const { isExplicitHashtagIntent, hashtagSectionQuery } = getHashtagSearchIntent(searchQuery, activeFilter);
-  const hasHashtagMatches = hashtagMatchedPosts.length > 0 || hashtagMatchedEvents.length > 0;
+  // Hashtag-probe rows only count while they still belong to the query in play —
+  // otherwise a slower older probe would keep the shortcut / inline sections
+  // visible under a newer query.
+  const currentHashtagPosts = selectCurrentRows(hashtagSectionQuery, hashtagResultsQuery, hashtagMatchedPosts);
+  const currentHashtagEvents = selectCurrentRows(hashtagSectionQuery, hashtagResultsQuery, hashtagMatchedEvents);
+  const hasHashtagMatches = currentHashtagPosts.length > 0 || currentHashtagEvents.length > 0;
+  // Non-empty => Events results come from the server-ranked /events/search
+  // endpoint; empty (or explicit `#` hashtag intent) => keep the existing
+  // /events/map upcoming list. Punctuation-only input normalizes to '' and is
+  // treated as no query (zero-query fallback), never an unrestricted search.
+  const eventSearchQuery = isExplicitHashtagIntent ? '' : normalizeSearchText(searchQuery);
 
   useEffect(() => {
     if (!hashtagSectionQuery) {
       setHashtagMatchedPosts([]);
       setHashtagMatchedEvents([]);
+      setHashtagResultsQuery('');
+      setHashtagErrorQuery(null);
       setIsHashtagChecking(false);
       return;
     }
 
     let cancelled = false;
     setIsHashtagChecking(true);
+    setHashtagErrorQuery(null);
 
     const timer = setTimeout(() => {
       void (async () => {
@@ -163,9 +222,10 @@ export default function SearchScreen() {
         // only maps and displays whatever the backend already decided matches and how it
         // already ordered them (Smart Feed-ranked posts, nearby-first events).
         const [momentsResult, eventsResult] = await Promise.allSettled([
-          getHashtagMoments(hashtagSectionQuery, SEARCH_RESULT_LIMIT),
+          getHashtagMoments(hashtagSectionQuery, SEARCH_RESULT_LIMIT, { expand: true }),
           getHashtagEvents(hashtagSectionQuery, {
             limit: SEARCH_RESULT_LIMIT,
+            expand: true,
             ...(location ? { latitude: location.latitude, longitude: location.longitude } : {}),
           }),
         ]);
@@ -174,8 +234,13 @@ export default function SearchScreen() {
           return;
         }
 
+        // Only a total failure (both sources rejected) is an error; a partial
+        // failure still shows the side that succeeded.
+        const bothFailed = momentsResult.status === 'rejected' && eventsResult.status === 'rejected';
         setHashtagMatchedPosts(momentsResult.status === 'fulfilled' ? momentsResult.value.map(toSearchPost) : []);
         setHashtagMatchedEvents(eventsResult.status === 'fulfilled' ? eventsResult.value.map(toSearchEvent) : []);
+        setHashtagResultsQuery(hashtagSectionQuery);
+        setHashtagErrorQuery(bothFailed ? hashtagSectionQuery : null);
         setIsHashtagChecking(false);
       })();
     }, HASHTAG_CHECK_DEBOUNCE_MS);
@@ -184,10 +249,116 @@ export default function SearchScreen() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [hashtagSectionQuery]);
+  }, [hashtagSectionQuery, retryToken]);
 
-  const loadSearchData = useCallback(async (isMounted: () => boolean) => {
-    setIsLoading(true);
+  // People results: server-ranked search when there is a real query, debounced.
+  // Every run bumps peopleRequestRef; a resolved response is only applied when
+  // its request id is still the latest, so a slow "ra" cannot overwrite "rak"
+  // and clearing the field immediately abandons any in-flight response.
+  useEffect(() => {
+    if (!peopleQuery) {
+      peopleRequestRef.current += 1;
+      setPeopleResults([]);
+      setPeopleResultsQuery('');
+      setPeopleErrorQuery(null);
+      setIsPeopleSearching(false);
+      return;
+    }
+
+    const requestId = (peopleRequestRef.current += 1);
+    setIsPeopleSearching(true);
+    setPeopleErrorQuery(null);
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const results = await searchPeople(peopleQuery, SEARCH_RESULT_LIMIT);
+
+          if (peopleRequestRef.current !== requestId) {
+            return;
+          }
+
+          // Render the backend's ranked order verbatim — no client re-sort/filter.
+          setPeopleResults(results.map((user) => ({
+            id: user.id,
+            name: user.name,
+            // Real handle only. No synthetic fallback — a user without a
+            // username simply shows no handle line.
+            handle: user.username ? `@${user.username}` : '',
+            avatarUrl: user.avatarUrl,
+          })));
+          setPeopleResultsQuery(peopleQuery);
+          setIsPeopleSearching(false);
+        } catch {
+          if (peopleRequestRef.current !== requestId) {
+            return;
+          }
+
+          setPeopleResults([]);
+          setPeopleResultsQuery(peopleQuery);
+          setPeopleErrorQuery(peopleQuery);
+          setIsPeopleSearching(false);
+        }
+      })();
+    }, PEOPLE_SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [peopleQuery, retryToken]);
+
+  // Events results: server-ranked /events/search when there is a real query,
+  // debounced. Same request-id guard shape as People (separate ref): a slow
+  // "part" response can never overwrite a newer "partys", and clearing the
+  // field abandons any in-flight response. Empty query => fall back to the
+  // existing /events/map upcoming list (no request).
+  useEffect(() => {
+    if (!eventSearchQuery) {
+      eventRequestRef.current += 1;
+      setEventResults([]);
+      setEventResultsQuery('');
+      setEventErrorQuery(null);
+      setIsEventSearching(false);
+      return;
+    }
+
+    const requestId = (eventRequestRef.current += 1);
+    setIsEventSearching(true);
+    setEventErrorQuery(null);
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const results = await searchEvents(eventSearchQuery, SEARCH_RESULT_LIMIT);
+
+          if (eventRequestRef.current !== requestId) {
+            return;
+          }
+
+          // Render the backend's ranked order verbatim — no client re-filter.
+          setEventResults(results.map(toSearchEvent));
+          setEventResultsQuery(eventSearchQuery);
+          setIsEventSearching(false);
+        } catch {
+          if (eventRequestRef.current !== requestId) {
+            return;
+          }
+
+          setEventResults([]);
+          setEventResultsQuery(eventSearchQuery);
+          setEventErrorQuery(eventSearchQuery);
+          setIsEventSearching(false);
+        }
+      })();
+    }, EVENT_SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [eventSearchQuery, retryToken]);
+
+  const loadSearchData = useCallback(async (isMounted: () => boolean, background = false) => {
+    // A background refresh (re-focus / retry with data already on screen) never
+    // flips the cold-load spinner back on and never wipes good data on failure.
+    if (!background) {
+      setIsLoading(true);
+    }
 
     const [peopleResult, eventsResult] = await Promise.allSettled([
       getSuggestedUsers(SEARCH_RESULT_LIMIT),
@@ -198,23 +369,37 @@ export default function SearchScreen() {
       return;
     }
 
-    setPeople(peopleResult.status === 'fulfilled'
-      ? peopleResult.value.map(user => ({
-          id: user.id,
-          name: user.name,
-          handle: user.username ? `@${user.username}` : '@xenog',
-          avatarUrl: user.avatarUrl,
-        }))
-      : []);
-    setEvents(eventsResult.status === 'fulfilled' ? eventsResult.value.map(toSearchEvent) : []);
+    if (peopleResult.status === 'fulfilled') {
+      setPeople(peopleResult.value.map(user => ({
+        id: user.id,
+        name: user.name,
+        // Real handle only — no synthetic fallback.
+        handle: user.username ? `@${user.username}` : '',
+        avatarUrl: user.avatarUrl,
+      })));
+    }
+    if (eventsResult.status === 'fulfilled') {
+      setEvents(eventsResult.value.map(toSearchEvent));
+    }
+    setLoadFailed(peopleResult.status === 'rejected' && eventsResult.status === 'rejected');
     setIsLoading(false);
+    hasLoadedRef.current = true;
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      const isBackground = hasLoadedRef.current;
 
-      void loadSearchData(() => isMounted);
+      void loadSearchData(() => isMounted, isBackground);
+
+      // On a real re-focus (Back into an already-loaded Search screen),
+      // revalidate any active search in the background so an item an admin
+      // removed while the user was away drops out shortly after returning —
+      // without clearing the query/tab/results or showing a cold spinner.
+      if (isBackground) {
+        setRetryToken((token) => token + 1);
+      }
 
       return () => {
         isMounted = false;
@@ -222,27 +407,51 @@ export default function SearchScreen() {
     }, [loadSearchData]),
   );
 
+  const handleRetry = useCallback(() => {
+    setPeopleErrorQuery(null);
+    setEventErrorQuery(null);
+    setHashtagErrorQuery(null);
+    setLoadFailed(false);
+    setRetryToken((token) => token + 1);
+    if (!searchQuery.trim()) {
+      void loadSearchData(() => true, false);
+    }
+  }, [loadSearchData, searchQuery]);
+
+  // Real query => server-ranked People results (order preserved as returned).
+  // No query => the existing recommendation list (unchanged behaviour).
   const filteredPeople = useMemo(
-    () => people.filter(
-      p => p.name.toLowerCase().includes(query) || p.handle.toLowerCase().includes(query)
-    ),
-    [people, query],
+    () => (peopleQuery
+      // Only render the People rows while they still belong to the query in the
+      // input — a slower older request can never flash its rows under a newer
+      // visible query (notably on the All tab, which does not spinner-gate People).
+      ? selectCurrentRows(peopleQuery, peopleResultsQuery, peopleResults)
+      : people.filter(
+          p => p.name.toLowerCase().includes(query) || p.handle.toLowerCase().includes(query)
+        )),
+    [peopleQuery, peopleResultsQuery, peopleResults, people, query],
   );
+  // Real query => server-ranked /events/search results (order preserved as
+  // returned — the old `.includes(query)` filter is NOT re-applied, so
+  // typo-corrected server rows survive). No query => the existing /events/map
+  // upcoming list, filtered locally exactly as before.
   const filteredEvents = useMemo(
-    () => events.filter(
-      e => e.title.toLowerCase().includes(query) || e.subtitle.toLowerCase().includes(query)
-    ),
-    [events, query],
+    () => (eventSearchQuery
+      ? selectCurrentRows(eventSearchQuery, eventResultsQuery, eventResults)
+      : events.filter(
+          e => e.title.toLowerCase().includes(query) || e.subtitle.toLowerCase().includes(query)
+        )),
+    [eventSearchQuery, eventResultsQuery, eventResults, events, query],
   );
   // The Events section is shared by the "All" and "Events" tabs. Its own intent rule is
   // independent of which tab is active or of the Hashtags-tab-implied rule above: an
   // explicit `#` switches it to real Event-hashtag results; plain text always stays normal
   // Event text search, even while the Hashtags tab happens to be selected.
-  const eventsSectionList = isExplicitHashtagIntent ? hashtagMatchedEvents : filteredEvents;
+  const eventsSectionList = isExplicitHashtagIntent ? currentHashtagEvents : filteredEvents;
   // Inline Posts only ever reflects explicit `#` intent (the same rule the Events section
   // uses) — this is additive to the existing Hashtags-tab shortcut card, not a replacement,
   // and is scoped to the All tab only via the 'PostsInline' visibility rule below.
-  const postsSectionList = isExplicitHashtagIntent ? hashtagMatchedPosts : EMPTY_SEARCH_POSTS;
+  const postsSectionList = isExplicitHashtagIntent ? currentHashtagPosts : EMPTY_SEARCH_POSTS;
   const searchSections = useMemo<SearchSection[]>(() => [
     {
       filter: 'Hashtags',
@@ -318,8 +527,10 @@ export default function SearchScreen() {
             >
               <UserAvatar uri={person.avatarUrl} name={person.name} size={52} style={styles.personAvatar} />
               <View style={styles.listTextContainer}>
-                <Text style={[styles.listTitle, { color: colors.text }]}>{person.name}</Text>
-                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{person.handle}</Text>
+                <Text style={[styles.listTitle, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{person.name}</Text>
+                {person.handle ? (
+                  <Text style={[styles.listSubtitle, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{person.handle}</Text>
+                ) : null}
               </View>
             </TouchableOpacity>
           ))}
@@ -349,8 +560,8 @@ export default function SearchScreen() {
                 </View>
               )}
               <View style={styles.listTextContainer}>
-                <Text style={[styles.listTitle, { color: colors.text }]}>{event.title}</Text>
-                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>{event.subtitle}</Text>
+                <Text style={[styles.listTitle, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{event.title}</Text>
+                <Text style={[styles.listSubtitle, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{event.subtitle}</Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -362,14 +573,50 @@ export default function SearchScreen() {
   const visibleSections = searchSections.filter(
     section => isSearchSectionVisible(section.filter, activeFilter),
   );
-  const hasResults = visibleSections.some(section => section.resultCount > 0);
-  // While a hashtag-intent query's real-data check is in flight, keep the loading state
-  // instead of briefly flashing "No Result Found" for a query that turns out to have
-  // matches — results must only ever appear once real data confirms them.
-  const isBusy = isLoading || (Boolean(hashtagSectionQuery) && isHashtagChecking);
+
+  // Per-source states for the visible sections. LOADING / ERROR / EMPTY /
+  // RESULTS stay distinct: a failed request is ERROR (never a silent EMPTY),
+  // and an in-flight request — or rows that still belong to an older query — is
+  // LOADING (never EMPTY).
+  const peopleSectionState = getSearchSourceState({
+    hasQuery: Boolean(peopleQuery),
+    isFetching: isPeopleSearching,
+    hasError: peopleErrorQuery !== null && peopleErrorQuery === peopleQuery,
+    rowsMatchQuery: peopleResultsQuery === peopleQuery,
+    rowCount: filteredPeople.length,
+  });
+  const eventSectionState = getSearchSourceState({
+    hasQuery: Boolean(eventSearchQuery),
+    isFetching: isEventSearching,
+    hasError: eventErrorQuery !== null && eventErrorQuery === eventSearchQuery,
+    rowsMatchQuery: eventResultsQuery === eventSearchQuery,
+    rowCount: filteredEvents.length,
+  });
+  const hashtagProbeState = getSearchSourceState({
+    hasQuery: Boolean(hashtagSectionQuery),
+    isFetching: isHashtagChecking,
+    hasError: hashtagErrorQuery !== null && hashtagErrorQuery === hashtagSectionQuery,
+    rowsMatchQuery: hashtagResultsQuery === hashtagSectionQuery,
+    rowCount: currentHashtagPosts.length + currentHashtagEvents.length,
+  });
+
+  const sectionStateFor = (sectionFilter: SearchSection['filter']): SearchSourceState => {
+    if (sectionFilter === 'People') return peopleSectionState;
+    if (sectionFilter === 'Hashtags' || sectionFilter === 'PostsInline') return hashtagProbeState;
+    // 'Events' shows hashtag-event rows under explicit `#` intent.
+    return isExplicitHashtagIntent ? hashtagProbeState : eventSectionState;
+  };
+
+  const zeroQueryErrored =
+    !searchQuery.trim() && loadFailed && people.length === 0 && events.length === 0;
+  const screenState: SearchSourceState = zeroQueryErrored
+    ? 'error'
+    : getScreenSearchState(visibleSections.map(section => sectionStateFor(section.filter)));
 
   const renderContent = () => {
-    if (isBusy) {
+    // `isLoading` is the cold first load only; `screenState === 'loading'`
+    // covers an in-flight query on an already-populated screen.
+    if (isLoading || (!zeroQueryErrored && screenState === 'loading')) {
       return (
         <View style={styles.emptyStateContainer}>
           <ActivityIndicator color={colors.textSecondary} />
@@ -377,12 +624,12 @@ export default function SearchScreen() {
       );
     }
 
-    if (!hasResults) {
-      return (
-        <View style={styles.emptyStateContainer}>
-          <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>No Result Found</Text>
-        </View>
-      );
+    if (screenState === 'error') {
+      return <SearchStateMessage variant="error" onRetry={handleRetry} />;
+    }
+
+    if (screenState === 'empty') {
+      return <SearchStateMessage variant="empty" />;
     }
 
     return (

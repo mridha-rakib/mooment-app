@@ -881,11 +881,6 @@ export default function CommentsModal({
                     {likesCount}
                   </Text>
                 </View>
-                <Text
-                  style={[styles.statsShares, { color: colors.textSecondary }]}
-                >
-                  {sharesCount} shares
-                </Text>
               </View>
             </View>
 
@@ -1155,11 +1150,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "600",
     marginLeft: 6,
-  },
-  statsShares: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "500",
   },
   scrollList: {
     flex: 1,

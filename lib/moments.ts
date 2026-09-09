@@ -213,9 +213,43 @@ export const getMoment = async (momentId: string): Promise<Moment> => {
   return moment;
 };
 
-export const getHashtagMoments = async (hashtag: string, limit = 100): Promise<Moment[]> => {
-  const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, { params: { limit } });
+export const getHashtagMoments = async (
+  hashtag: string,
+  limit = 100,
+  options: { expand?: boolean } = {},
+): Promise<Moment[]> => {
+  const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, {
+    params: { limit, ...(options.expand ? { expand: '1' } : {}) },
+  });
   return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+export type HashtagMomentPage = {
+  moments: Moment[];
+  nextCursor: string | null;
+};
+
+// Cursor-paginated, EXACT-tag hashtag Moments for the hashtag detail screen.
+// Opt-in `paginate=1` mode — the response gains `nextCursor` but is otherwise
+// the same envelope `getHashtagMoments` reads, so the Search probe is unaffected.
+export const getHashtagMomentsPage = async (
+  hashtag: string,
+  options: { limit?: number; cursor?: string | null } = {},
+): Promise<HashtagMomentPage> => {
+  const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, {
+    params: {
+      paginate: '1',
+      limit: options.limit ?? 30,
+      ...(options.cursor ? { cursor: options.cursor } : {}),
+    },
+  });
+  const moments = response.data?.data?.moments;
+  const nextCursor = response.data?.data?.nextCursor;
+
+  return {
+    moments: Array.isArray(moments) ? (moments as Moment[]) : [],
+    nextCursor: typeof nextCursor === 'string' && nextCursor.length > 0 ? nextCursor : null,
+  };
 };
 
 export const getProfileTimeline = async (

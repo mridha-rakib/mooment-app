@@ -216,7 +216,12 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     };
   }
 
-  if (!moment.caption && visualMedia.length === 0 && !isEventInteractionMoment) {
+  // A whitespace-only caption is not readable content: treated the same as no
+  // caption here so a text post with nothing to show falls through to the
+  // caller's existing "unavailable" path instead of rendering a blank card.
+  // Narrowly scoped to this existing no-media guard — every other branch
+  // (audio/visual/event-interaction) is unchanged.
+  if (!hasText(moment.caption) && visualMedia.length === 0 && !isEventInteractionMoment) {
     return null;
   }
 

@@ -27,7 +27,7 @@ import BackButton from '@/components/ui/BackButton';
 import DraggableStoryImage from '@/components/story/DraggableStoryImage';
 import DraggableStoryText from '@/components/story/DraggableStoryText';
 import { useTheme } from '@/hooks/useTheme';
-import { createStory, type StoryMediaSource, type StoryMediaType, type StoryTextBackground, type StoryTextOverlay } from '@/lib/stories';
+import { createStory, type StoryMediaSource, type StoryMediaType, type StoryTextBackground, type StoryTextOverlay, type StoryTextStyle } from '@/lib/stories';
 import {
   DEFAULT_IMAGE_TRANSFORM,
   isDefaultStoryTransform,
@@ -90,11 +90,15 @@ const TEXT_COLOR_PALETTE = [
   '#6366F1', '#8B5CF6', '#A855F7', '#C4B5FD', '#D946EF',
 ];
 
-const FONT_WEIGHT_OPTIONS: { label: string; value: StoryTextOverlay['fontWeight'] }[] = [
+// Heavy is "800" (measurably heavier than Bold "700"). It must NOT be "bold":
+// React Native treats "bold" as "700", which would make Heavy visually
+// identical to Bold. "800" is also the text-only Story body's existing
+// weight, so the text-only default appearance is preserved.
+const FONT_WEIGHT_OPTIONS: { label: string; value: NonNullable<StoryTextStyle['fontWeight']> }[] = [
   { label: 'Regular', value: 'normal' },
   { label: 'Semibold', value: '600' },
   { label: 'Bold', value: '700' },
-  { label: 'Heavy', value: 'bold' },
+  { label: 'Heavy', value: '800' },
 ];
 
 const TEXT_ALIGN_OPTIONS: { value: NonNullable<StoryTextOverlay['textAlign']>; icon: 'align-left' | 'align-center' | 'align-right' }[] = [
@@ -202,6 +206,7 @@ const buildOverlay = (
   rotation: number,
   fontWeight: StoryTextOverlay['fontWeight'],
   textAlign: StoryTextOverlay['textAlign'],
+  shadow: boolean,
 ): StoryTextOverlay | null => {
   const trimmedText = text.trim();
   if (!trimmedText) return null;
@@ -215,6 +220,7 @@ const buildOverlay = (
     fontWeight,
     textAlign,
     rotation,
+    shadow,
   };
 };
 
@@ -408,10 +414,18 @@ export default function AddStoryScreen() {
   const [overlayRotation, setOverlayRotation] = useState(0);
   const [overlayFontWeight, setOverlayFontWeight] = useState<StoryTextOverlay['fontWeight']>('700');
   const [overlayTextAlign, setOverlayTextAlign] = useState<StoryTextOverlay['textAlign']>('center');
-  // Editor-preview-only toggle (not persisted — see final report). Defaults
-  // to true so it matches the always-on shadow every published Story text
+  // Image-overlay text shadow intent. Now persisted (textOverlay.shadow) —
+  // defaults to true, matching the always-on shadow every published overlay
   // has rendered with until now.
   const [overlayShadowEnabled, setOverlayShadowEnabled] = useState(true);
+  // Text-only Story body style — kept entirely separate from the overlay*
+  // state above so a text-only selection never leaks into an image overlay
+  // and vice versa. Defaults reproduce the text-only body's existing
+  // hardcoded appearance (800 / white / center / shadow-on) exactly.
+  const [storyTextFontWeight, setStoryTextFontWeight] = useState<NonNullable<StoryTextStyle['fontWeight']>>('800');
+  const [storyTextColor, setStoryTextColor] = useState('#FFFFFF');
+  const [storyTextAlign, setStoryTextAlign] = useState<NonNullable<StoryTextStyle['textAlign']>>('center');
+  const [storyTextShadowEnabled, setStoryTextShadowEnabled] = useState(true);
   // Which text-tools panel is expanded within the tray. Color is the
   // product-preferred initial panel (the primary requested styling
   // action); once the user picks a different tab it's remembered across
@@ -476,8 +490,9 @@ export default function AddStoryScreen() {
       overlayRotation,
       overlayFontWeight,
       overlayTextAlign,
+      overlayShadowEnabled,
     ),
-    [overlayColor, overlayText, overlayX, overlayY, overlayScale, overlayRotation, overlayFontWeight, overlayTextAlign],
+    [overlayColor, overlayText, overlayX, overlayY, overlayScale, overlayRotation, overlayFontWeight, overlayTextAlign, overlayShadowEnabled],
   );
   const isPreviewing = Boolean(draft);
 
@@ -686,6 +701,10 @@ export default function AddStoryScreen() {
     setOverlayFontWeight('700');
     setOverlayTextAlign('center');
     setOverlayShadowEnabled(true);
+    setStoryTextFontWeight('800');
+    setStoryTextColor('#FFFFFF');
+    setStoryTextAlign('center');
+    setStoryTextShadowEnabled(true);
     setActiveTextTool('color');
     setIsTextToolsCollapsed(false);
     setIsEditingOverlayText(false);
@@ -732,7 +751,14 @@ export default function AddStoryScreen() {
     setOverlayRotation(nextDraft.textOverlay?.rotation ?? 0);
     setOverlayFontWeight(nextDraft.textOverlay?.fontWeight ?? '700');
     setOverlayTextAlign(nextDraft.textOverlay?.textAlign ?? 'center');
-    setOverlayShadowEnabled(true);
+    setOverlayShadowEnabled(nextDraft.textOverlay?.shadow ?? true);
+    // Text-only body style always starts from the canonical defaults — a
+    // fresh draft never carries a prior text-only style, and this keeps the
+    // text-only appearance identical to before the controls existed.
+    setStoryTextFontWeight('800');
+    setStoryTextColor('#FFFFFF');
+    setStoryTextAlign('center');
+    setStoryTextShadowEnabled(true);
     setActiveTextTool('color');
     setIsTextToolsCollapsed(false);
     setIsEditingOverlayText(false);
@@ -1045,6 +1071,13 @@ export default function AddStoryScreen() {
           durationSeconds: draft.durationSeconds,
           textContent: finalTextContent,
           textBackground,
+          // Text-only body style — its own object, never textOverlay.
+          textStyle: {
+            fontWeight: storyTextFontWeight,
+            color: storyTextColor,
+            textAlign: storyTextAlign,
+            shadow: storyTextShadowEnabled,
+          },
         });
         mark('create story API complete');
         didSucceed = true;
@@ -1298,8 +1331,16 @@ export default function AddStoryScreen() {
               placeholderTextColor="rgba(255,255,255,0.65)"
               multiline
               maxLength={500}
-              style={styles.textStoryInput}
-              textAlign="center"
+              style={[
+                styles.textStoryInput,
+                storyTextShadowEnabled && styles.textStoryInputShadow,
+                {
+                  color: storyTextColor,
+                  fontWeight: storyTextFontWeight,
+                  textAlign: storyTextAlign,
+                },
+              ]}
+              textAlign={storyTextAlign}
             />
           </View>
         )}
@@ -1417,6 +1458,30 @@ export default function AddStoryScreen() {
               </TouchableOpacity>
             </View>
           )
+        ) : null}
+
+        {/* Text-only Story body reuses the SAME StoryTextToolbar component —
+            wired to its own storyText* state so selections never cross over
+            to an image overlay. */}
+        {draft.mediaType === 'text' && !isTextToolsCollapsed ? (
+          <StoryTextToolbar
+            activeTool={activeTextTool}
+            onSelectTool={setActiveTextTool}
+            onCollapse={() => setIsTextToolsCollapsed(true)}
+            color={storyTextColor}
+            onColorChange={setStoryTextColor}
+            fontWeight={storyTextFontWeight}
+            onFontWeightChange={(weight) => {
+              if (weight && weight !== 'bold') setStoryTextFontWeight(weight);
+            }}
+            textAlign={storyTextAlign}
+            onTextAlignChange={(align) => {
+              if (align) setStoryTextAlign(align);
+            }}
+            shadowEnabled={storyTextShadowEnabled}
+            onShadowToggle={setStoryTextShadowEnabled}
+            safeBottomInset={Math.max(insets.bottom, 16)}
+          />
         ) : null}
 
         {isPublishing ? (
@@ -1882,6 +1947,14 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
     top: '32%',
     width: '100%',
+  },
+  // Shadow-only keys, byte-identical to the viewer's text-Story shadow
+  // (view-story.tsx styles.textStoryTextShadow) so composer and reopened
+  // Story match. Applied conditionally on storyTextShadowEnabled.
+  textStoryInputShadow: {
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
   },
   publishStatus: { minHeight: 28, alignItems: 'center', justifyContent: 'center' },
   publishStatusText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },

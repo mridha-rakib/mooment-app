@@ -16,21 +16,28 @@ import {
   type StoryMediaType,
   type StoryTextBackground,
   type StoryTextOverlay,
+  type StoryTextStyle,
 } from "@/lib/stories";
 import { groupStoriesByAuthor } from "@/lib/storyRow";
 import { markStoriesSeen } from "@/lib/storySeen";
 import { getCachedStoryThumbnail } from "@/lib/storyThumbnails";
 import { hasValidStoryImageTransform } from "@/lib/storyTransform";
 import {
+  clampHorizontalStoryDrag,
   clampStoryGroupDrag,
   clampStoryGroupPagerDrag,
+  getHorizontalCommitDuration,
+  getHorizontalCommitTranslateX,
   getStoryGroupCommitDuration,
   getStoryGroupCommitTranslateY,
   getStoryGroupSwipeDirection,
   getStoryGroupSwipeTarget,
+  shouldCaptureHorizontalStorySwipe,
+  shouldCommitHorizontalStorySwipe,
   STORY_GROUP_ACTIVATION_DISTANCE,
   STORY_GROUP_DIRECTION_DOMINANCE,
   type StoryGroupSwipeDirection,
+  type StoryHorizontalSwipeDirection,
 } from "@/lib/storyViewerGestures";
 import {
   getStoryViewerSession,
@@ -82,6 +89,7 @@ type StorySequenceItem = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  textStyle?: StoryTextStyle | null;
   imageTransform?: StoryImageTransform | null;
   createdAt?: string;
   expiresAt?: string;
@@ -104,6 +112,11 @@ type StoryGroup = {
 
 type AdjacentStoryLayer = {
   direction: StoryGroupSwipeDirection;
+  story: StorySequenceItem;
+};
+
+type HorizontalAdjacentStoryLayer = {
+  direction: StoryHorizontalSwipeDirection;
   story: StorySequenceItem;
 };
 
@@ -375,8 +388,12 @@ export default function ViewStoryScreen() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [adjacentStoryLayer, setAdjacentStoryLayer] =
     useState<AdjacentStoryLayer | null>(null);
+  const [horizontalAdjacentLayer, setHorizontalAdjacentLayer] =
+    useState<HorizontalAdjacentStoryLayer | null>(null);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const verticalDragY = useRef(new Animated.Value(0)).current;
+  // Dedicated to horizontal Story paging — never shared with verticalDragY.
+  const horizontalDragX = useRef(new Animated.Value(0)).current;
 
   const triggerFeedback = useCallback(() => {
     if (feedbackTimeoutRef.current) {
@@ -413,10 +430,34 @@ export default function ViewStoryScreen() {
   const resumeAfterGroupGestureRef = useRef(false);
   const wasHoldingBeforeGroupGestureRef = useRef(false);
   const adjacentStoryLayerRef = useRef<AdjacentStoryLayer | null>(null);
+  // Horizontal paging locks/latches — narrowly scoped mirrors of the vertical
+  // group-swipe refs above.
+  const horizontalSwipeLockRef = useRef(false);
+  const horizontalGestureActiveRef = useRef(false);
+  // True only while a *cancelled* (non-committing) horizontal swipe is
+  // visually springing back to 0. A genuine tap arriving in this window is
+  // valid — no Story transition is pending — so handlePressAction interrupts
+  // the spring, normalises the surface, and lets the tap through.
+  const horizontalCancelSpringActiveRef = useRef(false);
+  const resumeAfterHorizontalGestureRef = useRef(false);
+  const wasHoldingBeforeHorizontalGestureRef = useRef(false);
+  const horizontalAdjacentLayerRef = useRef<HorizontalAdjacentStoryLayer | null>(
+    null,
+  );
+  // Latched once per gesture so a diagonal drag can't flip axis frame-to-frame.
+  const activePanAxisRef = useRef<"horizontal" | "vertical" | null>(null);
   const loadRequestIdRef = useRef(0);
   const autoPlayRequestedRef = useRef(false);
   const holdActivatedRef = useRef(false);
-  const ignoreNextPressRef = useRef(false);
+  // Press-sequence ownership for long-press suppression. onPressIn on either
+  // tap zone bumps tapPressSequenceRef; pauseForHold records the current value
+  // in heldPressSequenceRef. Only the *same* physical press that became a
+  // long-press may be swallowed by handlePressAction — a brand-new tap has a
+  // higher sequence and can never match a stale hold, so it is always
+  // accepted regardless of whether the platform emits onPress after
+  // onLongPress.
+  const tapPressSequenceRef = useRef(0);
+  const heldPressSequenceRef = useRef<number | null>(null);
   const resumeAfterHoldRef = useRef(false);
   const resumeAfterAppStateRef = useRef(false);
   const playbackIntentRef = useRef(true);
@@ -434,6 +475,9 @@ export default function ViewStoryScreen() {
   const preloadRequestRef = useRef(0);
   const activeGroupIndexRef = useRef(activeGroupIndex);
   const groupsRef = useRef(groups);
+  const currentIndexRef = useRef(currentIndex);
+  const storyItemsRef = useRef(storyItems);
+  const activeStoryTabRef = useRef(activeStoryTab);
   const playbackTimingRef = useRef({
     storyId: "",
     requestStartedAt: 0,
@@ -479,6 +523,21 @@ export default function ViewStoryScreen() {
     );
   }, [adjacentStoryLayer, verticalDragY, viewportHeight]);
 
+  // The current Story surface follows the finger horizontally. horizontalDragX
+  // rests at 0 whenever no horizontal gesture is active, so adding it to the
+  // surface transform never disturbs the vertical pager.
+  const horizontalSurfaceTranslateX = horizontalDragX;
+  const horizontalAdjacentTranslateX = useMemo(() => {
+    if (!horizontalAdjacentLayer) {
+      return horizontalDragX;
+    }
+
+    return Animated.add(
+      horizontalDragX,
+      horizontalAdjacentLayer.direction === "next" ? canvasWidth : -canvasWidth,
+    );
+  }, [horizontalAdjacentLayer, horizontalDragX, canvasWidth]);
+
   useEffect(() => {
     activeGroupIndexRef.current = activeGroupIndex;
   }, [activeGroupIndex]);
@@ -487,10 +546,30 @@ export default function ViewStoryScreen() {
     groupsRef.current = groups;
   }, [groups]);
 
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    storyItemsRef.current = storyItems;
+  }, [storyItems]);
+
+  useEffect(() => {
+    activeStoryTabRef.current = activeStoryTab;
+  }, [activeStoryTab]);
+
   const setAdjacentStoryLayerState = useCallback(
     (nextLayer: AdjacentStoryLayer | null) => {
       adjacentStoryLayerRef.current = nextLayer;
       setAdjacentStoryLayer(nextLayer);
+    },
+    [],
+  );
+
+  const setHorizontalAdjacentLayerState = useCallback(
+    (nextLayer: HorizontalAdjacentStoryLayer | null) => {
+      horizontalAdjacentLayerRef.current = nextLayer;
+      setHorizontalAdjacentLayer(nextLayer);
     },
     [],
   );
@@ -521,21 +600,73 @@ export default function ViewStoryScreen() {
         return;
       }
 
+      const nextDiscover: StoryGroup[] | null =
+        discoverResult.status === "fulfilled"
+          ? toStoryGroups(groupStoriesByAuthor(discoverResult.value))
+          : null;
+      const nextFriends: StoryGroup[] | null =
+        friendsResult.status === "fulfilled"
+          ? toStoryGroups(groupStoriesByAuthor(friendsResult.value))
+          : null;
+
+      // Never swap the Story data out from under an in-flight gesture — the
+      // preview target would become stale mid-drag. This is a one-shot
+      // freshness pass; skipping it while the user is actively swiping is
+      // safe (the session snapshot they are navigating stays valid).
+      if (
+        horizontalGestureActiveRef.current ||
+        verticalGestureActiveRef.current ||
+        horizontalSwipeLockRef.current ||
+        groupSwipeLockRef.current ||
+        advanceLockRef.current
+      ) {
+        return;
+      }
+
+      // Preserve the same logical Story across the replacement: remember its
+      // id, then re-point activeGroupIndex/currentIndex at it in the fresh
+      // groups (indices can move if the feed reordered).
+      const anchorStoryId =
+        storyItemsRef.current[currentIndexRef.current]?.id ?? null;
+      const anchorTabGroups =
+        activeStoryTabRef.current === "discover" ? nextDiscover : nextFriends;
+
       setStoryGroupsByTab((current) => ({
-        discover:
-          discoverResult.status === "fulfilled"
-            ? toStoryGroups(groupStoriesByAuthor(discoverResult.value))
-            : current.discover,
-        friends:
-          friendsResult.status === "fulfilled"
-            ? toStoryGroups(groupStoriesByAuthor(friendsResult.value))
-            : current.friends,
+        discover: nextDiscover ?? current.discover,
+        friends: nextFriends ?? current.friends,
       }));
       setResolvedStoryTabs((current) => ({
         discover:
           discoverResult.status === "fulfilled" ? true : current.discover,
         friends: friendsResult.status === "fulfilled" ? true : current.friends,
       }));
+
+      if (anchorStoryId && anchorTabGroups) {
+        let anchorGroupIndex = -1;
+        let anchorStoryIndex = -1;
+        for (
+          let groupIndex = 0;
+          groupIndex < anchorTabGroups.length && anchorGroupIndex === -1;
+          groupIndex += 1
+        ) {
+          const storyIndex = anchorTabGroups[groupIndex].stories.findIndex(
+            (story) => story.id === anchorStoryId,
+          );
+          if (storyIndex !== -1) {
+            anchorGroupIndex = groupIndex;
+            anchorStoryIndex = storyIndex;
+          }
+        }
+
+        if (anchorGroupIndex !== -1) {
+          if (anchorGroupIndex !== activeGroupIndexRef.current) {
+            pendingStoryIndexRef.current = anchorStoryIndex;
+            setActiveGroupIndex(anchorGroupIndex);
+          } else if (anchorStoryIndex !== currentIndexRef.current) {
+            setCurrentIndex(anchorStoryIndex);
+          }
+        }
+      }
     };
 
     void loadViewerStories();
@@ -643,6 +774,18 @@ export default function ViewStoryScreen() {
       (playerStatus === "loading" && !isPlaying));
   const currentTime = Math.min(progressTime, currentDuration);
 
+  // Render-only index for the progress-segment bar. During the known 2-render
+  // group-boundary handshake, `currentIndex` briefly still holds the previous
+  // group's (larger) index while `storyItems` is already the new group — which
+  // would paint every new segment as "index < currentIndex" → all full for
+  // 1–2 frames. Clamp into the current storyItems range, preferring the
+  // pending target the handshake is about to apply. DISPLAY ONLY — navigation,
+  // currentStory selection, seen/view state all still use `currentIndex`.
+  const progressDisplayIndex = Math.min(
+    Math.max(pendingStoryIndexRef.current ?? currentIndex, 0),
+    Math.max(storyItems.length - 1, 0),
+  );
+
   useEffect(() => {
     progressTimeRef.current = progressTime;
   }, [progressTime]);
@@ -726,6 +869,13 @@ export default function ViewStoryScreen() {
       return;
     }
 
+    // First Story of the first group: restart THIS Story from 0. currentStory.id
+    // does not change, so the per-story load effect will NOT reinitialise the
+    // progress clock — reset the full image/text timing origin here so the next
+    // 100ms tick starts near 0 instead of jumping back to the prior elapsed
+    // value. No Story-id change ⇒ no duplicate seen/view side effect.
+    progressTimeRef.current = 0;
+    visibleStartedAtRef.current = Date.now();
     setProgressTime(0);
     try {
       player.currentTime = 0;
@@ -755,7 +905,7 @@ export default function ViewStoryScreen() {
     loadRequestIdRef.current = loadRequestId;
     advanceLockRef.current = false;
     holdActivatedRef.current = false;
-    ignoreNextPressRef.current = false;
+    heldPressSequenceRef.current = null;
     resumeAfterHoldRef.current = false;
     playbackIntentRef.current = true;
     setIsHolding(false);
@@ -1325,7 +1475,9 @@ export default function ViewStoryScreen() {
     }
 
     holdActivatedRef.current = true;
-    ignoreNextPressRef.current = true;
+    // Own this physical press: only its (possible) synthetic onPress may be
+    // swallowed by handlePressAction; any later press bumps the sequence.
+    heldPressSequenceRef.current = tapPressSequenceRef.current;
     resumeAfterHoldRef.current = isPlaying;
     if (!isCurrentVideo) freezeImagePlaybackProgress();
     setIsHolding(true);
@@ -1600,6 +1752,267 @@ export default function ViewStoryScreen() {
 
   useEffect(() => clearVerticalGroupGesture, [clearVerticalGroupGesture]);
 
+  // -----------------------------------------------------------------------
+  // Horizontal Story paging — mirrors the vertical group pager above:
+  // finger tracking + one adjacent layer + post-animation index commit +
+  // cancel spring. Media-type agnostic (image and text use the exact same
+  // path); only the content renderer differs.
+  // -----------------------------------------------------------------------
+
+  const pausePlaybackForHorizontalGesture = useCallback(() => {
+    if (horizontalGestureActiveRef.current) {
+      return;
+    }
+
+    horizontalGestureActiveRef.current = true;
+    wasHoldingBeforeHorizontalGestureRef.current = isHolding;
+    resumeAfterHorizontalGestureRef.current = isCurrentVideo
+      ? isPlaying
+      : !isHolding;
+
+    if (!isCurrentVideo) {
+      freezeImagePlaybackProgress();
+    }
+
+    setIsHolding(true);
+
+    if (isCurrentVideo && isPlaying) {
+      try {
+        player.pause();
+      } catch {
+        resumeAfterHorizontalGestureRef.current = false;
+      }
+    }
+  }, [freezeImagePlaybackProgress, isCurrentVideo, isHolding, isPlaying, player]);
+
+  const resumePlaybackAfterHorizontalGesture = useCallback(() => {
+    const shouldResume = resumeAfterHorizontalGestureRef.current;
+    const wasHolding = wasHoldingBeforeHorizontalGestureRef.current;
+
+    resumeAfterHorizontalGestureRef.current = false;
+    wasHoldingBeforeHorizontalGestureRef.current = false;
+    horizontalGestureActiveRef.current = false;
+
+    if (!shouldResume) {
+      setIsHolding(wasHolding);
+      return;
+    }
+
+    setIsHolding(false);
+
+    if (!isCurrentVideo) {
+      resumeImagePlaybackProgress();
+      return;
+    }
+
+    if (currentStory?.mediaUri && !isLoadingStory && !loadFailed) {
+      try {
+        player.play();
+      } catch {
+        // The existing player status listeners recover playback when ready.
+      }
+    }
+  }, [
+    currentStory?.mediaUri,
+    isCurrentVideo,
+    isLoadingStory,
+    loadFailed,
+    player,
+    resumeImagePlaybackProgress,
+  ]);
+
+  const clearHorizontalStoryGesture = useCallback(() => {
+    if (
+      !horizontalAdjacentLayerRef.current &&
+      !horizontalSwipeLockRef.current &&
+      !horizontalGestureActiveRef.current &&
+      !horizontalCancelSpringActiveRef.current
+    ) {
+      return;
+    }
+
+    horizontalCancelSpringActiveRef.current = false;
+    horizontalDragX.stopAnimation();
+    horizontalDragX.setValue(0);
+    setHorizontalAdjacentLayerState(null);
+    horizontalSwipeLockRef.current = false;
+    horizontalGestureActiveRef.current = false;
+    resumeAfterHorizontalGestureRef.current = false;
+    wasHoldingBeforeHorizontalGestureRef.current = false;
+  }, [horizontalDragX, setHorizontalAdjacentLayerState]);
+
+  const cancelHorizontalStoryGesture = useCallback(() => {
+    horizontalSwipeLockRef.current = true;
+    horizontalCancelSpringActiveRef.current = true;
+    Animated.spring(horizontalDragX, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 12,
+    }).start(() => {
+      if (!horizontalCancelSpringActiveRef.current) {
+        // A genuine tap already interrupted and normalised this non-committing
+        // settle (see handlePressAction) — nothing left to clean up.
+        return;
+      }
+      horizontalCancelSpringActiveRef.current = false;
+      horizontalDragX.setValue(0);
+      setHorizontalAdjacentLayerState(null);
+      horizontalSwipeLockRef.current = false;
+      horizontalGestureActiveRef.current = false;
+      resumePlaybackAfterHorizontalGesture();
+    });
+  }, [
+    horizontalDragX,
+    resumePlaybackAfterHorizontalGesture,
+    setHorizontalAdjacentLayerState,
+  ]);
+
+  const getHorizontalAdjacentStory = useCallback(
+    (
+      direction: StoryHorizontalSwipeDirection,
+    ): HorizontalAdjacentStoryLayer | null => {
+      const items = storyItemsRef.current;
+      const idx = currentIndexRef.current;
+      const groupIndex = activeGroupIndexRef.current;
+      const currentGroups = groupsRef.current;
+
+      if (direction === "next") {
+        if (idx < items.length - 1) {
+          const story = items[idx + 1];
+          return story ? { direction, story } : null;
+        }
+
+        const story = currentGroups[groupIndex + 1]?.stories[0];
+        return story ? { direction, story } : null;
+      }
+
+      if (idx > 0) {
+        const story = items[idx - 1];
+        return story ? { direction, story } : null;
+      }
+
+      const previousGroup = currentGroups[groupIndex - 1];
+      const story = previousGroup
+        ? previousGroup.stories[previousGroup.stories.length - 1]
+        : undefined;
+      return story ? { direction, story } : null;
+    },
+    [],
+  );
+
+  const prepareHorizontalAdjacentLayer = useCallback(
+    (direction: StoryHorizontalSwipeDirection) => {
+      const currentLayer = horizontalAdjacentLayerRef.current;
+
+      if (currentLayer?.direction === direction) {
+        return currentLayer;
+      }
+
+      const nextLayer = getHorizontalAdjacentStory(direction);
+      setHorizontalAdjacentLayerState(nextLayer);
+      return nextLayer;
+    },
+    [getHorizontalAdjacentStory, setHorizontalAdjacentLayerState],
+  );
+
+  const commitHorizontalStorySwipe = useCallback(
+    (direction: StoryHorizontalSwipeDirection, releaseVelocity = 0) => {
+      if (horizontalSwipeLockRef.current || advanceLockRef.current) {
+        return false;
+      }
+
+      if (!prepareHorizontalAdjacentLayer(direction)) {
+        return false;
+      }
+
+      horizontalSwipeLockRef.current = true;
+      advanceLockRef.current = true;
+
+      horizontalDragX.stopAnimation((currentDragX) => {
+        const targetX = getHorizontalCommitTranslateX(direction, canvasWidth);
+
+        Animated.timing(horizontalDragX, {
+          toValue: targetX,
+          duration: getHorizontalCommitDuration(
+            currentDragX,
+            targetX,
+            canvasWidth,
+            releaseVelocity,
+          ),
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          horizontalGestureActiveRef.current = false;
+
+          if (!finished) {
+            horizontalSwipeLockRef.current = false;
+            advanceLockRef.current = false;
+            resumePlaybackAfterHorizontalGesture();
+            return;
+          }
+
+          // The surface has fully settled at ±canvasWidth and the adjacent
+          // layer now covers the screen. Commit exactly one logical
+          // transition through the existing navigation semantics; the
+          // [currentIndex]/[activeGroupIndex] effect then resets
+          // horizontalDragX to 0 and drops the adjacent layer, so the new
+          // current Story never paints at the old off-screen translation.
+          resumeAfterHorizontalGestureRef.current = false;
+          wasHoldingBeforeHorizontalGestureRef.current = false;
+          advanceLockRef.current = false;
+          setIsHolding(false);
+
+          if (direction === "next") {
+            goToNextStory();
+          } else {
+            goToPreviousStory();
+          }
+        });
+      });
+
+      return true;
+    },
+    [
+      canvasWidth,
+      goToNextStory,
+      goToPreviousStory,
+      horizontalDragX,
+      prepareHorizontalAdjacentLayer,
+      resumePlaybackAfterHorizontalGesture,
+    ],
+  );
+
+  useEffect(() => {
+    clearHorizontalStoryGesture();
+  }, [
+    activeGroupIndex,
+    activeStoryTab,
+    clearHorizontalStoryGesture,
+    currentIndex,
+  ]);
+
+  useEffect(() => {
+    if (isOverlayOpen) {
+      clearHorizontalStoryGesture();
+    }
+  }, [clearHorizontalStoryGesture, isOverlayOpen]);
+
+  useEffect(() => clearHorizontalStoryGesture, [clearHorizontalStoryGesture]);
+
+  // Text-only Story body style. Fallbacks are non-negotiable for backward
+  // compatibility: a Story created before textStyle existed has none and must
+  // still render exactly as before — 800 / white / center / shadow-on.
+  const textStoryTextStyle = (textStyle?: StoryTextStyle | null) => [
+    styles.textStoryText,
+    textStyle?.shadow !== false ? styles.textStoryTextShadow : null,
+    {
+      fontWeight: textStyle?.fontWeight ?? ("800" as const),
+      color: textStyle?.color ?? "#FFFFFF",
+      textAlign: textStyle?.textAlign ?? ("center" as const),
+    },
+  ];
+
   const renderTextOverlay = (overlay?: StoryTextOverlay | null) => {
     if (!overlay?.text) {
       return null;
@@ -1628,6 +2041,7 @@ export default function ViewStoryScreen() {
         <Text
           style={[
             styles.overlayText,
+            overlay.shadow !== false ? styles.overlayTextShadow : null,
             {
               color: overlay.color,
               fontWeight: overlay.fontWeight ?? "700",
@@ -1696,13 +2110,63 @@ export default function ViewStoryScreen() {
     );
   };
 
+  // onPressIn on either tap zone — bump the press sequence so a brand-new tap
+  // can never be mistaken for the long-press's own (possible) synthetic press.
+  const handleTapPressIn = () => {
+    tapPressSequenceRef.current += 1;
+  };
+
   const handlePressAction = (action: () => void) => {
     if (isDeletingStory) {
       return;
     }
 
-    if (ignoreNextPressRef.current) {
-      ignoreNextPressRef.current = false;
+    // Defensive: CommentsModal / ShareModal are RN <Modal> windows that already
+    // block click-through today; this keeps tap nav safe if an overlay ever
+    // becomes an in-tree layer instead.
+    if (isOverlayOpen) {
+      return;
+    }
+
+    // Press-sequence ownership: only the exact physical press that became a
+    // long-press may be swallowed here. A later genuine tap incremented
+    // tapPressSequenceRef via onPressIn, so it can never match — it is always
+    // accepted, regardless of whether the platform emits onPress after
+    // onLongPress.
+    if (
+      heldPressSequenceRef.current !== null &&
+      heldPressSequenceRef.current === tapPressSequenceRef.current
+    ) {
+      heldPressSequenceRef.current = null;
+      return;
+    }
+
+    // An actual Story transition is in flight (a committed swipe settle, or a
+    // just-issued nav) — block a second navigation. goTo*Story also enforces
+    // this via advanceLockRef; returning here additionally stops the tap from
+    // disturbing an in-flight committed settle.
+    if (activePanAxisRef.current !== null || advanceLockRef.current) {
+      return;
+    }
+
+    // A *cancelled* horizontal swipe commits NO index change — it is only a
+    // visual spring-back. A genuine tap here is valid and must not be dropped:
+    // interrupt the spring, normalise the surface to translateX 0, drop the
+    // preview layer + cancelled-gesture state, then navigate exactly once.
+    if (horizontalCancelSpringActiveRef.current) {
+      horizontalCancelSpringActiveRef.current = false;
+      horizontalDragX.stopAnimation();
+      horizontalDragX.setValue(0);
+      setHorizontalAdjacentLayerState(null);
+      horizontalSwipeLockRef.current = false;
+      horizontalGestureActiveRef.current = false;
+      resumePlaybackAfterHorizontalGesture();
+    } else if (
+      horizontalGestureActiveRef.current ||
+      horizontalSwipeLockRef.current
+    ) {
+      // A committed horizontal swipe settle is still establishing — stay blocked
+      // until the transition is safely in place.
       return;
     }
 
@@ -1871,108 +2335,207 @@ export default function ViewStoryScreen() {
     ]);
   };
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_event, gesture) => {
-          if (isOverlayOpen) return false;
-          const absDx = Math.abs(gesture.dx);
-          const absDy = Math.abs(gesture.dy);
-          return (
-            (absDy > STORY_GROUP_ACTIVATION_DISTANCE &&
-              absDy > absDx * STORY_GROUP_DIRECTION_DOMINANCE) ||
-            (absDx > 24 && absDx > absDy * 1.15)
-          );
-        },
-        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
-          if (isOverlayOpen) return false;
-          const absDx = Math.abs(gesture.dx);
-          const absDy = Math.abs(gesture.dy);
-          return (
-            (absDy > STORY_GROUP_ACTIVATION_DISTANCE &&
-              absDy > absDx * STORY_GROUP_DIRECTION_DOMINANCE) ||
-            (absDx > 24 && absDx > absDy * 1.15)
-          );
-        },
-        onPanResponderRelease: (_event, gesture) => {
-          const absDx = Math.abs(gesture.dx);
-          const absDy = Math.abs(gesture.dy);
-          const isVerticalGesture = verticalGestureActiveRef.current || absDy > absDx;
+  const panResponder = useMemo(() => {
+    // Latch the axis on the first qualifying move and keep it for the whole
+    // gesture, so a diagonal drag can't flip between vertical paging and
+    // horizontal paging frame-to-frame.
+    const resolvePanAxis = (gesture: {
+      dx: number;
+      dy: number;
+      vx: number;
+    }): "horizontal" | "vertical" | null => {
+      if (activePanAxisRef.current) {
+        return activePanAxisRef.current;
+      }
 
-          if (isVerticalGesture) {
-            const direction = getStoryGroupSwipeDirection({
-              dx: gesture.dx,
-              dy: gesture.dy,
-              vx: gesture.vx,
-              vy: gesture.vy,
-            });
+      const absDx = Math.abs(gesture.dx);
+      const absDy = Math.abs(gesture.dy);
 
-            if (direction) {
-              if (!commitVerticalGroupSwipe(direction, gesture.vy)) {
-                resetVerticalGroupDrag();
-              }
-              return;
+      if (
+        absDy > STORY_GROUP_ACTIVATION_DISTANCE &&
+        absDy > absDx * STORY_GROUP_DIRECTION_DOMINANCE
+      ) {
+        activePanAxisRef.current = "vertical";
+        return "vertical";
+      }
+
+      if (
+        shouldCaptureHorizontalStorySwipe({
+          dx: gesture.dx,
+          dy: gesture.dy,
+          vx: gesture.vx,
+        })
+      ) {
+        activePanAxisRef.current = "horizontal";
+        return "horizontal";
+      }
+
+      return null;
+    };
+
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        activePanAxisRef.current = null;
+        return false;
+      },
+      onMoveShouldSetPanResponder: (_event, gesture) => {
+        if (isOverlayOpen) return false;
+        return resolvePanAxis(gesture) !== null;
+      },
+      onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+        if (isOverlayOpen) return false;
+        return resolvePanAxis(gesture) !== null;
+      },
+      onPanResponderRelease: (_event, gesture) => {
+        const axis =
+          activePanAxisRef.current ??
+          (Math.abs(gesture.dy) > Math.abs(gesture.dx)
+            ? "vertical"
+            : "horizontal");
+        activePanAxisRef.current = null;
+
+        if (axis === "vertical" || verticalGestureActiveRef.current) {
+          const direction = getStoryGroupSwipeDirection({
+            dx: gesture.dx,
+            dy: gesture.dy,
+            vx: gesture.vx,
+            vy: gesture.vy,
+          });
+
+          if (direction) {
+            if (!commitVerticalGroupSwipe(direction, gesture.vy)) {
+              resetVerticalGroupDrag();
             }
-
-            resetVerticalGroupDrag();
             return;
           }
 
-          if ((gesture.dx < -60 || gesture.vx < -0.45) && absDx > absDy) {
-            goToNextStory();
+          resetVerticalGroupDrag();
+          return;
+        }
+
+        const direction = shouldCommitHorizontalStorySwipe({
+          translationX: gesture.dx,
+          velocityX: gesture.vx,
+          translationY: gesture.dy,
+          canvasWidth,
+        });
+
+        if (direction) {
+          if (commitHorizontalStorySwipe(direction, gesture.vx)) {
             return;
           }
 
-          if ((gesture.dx > 60 || gesture.vx > 0.45) && absDx > absDy) {
-            goToPreviousStory();
+          // commit refused: either a settle is already running (ignore this
+          // release) or there is no adjacent Story for this direction — the
+          // first/last boundary, where the existing product behavior
+          // (restart current / exit the viewer) must be preserved.
+          if (!horizontalAdjacentLayerRef.current) {
+            horizontalGestureActiveRef.current = false;
+            horizontalDragX.stopAnimation();
+            horizontalDragX.setValue(0);
+            setHorizontalAdjacentLayerState(null);
+            resumeAfterHorizontalGestureRef.current = false;
+            wasHoldingBeforeHorizontalGestureRef.current = false;
+            setIsHolding(false);
+            if (direction === "next") {
+              goToNextStory();
+            } else {
+              goToPreviousStory();
+            }
           }
-        },
-        onPanResponderMove: (_event, gesture) => {
-          if (isOverlayOpen || groupSwipeLockRef.current) {
+          return;
+        }
+
+        if (horizontalGestureActiveRef.current) {
+          cancelHorizontalStoryGesture();
+        }
+      },
+      onPanResponderMove: (_event, gesture) => {
+        if (isOverlayOpen) {
+          return;
+        }
+
+        if (activePanAxisRef.current === "horizontal") {
+          if (horizontalSwipeLockRef.current || advanceLockRef.current) {
             return;
           }
 
-          const absDx = Math.abs(gesture.dx);
-          const absDy = Math.abs(gesture.dy);
+          const direction: StoryHorizontalSwipeDirection =
+            gesture.dx < 0 ? "next" : "previous";
+          const adjacent = prepareHorizontalAdjacentLayer(direction);
 
-          if (absDy <= absDx && !verticalGestureActiveRef.current) {
-            verticalDragY.setValue(0);
-            return;
-          }
-
-          const direction = gesture.dy >= 0 ? "previous" : "next";
-          const adjacentLayer = prepareVerticalGroupAdjacentLayer(direction);
-
-          pausePlaybackForVerticalGroupGesture();
-          verticalDragY.setValue(
-            adjacentLayer
-              ? clampStoryGroupPagerDrag(gesture.dy, viewportHeight)
-              : clampStoryGroupDrag(gesture.dy),
+          pausePlaybackForHorizontalGesture();
+          horizontalDragX.setValue(
+            adjacent
+              ? clampHorizontalStoryDrag(gesture.dx, canvasWidth)
+              : clampStoryGroupDrag(gesture.dx),
           );
-        },
-        onPanResponderTerminate: () => {
-          if (verticalGestureActiveRef.current) {
-            resetVerticalGroupDrag();
-            return;
-          }
+          return;
+        }
 
+        if (groupSwipeLockRef.current) {
+          return;
+        }
+
+        const absDx = Math.abs(gesture.dx);
+        const absDy = Math.abs(gesture.dy);
+
+        if (absDy <= absDx && !verticalGestureActiveRef.current) {
           verticalDragY.setValue(0);
-          groupSwipeLockRef.current = false;
-        },
-      }),
-    [
-      commitVerticalGroupSwipe,
-      goToNextStory,
-      goToPreviousStory,
-      isOverlayOpen,
-      pausePlaybackForVerticalGroupGesture,
-      prepareVerticalGroupAdjacentLayer,
-      resetVerticalGroupDrag,
-      viewportHeight,
-      verticalDragY,
-    ],
-  );
+          return;
+        }
+
+        const direction = gesture.dy >= 0 ? "previous" : "next";
+        const adjacentLayer = prepareVerticalGroupAdjacentLayer(direction);
+
+        pausePlaybackForVerticalGroupGesture();
+        verticalDragY.setValue(
+          adjacentLayer
+            ? clampStoryGroupPagerDrag(gesture.dy, viewportHeight)
+            : clampStoryGroupDrag(gesture.dy),
+        );
+      },
+      onPanResponderTerminate: () => {
+        const axis = activePanAxisRef.current;
+        activePanAxisRef.current = null;
+
+        if (axis === "horizontal" || horizontalGestureActiveRef.current) {
+          // If a commit settle is already running it is driven by the
+          // Animated value, not the responder — let it finish and commit.
+          // Otherwise spring the drag back to the current Story.
+          if (!horizontalSwipeLockRef.current) {
+            cancelHorizontalStoryGesture();
+          }
+          return;
+        }
+
+        if (verticalGestureActiveRef.current) {
+          resetVerticalGroupDrag();
+          return;
+        }
+
+        verticalDragY.setValue(0);
+        groupSwipeLockRef.current = false;
+      },
+    });
+  }, [
+    canvasWidth,
+    cancelHorizontalStoryGesture,
+    commitHorizontalStorySwipe,
+    commitVerticalGroupSwipe,
+    goToNextStory,
+    goToPreviousStory,
+    horizontalDragX,
+    isOverlayOpen,
+    pausePlaybackForHorizontalGesture,
+    pausePlaybackForVerticalGroupGesture,
+    prepareHorizontalAdjacentLayer,
+    prepareVerticalGroupAdjacentLayer,
+    resetVerticalGroupDrag,
+    setHorizontalAdjacentLayerState,
+    viewportHeight,
+    verticalDragY,
+  ]);
 
   const renderStaticStoryVisual = (story: StorySequenceItem) => {
     const mediaType = story.mediaType ?? "video";
@@ -1980,7 +2543,7 @@ export default function ViewStoryScreen() {
     if (mediaType === "text") {
       return (
         <StoryBackground background={story.textBackground}>
-          <Text style={styles.textStoryText}>{story.textContent}</Text>
+          <Text style={textStoryTextStyle(story.textStyle)}>{story.textContent}</Text>
         </StoryBackground>
       );
     }
@@ -2026,6 +2589,29 @@ export default function ViewStoryScreen() {
         {renderStaticStoryVisual(adjacentStoryLayer.story)}
         {mediaType !== "text"
           ? renderTextOverlay(adjacentStoryLayer.story.textOverlay)
+          : null}
+      </Animated.View>
+    );
+  };
+
+  const renderHorizontalAdjacentStoryLayer = () => {
+    if (!horizontalAdjacentLayer) {
+      return null;
+    }
+
+    const mediaType = horizontalAdjacentLayer.story.mediaType ?? "video";
+
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.adjacentStorySurface,
+          { transform: [{ translateX: horizontalAdjacentTranslateX }] },
+        ]}
+      >
+        {renderStaticStoryVisual(horizontalAdjacentLayer.story)}
+        {mediaType !== "text"
+          ? renderTextOverlay(horizontalAdjacentLayer.story.textOverlay)
           : null}
       </Animated.View>
     );
@@ -2109,10 +2695,16 @@ export default function ViewStoryScreen() {
   return (
     <View style={styles.container}>
       {renderAdjacentStoryLayer()}
+      {renderHorizontalAdjacentStoryLayer()}
       <Animated.View
         style={[
           styles.storySurface,
-          { transform: [{ translateY: verticalSurfaceTranslateY }] },
+          {
+            transform: [
+              { translateX: horizontalSurfaceTranslateX },
+              { translateY: verticalSurfaceTranslateY },
+            ],
+          },
         ]}
         onLayout={(event) => {
           const { width, height } = event.nativeEvent.layout;
@@ -2159,7 +2751,7 @@ export default function ViewStoryScreen() {
           renderCurrentStoryImage()
         ) : isCurrentText && currentStory && !loadFailed ? (
           <StoryBackground background={currentStory.textBackground}>
-            <Text style={styles.textStoryText}>{currentStory.textContent}</Text>
+            <Text style={textStoryTextStyle(currentStory.textStyle)}>{currentStory.textContent}</Text>
           </StoryBackground>
         ) : (
           <View style={styles.emptyState}>
@@ -2187,6 +2779,7 @@ export default function ViewStoryScreen() {
           <Pressable
             style={styles.tapZone}
             delayLongPress={LONG_PRESS_DELAY_MS}
+            onPressIn={handleTapPressIn}
             onLongPress={pauseForHold}
             onPress={() => handlePressAction(goToPreviousStory)}
             onPressOut={resumeFromHold}
@@ -2194,6 +2787,7 @@ export default function ViewStoryScreen() {
           <Pressable
             style={styles.tapZone}
             delayLongPress={LONG_PRESS_DELAY_MS}
+            onPressIn={handleTapPressIn}
             onLongPress={pauseForHold}
             onPress={() => handlePressAction(goToNextStory)}
             onPressOut={resumeFromHold}
@@ -2358,9 +2952,9 @@ export default function ViewStoryScreen() {
             <View style={styles.progressSegments}>
               {storyItems.map((story, index) => {
                 const progress =
-                  index < currentIndex
+                  index < progressDisplayIndex
                     ? 1
-                    : index > currentIndex
+                    : index > progressDisplayIndex
                       ? 0
                       : currentTime / currentDuration;
 
@@ -2452,6 +3046,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 40,
     textAlign: "center",
+  },
+  // Split out of textStoryText so the viewer can honour a text Story's
+  // persisted shadow:false. Values are byte-identical to the previous
+  // always-on shadow, so shadow-on Stories look exactly as before.
+  textStoryTextShadow: {
     textShadowColor: "rgba(0,0,0,0.45)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 5,
@@ -2473,6 +3072,12 @@ const styles = StyleSheet.create({
   overlayText: {
     fontSize: 30,
     lineHeight: 36,
+  },
+  // Split out of overlayText so the viewer can honour an image-overlay's
+  // persisted shadow:false. Values are byte-identical to the editor's
+  // DraggableStoryText.overlayTextShadow and to the previous always-on
+  // shadow here, so shadow-on overlays render exactly as before.
+  overlayTextShadow: {
     textShadowColor: "rgba(0,0,0,0.85)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,

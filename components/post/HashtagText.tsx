@@ -8,14 +8,15 @@ type HashtagTextProps = {
   style?: StyleProp<TextStyle>;
   hashtagStyle?: StyleProp<TextStyle>;
   numberOfLines?: number;
+  ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
 };
 
-export default function HashtagText({ children, style, hashtagStyle, numberOfLines }: HashtagTextProps) {
+export default function HashtagText({ children, style, hashtagStyle, numberOfLines, ellipsizeMode }: HashtagTextProps) {
   const router = useRouter();
   const parts = useMemo(() => splitHashtagText(children), [children]);
 
   return (
-    <Text style={style} numberOfLines={numberOfLines}>
+    <Text style={style} numberOfLines={numberOfLines} ellipsizeMode={ellipsizeMode}>
       {parts.map((part, index) => part.hashtag ? (
         <Text
           key={`${part.hashtag}-${index}`}

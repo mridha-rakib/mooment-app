@@ -21,6 +21,12 @@ import { useTheme } from '@/hooks/useTheme';
 import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 import CrowdStatusBadge from '@/components/events/CrowdStatusBadge';
 import type { CrowdStatus } from '@/lib/events';
+import {
+  EVENT_CARD_HORIZONTAL_INSET,
+  MAP_PREVIEW_CONTAINER_PADDING,
+  MAP_PREVIEW_SLIDE_MIN_HEIGHT,
+  MAP_PREVIEW_STATUS_REGION_HEIGHT,
+} from '@/constants/eventCardLayout';
 
 export type EventPreviewModalItem = {
   id: string;
@@ -185,7 +191,14 @@ export default function EventPreviewModal({
   );
   const selectedIndex = previewItems.findIndex((item) => item.id === selectedEventId);
   const requestedIndex = clampIndex(selectedIndex, previewItems.length);
-  const itemWidth = Math.max(width - 72, 1);
+  // Visible slide width. Pixel-equivalent to the previous literal
+  // (screen width minus 72, where 72 = 2 x (container marginHorizontal 16 +
+  // container padding 20)), now derived from the named layout constants so
+  // the container box and the paging width can't silently drift apart.
+  const itemWidth = Math.max(
+    width - 2 * (EVENT_CARD_HORIZONTAL_INSET + MAP_PREVIEW_CONTAINER_PADDING),
+    1,
+  );
   const [currentIndex, setCurrentIndex] = useState(requestedIndex);
 
   useEffect(() => {
@@ -227,7 +240,7 @@ export default function EventPreviewModal({
 
     return (
       <View style={[styles.previewSlide, { width: itemWidth }]}>
-        {/* Header */}
+        {/* Header — primary event identity (title) + host + distance */}
         <View style={styles.header}>
           <View style={[styles.iconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
             <MaterialCommunityIcons name="map-marker-radius" size={24} color={itemThemeColor} />
@@ -235,7 +248,11 @@ export default function EventPreviewModal({
 
           <View style={styles.headerInfo}>
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{item.eventTitle ?? "Event"}</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.subtitle, { color: colors.textSecondary }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               @{item.hostName ?? "host"} • {distanceLabel}
             </Text>
           </View>
@@ -245,75 +262,87 @@ export default function EventPreviewModal({
           </TouchableOpacity>
         </View>
 
-        {/* Status Badge */}
-        {itemIsLive && (
-          <View style={styles.statusRow}>
-            <Animated.View style={[styles.liveBadge, styles.liveBadgeActive, liveBadgePulseStyle]}>
-              <Animated.View style={[styles.liveDot, { backgroundColor: colors.danger }, liveDotPulseStyle]} />
-              <Text style={[styles.liveText, { color: colors.danger }]}>Live</Text>
-            </Animated.View>
-            <CrowdStatusBadge eventStatus={item.eventStatus} crowdStatus={item.crowdStatus} />
-          </View>
-        )}
+        {/* Status region — reserved height so live vs non-live never changes
+            the slide footprint or the CTA offset. */}
+        <View style={styles.statusRow}>
+          {itemIsLive ? (
+            <>
+              <Animated.View style={[styles.liveBadge, styles.liveBadgeActive, liveBadgePulseStyle]}>
+                <Animated.View style={[styles.liveDot, { backgroundColor: colors.danger }, liveDotPulseStyle]} />
+                <Text style={[styles.liveText, { color: colors.danger }]}>Live</Text>
+              </Animated.View>
+              <CrowdStatusBadge eventStatus={item.eventStatus} crowdStatus={item.crowdStatus} />
+            </>
+          ) : null}
+        </View>
 
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* Details */}
-        <View style={styles.detailsContainer}>
+        {/* Primary / shared-core metadata: status is above; here start, location, attending */}
+        <View style={styles.primaryDetails}>
           <View style={styles.detailItem}>
             <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Start</Text>
             <Feather name="calendar" size={16} color={colors.textSecondary} />
-            <Text style={[styles.detailText, { color: colors.text }]}>{item.eventDate ?? "Date TBA"}</Text>
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.eventDate ?? "Date TBA"}</Text>
             <Text style={[styles.dot, { color: colors.textSecondary }]}>•</Text>
             <Feather name="clock" size={16} color={colors.textSecondary} />
-            <Text style={[styles.detailText, { color: colors.text }]}>{item.eventTime ?? "Time TBA"}</Text>
-          </View>
-
-          <View style={styles.detailItem}>
-            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>End</Text>
-            <Feather name="calendar" size={16} color={colors.textSecondary} />
-            <Text style={[styles.detailText, { color: colors.text }]}>{item.eventEndDate ?? "Date TBA"}</Text>
-            <Text style={[styles.dot, { color: colors.textSecondary }]}>•</Text>
-            <Feather name="clock" size={16} color={colors.textSecondary} />
-            <Text style={[styles.detailText, { color: colors.text }]}>{item.eventEndTime ?? "Time TBA"}</Text>
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.eventTime ?? "Time TBA"}</Text>
           </View>
 
           <View style={styles.detailItem}>
             <Feather name="map-pin" size={16} color={colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.location ?? "Location TBA"}</Text>
           </View>
-        </View>
 
-        {/* Badges Row */}
-        <View style={styles.badgesRow}>
-          <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <Ionicons name="people" size={14} color={colors.textSecondary} />
-            <Text style={[styles.badgeText, { color: colors.text }]}>{item.attendeesCount ?? 0} attending</Text>
-          </View>
-          <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <Text style={[styles.badgeText, { color: colors.text }]}>{item.ageLimit ?? "All Ages"}</Text>
-          </View>
-          <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <Text style={[styles.badgeText, { color: colors.text }]}>{item.price ?? "Free"}</Text>
-          </View>
-        </View>
-
-        <View style={styles.ticketInfoRow}>
-          {item.ticketTypeCount ? (
-            <View style={styles.ticketInfoItem}>
-              <MaterialCommunityIcons name="ticket-outline" size={15} color={colors.textSecondary} />
-              <Text style={[styles.ticketInfoText, { color: colors.text }]}>{item.ticketTypeCount}</Text>
+          <View style={styles.attendingRow}>
+            <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+              <Ionicons name="people" size={14} color={colors.textSecondary} />
+              <Text style={[styles.badgeText, { color: colors.text }]} numberOfLines={1}>{item.attendeesCount ?? 0} attending</Text>
             </View>
-          ) : null}
-          <View style={styles.ticketInfoItem}>
-            <Feather name="tag" size={15} color={colors.textSecondary} />
-            <Text style={[styles.ticketInfoText, { color: colors.text }]}>{item.ticketsAvailable ?? "Tickets TBA"}</Text>
-          </View>
-          <View style={styles.ticketInfoItem}>
-            <Feather name="calendar" size={15} color={colors.textSecondary} />
-            <Text style={[styles.ticketInfoText, { color: colors.text }]}>{item.ticketSalesEndDate ?? "Sales end TBA"}</Text>
           </View>
         </View>
+
+        {/* Map-specific secondary metadata: end date/time, age, price, tickets, sales deadline */}
+        <View style={styles.secondaryDetails}>
+          <View style={styles.detailItem}>
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>End</Text>
+            <Feather name="calendar" size={16} color={colors.textSecondary} />
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.eventEndDate ?? "Date TBA"}</Text>
+            <Text style={[styles.dot, { color: colors.textSecondary }]}>•</Text>
+            <Feather name="clock" size={16} color={colors.textSecondary} />
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.eventEndTime ?? "Time TBA"}</Text>
+          </View>
+
+          <View style={styles.badgesRow}>
+            <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+              <Text style={[styles.badgeText, { color: colors.text }]} numberOfLines={1}>{item.ageLimit ?? "All Ages"}</Text>
+            </View>
+            <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+              <Text style={[styles.badgeText, { color: colors.text }]} numberOfLines={1}>{item.price ?? "Free"}</Text>
+            </View>
+          </View>
+
+          <View style={styles.ticketInfoRow}>
+            {item.ticketTypeCount ? (
+              <View style={styles.ticketInfoItem}>
+                <MaterialCommunityIcons name="ticket-outline" size={15} color={colors.textSecondary} />
+                <Text style={[styles.ticketInfoText, { color: colors.text }]} numberOfLines={1}>{item.ticketTypeCount}</Text>
+              </View>
+            ) : null}
+            <View style={styles.ticketInfoItem}>
+              <Feather name="tag" size={15} color={colors.textSecondary} />
+              <Text style={[styles.ticketInfoText, { color: colors.text }]} numberOfLines={1}>{item.ticketsAvailable ?? "Tickets TBA"}</Text>
+            </View>
+            <View style={styles.ticketInfoItem}>
+              <Feather name="calendar" size={15} color={colors.textSecondary} />
+              <Text style={[styles.ticketInfoText, { color: colors.text }]} numberOfLines={1}>{item.ticketSalesEndDate ?? "Sales end TBA"}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Flexible spacer — takes up any slack so the CTA is pinned to the
+            same bottom offset on every slide regardless of content. */}
+        <View style={styles.flexSpacer} />
 
         {/* Buttons */}
         <View style={styles.buttonRow}>
@@ -393,14 +422,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    marginHorizontal: 16,
+    marginHorizontal: EVENT_CARD_HORIZONTAL_INSET,
     borderRadius: 24,
-    padding: 20,
+    padding: MAP_PREVIEW_CONTAINER_PADDING,
     overflow: 'hidden',
     borderWidth: 1,
   },
   previewSlide: {
     flexShrink: 0,
+    flexDirection: 'column',
+    // Deterministic layout budget: every slide reserves the same content
+    // height so live/non-live, ticketTypeCount present/absent, long host
+    // names, longer date strings and changing attendee counts never change
+    // the slide's footprint. Slack is absorbed by `flexSpacer` below.
+    minHeight: MAP_PREVIEW_SLIDE_MIN_HEIGHT,
   },
   header: {
     flexDirection: 'row',
@@ -417,6 +452,7 @@ const styles = StyleSheet.create({
   headerInfo: {
     flex: 1,
     marginLeft: 12,
+    minWidth: 0,
   },
   title: {
     fontSize: 18,
@@ -435,7 +471,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusRow: {
+    minHeight: MAP_PREVIEW_STATUS_REGION_HEIGHT,
     alignItems: 'flex-start',
+    justifyContent: 'center',
     gap: 6,
     marginBottom: 16,
   },
@@ -468,8 +506,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     opacity: 0.5,
   },
-  detailsContainer: {
+  primaryDetails: {
     marginBottom: 16,
+    gap: 12,
+  },
+  secondaryDetails: {
     gap: 12,
   },
   detailItem: {
@@ -479,6 +520,8 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
+    flexShrink: 1,
+    minWidth: 0,
   },
   detailLabel: {
     width: 34,
@@ -488,10 +531,12 @@ const styles = StyleSheet.create({
   dot: {
     marginHorizontal: 4,
   },
+  attendingRow: {
+    flexDirection: 'row',
+  },
   badgesRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
   },
   badge: {
     flexDirection: 'row',
@@ -500,23 +545,31 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
   },
   badgeText: {
     fontSize: 13,
     fontWeight: '500',
+    flexShrink: 1,
   },
   ticketInfoRow: {
     gap: 8,
-    marginBottom: 18,
   },
   ticketInfoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   ticketInfoText: {
     fontSize: 13,
     fontWeight: '500',
+    flexShrink: 1,
+  },
+  flexSpacer: {
+    flex: 1,
   },
   buttonRow: {
     flexDirection: 'row',

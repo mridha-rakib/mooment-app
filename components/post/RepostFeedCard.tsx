@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View, type GestureResponderEvent } from 'react-native';
 import EventFeedCard from '@/components/home/EventFeedCard';
 import { useTheme } from '@/hooks/useTheme';
 import { getEventByIdCached, type EventResponse } from '@/lib/events';
@@ -15,6 +15,8 @@ import UserAvatar from '../ui/UserAvatar';
 import FeedPost from './FeedPost';
 import MoreMenuModal from './MoreMenuModal';
 import ShareModal, { type ShareItem } from './ShareModal';
+import TaggedPeopleSheet from './TaggedPeopleSheet';
+import { getTaggedFriendName } from '@/lib/taggedPeople';
 
 type Props = {
   share: MomentTimelineItem;
@@ -309,6 +311,9 @@ const RepostHeader = React.memo(function RepostHeader({
   const moreBtnRef = useRef<View>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [menuTop, setMenuTop] = useState(0);
+  // Local to this header instance — one sheet per mounted RepostHeader, so
+  // sibling feed cards never share visibility or show the wrong card's people.
+  const [showTaggedSheet, setShowTaggedSheet] = useState(false);
 
   const handleMorePress = () => {
     moreBtnRef.current?.measureInWindow((_x, y, _w, h) => {
@@ -335,6 +340,54 @@ const RepostHeader = React.memo(function RepostHeader({
       isFollowing: Boolean(friend.isFollowing),
     });
   };
+
+  // A tap on a visible tagged NAME navigates to that profile only. RN delivers
+  // a nested <Text> press to the innermost <Text> with an onPress, so this never
+  // also fires the wrapper's sheet handler; stopPropagation is belt-and-braces.
+  const handleTaggedNamePress = (event: GestureResponderEvent, friend: MomentAuthor) => {
+    event?.stopPropagation?.();
+    openTaggedProfile(friend);
+  };
+
+  // The muted connective text (" with ", ", ", " and ") owns the sheet
+  // affordance — the reposter name, "shared a post", and the overflow menu do
+  // not. Compact header string + numberOfLines={2} clamp are unchanged.
+  const taggedInline = validTaggedFriends.length > 0 ? (
+    <Text
+      style={{ color: colors.textSecondary }}
+      onPress={() => setShowTaggedSheet(true)}
+      suppressHighlighting
+      accessibilityRole="button"
+      accessibilityLabel={`View ${validTaggedFriends.length} tagged ${validTaggedFriends.length === 1 ? 'person' : 'people'}`}
+    >
+      {' with '}
+      {validTaggedFriends.map((friend, index) => (
+        <React.Fragment key={friend.id ?? `${getTaggedFriendName(friend)}-${index}`}>
+          {index > 0 ? (
+            <Text style={{ color: colors.textSecondary }}>
+              {index === validTaggedFriends.length - 1 ? ' and ' : ', '}
+            </Text>
+          ) : null}
+          <Text
+            style={[styles.reposterName, { color: colors.text }]}
+            onPress={(event) => handleTaggedNamePress(event, friend)}
+            suppressHighlighting
+          >
+            {getTaggedFriendName(friend)}
+          </Text>
+        </React.Fragment>
+      ))}
+    </Text>
+  ) : null;
+
+  const taggedSheet = validTaggedFriends.length > 0 ? (
+    <TaggedPeopleSheet
+      visible={showTaggedSheet}
+      people={validTaggedFriends}
+      onClose={() => setShowTaggedSheet(false)}
+      onPressPerson={openTaggedProfile}
+    />
+  ) : null;
 
   const moreMenu = isOwnRepost ? (
     <>
@@ -363,6 +416,28 @@ const RepostHeader = React.memo(function RepostHeader({
   // directly beneath this header (not indented under the name).
   if (variant === 'event') {
     return (
+      <>
+        <View style={styles.shareHeaderRow}>
+          <TouchableOpacity activeOpacity={0.7} onPress={openReposterProfile} disabled={!reposterId}>
+            <UserAvatar uri={reposterAvatar} name={reposterName} size={36} style={styles.shareHeaderAvatar} />
+          </TouchableOpacity>
+          <View style={styles.shareHeaderText}>
+            <Text style={[styles.shareHeaderLine, { color: colors.text }]} numberOfLines={2}>
+              <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
+              <Text style={{ color: colors.textSecondary }}>{` ${contextLabel}`}</Text>
+              {taggedInline}
+            </Text>
+            {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
+          </View>
+          {moreMenu}
+        </View>
+        {taggedSheet}
+      </>
+    );
+  }
+
+  return (
+    <>
       <View style={styles.shareHeaderRow}>
         <TouchableOpacity activeOpacity={0.7} onPress={openReposterProfile} disabled={!reposterId}>
           <UserAvatar uri={reposterAvatar} name={reposterName} size={36} style={styles.shareHeaderAvatar} />
@@ -371,70 +446,14 @@ const RepostHeader = React.memo(function RepostHeader({
           <Text style={[styles.shareHeaderLine, { color: colors.text }]} numberOfLines={2}>
             <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
             <Text style={{ color: colors.textSecondary }}>{` ${contextLabel}`}</Text>
-            {validTaggedFriends.length > 0 ? (
-              <Text style={{ color: colors.textSecondary }}>
-                {' with '}
-                {validTaggedFriends.map((friend, index) => (
-                  <React.Fragment key={friend.id ?? `${getTaggedFriendName(friend)}-${index}`}>
-                    {index > 0 ? (
-                      <Text style={{ color: colors.textSecondary }}>
-                        {index === validTaggedFriends.length - 1 ? ' and ' : ', '}
-                      </Text>
-                    ) : null}
-                    <Text
-                      style={[styles.reposterName, { color: colors.text }]}
-                      onPress={() => openTaggedProfile(friend)}
-                      suppressHighlighting
-                    >
-                      {getTaggedFriendName(friend)}
-                    </Text>
-                  </React.Fragment>
-                ))}
-              </Text>
-            ) : null}
+            {taggedInline}
           </Text>
           {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
         </View>
         {moreMenu}
       </View>
-    );
-  }
-
-  return (
-    <View style={styles.shareHeaderRow}>
-      <TouchableOpacity activeOpacity={0.7} onPress={openReposterProfile} disabled={!reposterId}>
-        <UserAvatar uri={reposterAvatar} name={reposterName} size={36} style={styles.shareHeaderAvatar} />
-      </TouchableOpacity>
-      <View style={styles.shareHeaderText}>
-        <Text style={[styles.shareHeaderLine, { color: colors.text }]} numberOfLines={2}>
-          <Text style={styles.reposterName} onPress={openReposterProfile} suppressHighlighting>{reposterName}</Text>
-          <Text style={{ color: colors.textSecondary }}>{` ${contextLabel}`}</Text>
-          {validTaggedFriends.length > 0 ? (
-            <Text style={{ color: colors.textSecondary }}>
-              {' with '}
-              {validTaggedFriends.map((friend, index) => (
-                <React.Fragment key={friend.id ?? `${getTaggedFriendName(friend)}-${index}`}>
-                  {index > 0 ? (
-                    <Text style={{ color: colors.textSecondary }}>
-                      {index === validTaggedFriends.length - 1 ? ' and ' : ', '}
-                    </Text>
-                  ) : null}
-                  <Text
-                    style={[styles.reposterName, { color: colors.text }]}
-                    onPress={() => openTaggedProfile(friend)}
-                    suppressHighlighting
-                  >
-                    {getTaggedFriendName(friend)}
-                  </Text>
-                </React.Fragment>
-              ))}
-            </Text>
-          ) : null}
-        </Text>
-        {Boolean(sharedTime) && <Text style={[styles.sharedTime, { color: colors.textSecondary }]}>{sharedTime}</Text>}
-      </View>
-      {moreMenu}
-    </View>
+      {taggedSheet}
+    </>
   );
 });
 
@@ -494,9 +513,6 @@ const formatTimeAgo = (dateStr?: string | Date | null): string => {
   if (days < 7) return `${days}d ago`;
   return TIME_AGO_FORMATTER.format(date);
 };
-
-const getTaggedFriendName = (friend: MomentAuthor) =>
-  friend.name?.trim() || friend.username?.trim() || 'Mooment user';
 
 const toTaggedFriend = (friend: MomentAuthor): TaggedFriend => ({
   id: friend.id,

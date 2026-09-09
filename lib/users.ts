@@ -159,6 +159,26 @@ export const getSuggestedUsers = async (limit = 10): Promise<SuggestedUserRespon
   return Array.isArray(users) ? (users as SuggestedUserResponse[]) : [];
 };
 
+/**
+ * Authenticated People/User search. Server-ranked (exact username > username
+ * prefix > display-name > weak substring, with follow/mutual/relevance/activity
+ * as within-tier tie-breakers). Distinct from `getSuggestedUsers`
+ * (recommendations) — a real query is required and already-followed users are
+ * included. Callers must render the returned order as-is (no client re-sort).
+ */
+export const searchPeople = async (query: string, limit = 50): Promise<SuggestedUserResponse[]> => {
+  const response = await api.get("/users/search", {
+    params: {
+      q: query,
+      limit,
+    },
+  });
+
+  const users = response.data?.data?.users;
+
+  return Array.isArray(users) ? (users as SuggestedUserResponse[]) : [];
+};
+
 export const getFriendUsers = async (search?: string, limit = 100): Promise<FriendUserResponse[]> => {
   const response = await api.get("/users/friends", {
     params: {

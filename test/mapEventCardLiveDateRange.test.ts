@@ -72,10 +72,14 @@ test("LIVE map preview visual is red using the existing danger token", () => {
 
 test("non-live map preview does not render the animated LIVE pulse", () => {
   assert.match(eventPreviewModalSource, /const itemIsLive = item\.isLive \|\| item\.eventStatus === "live";/);
+  // The status region is now always rendered (with a reserved minHeight) so
+  // live vs non-live cannot change the slide height; the animated LIVE badge
+  // itself is still gated behind `itemIsLive`.
   assert.match(
     eventPreviewModalSource,
-    /\{itemIsLive && \(\s*<View style=\{styles\.statusRow\}>\s*<Animated\.View style=\{\[styles\.liveBadge,\s*styles\.liveBadgeActive,\s*liveBadgePulseStyle\]\}>/,
+    /<View style=\{styles\.statusRow\}>\s*\{itemIsLive \? \(\s*<>\s*<Animated\.View style=\{\[styles\.liveBadge,\s*styles\.liveBadgeActive,\s*liveBadgePulseStyle\]\}>/,
   );
+  assert.match(eventPreviewModalSource, /statusRow:\s*\{\s*minHeight: MAP_PREVIEW_STATUS_REGION_HEIGHT,/);
 });
 
 test("Busy and Not Busy badge rendering remains delegated to the existing component", () => {

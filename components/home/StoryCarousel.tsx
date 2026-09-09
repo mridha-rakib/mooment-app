@@ -3,6 +3,7 @@ import type {
   StoryMediaType,
   StoryTextBackground,
   StoryTextOverlay,
+  StoryTextStyle,
 } from "@/lib/stories";
 import {
   generateStoryThumbnail,
@@ -20,6 +21,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -47,6 +49,9 @@ export type StoryData = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  // Text-only Story body style. Carried through for the viewer only — the
+  // Feed capsule (StoryThumbnail) never renders it.
+  textStyle?: StoryTextStyle | null;
   imageTransform?: StoryImageTransform | null;
   storyItems?: StorySequenceItem[];
   title?: string;
@@ -66,6 +71,7 @@ export type StorySequenceItem = {
   textContent?: string | null;
   textBackground?: StoryTextBackground | null;
   textOverlay?: StoryTextOverlay | null;
+  textStyle?: StoryTextStyle | null;
   imageTransform?: StoryImageTransform | null;
   createdAt?: string;
   expiresAt?: string;
@@ -100,6 +106,7 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
   fallbackName,
   mediaType = "video",
   textBackground,
+  textContent,
 }: {
   storyId: string;
   mediaUri?: string | null;
@@ -107,6 +114,7 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
   fallbackName?: string | null;
   mediaType?: StoryMediaType;
   textBackground?: StoryTextBackground | null;
+  textContent?: string | null;
 }) {
   const [localThumbnail, setLocalThumbnail] =
     React.useState<StoryThumbnailSource>(() =>
@@ -135,17 +143,48 @@ const StoryThumbnail = React.memo(function StoryThumbnail({
     localThumbnail ?? (fallbackUri ? { uri: fallbackUri } : null);
 
   if (mediaType === "text") {
+    // A valid text Story shows its own text; a text Story with no usable
+    // text (null / whitespace-only, e.g. legacy or malformed) keeps the
+    // existing author-name fallback rather than an empty coloured tile.
+    const storyText = textContent?.trim();
+    const previewText = storyText || fallbackName || "Story";
+    const backgroundColors = textBackground?.colors ?? [];
+    // Canonical background — same semantics as the full Story viewer's
+    // StoryBackground: a 2-colour gradient renders as a compact
+    // LinearGradient, anything else falls back to the first solid colour.
+    const isGradient =
+      textBackground?.type === "gradient" && backgroundColors.length >= 2;
+
+    const previewNode = (
+      <Text
+        style={styles.textThumbnailText}
+        numberOfLines={2}
+        ellipsizeMode="tail"
+      >
+        {previewText}
+      </Text>
+    );
+
+    if (isGradient) {
+      return (
+        <LinearGradient
+          colors={[backgroundColors[0], backgroundColors[1]]}
+          style={[styles.storyImage, styles.textThumbnail]}
+        >
+          {previewNode}
+        </LinearGradient>
+      );
+    }
+
     return (
       <View
         style={[
           styles.storyImage,
           styles.textThumbnail,
-          { backgroundColor: textBackground?.colors[0] ?? "#37214F" },
+          { backgroundColor: backgroundColors[0] ?? "#37214F" },
         ]}
       >
-        <Text style={styles.textThumbnailText} numberOfLines={3}>
-          {fallbackName || "Story"}
-        </Text>
+        {previewNode}
       </View>
     );
   }
@@ -291,6 +330,7 @@ function StoryCarousel({
               textContent: story.textContent,
               textBackground: story.textBackground,
               textOverlay: story.textOverlay,
+              textStyle: story.textStyle,
               imageTransform: story.imageTransform,
             },
           ]
@@ -376,6 +416,7 @@ function StoryCarousel({
                           story.title ?? story.authorName ?? currentUserName
                         }
                         textBackground={story.textBackground}
+                        textContent={story.textContent}
                       />
                     </View>
                   ) : (
@@ -467,6 +508,8 @@ function StoryCarousel({
               style={styles.storyItem}
               activeOpacity={0.8}
               onPress={() => openStoryViewer(story)}
+              accessibilityRole="button"
+              accessibilityLabel={`Story by ${story.title ?? story.authorName ?? "someone"}`}
             >
               <View style={[styles.storyRing, ringStyle]}>
                 <StoryThumbnail
@@ -476,6 +519,7 @@ function StoryCarousel({
                   fallbackUri={story.imageUri}
                   fallbackName={story.title ?? story.authorName}
                   textBackground={story.textBackground}
+                  textContent={story.textContent}
                 />
 
                 {story.type === "live" && (

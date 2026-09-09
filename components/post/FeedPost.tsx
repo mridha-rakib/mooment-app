@@ -1506,6 +1506,16 @@ function FeedPost({
     uri: item.fullUri?.trim() || item.uri.trim(),
     type: item.type,
   })), [mediaItems]);
+  // A text-only post rendered inside a repost/share card (RepostFeedCard's
+  // compact shell). Only this case gets the bounded 3-line excerpt + a small
+  // "View post" affordance — standalone posts and any post with media are
+  // untouched.
+  const isEmbeddedTextOnly = embedded && post.postType === 'standard' && mediaItems.length === 0;
+
+  const handleViewPostPress = () => {
+    if (!post.id) return;
+    router.push({ pathname: '/post-screen/view-post', params: { postId: post.id } });
+  };
   // Local, per-instance overrides only — mirrors the existing isLiked/isSaved
   // pattern (no second post cache, no global polling). An index is only ever
   // added after its own Retry call succeeds, and the override only takes
@@ -2058,10 +2068,27 @@ function FeedPost({
             // strongly as the author name, not as muted secondary text.
             style={[styles.postCaption, isNormalPost && styles.normalPostCaption, { color: colors.text }]}
             hashtagStyle={{ color: colors.primary, fontWeight: '700' }}
+            // Bound the excerpt only for text-only reposts so a long post
+            // can't grow the feed row unpredictably; the full text stays one
+            // tap away via "View post" below. The underlying post.caption is
+            // never mutated — only its rendering is clamped.
+            {...(isEmbeddedTextOnly ? { numberOfLines: 3, ellipsizeMode: 'tail' as const } : null)}
           >
             {post.caption}
           </HashtagText>
         ) : null}
+
+        {isEmbeddedTextOnly && (
+          <TouchableOpacity
+            style={styles.embeddedViewPostBtn}
+            activeOpacity={0.7}
+            onPress={handleViewPostPress}
+            accessibilityRole="button"
+            accessibilityLabel="View post"
+          >
+            <Text style={[styles.embeddedViewPostText, { color: colors.primary }]}>View post</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Dynamic Media Section based on Post Type */}
         {post.postType === 'audio' && post.audioDetails && (
@@ -2578,6 +2605,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     marginBottom: 12,
     paddingHorizontal: 12,
+  },
+  // Compact text action (not a full-width button) shown under a clamped
+  // text-only repost excerpt. Aligns with the normal-post caption's 12px
+  // inset so it reads as part of the same column.
+  embeddedViewPostBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingTop: 2,
+    paddingBottom: 10,
+  },
+  embeddedViewPostText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   postMediaContainer: {
     width: "100%",

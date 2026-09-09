@@ -149,11 +149,23 @@ export type SmartFeedSocialContext = {
   totalMutualReactions: number;
 };
 
+export type SmartFeedProximitySource = "exact" | "geoip" | "none";
+
 export type SmartFeedMetadata = {
   nearbyScore: number;
   freshnessScore: number;
   socialScore: number;
   finalScore: number;
+  // Additive Event-only ranking breakdown. Informational/debug only — never
+  // rendered in the Event card.
+  statusScore?: number;
+  proximityScore?: number;
+  titleScore?: number;
+  categoryScore?: number;
+  hostScore?: number;
+  venueScore?: number;
+  popularityScore?: number;
+  proximitySource?: SmartFeedProximitySource;
 };
 
 export type EventMemberResponse = {
@@ -322,6 +334,13 @@ export type EventFeedQuery = {
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
+  /**
+   * Ranking-only viewer coordinates. Passive: they refine Smart Feed proximity
+   * ordering but never activate the Nearby filter / radius / active-only
+   * candidate window (that stays driven by latitude/longitude/radiusKm).
+   */
+  rankingLatitude?: number;
+  rankingLongitude?: number;
   limit?: number;
   ageRestriction?: EventAgeRestriction;
   priceFilter?: "free" | "lt_10" | "lt_50" | "lt_100" | "gte_100";
@@ -860,13 +879,57 @@ export type EventHashtagQuery = {
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
+  /**
+   * Search screen only: also return a small, capped anchored-prefix +
+   * morphology-variant tag group after the exact-tag rows. Omitted by the
+   * hashtag detail screen, which keeps exact-tag-only behaviour.
+   */
+  expand?: boolean;
 };
 
 export const getHashtagEvents = async (
   hashtag: string,
   params: EventHashtagQuery = {},
 ): Promise<EventResponse[]> => {
-  const response = await api.get(`/events/hashtags/${encodeURIComponent(hashtag)}`, { params });
+  const { expand, ...rest } = params;
+  const response = await api.get(`/events/hashtags/${encodeURIComponent(hashtag)}`, {
+    params: { ...rest, ...(expand ? { expand: '1' } : {}) },
+  });
+  const events = response.data?.data?.events;
+
+  return Array.isArray(events) ? (events as EventResponse[]) : [];
+};
+
+export type HashtagEventPage = {
+  events: EventResponse[];
+  nextCursor: string | null;
+};
+
+// Offset-paginated (opaque cursor), EXACT-tag hashtag Events for the hashtag
+// detail screen. Opt-in `paginate=1` mode — adds `nextCursor`; the non-paginated
+// callers keep their array-only response.
+export const getHashtagEventsPage = async (
+  hashtag: string,
+  params: { limit?: number; cursor?: string | null; latitude?: number; longitude?: number; radiusKm?: number } = {},
+): Promise<HashtagEventPage> => {
+  const { cursor, ...rest } = params;
+  const response = await api.get(`/events/hashtags/${encodeURIComponent(hashtag)}`, {
+    params: { ...rest, paginate: '1', ...(cursor ? { cursor } : {}) },
+  });
+  const events = response.data?.data?.events;
+  const nextCursor = response.data?.data?.nextCursor;
+
+  return {
+    events: Array.isArray(events) ? (events as EventResponse[]) : [],
+    nextCursor: typeof nextCursor === 'string' && nextCursor.length > 0 ? nextCursor : null,
+  };
+};
+
+// Free-text Event search (Search screen "Events" tab, non-`#` queries).
+// Server-ranked: exact title > prefix > category > morphology variant > bounded
+// typo > weak substring. Callers must render the returned order as-is.
+export const searchEvents = async (query: string, limit = 50): Promise<EventResponse[]> => {
+  const response = await api.get('/events/search', { params: { q: query, limit } });
   const events = response.data?.data?.events;
 
   return Array.isArray(events) ? (events as EventResponse[]) : [];

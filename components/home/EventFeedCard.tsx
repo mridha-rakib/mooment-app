@@ -761,13 +761,13 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
     >
       {headerLabel ? (
         <View style={styles.repostContext}>
-          <Text style={[styles.repostLabel, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>{headerLabel}</Text>
-          {repostCaption ? <Text style={[styles.repostCaption, { color: isDark ? "#FFFFFF" : colors.text }]}>{repostCaption}</Text> : null}
-          {taggedFriendNames.length > 0 ? <Text style={[styles.repostTags, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>with {taggedFriendNames.join(", ")}</Text> : null}
+          <Text numberOfLines={1} style={[styles.repostLabel, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>{headerLabel}</Text>
+          {repostCaption ? <Text numberOfLines={2} style={[styles.repostCaption, { color: isDark ? "#FFFFFF" : colors.text }]}>{repostCaption}</Text> : null}
+          {taggedFriendNames.length > 0 ? <Text numberOfLines={1} style={[styles.repostTags, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>with {taggedFriendNames.join(", ")}</Text> : null}
         </View>
       ) : null}
       {likedByContext ? (
-        <Text style={[styles.socialContextText, { color: isDark ? "#FFFFFF" : colors.text }]}>
+        <Text numberOfLines={2} style={[styles.socialContextText, { color: isDark ? "#FFFFFF" : colors.text }]}>
           <Text style={[styles.socialContextMuted, { color: isDark ? "#AFAFB8" : colors.textSecondary }]}>liked by </Text>
           {likedByContext}
         </Text>

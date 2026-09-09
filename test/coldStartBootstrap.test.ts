@@ -70,9 +70,12 @@ test("feed treats the first render as loading so a skeleton shows immediately", 
     homeSource,
     /shouldShowFeedSkeleton = selectedType === 'Feed' && !hasFeedLoadedOnce && isFeedLoading && feedItems\.length === 0 && !isRefreshing/,
   );
+  // The Friends true-empty state was added as a trailing fallback branch of
+  // ListEmptyComponent; the skeleton must still be its FIRST branch, keyed on
+  // the same shouldShowFeedSkeleton gate, so cold-start loading is unchanged.
   assert.match(
     homeSource,
-    /ListEmptyComponent=\{shouldShowFeedSkeleton \? <FeedSkeletonList \/> : null\}/,
+    /ListEmptyComponent=\{\s*shouldShowFeedSkeleton\s*\n\s*\? <FeedSkeletonList \/>/,
   );
 });
 

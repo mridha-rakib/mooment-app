@@ -163,6 +163,16 @@ type SharedPostPreview = {
   mediaUri?: string | null;
   preview?: string | null;
   authorName?: string | null;
+  // Original author's avatar, resolved once here with the same avatarKey ->
+  // getStorageFileUrl, else avatarUrl convention used everywhere else. Passed
+  // straight to <UserAvatar>, which owns the image -> initial -> icon fallback.
+  authorAvatarUri?: string | null;
+  // Set when getMoment(postId) rejected — deleted, private, blocked, or
+  // otherwise inaccessible. The backend intentionally returns the same 404
+  // for "deleted" and "private", so this stays a single non-discriminated
+  // flag and the UI shows one neutral unavailable state (never a cached
+  // author/caption).
+  unavailable?: boolean;
   // Only set when mediaType === 'audio'. The moment model has no waveform
   // data (neither this screen's own AudioBubble nor the feed's AudioFeedPlayer
   // have real waveform data either — both render a static bar pattern driven
@@ -328,23 +338,37 @@ const loadSharedPostPreview = (postId: string) => {
       const mediaItem = moment.mediaItems?.find(
         (item) => item.type === 'image' || item.type === 'video' || item.type === 'audio',
       ) ?? null;
+      let authorAvatarUri: string | null = null;
+      if (moment.author?.avatarKey) {
+        try { authorAvatarUri = getStorageFileUrl(moment.author.avatarKey); } catch { /* fall through */ }
+      }
+      if (!authorAvatarUri) {
+        authorAvatarUri = moment.author?.avatarUrl ?? null;
+      }
       const preview: SharedPostPreview = {
         mediaType: mediaItem?.type ?? null,
         mediaUri: mediaItem ? getSharedPostMediaUri(mediaItem) : null,
         preview: moment.caption?.trim() || null,
         authorName: moment.author?.name ?? null,
+        authorAvatarUri,
         audioDurationSeconds: mediaItem?.type === 'audio' ? mediaItem.durationSeconds ?? null : null,
       };
 
       sharedPostPreviewCache.set(postId, preview);
       return preview;
     })
-    .catch(() => {
+    .catch((): SharedPostPreview => {
+      // Deleted / private / blocked / otherwise inaccessible — server is the
+      // authority (GET /moments/:id 404s). Cache a neutral unavailable marker
+      // so the renderer never falls back to the message's stale snapshot
+      // author/caption for a post the viewer can't see.
       const fallback: SharedPostPreview = {
         mediaType: null,
         mediaUri: null,
         preview: null,
         authorName: null,
+        authorAvatarUri: null,
+        unavailable: true,
       };
 
       sharedPostPreviewCache.set(postId, fallback);
@@ -918,11 +942,64 @@ function PostBubble({ msg }: { msg: Message }) {
     };
   }, [msg.postImage, postId]);
 
+  // Same route + param the whole bubble has always used; extracted so the
+  // visible "View Post" affordance and the bubble share one handler.
+  const openPost = useCallback(() => {
+    if (postId) {
+      router.push({ pathname: '/post-screen/view-post', params: { postId } } as any);
+    }
+  }, [postId, router]);
+
+  // Only a text-only share with no snapshot image ever waits on getMoment; a
+  // message that carried its own image is a media post and never fetches.
+  // Keep loading visually distinct from the unavailable state and never show
+  // the 132px media tile while pending.
+  const isResolving = !msg.postImage && !resolvedPreview;
+
+  if (isResolving) {
+    return (
+      <View
+        style={[
+          styles.sharedPostBubble,
+          msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem,
+          styles.sharedPostLoading,
+        ]}
+      >
+        <View style={styles.sharedPostLoadingLineSm} />
+        <View style={styles.sharedPostLoadingLineLg} />
+        <View style={styles.sharedPostLoadingLineMd} />
+      </View>
+    );
+  }
+
+  if (resolvedPreview?.unavailable) {
+    return (
+      <TouchableOpacity
+        style={[
+          styles.sharedPostBubble,
+          msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem,
+          styles.sharedPostUnavailable,
+        ]}
+        activeOpacity={0.82}
+        onPress={openPost}
+        accessibilityRole="button"
+        accessibilityLabel="View post"
+      >
+        <Feather name="alert-circle" size={16} color="#8E8E9B" style={{ marginRight: 6 }} />
+        <Text style={styles.sharedPostUnavailableText}>This post is unavailable</Text>
+      </TouchableOpacity>
+    );
+  }
+
   const mediaUri = msg.postImage ?? resolvedPreview?.mediaUri ?? null;
   const isVideoPost = resolvedPreview?.mediaType === 'video';
   const isAudioPost = resolvedPreview?.mediaType === 'audio';
   const canPlayAudio = isAudioPost && Boolean(mediaUri);
-  const postLabel = isVideoPost ? 'Shared video post' : isAudioPost ? 'Shared audio post' : 'POST';
+  // A genuine text-only share: nothing to put in the 132px media frame, so the
+  // frame is omitted entirely and the bubble is the compact info block alone.
+  // Image/video/audio shares keep the frame and their existing layout exactly.
+  const isTextOnly = !mediaUri && !isVideoPost && !isAudioPost;
+  const postLabel = isVideoPost ? 'Shared video post' : isAudioPost ? 'Shared audio post' : 'Shared post';
   const postAuthor = resolvedPreview?.authorName || msg.postAuthor;
   const postPreview = resolvedPreview?.preview || msg.postPreview
     || (isVideoPost ? 'Shared video post' : isAudioPost ? 'Shared audio post' : 'Shared post');
@@ -931,33 +1008,45 @@ function PostBubble({ msg }: { msg: Message }) {
     <TouchableOpacity
       style={[styles.sharedPostBubble, msg.fromMe ? styles.eventBubbleMe : styles.eventBubbleThem]}
       activeOpacity={0.82}
-      onPress={() => postId && router.push({ pathname: '/post-screen/view-post', params: { postId } } as any)}
+      onPress={openPost}
+      accessibilityRole="button"
+      accessibilityLabel="View post"
     >
-      <View style={styles.sharedPostMediaFrame}>
-        {canPlayAudio ? (
-          <SharedPostAudioPlayer
-            playerId={msg.id}
-            uri={mediaUri as string}
-            durationSeconds={resolvedPreview?.audioDurationSeconds}
-            fromMe={msg.fromMe}
-          />
-        ) : mediaUri ? (
-          <Image source={{ uri: mediaUri }} style={styles.sharedPostImage} resizeMode="cover" />
-        ) : (
-          <View style={[styles.sharedPostImage, styles.mediaFallback]}>
-            <Feather name={isVideoPost ? 'play-circle' : isAudioPost ? 'music' : 'file-text'} size={28} color="#8E8E9B" />
-          </View>
-        )}
-        {isVideoPost ? (
-          <View pointerEvents="none" style={styles.sharedPostPlayBadge}>
-            <Feather name="play" size={18} color="#FFFFFF" />
-          </View>
-        ) : null}
-      </View>
+      {isTextOnly ? null : (
+        <View style={styles.sharedPostMediaFrame}>
+          {canPlayAudio ? (
+            <SharedPostAudioPlayer
+              playerId={msg.id}
+              uri={mediaUri as string}
+              durationSeconds={resolvedPreview?.audioDurationSeconds}
+              fromMe={msg.fromMe}
+            />
+          ) : mediaUri ? (
+            <Image source={{ uri: mediaUri }} style={styles.sharedPostImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.sharedPostImage, styles.mediaFallback]}>
+              <Feather name={isVideoPost ? 'play-circle' : isAudioPost ? 'music' : 'file-text'} size={28} color="#8E8E9B" />
+            </View>
+          )}
+          {isVideoPost ? (
+            <View pointerEvents="none" style={styles.sharedPostPlayBadge}>
+              <Feather name="play" size={18} color="#FFFFFF" />
+            </View>
+          ) : null}
+        </View>
+      )}
       <View style={styles.sharedPostInfo}>
         <Text style={styles.eventBubbleTagText}>{postLabel}</Text>
-        <Text style={styles.sharedPostAuthor} numberOfLines={1}>{postAuthor}</Text>
-        <Text style={styles.sharedPostPreview} numberOfLines={3}>{postPreview}</Text>
+        {isTextOnly ? (
+          <View style={styles.sharedPostAuthorRow}>
+            <UserAvatar uri={resolvedPreview?.authorAvatarUri ?? null} name={postAuthor} size={20} />
+            <Text style={[styles.sharedPostAuthor, styles.sharedPostAuthorInline]} numberOfLines={1}>{postAuthor}</Text>
+          </View>
+        ) : (
+          <Text style={styles.sharedPostAuthor} numberOfLines={1}>{postAuthor}</Text>
+        )}
+        <Text style={styles.sharedPostPreview} numberOfLines={3} ellipsizeMode="tail">{postPreview}</Text>
+        {isTextOnly ? <Text style={styles.sharedPostViewPost}>View Post</Text> : null}
         <Text style={styles.eventBubbleTime}>{msg.time}</Text>
       </View>
     </TouchableOpacity>
@@ -3140,7 +3229,21 @@ const styles = StyleSheet.create({
   sharedPostPlayBadge: { position: 'absolute', left: '50%', top: '50%', width: 42, height: 42, marginLeft: -21, marginTop: -21, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.58)', alignItems: 'center', justifyContent: 'center' },
   sharedPostInfo: { padding: 14, gap: 4 },
   sharedPostAuthor: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  sharedPostAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  sharedPostAuthorInline: { flex: 1 },
   sharedPostPreview: { color: 'rgba(255,255,255,0.78)', fontSize: 13, lineHeight: 18, marginBottom: 4 },
+  // Compact text action inside the existing pressable bubble — not a nested
+  // button. Reuses the chat's existing sender accent, no new purple.
+  sharedPostViewPost: { color: CHAT_COLORS.senderAccentSoft, fontSize: 12, fontWeight: '800' },
+  // Text-only share: pending fetch. Deliberately unlike the unavailable state
+  // and without the 132px media tile.
+  sharedPostLoading: { padding: 14, gap: 8 },
+  sharedPostLoadingLineSm: { width: 46, height: 10, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.16)' },
+  sharedPostLoadingLineLg: { width: '70%', height: 13, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.12)' },
+  sharedPostLoadingLineMd: { width: '90%', height: 12, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)' },
+  // Deleted / private / inaccessible — mirrors StoryBubble's unavailable row.
+  sharedPostUnavailable: { alignItems: 'center', justifyContent: 'center', minHeight: 60, flexDirection: 'row', paddingHorizontal: 16 },
+  sharedPostUnavailableText: { color: '#E2E2EA', fontSize: 13, fontWeight: '600' },
 
   /* Reactions */
   reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },

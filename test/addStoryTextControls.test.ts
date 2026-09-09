@@ -46,10 +46,11 @@ test("S/M/L discrete size button controls remain removed in favor of freeform pi
 
 test("new Story text initializes to canonical scale and supports freeform pinch-to-scale", () => {
   assert.match(addStorySource, /const STANDARD_TEXT_SCALE = 1;/);
-  // buildOverlay's call site passes the dynamic overlayScale state
+  // buildOverlay's call site passes the dynamic overlayScale state (and, since
+  // Shadow is now persisted, the overlayShadowEnabled state as the final arg).
   assert.match(
     addStorySource,
-    /buildOverlay\(\s*overlayText,\s*overlayX,\s*overlayY,\s*overlayColor,\s*overlayScale,\s*overlayRotation,\s*overlayFontWeight,\s*overlayTextAlign,\s*\)/,
+    /buildOverlay\(\s*overlayText,\s*overlayX,\s*overlayY,\s*overlayColor,\s*overlayScale,\s*overlayRotation,\s*overlayFontWeight,\s*overlayTextAlign,\s*overlayShadowEnabled,\s*\)/,
   );
   // The on-canvas object is given the dynamic overlayScale state and enables pinch
   assert.match(addStorySource, /<DraggableStoryText[\s\S]{0,500}scale=\{overlayScale\}/);
@@ -189,7 +190,10 @@ test("Color is the product-preferred default active tool, and is never reset on 
   assert.doesNotMatch(finishBlock, /setActiveTextTool/);
 });
 
-test("shadow tool changes only the local preview toggle — never position, color, or text", () => {
+test("shadow tool changes only the shadow toggle — never position, color, or text", () => {
+  // Shadow is now a persisted value (textOverlay.shadow / textStyle.shadow),
+  // but the tool itself still only ever flips the shadow state — it must not
+  // touch any other overlay field.
   const shadowToolBlock = addStorySource.slice(
     addStorySource.indexOf("activeTool === 'shadow' ? ("),
     addStorySource.indexOf("<View style={styles.textToolTabRow}>"),
