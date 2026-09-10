@@ -72,12 +72,12 @@ function PayoutRow({ payout, colors }: { payout: CreatorPayout; colors: any }) {
       <View style={styles.payoutLeft}>
         <Text style={[styles.payoutAmount, { color: colors.text }]}>{fmt(payout.totalAmount)}</Text>
         <Text style={[styles.payoutDate, { color: colors.textSecondary }]}>
-          {new Date(payout.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+          {new Date(payout.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
         </Text>
       </View>
       <View style={[styles.statusPill, { backgroundColor: `${statusColor}20` }]}>
         <Text style={[styles.statusText, { color: statusColor }]}>
-          {payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
+          {payout.status === "cancelled" ? "Canceled" : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
         </Text>
       </View>
     </View>

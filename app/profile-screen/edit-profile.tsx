@@ -1069,7 +1069,7 @@ export default function EditProfileScreen() {
                   onLayout={handleFieldLayout("name")}
                   onChangeText={setName}
                   onSubmitEditing={() => focusNextField("name")}
-                  placeholder={"Fullname"}
+                  placeholder={"Full Name"}
                   returnKeyType="next"
                   value={name}
                 />
@@ -1088,7 +1088,7 @@ export default function EditProfileScreen() {
                   onLayout={handleFieldLayout("username")}
                   onChangeText={setUsername}
                   onSubmitEditing={() => focusNextField("username")}
-                  placeholder="username"
+                  placeholder="Username"
                   returnKeyType="next"
                   value={username}
                 />
@@ -1108,7 +1108,7 @@ export default function EditProfileScreen() {
                   onLayout={handleFieldLayout("email")}
                   onChangeText={setEmail}
                   onSubmitEditing={() => focusNextField("email")}
-                  placeholder="name@nocturnal.com"
+                  placeholder="name@example.com"
                   returnKeyType="next"
                   value={email}
                 />
