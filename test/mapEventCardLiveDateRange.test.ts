@@ -25,15 +25,24 @@ test("map event payload already exposes endAt, so no backend field invention is 
   assert.match(mapContainerSource, /endAt:\s*event\.endAt\s*\?\?\s*null/);
 });
 
-test("MapContainer formats start datetime from existing scheduledAt data", () => {
+test("Batch 3C: MapContainer derives the card schedule from the shared venue-local time helper", () => {
   assert.match(mapContainerSource, /scheduledAt:\s*event\.scheduledAt\s*\?\?\s*null/);
-  assert.match(mapContainerSource, /eventDate:\s*formatEventDate\(event\.scheduledAt\)/);
-  assert.match(mapContainerSource, /eventTime:\s*formatEventTime\(event\.scheduledAt\)/);
+  // start + end date/time now come from the ONE shared timezone-aware helper.
+  assert.match(mapContainerSource, /import \{ formatEventTimeDisplay \} from "@\/lib\/eventTimeDisplay"/);
+  assert.match(
+    mapContainerSource,
+    /const buildMapEventSchedule = \(event: EventResponse\) => \{\s*const model = formatEventTimeDisplay\(\{[\s\S]*scheduledAt: event\.scheduledAt,[\s\S]*endAt: event\.endAt,[\s\S]*timezone: event\.timezone,/,
+  );
+  assert.match(mapContainerSource, /eventDate: model\.primaryDateText/);
+  assert.match(mapContainerSource, /eventEndTime: model\.primaryEndTimeText/);
+  assert.match(mapContainerSource, /\.\.\.buildMapEventSchedule\(event\),/);
+  // The old device-local helpers are gone.
+  assert.doesNotMatch(mapContainerSource, /formatEventDate\(event\.scheduledAt\)/);
+  assert.doesNotMatch(mapContainerSource, /formatEventTime\(event\.endAt\)/);
 });
 
-test("MapContainer formats end datetime from existing endAt data with the same helpers", () => {
-  assert.match(mapContainerSource, /eventEndDate:\s*formatEventDate\(event\.endAt\)/);
-  assert.match(mapContainerSource, /eventEndTime:\s*formatEventTime\(event\.endAt\)/);
+test("Batch 3C: MapContainer surfaces the viewer-local equivalent for the map card", () => {
+  assert.match(mapContainerSource, /eventViewerDateTime: model\.showViewerEquivalent \? model\.viewerDateTimeText : null/);
 });
 
 test("MapScreen forwards formatted end datetime into the map event preview card", () => {

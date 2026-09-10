@@ -210,6 +210,21 @@ export type EventPayload = {
   categories?: EventCategory[];
   scheduledAt?: string | null;
   endAt?: string | null;
+  /**
+   * Transport-only (Batch 3A). The user's VISIBLE venue-local wall-clock. When
+   * the venue has resolvable coordinates the server interprets these in the
+   * resolved IANA zone to derive `scheduledAt`/`endAt`; they are never persisted.
+   * `scheduledAt`/`endAt` above stay as legacy/compat absolute values.
+   */
+  scheduledLocalDate?: string;
+  scheduledLocalTime?: string;
+  endLocalDate?: string;
+  endLocalTime?: string;
+  /**
+   * Transport-only (Batch 3A). Controlled fallback IANA zone echoed back on
+   * edit; server-resolved coordinates always win. Not sent for normal flows.
+   */
+  timezone?: string | null;
   location?: EventLocation | null;
   tickets?: EventTicketRequestPayload[];
   privacy?: EventPrivacy;
@@ -258,6 +273,12 @@ export type EventResponse = {
   categories: EventCategory[];
   scheduledAt?: string | null;
   endAt?: string | null;
+  /**
+   * Additive (Batch 3A). IANA venue timezone resolved server-side, e.g.
+   * "America/New_York". `null` on legacy Events / unresolved venues. Used for
+   * edit hydration only in this batch — not for card/detail display yet.
+   */
+  timezone?: string | null;
   location?: EventLocation | null;
   tickets: EventTicketPayload[];
   rewards: EventRewardPayload[];

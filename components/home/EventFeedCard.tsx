@@ -22,6 +22,7 @@ import { getAuthErrorMessage } from "@/lib/authErrors";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
 import { cancelEvent, type EventResponse } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { tapFeedback } from "@/lib/microFeedback";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -46,8 +47,6 @@ import CrowdStatusBadge from "@/components/events/CrowdStatusBadge";
 import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
 
 const TIME_AGO_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
-const TIME_FORMATTER = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
 const timeAgo = (dateStr?: string | Date | null): string => {
   if (!dateStr) return "";
@@ -76,20 +75,6 @@ const formatLikedByContext = (event: EventResponse) => {
   const names = previewNames.join(", ");
 
   return remaining > 0 ? `${names}... +${remaining} more` : names;
-};
-
-const formatDate = (scheduledAt?: string | Date | null): string => {
-  if (!scheduledAt) return "";
-  const d = new Date(scheduledAt as string);
-  if (Number.isNaN(d.getTime())) return "";
-  return DATE_FORMATTER.format(d);
-};
-
-const formatTime = (scheduledAt?: string | Date | null): string => {
-  if (!scheduledAt) return "";
-  const d = new Date(scheduledAt as string);
-  if (Number.isNaN(d.getTime())) return "";
-  return TIME_FORMATTER.format(d);
 };
 
 const getLocation = (event: EventResponse): string =>
@@ -227,8 +212,21 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
     };
   }, [categoryCount]);
   const firstCategory = categories[0] ?? null;
-  const eventDate = formatDate(event.scheduledAt);
-  const eventTime = formatTime(event.scheduledAt);
+  // Batch 3C — venue-local primary time (agrees with Batch 3B filtering); a
+  // muted "your time" line only when the viewer's device clock differs.
+  const eventTimeModel = useMemo(
+    () =>
+      formatEventTimeDisplay({
+        scheduledAt: event.scheduledAt,
+        endAt: event.endAt,
+        timezone: event.timezone,
+      }),
+    [event.scheduledAt, event.endAt, event.timezone],
+  );
+  const eventDate = eventTimeModel.primaryDateText;
+  const eventTime = eventTimeModel.primaryZoneText
+    ? `${eventTimeModel.primaryTimeText} ${eventTimeModel.primaryZoneText}`
+    : eventTimeModel.primaryTimeText;
   const location = getLocation(event);
   const timestamp = timeAgo(event.publishedAt ?? event.createdAt);
   const likedByContext = useMemo(() => formatLikedByContext(event), [event]);
@@ -922,6 +920,12 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
                 </View>
               ) : null}
 
+              {eventTimeModel.showViewerEquivalent && eventTimeModel.viewerDateTimeText ? (
+                <Text style={styles.metaSubtleText} numberOfLines={1}>
+                  {eventTimeModel.viewerDateTimeText}
+                </Text>
+              ) : null}
+
               {Boolean(location) ? (
                 <View style={styles.metaRow}>
                   <Feather name="map-pin" size={10} color="rgba(255,255,255,0.65)" />
@@ -1338,6 +1342,12 @@ const styles = StyleSheet.create({
   metaText: {
     color: "#FFFFFF",
     fontSize: 12,
+    fontWeight: "400",
+    letterSpacing: -0.08,
+  },
+  metaSubtleText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
     fontWeight: "400",
     letterSpacing: -0.08,
   },

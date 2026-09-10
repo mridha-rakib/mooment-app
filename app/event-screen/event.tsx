@@ -38,6 +38,7 @@ import {
     type JoinRequest,
     type JoinRequestStatus,
 } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
@@ -141,68 +142,6 @@ const getDistanceMiles = (from: [number, number], to: [number, number]) => {
   const distanceKm = 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return distanceKm * 0.621371;
-};
-
-const formatEventDate = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
-    return "Date TBA";
-  }
-
-  const date = new Date(scheduledAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Date TBA";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  }).format(date);
-};
-
-const formatEventTime = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
-    return "Time TBA";
-  }
-
-  const date = new Date(scheduledAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Time TBA";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-};
-
-const isValidDateTimeValue = (value?: string | null) => {
-  if (!value) {
-    return false;
-  }
-
-  return !Number.isNaN(new Date(value).getTime());
-};
-
-const formatEventDateTime = (dateTime?: string | null) =>
-  `${formatEventDate(dateTime)} • ${formatEventTime(dateTime)}`;
-
-const formatEventScheduleRange = (scheduledAt?: string | null, endAt?: string | null) => {
-  const startDateTime = formatEventDateTime(scheduledAt);
-
-  if (!isValidDateTimeValue(endAt)) {
-    return {
-      startDateTime,
-      endDateTime: null,
-    };
-  }
-
-  return {
-    startDateTime,
-    endDateTime: formatEventDateTime(endAt),
-  };
 };
 
 function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
@@ -1089,9 +1028,29 @@ const EventScreen = () => {
     return bannerUris.length > 0 ? bannerUris : [bannerImageUri];
   }, [bannerImageUri, event]);
   const distanceLabel = getDistanceLabel(event, userLocation);
-  const eventDate = formatEventDate(event?.scheduledAt);
-  const eventTime = formatEventTime(event?.scheduledAt);
-  const eventScheduleDisplay = formatEventScheduleRange(event?.scheduledAt, event?.endAt);
+  // Batch 3C — venue-local primary schedule + a viewer-local "your time" line
+  // when the device clock differs. Falls back to device-local rendering when the
+  // Event has no known timezone (unchanged pre-3C behaviour).
+  const eventTimeModel = useMemo(
+    () =>
+      formatEventTimeDisplay({
+        scheduledAt: event?.scheduledAt,
+        endAt: event?.endAt,
+        timezone: event?.timezone,
+      }),
+    [event?.scheduledAt, event?.endAt, event?.timezone],
+  );
+  const eventZoneSuffix = eventTimeModel.primaryZoneText ? ` ${eventTimeModel.primaryZoneText}` : "";
+  const eventDate = eventTimeModel.primaryDateText || "Date TBA";
+  const eventTime = eventTimeModel.primaryTimeText
+    ? `${eventTimeModel.primaryTimeText}${eventZoneSuffix}`
+    : "Time TBA";
+  const eventScheduleDisplay = eventTimeModel.primaryEndTimeText
+    ? {
+        startDateTime: `${eventDate} • ${eventTimeModel.primaryTimeText}${eventZoneSuffix}`,
+        endDateTime: `${eventTimeModel.primaryEndDateText ?? eventDate} • ${eventTimeModel.primaryEndTimeText}${eventZoneSuffix}`,
+      }
+    : { startDateTime: `${eventDate} • ${eventTime}`, endDateTime: null as string | null };
   const ticketsLeftText = `${ticketsLeft} tickets left`;
   const eventStats = event as
     | (EventResponse & {
@@ -2110,6 +2069,14 @@ const EventScreen = () => {
                   </View>
                 </>
               )}
+              {eventTimeModel.showViewerEquivalent && eventTimeModel.viewerDateTimeText ? (
+                <Text
+                  style={[styles.infoText, styles.viewerEquivalentText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {eventTimeModel.viewerDateTimeText}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.infoItem}>
               <Feather name="map-pin" size={14} color={colors.textSecondary} />
@@ -3065,6 +3032,11 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 13,
     flexShrink: 1,
+  },
+  viewerEquivalentText: {
+    width: "100%",
+    fontSize: 12,
+    opacity: 0.75,
   },
   tabBar: {
     flexDirection: "row",

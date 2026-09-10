@@ -2,6 +2,7 @@ import React from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import MapScreen, { type MapFilterRecenterIntent, type MapMarkerData } from "@/components/ui/MapScreen";
 import { getMapEventPage, type EventResponse, type EventMapQuery } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import {
   createEmptyEventFilters,
   getEventLocationFilterKey,
@@ -13,6 +14,7 @@ import {
   getMapViewportPageBudget,
   getMapViewportRequestKey,
   getRadiusAwareMapZoom,
+  hasBoundedNearbyFilter,
   type EventMapViewport,
 } from "@/lib/mapEventRequests";
 import { getStorageFileUrl } from "@/lib/storage";
@@ -33,6 +35,10 @@ type MapContainerProps = {
   filterRecenterKey?: string | null;
   onFilterRecenterHandled?: (key: string) => void;
   onCategoryChange?: (category: EventCategory | null) => void;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
+  canIncreaseRadius?: boolean;
+  onIncreaseRadius?: () => void;
 };
 
 const isFiniteCoordinate = (value: unknown): value is number =>
@@ -74,39 +80,23 @@ const formatDistanceFromMiles = (miles: number | null) => {
   return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()} mi`;
 };
 
-const formatEventDate = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
-    return "Date TBA";
-  }
-
-  const date = new Date(scheduledAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Date TBA";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  }).format(date);
-};
-
-const formatEventTime = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
-    return "Time TBA";
-  }
-
-  const date = new Date(scheduledAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Time TBA";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+// Batch 3C — venue-local primary time for the Map card (agrees with Batch 3B
+// filtering + Event Detail). Falls back to device-local rendering when the Event
+// has no known timezone.
+const buildMapEventSchedule = (event: EventResponse) => {
+  const model = formatEventTimeDisplay({
+    scheduledAt: event.scheduledAt,
+    endAt: event.endAt,
+    timezone: event.timezone,
+  });
+  const zoneSuffix = model.primaryZoneText ? ` ${model.primaryZoneText}` : "";
+  return {
+    eventDate: model.primaryDateText || "Date TBA",
+    eventTime: model.primaryTimeText ? `${model.primaryTimeText}${zoneSuffix}` : "Time TBA",
+    eventEndDate: model.primaryEndDateText ?? (model.primaryEndTimeText ? model.primaryDateText : "Date TBA"),
+    eventEndTime: model.primaryEndTimeText ? `${model.primaryEndTimeText}${zoneSuffix}` : "Time TBA",
+    eventViewerDateTime: model.showViewerEquivalent ? model.viewerDateTimeText : null,
+  };
 };
 
 const formatLocation = (event: EventResponse) =>
@@ -162,10 +152,7 @@ const toMapMarker = (
     eventStatus: event.status,
     crowdStatus: event.crowdStatus ?? null,
     checkedInCount: typeof event.checkedInCount === "number" ? event.checkedInCount : 0,
-    eventDate: formatEventDate(event.scheduledAt),
-    eventTime: formatEventTime(event.scheduledAt),
-    eventEndDate: formatEventDate(event.endAt),
-    eventEndTime: formatEventTime(event.endAt),
+    ...buildMapEventSchedule(event),
     location: formatLocation(event),
     // Same authoritative source as Feed / Event Detail / Profile:
     // publicGoingSummary.going (paid, non-cancelled ticket passes). Never
@@ -222,11 +209,19 @@ export default function MapContainer({
   filterRecenterKey = null,
   onFilterRecenterHandled,
   onCategoryChange,
+  hasActiveFilters = false,
+  onClearFilters,
+  canIncreaseRadius = false,
+  onIncreaseRadius,
 }: MapContainerProps) {
   const [markers, setMarkers] = React.useState<MapMarkerData[]>([]);
   const [userLocation, setUserLocation] = React.useState<[number, number] | null>(null);
   const [settledViewport, setSettledViewport] = React.useState<EventMapViewport | null>(null);
   const [debouncedViewport, setDebouncedViewport] = React.useState<EventMapViewport | null>(null);
+  // True once the current Event request has finished (success or failure), so
+  // the Map can tell "still loading" apart from "settled with zero matches".
+  const [eventsSettled, setEventsSettled] = React.useState(false);
+  const lastSettledKeyRef = React.useRef<string | null>(null);
   const mapRequestIdRef = React.useRef(0);
   const debouncedViewportKeyRef = React.useRef<string | null>(null);
   const lastNearbyClearKeyRef = React.useRef<string | null>(null);
@@ -278,7 +273,9 @@ export default function MapContainer({
     };
   }, [settledViewport]);
 
-  const requestViewport = isValidEventLocationFilter(eventFilters.nearby) ? null : debouncedViewport;
+  // Bounded radius (1–199) → circular nearby request, no viewport. Broad ("200+")
+  // and no-centre both use the visible viewport as the display window.
+  const requestViewport = hasBoundedNearbyFilter(eventFilters) ? null : debouncedViewport;
   const pageBudget = React.useMemo(
     () => getMapViewportPageBudget(eventFilters, requestViewport),
     [eventFilters, requestViewport],
@@ -313,6 +310,12 @@ export default function MapContainer({
     let isMounted = true;
     const abortController = new AbortController();
     const requestId = ++mapRequestIdRef.current;
+    // Only drop the "settled" flag on a genuine query change (not a silent
+    // focus refresh that reuses the same key) so the no-match copy doesn't
+    // flicker while refreshed data loads.
+    if (mapRequestKey !== lastSettledKeyRef.current) {
+      setEventsSettled(false);
+    }
     // Only clear already-rendered markers when the nearby filter's actual
     // value changed (a genuine filter change). A silent focus refresh reuses
     // the same nearby key, so it must not flash markers to empty while the
@@ -361,9 +364,18 @@ export default function MapContainer({
           }
           cursor = page.nextCursor;
         } while (cursor && (!pageBudget || pagesFetched < pageBudget));
+
+        if (isMounted && requestId === mapRequestIdRef.current) {
+          lastSettledKeyRef.current = mapRequestKey;
+          setEventsSettled(true);
+        }
       } catch {
-        if (isMounted && requestId === mapRequestIdRef.current && !hasRenderedFirstPage) {
-          applyMarkersIfChanged(setMarkers, []);
+        if (isMounted && requestId === mapRequestIdRef.current) {
+          if (!hasRenderedFirstPage) {
+            applyMarkersIfChanged(setMarkers, []);
+          }
+          lastSettledKeyRef.current = mapRequestKey;
+          setEventsSettled(true);
         }
       }
     };
@@ -397,6 +409,11 @@ export default function MapContainer({
       onFilterRecenterHandled={onFilterRecenterHandled}
       selectedCategory={eventFilters.category ?? null}
       onCategoryChange={onCategoryChange}
+      hasActiveFilters={hasActiveFilters}
+      onClearFilters={onClearFilters}
+      canIncreaseRadius={canIncreaseRadius}
+      onIncreaseRadius={onIncreaseRadius}
+      noEventMatches={hasActiveFilters && eventsSettled && markers.length === 0}
     />
   );
 }

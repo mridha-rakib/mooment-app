@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FilterModal, { type HomeFeedFilters } from './FilterModal';
-import type { SharedEventFilters } from '@/lib/eventFilters';
+import { hasActiveEventFilters, type SharedEventFilters } from '@/lib/eventFilters';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '../ui/CinematicButton';
 
@@ -29,6 +29,9 @@ function HomeHeader({
   const { colors } = useTheme();
   const [filterVisible, setFilterVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
+  // Single boolean source, shared by Feed and Map since both render this header
+  // with the same authoritative `activeFilters` (appliedEventFilters).
+  const filtersActive = hasActiveEventFilters(activeFilters);
 
   return (
     <View
@@ -68,14 +71,26 @@ function HomeHeader({
               borderRadius={19}
             />
           )}
-          <CinematicButton
-            icon={FilterHorizontalIcon}
-            onPress={() => setFilterVisible(true)}
-            style={styles.iconBtn}
-            width={38}
-            height={38}
-            borderRadius={19}
-          />
+          <View style={styles.filterButtonWrap}>
+            <CinematicButton
+              icon={FilterHorizontalIcon}
+              onPress={() => setFilterVisible(true)}
+              style={styles.iconBtn}
+              width={38}
+              height={38}
+              borderRadius={19}
+            />
+            {filtersActive ? (
+              <View
+                style={[
+                  styles.filterActiveDot,
+                  { backgroundColor: colors.primary, borderColor: colors.background },
+                ]}
+                pointerEvents="none"
+                accessibilityElementsHidden
+              />
+            ) : null}
+          </View>
         </View>
       </View>
 
@@ -192,6 +207,18 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 0,
+  },
+  filterButtonWrap: {
+    position: 'relative',
+  },
+  filterActiveDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
   },
 
   dropdownOverlay: {

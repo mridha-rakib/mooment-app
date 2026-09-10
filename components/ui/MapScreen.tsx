@@ -19,6 +19,8 @@ import {
 } from "@/lib/mapEventCarousel";
 import {
   getBestCurrentDeviceLocation,
+  type DeviceLocationFailureStatus,
+  type DeviceLocationResult,
   isValidLocationCoordinate,
   toMapboxCoordinate,
   type CurrentLocationPayload,
@@ -43,6 +45,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  AppState,
   Image,
   ScrollView,
   StyleSheet,
@@ -50,6 +53,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import LocationRecoveryState from "@/components/home/LocationRecoveryState";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -82,6 +86,10 @@ const USER_LOCATION_ZOOM_LEVEL = 14;
 const INITIAL_CAMERA_CORRECTION_THRESHOLD_METERS = 25;
 const CATEGORY_RAIL_TOP = 60;
 const CATEGORY_RAIL_HEIGHT = 42;
+// Outer settle-guard so a stalled platform call can never leave the map's
+// location request permanently "in flight" (which would suppress the recovery
+// banner and block AppState rechecks). Above the helper's own 12s GPS timeout.
+const MAP_LOCATION_REQUEST_TIMEOUT_MS = 15000;
 const MAP_SCALE_BAR_OFFSET = {
   top: CATEGORY_RAIL_TOP + CATEGORY_RAIL_HEIGHT + 10,
   left: 16,
@@ -148,6 +156,8 @@ export type MapMarkerData = MapCarouselMarker & {
   eventTime?: string | null;
   eventEndDate?: string | null;
   eventEndTime?: string | null;
+  /** Batch 3C — viewer/device-local "your time" equivalent; null when it matches the venue clock. */
+  eventViewerDateTime?: string | null;
   location?: string | null;
   attendeesCount?: number;
   ageLimit?: string | null;
@@ -167,6 +177,11 @@ type MapScreenProps = {
   onFilterRecenterHandled?: (key: string) => void;
   selectedCategory?: EventCategory | null;
   onCategoryChange?: (category: EventCategory | null) => void;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
+  canIncreaseRadius?: boolean;
+  onIncreaseRadius?: () => void;
+  noEventMatches?: boolean;
 };
 
 type MapMarkerProps = {
@@ -595,6 +610,11 @@ export default function MapScreen({
   onFilterRecenterHandled,
   selectedCategory,
   onCategoryChange,
+  hasActiveFilters = false,
+  onClearFilters,
+  canIncreaseRadius = false,
+  onIncreaseRadius,
+  noEventMatches = false,
 }: MapScreenProps) {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
@@ -646,7 +666,12 @@ export default function MapScreen({
   const [cameraCenter, setCameraCenter] = useState<[number, number] | null>(null);
   const [, setUserLocationSource] = useState<UserLocationSource | null>(null);
   const [canUseStoredFallback, setCanUseStoredFallback] = useState(false);
+  const [deviceLocationStatus, setDeviceLocationStatus] = useState<DeviceLocationFailureStatus | null>(null);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
+  // "Filters active + request settled + zero markers" is a distinct state from a
+  // device-location failure — a location failure always takes precedence and
+  // shows its own recovery panel instead.
+  const showNoEventMatches = noEventMatches && !deviceLocationStatus;
   const isSatellite = mapMode === "satellite";
   const currentMapStyle = isSatellite
     ? SATELLITE_MAP_STYLE_URL
@@ -903,26 +928,40 @@ export default function MapScreen({
         isMountedRef.current && requestId === locationRequestIdRef.current;
 
       try {
-        const result = await getBestCurrentDeviceLocation({
-          requestPermission: true,
-          onTemporaryLocation: (temporaryResult) => {
-            if (!isCurrentRequest()) {
-              return;
-            }
+        const result = await Promise.race<DeviceLocationResult>([
+          getBestCurrentDeviceLocation({
+            requestPermission: true,
+            onTemporaryLocation: (temporaryResult) => {
+              if (!isCurrentRequest()) {
+                return;
+              }
 
-            handleDeviceLocationResult(temporaryResult, options);
-          },
-        });
+              handleDeviceLocationResult(temporaryResult, options);
+            },
+          }),
+          new Promise<DeviceLocationResult>((resolve) => {
+            setTimeout(
+              () => resolve({ status: "timeout" }),
+              MAP_LOCATION_REQUEST_TIMEOUT_MS,
+            );
+          }),
+        ]);
 
         if (!isCurrentRequest()) {
           return;
         }
 
         if (result.status === "fresh" || result.status === "lastKnown") {
+          setDeviceLocationStatus(null);
           handleDeviceLocationResult(result, options);
           return;
         }
 
+        // Location is genuinely unavailable (permission denied/blocked, services
+        // off, timeout, …). Keep the existing stored-fallback camera behavior,
+        // but also surface a clear recoverable state instead of a silent
+        // blank/mis-centered map.
+        setDeviceLocationStatus(result.status);
         setCanUseStoredFallback(true);
       } finally {
         if (isCurrentRequest()) {
@@ -1079,6 +1118,18 @@ export default function MapScreen({
     }, [requestCurrentDeviceLocation]),
   );
 
+  // Recheck once when the app returns to the foreground while location is
+  // unavailable (e.g. the user just enabled permission in Settings). Guarded to
+  // "currently unavailable" so it never polls or re-prompts otherwise.
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && deviceLocationStatus) {
+        void requestCurrentDeviceLocation({ force: true });
+      }
+    });
+    return () => subscription.remove();
+  }, [deviceLocationStatus, requestCurrentDeviceLocation]);
+
   const categories: ("All" | EventCategory)[] = ["All", ...EVENT_CATEGORIES];
   const visibleMarkers = React.useMemo(
     () =>
@@ -1173,6 +1224,7 @@ export default function MapScreen({
       eventTime: marker.eventTime ?? undefined,
       eventEndDate: marker.eventEndDate ?? undefined,
       eventEndTime: marker.eventEndTime ?? undefined,
+      eventViewerDateTime: marker.eventViewerDateTime ?? undefined,
       location: marker.location ?? undefined,
       attendeesCount: marker.attendeesCount,
       ageLimit: marker.ageLimit ?? undefined,
@@ -1361,6 +1413,75 @@ export default function MapScreen({
             );
           })}
         </ScrollView>
+
+        {(hasActiveFilters && onClearFilters) || deviceLocationStatus || showNoEventMatches ? (
+          <View style={styles.mapOverlayControls}>
+            {showNoEventMatches ? (
+              <View
+                style={[
+                  styles.mapNoMatchBanner,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? "rgba(24,24,28,0.92)" : "rgba(255,255,255,0.92)",
+                  },
+                ]}
+                accessibilityRole="text"
+              >
+                <Text style={[styles.mapNoMatchText, { color: colors.text }]}>
+                  No events match these filters nearby
+                </Text>
+              </View>
+            ) : null}
+
+            {hasActiveFilters && onClearFilters ? (
+              <TouchableOpacity
+                style={[
+                  styles.mapClearFiltersButton,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? "rgba(24,24,28,0.92)" : "rgba(255,255,255,0.92)",
+                  },
+                ]}
+                activeOpacity={0.75}
+                onPress={onClearFilters}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear filters"
+              >
+                <Text style={[styles.mapClearFiltersText, { color: colors.text }]}>Clear filters</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {showNoEventMatches && canIncreaseRadius && onIncreaseRadius ? (
+              <TouchableOpacity
+                style={[
+                  styles.mapClearFiltersButton,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? "rgba(24,24,28,0.92)" : "rgba(255,255,255,0.92)",
+                  },
+                ]}
+                activeOpacity={0.75}
+                onPress={onIncreaseRadius}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Increase radius"
+              >
+                <Text style={[styles.mapClearFiltersText, { color: colors.text }]}>Increase radius</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {deviceLocationStatus ? (
+              <LocationRecoveryState
+                variant="banner"
+                status={deviceLocationStatus}
+                onRetry={() => {
+                  void requestCurrentDeviceLocation({ force: true });
+                }}
+              />
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.mapArea}>
@@ -1670,6 +1791,37 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
     backgroundColor: "#000000",
+  },
+  mapOverlayControls: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    gap: 8,
+    alignItems: "stretch",
+  },
+  mapClearFiltersButton: {
+    alignSelf: "flex-start",
+    minHeight: 32,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapClearFiltersText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  mapNoMatchBanner: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  mapNoMatchText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   categoriesScroll: {
     paddingHorizontal: 16,

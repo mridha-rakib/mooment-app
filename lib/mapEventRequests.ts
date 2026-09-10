@@ -2,11 +2,18 @@ import {
   MAX_EVENT_RADIUS_MILES,
   MIN_EVENT_RADIUS_MILES,
   buildEventFilterRequestParams,
-  isValidEventLocationFilter,
+  hasBoundedRadiusFilter,
   normalizeEventRadiusMiles,
   type SharedEventFilters,
 } from "@/lib/eventFilters";
 import type { EventMapQuery } from "@/lib/events";
+
+// A valid discovery centre with an ACTIVE bounded radius (1–199). "Any distance"
+// (radius inactive) and "200+" broad both drop circular radius mode and fall
+// back to the existing viewport path — the centre only drives camera/recenter,
+// never eligibility. Kept as a named re-export so MapContainer / tests that
+// import it from here keep working.
+export const hasBoundedNearbyFilter = hasBoundedRadiusFilter;
 
 export type EventMapViewport = {
   north: number;
@@ -80,7 +87,7 @@ export const getMapViewportPageBudget = (
   filters: SharedEventFilters,
   viewport: EventMapViewport | null | undefined,
 ): number | null => {
-  if (isValidEventLocationFilter(filters.nearby)) {
+  if (hasBoundedNearbyFilter(filters)) {
     return null;
   }
 
@@ -123,13 +130,16 @@ export const buildMapEventRequestParams = (
   viewport: EventMapViewport | null,
   limit: number,
 ): EventMapQuery | null => {
-  const hasValidNearbyFilter = isValidEventLocationFilter(filters.nearby);
+  const boundedNearby = hasBoundedNearbyFilter(filters);
   const params = buildEventFilterRequestParams(filters, {
-    includeLocation: hasValidNearbyFilter,
+    // Broad ("200+") deliberately passes includeLocation:false so no
+    // latitude/longitude/radiusKm (and no ranking coords the Map doesn't use)
+    // reach the request — it routes through the viewport branch below instead.
+    includeLocation: boundedNearby,
     limit,
   });
 
-  if (hasValidNearbyFilter) {
+  if (boundedNearby) {
     return params;
   }
 

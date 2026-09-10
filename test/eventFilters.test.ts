@@ -334,7 +334,7 @@ test("invalid nearby filters do not emit stale or unsafe location request params
   assert.equal(mapParams?.north, 24);
 });
 
-test("one-mile and two-hundred-mile radii convert to kilometres exactly once", () => {
+test("bounded radii convert to kilometres exactly once; the 200 endpoint is broad (no radiusKm)", () => {
   const oneMileFilters: SharedEventFilters = {
     ...createEmptyEventFilters(),
     nearby: {
@@ -345,18 +345,33 @@ test("one-mile and two-hundred-mile radii convert to kilometres exactly once", (
       source: "selected",
     },
   };
-  const maxMileFilters: SharedEventFilters = {
+  const nearMaxFilters: SharedEventFilters = {
     ...oneMileFilters,
-    nearby: {
-      ...oneMileFilters.nearby!,
-      radiusMiles: 200,
-    },
+    nearby: { ...oneMileFilters.nearby!, radiusMiles: 199 },
+  };
+  const broadFilters: SharedEventFilters = {
+    ...oneMileFilters,
+    nearby: { ...oneMileFilters.nearby!, radiusMiles: 200 },
   };
 
+  // 1–199 mi: unchanged bounded conversion.
   assert.equal(buildEventFilterRequestParams(oneMileFilters).radiusKm, 1.609344);
-  assert.equal(buildEventFilterRequestParams(maxMileFilters).radiusKm, 321.8688);
+  assert.equal(buildEventFilterRequestParams(nearMaxFilters).radiusKm, 199 * 1.609344);
   assert.equal(buildMapEventRequestParams(oneMileFilters, null, 100)?.radiusKm, 1.609344);
-  assert.equal(buildMapEventRequestParams(maxMileFilters, null, 100)?.radiusKm, 321.8688);
+  assert.equal(buildMapEventRequestParams(nearMaxFilters, null, 100)?.radiusKm, 199 * 1.609344);
+
+  // 200 = broad: no latitude/longitude/radiusKm at all; the centre is passed
+  // only as passive ranking context for the Feed.
+  const broadFeed = buildEventFilterRequestParams(broadFilters);
+  assert.equal(broadFeed.radiusKm, undefined);
+  assert.equal(broadFeed.latitude, undefined);
+  assert.equal(broadFeed.longitude, undefined);
+  assert.equal(broadFeed.rankingLatitude, 23.7806);
+  assert.equal(broadFeed.rankingLongitude, 90.4074);
+
+  // 200 = broad on the Map: routes to the viewport branch, so with no viewport
+  // there is no request at all (and definitely no radiusKm).
+  assert.equal(buildMapEventRequestParams(broadFilters, null, 100), null);
 });
 
 test("nearby filter key is stable for map recenter intents", () => {

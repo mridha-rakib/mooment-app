@@ -3,6 +3,7 @@ import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constan
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { combineLocalDateAndTime } from '@/lib/eventDateRange';
+import { dateToDateKey, dateToTimeKey, resolveInitialPickerDate } from '@/lib/eventLocalTime';
 import {
   getEventStepTwoScheduleErrors,
   isOngoingPublishedEventEdit,
@@ -72,6 +73,11 @@ export default function CreateEventStep2() {
   const draftCategories = useEventDraftStore((state) => state.categories);
   const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
   const draftEndAt = useEventDraftStore((state) => state.endAt);
+  const draftScheduledLocalDate = useEventDraftStore((state) => state.scheduledLocalDate);
+  const draftScheduledLocalTime = useEventDraftStore((state) => state.scheduledLocalTime);
+  const draftEndLocalDate = useEventDraftStore((state) => state.endLocalDate);
+  const draftEndLocalTime = useEventDraftStore((state) => state.endLocalTime);
+  const draftTimezone = useEventDraftStore((state) => state.timezone);
   const originalScheduledAt = useEventDraftStore((state) => state.originalScheduledAt);
   const persistedEndAt = useEventDraftStore((state) => state.persistedEndAt);
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
@@ -97,14 +103,32 @@ export default function CreateEventStep2() {
     draftCategories.filter(isEventCategory).slice(0, MAX_CATEGORIES),
   );
   const selectedCategoriesRef = useRef(selectedCategories);
-  const initialStartAt = draftScheduledAt ? new Date(draftScheduledAt) : null;
-  const initialEndAt = draftEndAt ? new Date(draftEndAt) : null;
-  const validInitialStartAt = initialStartAt && !Number.isNaN(initialStartAt.getTime()) ? initialStartAt : null;
-  const validInitialEndAt = initialEndAt && !Number.isNaN(initialEndAt.getTime()) ? initialEndAt : null;
+  // Batch 3A picker hydration priority: explicit stored wall-clock parts >
+  // absolute instant reinterpreted in the Event's IANA timezone > legacy
+  // device-local interpretation of the absolute instant.
+  const validInitialStartAt = resolveInitialPickerDate(
+    draftScheduledLocalDate && draftScheduledLocalTime
+      ? { dateKey: draftScheduledLocalDate, time: draftScheduledLocalTime }
+      : null,
+    draftScheduledAt,
+    draftTimezone,
+  );
+  const validInitialEndAt = resolveInitialPickerDate(
+    draftEndLocalDate && draftEndLocalTime
+      ? { dateKey: draftEndLocalDate, time: draftEndLocalTime }
+      : null,
+    draftEndAt,
+    draftTimezone,
+  );
   const [startDate, setStartDate] = useState<Date | null>(validInitialStartAt);
   const [endDate, setEndDate] = useState<Date | null>(validInitialEndAt);
   const [startTime, setStartTime] = useState<Date | null>(validInitialStartAt);
   const [endTime, setEndTime] = useState<Date | null>(validInitialEndAt);
+  // True once the user explicitly changes a start / end picker in this visit.
+  // A venue-only edit leaves these false so the schedule is NOT re-sent as an
+  // explicit edit (the backend then runs its venue-change wall-clock branch).
+  const startScheduleTouchedRef = useRef(false);
+  const endScheduleTouchedRef = useRef(false);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
@@ -136,6 +160,7 @@ export default function CreateEventStep2() {
     setShowStartDatePicker(false);
     if (selectedDate) {
       setStartDate(selectedDate);
+      startScheduleTouchedRef.current = true;
       clearFieldError('startDate');
     }
   };
@@ -144,6 +169,7 @@ export default function CreateEventStep2() {
     setShowEndDatePicker(false);
     if (selectedDate) {
       setEndDate(selectedDate);
+      endScheduleTouchedRef.current = true;
       clearFieldError('endDate');
     }
   };
@@ -152,6 +178,7 @@ export default function CreateEventStep2() {
     setShowStartTimePicker(false);
     if (selectedTime) {
       setStartTime(selectedTime);
+      startScheduleTouchedRef.current = true;
       clearFieldError('startTime');
     }
   };
@@ -160,6 +187,7 @@ export default function CreateEventStep2() {
     setShowEndTimePicker(false);
     if (selectedTime) {
       setEndTime(selectedTime);
+      endScheduleTouchedRef.current = true;
       clearFieldError('endTime');
     }
   };
@@ -248,11 +276,49 @@ export default function CreateEventStep2() {
         ? combineLocalDateAndTime(endDate, endTime).toISOString()
         : null;
 
+    // Batch 3A — venue-local wall-clock transport. Derived from the VISIBLE
+    // picker components (never `.toISOString()`, which shifts through the device
+    // zone). Sent when the schedule is explicit intent: a new Event, or a
+    // start/end picker touched this visit. Ongoing edits keep their locked start
+    // untouched, so no start parts are emitted for them.
+    const startPickerDate = values?.startDate ?? startDate;
+    const startPickerTime = values?.startTime ?? startTime;
+    const endPickerDate = values?.endDate ?? endDate;
+    const endPickerTime = values?.endTime ?? endTime;
+    const isNewEvent = !isEditingEvent;
+    const startTouched = startScheduleTouchedRef.current;
+    const endTouched = endScheduleTouchedRef.current;
+    const emitSchedule = isNewEvent || startTouched || endTouched;
+
+    let scheduledLocalDate: string | null | undefined;
+    let scheduledLocalTime: string | null | undefined;
+    let endLocalDate: string | null | undefined;
+    let endLocalTime: string | null | undefined;
+
+    if (emitSchedule) {
+      if (isOngoingEdit) {
+        scheduledLocalDate = null;
+        scheduledLocalTime = null;
+      } else if (startPickerDate && startPickerTime) {
+        scheduledLocalDate = dateToDateKey(startPickerDate);
+        scheduledLocalTime = dateToTimeKey(startPickerTime);
+      }
+      if (endPickerDate && endPickerTime) {
+        endLocalDate = dateToDateKey(endPickerDate);
+        endLocalTime = dateToTimeKey(endPickerTime);
+      }
+    }
+
     setStepTwo({
       ageRestriction: toAgeRestriction(values?.ageRestriction ?? selectedAge),
       categories: values?.categories ?? selectedCategories,
       scheduledAt,
       endAt: eventEndAt,
+      scheduledLocalDate,
+      scheduledLocalTime,
+      endLocalDate,
+      endLocalTime,
+      scheduleWallClockDirty: emitSchedule ? true : undefined,
     });
   };
 

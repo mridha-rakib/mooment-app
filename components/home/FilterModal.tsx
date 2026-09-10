@@ -1,9 +1,13 @@
 import LocationSearchModal from '@/components/post/LocationSearchModal';
 import EventRadiusSlider from '@/components/home/EventRadiusSlider';
-import { getCurrentLocationForSharing, getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
+import LocationRecoveryState from '@/components/home/LocationRecoveryState';
+import {
+  getBestCurrentDeviceLocation,
+  getCurrentLocationIfPermissionGranted,
+  type DeviceLocationFailureStatus,
+  type DeviceLocationResult,
+} from '@/lib/locationSharing';
 import type { LocationSearchContext, LocationSearchResult } from '@/lib/locationSearch';
-import { useAuthStore } from '@/stores/authStore';
-import { useLocationSharingStore } from '@/stores/locationSharingStore';
 import { Spinner } from '@/components/ui/spinner';
 import {
   useTheme } from '@/hooks/useTheme';
@@ -16,6 +20,7 @@ import React,
   useState } from 'react';
 import { Modal,
   Alert,
+  AppState,
   Platform,
   ScrollView,
   StatusBar,
@@ -30,11 +35,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseHashtagFilterInput } from '@/lib/hashtags';
 import {
   DEFAULT_EVENT_RADIUS_MILES,
-  canApplyEventFilters,
   confirmVisibleEventFilters,
+  isEventRadiusEnabled,
   isValidEventLocationFilter,
   normalizeEventRadiusMiles,
   parseLocalDateKey,
+  resetEventFiltersPreservingDiscoveryCenter,
+  summarizeEventFilters,
   toLocalDateKey,
   toggleSingleSelectFilterValue,
   type EventLocationFilter,
@@ -101,6 +108,11 @@ type DraftLocationCoords = {
   longitude: number | null;
 };
 
+// Outer settle-guard so the recovery spinner can never hang even if the
+// underlying platform call stalls. Comfortably above the device-location
+// helper's own internal 12s GPS timeout; it does not replace it.
+const FILTER_LOCATION_CHECK_TIMEOUT_MS = 15000;
+
 const EMPTY_LOCATION_COORDS: DraftLocationCoords = {
   latitude: null,
   longitude: null,
@@ -138,16 +150,15 @@ export default function FilterModal({
 
   const [hashtags, setHashtags] = useState('');
 
-  const user = useAuthStore((state) => state.user);
-  const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
-  const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
-  const isLocationSyncing = useLocationSharingStore((state) => state.isSyncing);
-  // Authoritative persisted value — Apply/filter-resolution logic must always use this,
-  // never the transient optimistic value below, so filter semantics stay unchanged.
-  const locationSharingEnabled = Boolean(user?.currentLocationSharingEnabled);
-  // Transient, display-only value: lets the Switch move the instant the user taps it
-  // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
-  const [pendingLocationValue, setPendingLocationValue] = useState<boolean | null>(null);
+  // Filter-scoped Current Location state. This is intentionally DECOUPLED from
+  // the app-wide live-location sharing preference (user.currentLocationSharingEnabled):
+  // choosing "Current Location" as the Event discovery center must never enable/
+  // disable global sharing, PATCH /auth/me, start/stop the background watcher, or
+  // touch OS permission beyond a normal foreground read.
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [deviceLocationCoords, setDeviceLocationCoords] = useState<DraftLocationCoords>(EMPTY_LOCATION_COORDS);
+  const [locationRecovery, setLocationRecovery] = useState<DeviceLocationFailureStatus | null>(null);
+  const [isCheckingLocation, setIsCheckingLocation] = useState(false);
 
   const [locationSearchVisible, setLocationSearchVisible] = useState(false);
   const [locationSearchContext, setLocationSearchContext] = useState<LocationSearchContext | null>(null);
@@ -159,30 +170,39 @@ export default function FilterModal({
   // carried forward across reopen so it survives even after selectedLocationResult
   // is cleared back to null. Never sent to the backend.
   const [selectedLocationShortLabel, setSelectedLocationShortLabel] = useState<string | null>(null);
-  // Session-scoped: true once Reset has been pressed in this open/edit session,
-  // until the user explicitly re-selects Current Location or a manual place.
-  // Lets "Reset" clear the Event location filter without touching the user's
-  // persisted global location-sharing preference (locationSharingEnabled).
-  const [locationFilterSessionReset, setLocationFilterSessionReset] = useState(false);
-  // Session reset only overrides the *displayed* draft value — it never calls the
-  // sharing API, so the persisted global preference (locationSharingEnabled) is untouched.
-  const useCurrentLocation = pendingLocationValue !== null
-    ? pendingLocationValue
-    : locationFilterSessionReset
-      ? false
-      : locationSharingEnabled;
 
   const [radius, setRadius] = useState(DEFAULT_EVENT_RADIUS_MILES);
+  // Distance filter active/inactive. `radius` above is only a UI anchor; when
+  // this is false the applied filter carries no circular cutoff ("Any distance").
+  const [radiusEnabled, setRadiusEnabled] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
   const resetDraftRef = useRef(false);
   const searchContextRequestIdRef = useRef(0);
+  // Set synchronously by Reset to the exact filter object Apply must commit.
+  // React state updates are async, so re-deriving `nearby.radiusMiles` (and the
+  // cleared criteria) from local state in handleApply could otherwise leak the
+  // pre-Reset values. Any subsequent draft edit invalidates it.
+  const resetSnapshotRef = useRef<SharedEventFilters | null>(null);
+  // Generation guard for the device-location check: only the newest request may
+  // commit coords / recovery status / loading=false, so AppState recovery,
+  // Retry, the toggle and Apply can never race a stale result over a newer one.
+  const locationCheckIdRef = useRef(0);
+  const isCheckingLocationRef = useRef(false);
+
+  const invalidateResetSnapshot = useCallback(() => {
+    resetSnapshotRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
 
     resetDraftRef.current = false;
-    setLocationFilterSessionReset(false);
+    resetSnapshotRef.current = null;
+    // A fresh open supersedes any in-flight location check from a prior session.
+    locationCheckIdRef.current += 1;
+    setLocationRecovery(null);
+    setIsCheckingLocation(false);
     setActiveAge(activeFilters.ageRestriction ? AGE_VALUE_TO_OPTION[activeFilters.ageRestriction] : null);
     setActivePrice(activeFilters.priceFilter ? PRICE_VALUE_TO_OPTION[activeFilters.priceFilter] : null);
     setActiveTime(
@@ -194,11 +214,21 @@ export default function FilterModal({
     setHashtags(activeFilters.hashtags.map((tag) => `#${tag}`).join(' '));
     if (isValidEventLocationFilter(activeFilters.nearby)) {
       setRadius(normalizeEventRadiusMiles(activeFilters.nearby.radiusMiles));
+      // Legacy applied objects (no `radiusEnabled`) reopen as ACTIVE; only an
+      // explicit `radiusEnabled: false` reopens as "Any distance".
+      setRadiusEnabled(isEventRadiusEnabled(activeFilters.nearby));
       if (activeFilters.nearby.source === 'current') {
         setSelectedLocation('');
         setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
         setSelectedLocationResult(null);
         setSelectedLocationShortLabel(null);
+        // Reflect the applied Current Location center; reuse its coordinates so
+        // re-applying an unchanged center needs no fresh GPS read.
+        setUseCurrentLocation(true);
+        setDeviceLocationCoords({
+          latitude: activeFilters.nearby.latitude,
+          longitude: activeFilters.nearby.longitude,
+        });
       } else {
         setSelectedLocation(activeFilters.nearby.label);
         setSelectedLocationCoords({
@@ -207,19 +237,65 @@ export default function FilterModal({
         });
         setSelectedLocationResult(null);
         setSelectedLocationShortLabel(activeFilters.nearby.shortLabel ?? null);
+        setUseCurrentLocation(false);
+        setDeviceLocationCoords(EMPTY_LOCATION_COORDS);
       }
     } else {
       setRadius(DEFAULT_EVENT_RADIUS_MILES);
+      setRadiusEnabled(false);
       setSelectedLocation('');
       setSelectedLocationCoords(EMPTY_LOCATION_COORDS);
       setSelectedLocationResult(null);
       setSelectedLocationShortLabel(null);
+      setUseCurrentLocation(false);
+      setDeviceLocationCoords(EMPTY_LOCATION_COORDS);
     }
   }, [activeFilters, visible]);
 
+  useEffect(() => {
+    isCheckingLocationRef.current = isCheckingLocation;
+  }, [isCheckingLocation]);
+
+  // Re-check device location when returning to a foregrounded app while the
+  // recovery panel is showing (e.g. the user just enabled permission in
+  // Settings). Guarded to "modal visible + Current Location intended +
+  // currently unavailable + not already checking" so it never prompts, polls,
+  // or stacks concurrent requests.
+  useEffect(() => {
+    if (!visible) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (
+        state === 'active' &&
+        useCurrentLocation &&
+        locationRecovery &&
+        !isCheckingLocationRef.current
+      ) {
+        void runLocationCheck();
+      }
+    });
+    return () => subscription.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, useCurrentLocation, locationRecovery]);
+
   const handleRadiusCommitted = useCallback((nextRadius: number) => {
+    invalidateResetSnapshot();
     setRadius(normalizeEventRadiusMiles(nextRadius));
-  }, []);
+  }, [invalidateResetSnapshot]);
+
+  // The first intentional touch on the slider turns the distance filter on.
+  // Draft-only: nothing is fetched / committed / recentred until Apply.
+  const handleActivateRadius = useCallback(() => {
+    invalidateResetSnapshot();
+    setRadiusEnabled(true);
+  }, [invalidateResetSnapshot]);
+
+  // Radius-only clear: back to "Any distance", anchor 75, keeping the discovery
+  // centre and every other criterion. Draft-only until Apply.
+  const handleClearRadiusDraft = useCallback(() => {
+    invalidateResetSnapshot();
+    setRadiusEnabled(false);
+    setRadius(DEFAULT_EVENT_RADIUS_MILES);
+  }, [invalidateResetSnapshot]);
 
   const clearSelectedLocationDraft = useCallback(() => {
     setSelectedLocation('');
@@ -228,35 +304,71 @@ export default function FilterModal({
     setSelectedLocationShortLabel(null);
   }, []);
 
+  // Foreground device-location read for the Event discovery center. Uses the
+  // shared helper (which requests foreground permission and reads a position)
+  // but never enables/disables global live-location sharing. Returns the
+  // coordinates on success, or null after recording a recoverable status.
+  //
+  // Concurrency-safe: each call takes a generation id and only the newest call
+  // is allowed to commit coords / recovery status / loading. A superseded call
+  // resolves silently, so an AppState recovery attempt, a manual Retry, the
+  // toggle and Apply can never race a stale failure over a newer success (or
+  // leave the spinner stuck). An outer timeout guarantees the newest call
+  // always settles even if a platform call stalls.
+  const runLocationCheck = useCallback(async (): Promise<{ latitude: number; longitude: number } | null> => {
+    const requestId = ++locationCheckIdRef.current;
+    const isCurrent = () => requestId === locationCheckIdRef.current;
+    setIsCheckingLocation(true);
+    try {
+      const result = await Promise.race<DeviceLocationResult>([
+        getBestCurrentDeviceLocation({ requestPermission: true }),
+        new Promise<DeviceLocationResult>((resolve) => {
+          setTimeout(() => resolve({ status: 'timeout' }), FILTER_LOCATION_CHECK_TIMEOUT_MS);
+        }),
+      ]);
+
+      if (!isCurrent()) {
+        return null;
+      }
+
+      if (result.status === 'fresh' || result.status === 'lastKnown') {
+        const coords = { latitude: result.location.latitude, longitude: result.location.longitude };
+        setDeviceLocationCoords(coords);
+        setLocationRecovery(null);
+        return coords;
+      }
+
+      setLocationRecovery(result.status);
+      return null;
+    } catch {
+      if (isCurrent()) {
+        setLocationRecovery('failed');
+      }
+      return null;
+    } finally {
+      if (isCurrent()) {
+        setIsCheckingLocation(false);
+      }
+    }
+  }, []);
+
   const handleToggleCurrentLocation = useCallback(async (value: boolean) => {
-    if (isLocationSyncing) {
+    invalidateResetSnapshot();
+    setUseCurrentLocation(value);
+    setLocationRecovery(null);
+
+    if (!value) {
+      // Cancel any in-flight check so a late result can't re-open recovery.
+      locationCheckIdRef.current += 1;
+      setIsCheckingLocation(false);
+      setDeviceLocationCoords(EMPTY_LOCATION_COORDS);
       return;
     }
 
-    setPendingLocationValue(value);
-    if (value) {
-      // Explicitly re-selecting Current Location ends any prior Reset for this session.
-      setLocationFilterSessionReset(false);
-    }
-
-    try {
-      if (value) {
-        await enableLocationSharing();
-        clearSelectedLocationDraft();
-      } else {
-        await disableLocationSharing();
-      }
-      // enableSharing()/disableSharing() only resolve after authStore.user has
-      // already been updated, so it's safe to drop the transient value now.
-      setPendingLocationValue(null);
-    } catch (error) {
-      setPendingLocationValue(null);
-      Alert.alert(
-        'Current Location',
-        error instanceof Error ? error.message : 'Unable to update current location sharing.',
-      );
-    }
-  }, [isLocationSyncing, enableLocationSharing, disableLocationSharing, clearSelectedLocationDraft]);
+    // Current Location replaces any searched place as the discovery center.
+    clearSelectedLocationDraft();
+    await runLocationCheck();
+  }, [invalidateResetSnapshot, clearSelectedLocationDraft, runLocationCheck]);
 
   const resolveSearchProximityContext = useCallback(async (requestId: number) => {
     try {
@@ -290,44 +402,119 @@ export default function FilterModal({
   const handleDateChange = (event: any, date?: Date) => {
     setShowDatePicker(false);
     if (date) {
+      invalidateResetSnapshot();
       setSelectedDate(date);
     }
   };
 
+  // Draft-only: clears just the date until Apply. Cancel leaves the previously
+  // applied date intact; every other criterion is untouched.
+  const handleClearDate = useCallback(() => {
+    invalidateResetSnapshot();
+    setSelectedDate(null);
+  }, [invalidateResetSnapshot]);
+
+  // Explicit, dedicated remove of a searched discovery center. Returns the
+  // Event discovery center to the filter-scoped Current Location (never the
+  // global live-location sharing preference; never mutates OS permission or
+  // real device coordinates). If the device location cannot be acquired, the
+  // existing Batch-1 recovery panel takes over and the filter criteria stay
+  // intact. This is a different action from Reset — Reset's searched-center
+  // semantics are unchanged.
+  const handleRemoveSearchedLocation = useCallback(() => {
+    invalidateResetSnapshot();
+    clearSelectedLocationDraft();
+    setLocationRecovery(null);
+    setUseCurrentLocation(true);
+    void runLocationCheck();
+  }, [invalidateResetSnapshot, clearSelectedLocationDraft, runLocationCheck]);
+
   const handleReset = () => {
     resetDraftRef.current = true;
+    // Build the authoritative reset result ONCE, synchronously, from the
+    // always-current `activeFilters` prop. handleApply commits this exact
+    // object, so async state batching cannot leak the pre-Reset radius or
+    // criteria. APPROVED semantics: clear every non-location criterion, return
+    // distance to "Any distance" (radius inactive, anchor 75), and PRESERVE any
+    // valid discovery centre — current OR searched. Nothing here touches OS
+    // permission, real device coordinates, or global live-location sharing.
+    const snapshot = resetEventFiltersPreservingDiscoveryCenter(activeFilters);
+    resetSnapshotRef.current = snapshot;
+
+    const center = isValidEventLocationFilter(snapshot.nearby) ? snapshot.nearby : null;
+
     setActiveAge(null);
     setActivePrice(null);
     setActiveTime(null);
     setSelectedDate(null);
     setHashtags('');
-    clearSelectedLocationDraft();
     setRadius(DEFAULT_EVENT_RADIUS_MILES);
-    // Clears the Event *filter* session only — does not call enable/disableLocationSharing,
-    // so the user's persisted global location-sharing preference is left untouched.
-    setLocationFilterSessionReset(true);
+    setRadiusEnabled(false);
+    setLocationRecovery(null);
+
+    if (center?.source === 'current') {
+      clearSelectedLocationDraft();
+      setUseCurrentLocation(true);
+      setDeviceLocationCoords({ latitude: center.latitude, longitude: center.longitude });
+    } else if (center?.source === 'selected') {
+      setUseCurrentLocation(false);
+      setDeviceLocationCoords(EMPTY_LOCATION_COORDS);
+      setSelectedLocation(center.label);
+      setSelectedLocationCoords({ latitude: center.latitude, longitude: center.longitude });
+      setSelectedLocationResult(null);
+      setSelectedLocationShortLabel(center.shortLabel ?? null);
+    } else {
+      clearSelectedLocationDraft();
+      setUseCurrentLocation(false);
+      setDeviceLocationCoords(EMPTY_LOCATION_COORDS);
+    }
   };
 
   const handleApply = async () => {
-    if (isApplying || !canApplyCurrentDraft) return;
+    if (isApplying) return;
 
     setIsApplying(true);
     try {
+      // Reset produced an authoritative snapshot synchronously; commit it
+      // verbatim (unless the user has since edited the draft, which clears it)
+      // so a not-yet-flushed local radius/criteria value can't be re-applied.
+      const resetSnapshot = resetSnapshotRef.current;
+      if (resetSnapshot) {
+        onApply(resetSnapshot);
+        onClose();
+        return;
+      }
+
       const parsedHashtags = parseHashtagFilterInput(hashtags);
       const committedRadius = normalizeEventRadiusMiles(radius);
       const timePeriod = activeTime ? TIME_OPTION_TO_VALUE[activeTime] : undefined;
-      // A manually searched location always takes priority: since the switch now mirrors the
-      // global sharing preference, it can stay ON after the user picks a specific place.
-      // Uses the authoritative persisted value (not the transient display value) so Apply
-      // never resolves "current location" based on an operation that hasn't confirmed yet.
-      // locationFilterSessionReset lets Reset clear the Event location filter for this
-      // session without touching that persisted preference.
+      // A manually searched location always takes priority. Otherwise, if the
+      // filter-scoped Current Location toggle is on, resolve the discovery
+      // center from a foreground device read (reusing coordinates already
+      // acquired this session). If it cannot be resolved, surface the recovery
+      // panel and keep the modal open rather than applying a broken center or
+      // blocking every non-location filter.
       const hasManualLocationSelection = Boolean(selectedLocation.trim() || selectedLocationResult);
-      const nearby = hasManualLocationSelection
-        ? resolveSelectedLocationFilter(committedRadius)
-        : locationSharingEnabled && !locationFilterSessionReset
-          ? await resolveCurrentLocationFilter(committedRadius)
-          : null;
+      let nearby: NearbyEventsFilter | null = null;
+      if (hasManualLocationSelection) {
+        nearby = resolveSelectedLocationFilter(committedRadius);
+      } else if (useCurrentLocation) {
+        const coords = isValidLocationCoords(deviceLocationCoords)
+          ? deviceLocationCoords
+          : await runLocationCheck();
+        if (!coords) {
+          setIsApplying(false);
+          return;
+        }
+        nearby = {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          radiusMiles: committedRadius,
+          label: 'Current Location',
+          source: 'current',
+          radiusEnabled,
+        };
+      }
 
       onApply(confirmVisibleEventFilters(
         activeFilters,
@@ -348,6 +535,7 @@ export default function FilterModal({
         error instanceof Error ? error.message : 'Please check your location settings and try again.',
       );
     } finally {
+      resetSnapshotRef.current = null;
       setIsApplying(false);
     }
   };
@@ -368,22 +556,7 @@ export default function FilterModal({
       label: selectedLocation.trim() || selectedLocationResult?.label || 'Selected Location',
       source: 'selected',
       shortLabel: selectedLocationShortLabel ?? undefined,
-    };
-  };
-
-  const resolveCurrentLocationFilter = async (radiusMiles: number): Promise<NearbyEventsFilter> => {
-    const location = await getCurrentLocationForSharing();
-
-    if (!isValidLocationCoords(location)) {
-      throw new Error('Unable to read a valid current location. Check Location Services and try again.');
-    }
-
-    return {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      radiusMiles,
-      label: 'Current Location',
-      source: 'current',
+      radiusEnabled,
     };
   };
 
@@ -392,6 +565,7 @@ export default function FilterModal({
       return;
     }
 
+    invalidateResetSnapshot();
     setSelectedLocation(location.label);
     setSelectedLocationCoords({
       latitude: location.latitude,
@@ -401,17 +575,20 @@ export default function FilterModal({
     // Prefer the structured short place name over the flat label so the Feed
     // heading can safely say "Events around Barisal" without string-splitting.
     setSelectedLocationShortLabel(location.name?.trim() || location.city?.trim() || null);
-    // A fresh manual selection is itself an explicit location decision for this session.
-    setLocationFilterSessionReset(false);
+    // A fresh manual selection replaces Current Location as the discovery center.
+    setUseCurrentLocation(false);
+    setDeviceLocationCoords(EMPTY_LOCATION_COORDS);
+    setLocationRecovery(null);
   };
 
-  const canApplyCurrentDraft = canApplyEventFilters({
-    useCurrentLocation: locationSharingEnabled,
-    selectedLocationLabel: selectedLocation,
-    selectedLatitude: selectedLocationCoords.latitude,
-    selectedLongitude: selectedLocationCoords.longitude,
-  });
-  const isApplyDisabled = isApplying || !canApplyCurrentDraft;
+  // A location source is NOT required to apply Event filters. Age/price/date/
+  // time/hashtag/category can be applied with nearby = null; the request simply
+  // omits latitude/longitude/radiusKm.
+  const isApplyDisabled = isApplying;
+
+  // Compact, display-only line of the AUTHORITATIVE applied criteria (prop),
+  // never the editable draft. "" when nothing is active.
+  const appliedSummary = summarizeEventFilters(activeFilters);
 
   const renderPills = (options: string[], active: string | null, onSelect: (val: string | null) => void) => {
     return (
@@ -422,7 +599,10 @@ export default function FilterModal({
             <TouchableOpacity
               key={opt}
               style={[styles.pill, { borderColor: colors.border }, isActive && { backgroundColor: buttonBackground(colors), borderColor: colors.primary }]}
-              onPress={() => onSelect(toggleSingleSelectFilterValue(active, opt))}
+              onPress={() => {
+                invalidateResetSnapshot();
+                onSelect(toggleSingleSelectFilterValue(active, opt));
+              }}
               activeOpacity={0.8}
             >
               <Text style={[styles.pillText, { color: colors.textSecondary }, isActive && { color: buttonForeground(colors), fontWeight: 'bold' }]}>{opt}</Text>
@@ -450,6 +630,16 @@ export default function FilterModal({
             </TouchableOpacity>
           </View>
 
+          {appliedSummary ? (
+            <Text
+              style={[styles.appliedSummary, { color: colors.textSecondary }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {appliedSummary}
+            </Text>
+          ) : null}
+
           <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
             {/* Age Restrictions */}
@@ -469,16 +659,29 @@ export default function FilterModal({
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
               {renderPills(TIME_OPTIONS, activeTime, setActiveTime)}
 
-              <TouchableOpacity
-                style={[styles.inputBox, { backgroundColor: colors.card }]}
-                activeOpacity={0.8}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-                  {selectedDate ? selectedDate.toLocaleDateString() : 'Pick a date'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.dateRow}>
+                <TouchableOpacity
+                  style={[styles.inputBox, styles.dateInput, { backgroundColor: colors.card }]}
+                  activeOpacity={0.8}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
+                  <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
+                    {selectedDate ? selectedDate.toLocaleDateString() : 'Pick a date'}
+                  </Text>
+                </TouchableOpacity>
+                {selectedDate ? (
+                  <TouchableOpacity
+                    style={styles.inlineClearBtn}
+                    onPress={handleClearDate}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove date"
+                  >
+                    <Feather name="x" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
 
               {showDatePicker && (
                 <DateTimePicker
@@ -497,7 +700,10 @@ export default function FilterModal({
                 <TextInput
                   style={[styles.inputText, { color: colors.text }]}
                   value={hashtags}
-                  onChangeText={setHashtags}
+                  onChangeText={(text) => {
+                    invalidateResetSnapshot();
+                    setHashtags(text);
+                  }}
                   placeholder="#music #summer"
                   placeholderTextColor={colors.textSecondary}
                 />
@@ -520,7 +726,21 @@ export default function FilterModal({
               {selectedLocation.trim() ? (
                 <View style={[styles.inputBox, styles.selectedLocationBox, { backgroundColor: isDark ? '#52525A' : '#F0F0F3' }]}>
                   <Feather name="map-pin" size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                  <Text style={[styles.inputText, { color: colors.text }]}>{selectedLocation}</Text>
+                  <View style={styles.selectedLocationTextGroup}>
+                    <Text style={[styles.selectedLocationCaption, { color: colors.textSecondary }]}>Searching near</Text>
+                    <Text style={[styles.inputText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                      {selectedLocation}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.inlineClearBtn}
+                    onPress={handleRemoveSearchedLocation}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove search location"
+                  >
+                    <Feather name="x" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
                 </View>
               ) : null}
 
@@ -530,20 +750,38 @@ export default function FilterModal({
                   <Text style={[styles.inputText, { color: colors.text }]}>Current Location</Text>
                 </View>
                 <View style={styles.currentLocationToggleGroup}>
-                  {isLocationSyncing && <Spinner size="small" color={colors.textSecondary} />}
+                  {isCheckingLocation && <Spinner size="small" color={colors.textSecondary} />}
                   <Switch
                     value={useCurrentLocation}
                     onValueChange={handleToggleCurrentLocation}
                     trackColor={{ false: isDark ? '#3A3A44' : '#E0E0E0', true: colors.primary }}
                     thumbColor="#FFFFFF"
-                    disabled={isLocationSyncing}
+                    disabled={isCheckingLocation}
                   />
                 </View>
               </View>
 
+              {locationRecovery ? (
+                <LocationRecoveryState
+                  status={locationRecovery}
+                  retrying={isCheckingLocation}
+                  onRetry={() => {
+                    void runLocationCheck();
+                  }}
+                />
+              ) : null}
+
               {/* Radius Slider — owns its own live drag state so dragging doesn't
-                  re-render the rest of this modal; commits to `radius` on release. */}
-              <EventRadiusSlider value={radius} onChangeCommitted={handleRadiusCommitted} />
+                  re-render the rest of this modal; commits to `radius` on release.
+                  When `enabled` is false it shows "Any distance"; the first drag
+                  gesture calls `onActivate`. `onClear` returns it to inactive. */}
+              <EventRadiusSlider
+                value={radius}
+                enabled={radiusEnabled}
+                onActivate={handleActivateRadius}
+                onClear={handleClearRadiusDraft}
+                onChangeCommitted={handleRadiusCommitted}
+              />
             </View>
 
             <View style={{ height: 40 }} />
@@ -663,6 +901,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   selectedLocationBox: {
+  },
+  appliedSummary: {
+    fontSize: 12,
+    paddingHorizontal: 20,
+    marginTop: -12,
+    marginBottom: 12,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  dateInput: {
+    flex: 1,
+    marginTop: 0,
+  },
+  inlineClearBtn: {
+    width: 32,
+    height: 32,
+    marginLeft: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedLocationTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+  selectedLocationCaption: {
+    fontSize: 11,
+    lineHeight: 13,
   },
   currentLocationRow: {
     flexDirection: 'row',

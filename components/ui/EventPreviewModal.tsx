@@ -41,6 +41,8 @@ export type EventPreviewModalItem = {
   eventTime?: string;
   eventEndDate?: string;
   eventEndTime?: string;
+  /** Batch 3C — "Sep 21 · 5:00 AM your time"; only set when it differs from the venue clock. */
+  eventViewerDateTime?: string;
   location?: string;
   attendeesCount?: number;
   ageLimit?: string;
@@ -289,6 +291,12 @@ export default function EventPreviewModal({
             <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.eventTime ?? "Time TBA"}</Text>
           </View>
 
+          {item.eventViewerDateTime ? (
+            <Text style={[styles.viewerEquivalentLine, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.eventViewerDateTime}
+            </Text>
+          ) : null}
+
           <View style={styles.detailItem}>
             <Feather name="map-pin" size={16} color={colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{item.location ?? "Location TBA"}</Text>
@@ -522,6 +530,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flexShrink: 1,
     minWidth: 0,
+  },
+  viewerEquivalentLine: {
+    fontSize: 12,
+    marginTop: -4,
+    marginLeft: 42,
+    opacity: 0.8,
   },
   detailLabel: {
     width: 34,

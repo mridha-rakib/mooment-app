@@ -60,9 +60,14 @@ import {
   buildEventFilterRequestParams,
   createEmptyEventFilters,
   getEventLocationFilterKey,
+  getNextEventRadiusMiles,
   hasActiveEventFilters,
+  isBroadEventRadius,
+  isEventRadiusEnabled,
+  isValidEventLocationFilter,
   mergeCategoryIntoEventFilters,
   normalizeEventCategoryFilter,
+  resetEventFiltersPreservingDiscoveryCenter,
   setCategoryInEventFilters,
   type SharedEventFilters,
 } from "@/lib/eventFilters";
@@ -443,6 +448,10 @@ export default function HomeFeed() {
   const activeFeedVideoItemIdRef = useRef<string | null>(null);
   const appliedEventFiltersRef = useRef(appliedEventFilters);
   const appliedNearbyFilterKeyRef = useRef(getEventLocationFilterKey(appliedEventFilters.nearby));
+  // Mirror of isEventFilterLoading for event handlers that must not fire a
+  // second time while the previous Event-filter request is still in flight
+  // (no-match "Increase radius" rapid double-tap guard).
+  const isEventFilterLoadingRef = useRef(false);
   const feedAudienceRef = useRef(feedAudience);
   const activeThemeRef = useRef(activeTheme);
   const previousThemeRef = useRef(activeTheme);
@@ -466,6 +475,10 @@ export default function HomeFeed() {
     appliedEventFiltersRef.current = appliedEventFilters;
     appliedNearbyFilterKeyRef.current = getEventLocationFilterKey(appliedEventFilters.nearby);
   }, [appliedEventFilters]);
+
+  useEffect(() => {
+    isEventFilterLoadingRef.current = isEventFilterLoading;
+  }, [isEventFilterLoading]);
 
   useEffect(() => {
     feedAudienceRef.current = feedAudience;
@@ -703,11 +716,14 @@ export default function HomeFeed() {
     try {
       const rankingLocation = await getSmartFeedRankingLocation();
       const events = await getFeedEvents({
+        // Passive device/GeoIP ranking is the fallback; a broad ("200+")
+        // discovery centre supplies its own rankingLatitude/Longitude via the
+        // request params, so those must win when present.
+        ...rankingLocation,
         ...buildEventFilterRequestParams(appliedEventFiltersRef.current, {
           limit: 100,
           audience,
         }),
-        ...rankingLocation,
       });
 
       if (!isLatestEventRequest(requestId, eventRequestIdRef.current)) return;
@@ -758,14 +774,16 @@ export default function HomeFeed() {
       const rankingLocationPromise = getSmartFeedRankingLocation();
       const rankingLocation = await rankingLocationPromise;
       const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
-        getFeedMoments({
-          hashtags: eventFilters.hashtags,
-          audience,
-          latitude: eventRequestParams.latitude,
-          longitude: eventRequestParams.longitude,
-          radiusKm: eventRequestParams.radiusKm,
-        }),
-        getFeedEvents({ ...eventRequestParams, ...rankingLocation }),
+        // Ordinary social Posts must NOT inherit Event filter criteria. The
+        // Event hashtag / searched-location / radius filters only constrain
+        // Events (getFeedEvents below); forwarding them here previously hid
+        // untagged / out-of-radius / location-less Posts from Discover and
+        // Friends. Standalone Post hashtag/location features are unaffected.
+        getFeedMoments({ audience }),
+        // rankingLocation (passive device/GeoIP) is the fallback; a broad
+        // ("200+") discovery centre carries its own rankingLatitude/Longitude
+        // in eventRequestParams and must take precedence when present.
+        getFeedEvents({ ...rankingLocation, ...eventRequestParams }),
         getFeedReposts(50, audience),
       ]);
       const isLatestSettled = isLatestEventRequest(requestId, feedRequestIdRef.current);
@@ -913,8 +931,40 @@ export default function HomeFeed() {
   const handleClearEventFilters = useCallback(() => {
     beginEventFilterTransition();
     setPendingMapFilterRecenterKey(null);
-    setAppliedEventFilters(createEmptyEventFilters());
+    // Same authoritative reset used by the modal: clears every non-location
+    // criterion, returns distance to "Any distance" (radius inactive, anchor
+    // 75), and PRESERVES the discovery centre — current OR searched. One helper
+    // for the Feed chip and the Map "Clear filters" action.
+    setAppliedEventFilters((current) => resetEventFiltersPreservingDiscoveryCenter(current));
   }, [beginEventFilterTransition]);
+
+  // No-match "Increase radius": widen ONLY the radius to the next canonical
+  // checkpoint on the already-applied filters, preserving the discovery centre
+  // (current or searched) and every other criterion. Commits through the same
+  // handleFilterChange path Feed and Map both use — no Map-local state, no GPS
+  // re-read, no global-sharing mutation. Ignored while an Event-filter request
+  // is in flight so a rapid double-tap can't skip a step.
+  const handleIncreaseEventRadius = useCallback(() => {
+    if (isEventFilterLoadingRef.current) {
+      return;
+    }
+    const nearby = appliedEventFiltersRef.current.nearby;
+    if (
+      !isValidEventLocationFilter(nearby) ||
+      !isEventRadiusEnabled(nearby) || // no active radius to widen ("Any distance")
+      isBroadEventRadius(nearby.radiusMiles)
+    ) {
+      return;
+    }
+    const nextRadius = getNextEventRadiusMiles(nearby.radiusMiles);
+    if (nextRadius <= nearby.radiusMiles) {
+      return;
+    }
+    handleFilterChange({
+      ...appliedEventFiltersRef.current,
+      nearby: { ...nearby, radiusMiles: nextRadius },
+    });
+  }, [handleFilterChange]);
 
   const handleMapFilterRecenterHandled = useCallback((key: string) => {
     setPendingMapFilterRecenterKey((currentKey) => (
@@ -1333,6 +1383,16 @@ export default function HomeFeed() {
     isFeedLoading,
     eventCount: feedEvents.length,
   });
+  // "Increase radius" is offered only with a real discovery centre whose radius
+  // is an ACTIVE restriction still below the broad max — never when distance is
+  // "Any distance" (nothing to widen). Shared by the Feed row and the Map overlay.
+  const canIncreaseEventRadius = useMemo(
+    () =>
+      isValidEventLocationFilter(appliedEventFilters.nearby) &&
+      isEventRadiusEnabled(appliedEventFilters.nearby) &&
+      !isBroadEventRadius(appliedEventFilters.nearby.radiusMiles),
+    [appliedEventFilters],
+  );
   const shouldShowFeedSkeleton = selectedType === 'Feed' && !hasFeedLoadedOnce && isFeedLoading && feedItems.length === 0 && !isRefreshing;
   // Friends-only true empty state. Mutually exclusive with the skeleton
   // (skeleton requires isFeedLoading, this requires !isFeedLoading) and
@@ -1568,9 +1628,24 @@ export default function HomeFeed() {
                     {isEventFilterLoading ? (
                       <EventFeedSkeletonList />
                     ) : showEventFilterEmptyState ? (
-                      <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
-                        No nearby active or upcoming events found.
-                      </Text>
+                      <>
+                        <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
+                          No events match these filters nearby
+                        </Text>
+                        {canIncreaseEventRadius ? (
+                          <TouchableOpacity
+                            style={[styles.clearEventFiltersButton, styles.increaseRadiusButton, { borderColor: colors.border }]}
+                            activeOpacity={0.75}
+                            onPress={handleIncreaseEventRadius}
+                            disabled={isEventFilterLoading}
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Increase radius"
+                          >
+                            <Text style={[styles.clearEventFiltersText, { color: colors.textSecondary }]}>Increase radius</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </>
                     ) : null}
                   </View>
                 ) : null}
@@ -1593,6 +1668,10 @@ export default function HomeFeed() {
             filterRecenterKey={pendingMapFilterRecenterKey}
             onFilterRecenterHandled={handleMapFilterRecenterHandled}
             onCategoryChange={handleMapCategoryChange}
+            hasActiveFilters={hasAppliedEventFilters}
+            onClearFilters={handleClearEventFilters}
+            canIncreaseRadius={canIncreaseEventRadius}
+            onIncreaseRadius={handleIncreaseEventRadius}
           />
         )}
       </View>
@@ -1689,6 +1768,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  increaseRadiusButton: {
+    alignSelf: "flex-start",
+    marginTop: 8,
   },
   clearEventFiltersText: {
     fontSize: 12,

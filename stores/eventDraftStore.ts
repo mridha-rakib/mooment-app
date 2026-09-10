@@ -23,6 +23,10 @@ import type {
   EventTicketRequestPayload,
 } from "@/lib/events";
 import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
+import {
+  instantToWallClockPartsForEvent,
+  type EventWallClockParts,
+} from "@/lib/eventLocalTime";
 import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
 
 export type EventDraftTicket = EventTicketPayload & {
@@ -48,6 +52,19 @@ type EventDraftState = {
   categories: EventCategory[];
   scheduledAt: string | null;
   endAt: string | null;
+  // Batch 3A — venue-local wall-clock transport. `scheduledAt`/`endAt` above stay
+  // as legacy/compat absolute values; these carry the user's VISIBLE selection so
+  // the server can interpret it in the resolved venue timezone.
+  scheduledLocalDate: string | null;
+  scheduledLocalTime: string | null;
+  endLocalDate: string | null;
+  endLocalTime: string | null;
+  // IANA venue timezone from the server (edit hydration only in this batch).
+  timezone: string | null;
+  // True only when the user explicitly edited a start/end picker this session.
+  // Gates whether local wall-clock parts are sent on an EXISTING Event (a
+  // venue-only edit must not masquerade as a schedule edit).
+  scheduleWallClockDirty: boolean;
   location: EventLocation;
   tickets: EventDraftTicket[];
   privacy: EventPrivacy;
@@ -63,6 +80,11 @@ type EventDraftState = {
     categories: EventCategory[];
     scheduledAt: string | null;
     endAt: string | null;
+    scheduledLocalDate?: string | null;
+    scheduledLocalTime?: string | null;
+    endLocalDate?: string | null;
+    endLocalTime?: string | null;
+    scheduleWallClockDirty?: boolean;
   }) => void;
   setStepThree: (payload: { location: EventLocation }) => void;
   setPrivacy: (privacy: EventPrivacy) => void;
@@ -112,6 +134,12 @@ const createInitialState = () => {
     ageRestriction: "all_ages" as EventAgeRestriction,
     categories: [],
     endAt: null,
+    scheduledLocalDate: null,
+    scheduledLocalTime: null,
+    endLocalDate: null,
+    endLocalTime: null,
+    timezone: null,
+    scheduleWallClockDirty: false,
     location: {},
     tickets: [],
     privacy: "public" as EventPrivacy,
@@ -194,12 +222,46 @@ const mergeTicketsFromEvent = (
     };
   });
 
+// Batch 3A — rebuild venue-local wall-clock parts from an authoritative server
+// Event (absolute instant + resolved IANA timezone). `null` when the Event has
+// no known timezone, so callers keep the legacy device-local behaviour.
+const deriveEventWallClockParts = (
+  event: Pick<EventResponse, "scheduledAt" | "endAt" | "timezone">,
+): {
+  scheduledLocalDate: string | null;
+  scheduledLocalTime: string | null;
+  endLocalDate: string | null;
+  endLocalTime: string | null;
+} | null => {
+  if (!event.timezone) {
+    return null;
+  }
+  const start: EventWallClockParts | null = instantToWallClockPartsForEvent(
+    event.scheduledAt ?? null,
+    event.timezone,
+  );
+  const end: EventWallClockParts | null = instantToWallClockPartsForEvent(
+    event.endAt ?? null,
+    event.timezone,
+  );
+  if (!start && !end) {
+    return null;
+  }
+  return {
+    scheduledLocalDate: start?.dateKey ?? null,
+    scheduledLocalTime: start?.time ?? null,
+    endLocalDate: end?.dateKey ?? null,
+    endLocalTime: end?.time ?? null,
+  };
+};
+
 const getEventSyncState = (event: EventResponse, currentTickets: EventDraftTicket[]) => ({
   draftId: event.id,
   isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
   publishedEventBaseline: getPublishedEventBaseline(event),
   publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
   persistedEndAt: event.endAt ?? null,
+  timezone: event.timezone ?? null,
   bannerImageKey: event.bannerImageKey ?? null,
   bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
   bannerImageDisplay: event.bannerImageDisplay ?? null,
@@ -331,8 +393,33 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     }));
   },
 
-  setStepTwo: ({ ageRestriction, categories, scheduledAt, endAt }) => {
-    set({ ageRestriction, categories, scheduledAt, endAt });
+  setStepTwo: ({
+    ageRestriction,
+    categories,
+    scheduledAt,
+    endAt,
+    scheduledLocalDate,
+    scheduledLocalTime,
+    endLocalDate,
+    endLocalTime,
+    scheduleWallClockDirty,
+  }) => {
+    set((state) => ({
+      ageRestriction,
+      categories,
+      scheduledAt,
+      endAt,
+      scheduledLocalDate:
+        scheduledLocalDate === undefined ? state.scheduledLocalDate : scheduledLocalDate,
+      scheduledLocalTime:
+        scheduledLocalTime === undefined ? state.scheduledLocalTime : scheduledLocalTime,
+      endLocalDate: endLocalDate === undefined ? state.endLocalDate : endLocalDate,
+      endLocalTime: endLocalTime === undefined ? state.endLocalTime : endLocalTime,
+      scheduleWallClockDirty:
+        scheduleWallClockDirty === undefined
+          ? state.scheduleWallClockDirty
+          : scheduleWallClockDirty,
+    }));
   },
 
   setStepThree: ({ location }) => {
@@ -491,6 +578,12 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
 
         set({
           ...getEventSyncState(event, get().tickets),
+          // Batch 3A: the saved Event's instant + timezone are now authoritative
+          // (covers DST normalisation + server-side venue conversion). Drop the
+          // provisional dirty flag so a later venue-only edit isn't treated as a
+          // schedule edit.
+          ...(deriveEventWallClockParts(event) ?? {}),
+          scheduleWallClockDirty: false,
           bannerImageKey: event.bannerImageKey ?? get().bannerImageKey,
           bannerOriginalImageKey: event.bannerOriginalImageKey ?? get().bannerOriginalImageKey,
           bannerImageDisplay: event.bannerImageDisplay ?? get().bannerImageDisplay,
@@ -553,6 +646,8 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
 
     set({
       ...getEventSyncState(event, state.tickets),
+      ...(deriveEventWallClockParts(event) ?? {}),
+      scheduleWallClockDirty: false,
       bannerImageKey: event.bannerImageKey ?? state.bannerImageKey,
       bannerOriginalImageKey: event.bannerOriginalImageKey ?? state.bannerOriginalImageKey,
       bannerImageDisplay: event.bannerImageDisplay ?? state.bannerImageDisplay,
@@ -571,6 +666,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
     const bannerOriginalImageUri = event.bannerOriginalImageKey
       ? getStorageFileUrl(event.bannerOriginalImageKey)
       : bannerImageUri;
+    const wallClock = deriveEventWallClockParts(event);
 
     set({
       draftId: event.id,
@@ -595,6 +691,16 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       categories: event.categories?.length ? event.categories : event.category ? [event.category] : [],
       scheduledAt: event.scheduledAt ?? null,
       endAt: event.endAt ?? null,
+      timezone: event.timezone ?? null,
+      // Batch 3A: seed picker hydration from the venue-local wall-clock when the
+      // Event carries a timezone; otherwise leave null so Step 2 falls back to
+      // legacy device-local interpretation of `scheduledAt`.
+      scheduledLocalDate: wallClock?.scheduledLocalDate ?? null,
+      scheduledLocalTime: wallClock?.scheduledLocalTime ?? null,
+      endLocalDate: wallClock?.endLocalDate ?? null,
+      endLocalTime: wallClock?.endLocalTime ?? null,
+      // A freshly opened Event is not a schedule edit until the user touches a picker.
+      scheduleWallClockDirty: false,
       location: event.location ?? {},
       tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [],
       privacy: event.privacy,
@@ -677,6 +783,31 @@ const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> 
     privacy: state.privacy,
     scheduledAt: state.scheduledAt,
     endAt: state.endAt,
+    ...buildWallClockTransportFields(state),
     tickets: stripLocalTicketFields(state.tickets),
+  };
+};
+
+// Batch 3A — attach the venue-local wall-clock transport fields to an outgoing
+// draft/publish payload. Included when the schedule is explicit intent:
+//   - a NEW Event (its schedule is always intentional once entered), OR
+//   - the user touched a start/end picker this session.
+// A venue-only edit on an existing Event therefore sends NO local parts, so the
+// backend's venue-change wall-clock-preservation branch runs.
+const buildWallClockTransportFields = (
+  state: EventDraftState,
+): Pick<
+  EventPayload,
+  "scheduledLocalDate" | "scheduledLocalTime" | "endLocalDate" | "endLocalTime"
+> => {
+  const includeWallClock = !state.isExistingEventSession || state.scheduleWallClockDirty;
+  if (!includeWallClock) {
+    return {};
+  }
+  return {
+    ...(state.scheduledLocalDate ? { scheduledLocalDate: state.scheduledLocalDate } : {}),
+    ...(state.scheduledLocalTime ? { scheduledLocalTime: state.scheduledLocalTime } : {}),
+    ...(state.endLocalDate ? { endLocalDate: state.endLocalDate } : {}),
+    ...(state.endLocalTime ? { endLocalTime: state.endLocalTime } : {}),
   };
 };

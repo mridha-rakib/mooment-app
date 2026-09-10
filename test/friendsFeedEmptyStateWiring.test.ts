@@ -142,6 +142,7 @@ test("RefreshControl remains wired to the feed FlatList", () => {
   );
 });
 
-test("nearby-event filter subsection copy is untouched", () => {
-  assert.match(homeSource, /No nearby active or upcoming events found\./);
+test("nearby-event filter no-match copy is the clearer Batch-2A wording", () => {
+  assert.match(homeSource, /No events match these filters nearby/);
+  assert.doesNotMatch(homeSource, /No nearby active or upcoming events found/);
 });
