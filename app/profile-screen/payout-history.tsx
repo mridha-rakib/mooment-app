@@ -24,7 +24,7 @@ const STATUS_CONFIG: Record<
   processing: { label: "Processing", icon: "loader", colorKey: "primary" },
   pending: { label: "Pending", icon: "clock", colorKey: "warning" },
   failed: { label: "Failed", icon: "x-circle", colorKey: "danger" },
-  cancelled: { label: "Cancelled", icon: "slash", colorKey: "textSecondary" },
+  cancelled: { label: "Canceled", icon: "slash", colorKey: "textSecondary" },
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -34,7 +34,7 @@ const METHOD_LABELS: Record<string, string> = {
 
 const formatDate = (dateStr: string | null | undefined): string => {
   if (!dateStr) return "–";
-  return new Date(dateStr).toLocaleDateString(undefined, {
+  return new Date(dateStr).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
