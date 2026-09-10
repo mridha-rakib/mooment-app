@@ -41,7 +41,7 @@ const FILTER_LABELS: Record<EventTicketStatFilter, string> = {
 };
 
 const EMPTY_TEXT: Record<EventTicketStatFilter, string> = {
-  going: "No issued ticket holders are available.",
+  going: "No registered attendees are available.",
   attended: "No attendees have checked in yet.",
   canceled: "No tickets have been canceled.",
   noShow: "No no-show attendees are available.",
@@ -358,7 +358,7 @@ export default function AttendeeListScreen() {
           const username = isAnonymous ? "" : attendee?.username?.trim();
           const displayName = isAnonymous ? "Anonymous" : attendee?.name.trim() || "Attendee";
           const ticketCount = getTicketCount(item);
-          const ticketCountLabel = ticketCount > 1 ? `${ticketCount} Tickets` : "";
+          const ticketCountLabel = ticketCount > 0 ? `${ticketCount} ${ticketCount === 1 ? "Ticket" : "Tickets"}` : "";
           const handleLabel = username ? `@${username.replace(/^@+/, "")}` : "@xenog";
           const secondaryLabel = [
             !isAnonymous ? handleLabel : null,

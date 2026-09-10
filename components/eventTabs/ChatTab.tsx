@@ -89,7 +89,7 @@ const MESSAGE_COLORS = {
 };
 
 const formatMessageTime = (value: string) =>
-  new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 
 const formatScheduledTime = (value: string) => {
   const date = new Date(value);

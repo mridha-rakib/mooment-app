@@ -199,7 +199,7 @@ export default function TicketStatScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Stat</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Stats</Text>
         <View style={{ width: 40 }} />
       </View>
 

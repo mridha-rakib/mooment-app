@@ -64,7 +64,7 @@ export default function ForgotPassword() {
               resizeMode="contain"
             />
              
-            <Text style={[styles.title, { color: colors.text }]}>Forget Password</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Forgot Password</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Type your email to recover your account</Text>
           </View>
 
@@ -72,7 +72,7 @@ export default function ForgotPassword() {
             <Feather name="mail" size={20} color={colors.textSecondary} style={styles.icon} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              placeholder="name@nocturnal.com"
+              placeholder="name@example.com"
               placeholderTextColor={colors.textSecondary}
               value={email}
               onChangeText={setEmail}

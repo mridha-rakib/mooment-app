@@ -476,7 +476,7 @@ export default function FilterModal({
               >
                 <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
                 <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-                  {selectedDate ? selectedDate.toLocaleDateString() : 'Pick a date'}
+                  {selectedDate ? selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : 'Pick a date'}
                 </Text>
               </TouchableOpacity>
 

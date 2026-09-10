@@ -139,9 +139,9 @@ export const EVENT_CATEGORY_METADATA = [
     displayName: "Wellness & Spirituality",
     order: 16,
     emoji: "🧘",
-    solidColorName: "Silver Grey",
+    solidColorName: "Silver Gray",
     hexColor: "#C0C0C0",
-    purpose: "A soft, balanced metallic silver-grey. Ensures high visibility on a pure white background while remaining clean and neutral.",
+    purpose: "A soft, balanced metallic silver-gray. Ensures high visibility on a pure white background while remaining clean and neutral.",
   },
   {
     value: "Travel & Experiences",

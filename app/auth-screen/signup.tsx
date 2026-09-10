@@ -234,7 +234,7 @@ export default function SignUp() {
               // placeholder={
               //   accountType === "personal" ? "Fullname" : "Business Name"
               // }
-              placeholder="Fullname"
+              placeholder="Full Name"
               placeholderTextColor={colors.textSecondary}
               value={name}
               onChangeText={(value) => {
@@ -260,7 +260,7 @@ export default function SignUp() {
             />
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              placeholder="username"
+              placeholder="Username"
               placeholderTextColor={colors.textSecondary}
               value={username}
               onChangeText={(value) => {
@@ -288,7 +288,7 @@ export default function SignUp() {
             />
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              placeholder="name@nocturnal.com"
+              placeholder="name@example.com"
               placeholderTextColor={colors.textSecondary}
               value={email}
               onChangeText={(value) => {

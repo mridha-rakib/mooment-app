@@ -374,7 +374,7 @@ export default function EventDashboardScreen() {
               style={styles.seeAllBtn}
               onPress={goToTicketStats}
             >
-              <Text style={[styles.seeAllText, { color: colors.text }]}>See Stat</Text>
+              <Text style={[styles.seeAllText, { color: colors.text }]}>View Stats</Text>
               <HugeiconsIcon icon={ArrowRight02Icon} size={14} color={colors.text} />
             </TouchableOpacity>
           </View>

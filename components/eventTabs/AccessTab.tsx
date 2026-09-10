@@ -186,6 +186,9 @@ const getRewardCapacityLabel = (reward: EventRewardPayload) => {
   }
 
   const remaining = Math.max(0, reward.availableCount ?? reward.capacity ?? 0);
+  if (remaining <= 0) {
+    return "No spots left";
+  }
   return `${remaining} user${remaining === 1 ? "" : "s"} left`;
 };
 

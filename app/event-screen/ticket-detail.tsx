@@ -198,7 +198,7 @@ const getTicketCancellationRefundLabel = (cancellation?: TicketCancellation | nu
 
 const getTicketCancellationStatusLabel = (cancellation?: TicketCancellation | null) => {
   if (!cancellation) return "";
-  return cancellation.status === "needs_attention" ? "Refund needs attention" : "Cancelled";
+  return cancellation.status === "needs_attention" ? "Refund needs attention" : "Canceled";
 };
 
 const findWalletPassIndex = (
@@ -615,7 +615,7 @@ const TicketDetailScreen = () => {
   const hasAnySharedPass = walletContextPasses.some((pass) => Boolean(pass.currentShare));
   const hasAnyUsedPass = walletTicketPasses.some((pass) => pass.status === "used");
   const walletStatusLabel = walletIsCancelled
-    ? "Cancelled"
+    ? "Canceled"
     : hasAnyUsedPass && walletActiveVisiblePassCount === 0
       ? "Used"
       : hasAnySharedPass && !walletCanShowQr
@@ -928,8 +928,8 @@ const TicketDetailScreen = () => {
     Alert.alert(
       "Cancel this ticket?",
       isMonetaryTicket
-        ? "Your ticket will be cancelled, the QR code will stop working, and the eligible amount will be refunded to your original payment method."
-        : "Your ticket will be cancelled, the QR code will stop working, and the ticket will be returned to availability.",
+        ? "Your ticket will be canceled, the QR code will stop working, and the eligible amount will be refunded to your original payment method."
+        : "Your ticket will be canceled, the QR code will stop working, and the ticket will be returned to availability.",
       [
         { text: "Keep Ticket", style: "cancel" },
         {
@@ -964,7 +964,7 @@ const TicketDetailScreen = () => {
                           disabledReason: cancellation.refundStatus === "not_required" ? "already_cancelled" : "refund_processing",
                           disabledMessage:
                             cancellation.refundStatus === "not_required"
-                              ? "This ticket has already been cancelled."
+                              ? "This ticket has already been canceled."
                               : "Your refund is currently being processed.",
                           cancellationStatus: cancellation.status,
                           refundStatus: cancellation.refundStatus,
@@ -1133,7 +1133,7 @@ const TicketDetailScreen = () => {
 
             {selectedCancellation ? (
               <View style={styles.walletCancellationState}>
-                <Text style={styles.walletCancellationStateText}>Cancelled</Text>
+                <Text style={styles.walletCancellationStateText}>Canceled</Text>
                 {!!walletPassRefundStatus && (
                   <Text style={styles.walletCancellationSubText}>{walletPassRefundStatus}</Text>
                 )}
@@ -1242,7 +1242,7 @@ const TicketDetailScreen = () => {
                 {selectedSharePass?.status === "used"
                   ? "Selected ticket is already used and cannot be shared again."
                   : selectedShare
-                  ? "An active shared QR can be cancelled below. Owner-held tickets remain selectable for new shares."
+                  ? "An active shared QR can be canceled below. Owner-held tickets remain selectable for new shares."
                   : !selectedSharePass
                   ? "No owner-held ticket QR is currently available to share."
                   : "Select a ticket QR, then choose one friend to share that ticket with."}
