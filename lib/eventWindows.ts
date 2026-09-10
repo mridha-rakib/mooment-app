@@ -215,6 +215,8 @@ export type ParticipatedEvent = {
   bannerImageDisplay?: EventImageDisplay | null;
   scheduledAt?: string | null;
   endAt?: string | null;
+  /** Additive (Batch 3C.2). IANA venue timezone for Event-local schedule-date display. */
+  timezone?: string | null;
   status: string;
   participatedWindows: ParticipatedWindow[];
   lastParticipatedAt: string;

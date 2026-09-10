@@ -3,6 +3,7 @@ import CrowdStatusBadge from "@/components/events/CrowdStatusBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { getMyEvents, type EventResponse } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getMyEarningsSummary, type CreatorEarningsSummary } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
@@ -27,24 +28,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const fmt = (n: number) => `$${n.toFixed(2)}`;
 
-const formatEventDate = (scheduledAt?: string | null): string => {
-  if (!scheduledAt) return "";
-  try {
-    const d = new Date(scheduledAt);
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  } catch {
-    return "";
-  }
-};
+// Batch 3C.1 — the host sees the venue-local wall-clock they scheduled (+ short
+// zone label); device-local fallback when `timezone` is unknown.
+const formatEventDate = (event: Pick<EventResponse, "scheduledAt" | "timezone">): string =>
+  formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone }).primaryDateText;
 
-const formatEventTime = (scheduledAt?: string | null): string => {
-  if (!scheduledAt) return "";
-  try {
-    const d = new Date(scheduledAt);
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  } catch {
-    return "";
-  }
+const formatEventTime = (event: Pick<EventResponse, "scheduledAt" | "timezone">): string => {
+  const model = formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone });
+  if (!model.primaryTimeText) return "";
+  return model.primaryZoneText ? `${model.primaryTimeText} ${model.primaryZoneText}` : model.primaryTimeText;
 };
 
 const getBannerUri = (event: EventResponse): string | null => {
@@ -206,8 +198,8 @@ export default function CreatorDashboardScreen() {
             ) : (
               events.map((event) => {
                 const bannerUri = getBannerUri(event);
-                const dateStr = formatEventDate(event.scheduledAt);
-                const timeStr = formatEventTime(event.scheduledAt);
+                const dateStr = formatEventDate(event);
+                const timeStr = formatEventTime(event);
                 const isPrivate = event.privacy === "locked" || event.privacy === "private";
                 const totalCapacity = event.tickets.reduce((sum, t) => sum + t.capacity, 0);
 

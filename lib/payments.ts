@@ -314,6 +314,8 @@ export type TicketWalletItem = {
     categories?: EventCategory[];
     scheduledAt?: string | null;
     endAt?: string | null;
+    /** Additive (Batch 3C.2). IANA venue timezone for Event-local schedule display. */
+    timezone?: string | null;
     location?: {
       searchLabel?: string | null;
       venue?: string | null;

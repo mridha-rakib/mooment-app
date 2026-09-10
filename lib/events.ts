@@ -430,6 +430,13 @@ export type PostTagEvent = {
   name: string;
   bannerImageUrl?: string | null;
   scheduledAt: string;
+  /**
+   * Additive (Batch 3C.2). IANA venue timezone. NOT yet consumed by
+   * EventPickerModal display — that surface mixes a viewer-relative
+   * "Tonight"/"Tomorrow" label with the time, which is a deferred
+   * relative-label product decision.
+   */
+  timezone?: string | null;
   location?: EventLocation | null;
   postTagStatus: PostTagEventStatus;
 };

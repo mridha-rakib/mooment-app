@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { getMapEvents, getHashtagEvents, searchEvents, type EventResponse } from '@/lib/events';
+import { formatEventTimeDisplay } from '@/lib/eventTimeDisplay';
 import { normalizeSearchText } from '@/lib/searchText';
 import { getStorageFileUrl } from '@/lib/storage';
 import { getSuggestedUsers, searchPeople } from '@/lib/users';
@@ -78,34 +79,25 @@ const resolveStorageUrl = (key?: string | null) => {
   }
 };
 
-const formatEventSchedule = (scheduledAt?: string | null) => {
-  if (!scheduledAt) {
+// Batch 3C.1 — compact Event-local schedule (venue timezone + short zone label);
+// device-local fallback when `event.timezone` is unknown. No viewer-secondary on
+// this single-line search subtitle.
+const formatEventSchedule = (event: Pick<EventResponse, "scheduledAt" | "timezone">) => {
+  const model = formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone });
+  if (!model.primaryDateShortText) {
     return "Date TBA";
   }
-
-  const date = new Date(scheduledAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Date TBA";
-  }
-
-  const day = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(date);
-  const time = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-
-  return `${day} • ${time}`;
+  const time = model.primaryZoneText
+    ? `${model.primaryTimeText} ${model.primaryZoneText}`
+    : model.primaryTimeText;
+  return `${model.primaryDateShortText} • ${time}`;
 };
 
 const getEventSubtitle = (event: EventResponse) => {
   const host = event.host?.name || event.host?.username;
   const location = event.location?.venue || event.location?.address || event.location?.searchLabel;
 
-  return [host, formatEventSchedule(event.scheduledAt), location].filter(Boolean).join(" • ");
+  return [host, formatEventSchedule(event), location].filter(Boolean).join(" • ");
 };
 
 const toSearchEvent = (event: EventResponse): SearchEvent => ({

@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getCategoryColor } from "@/constants/categoryColors";
 import { getNowModeEvents, type NowEventStatus, type NowModeEventResponse } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getStorageFileUrl } from "@/lib/storage";
 
 const COLORS = {
@@ -82,25 +83,16 @@ const formatDistance = (
   return `${mi < 10 ? mi.toFixed(1) : Math.round(mi)} mi`;
 };
 
-const formatEventDate = (scheduledAt?: string | null): string => {
-  if (!scheduledAt) return "Date TBA";
-  const d = new Date(scheduledAt);
-  if (Number.isNaN(d.getTime())) return "Date TBA";
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  }).format(d);
-};
+// Batch 3C.1 — human-readable Event schedule in the venue timezone (+ short zone
+// label); device-local fallback when `timezone` is unknown. The Now-mode
+// countdown / `nowStatus` remain absolute-time logic and are untouched.
+const formatEventDate = (event: Pick<NowModeEventResponse, "scheduledAt" | "timezone">): string =>
+  formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone }).primaryDateText || "Date TBA";
 
-const formatEventTime = (scheduledAt?: string | null): string => {
-  if (!scheduledAt) return "";
-  const d = new Date(scheduledAt);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(d);
+const formatEventTime = (event: Pick<NowModeEventResponse, "scheduledAt" | "timezone">): string => {
+  const model = formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone });
+  if (!model.primaryTimeText) return "";
+  return model.primaryZoneText ? `${model.primaryTimeText} ${model.primaryZoneText}` : model.primaryTimeText;
 };
 
 const getStatusConfig = (
@@ -230,12 +222,12 @@ const EventCard = ({ event, userLocation, onViewEvent }: EventCardProps) => {
         {/* Date / time / distance */}
         <View style={styles.metaRow}>
           <Feather name="calendar" size={12} color={COLORS.textMuted} />
-          <Text style={styles.metaText}>{formatEventDate(event.scheduledAt)}</Text>
-          {formatEventTime(event.scheduledAt) ? (
+          <Text style={styles.metaText}>{formatEventDate(event)}</Text>
+          {formatEventTime(event) ? (
             <>
               <View style={styles.metaDot} />
               <Feather name="clock" size={12} color={COLORS.textMuted} />
-              <Text style={styles.metaText}>{formatEventTime(event.scheduledAt)}</Text>
+              <Text style={styles.metaText}>{formatEventTime(event)}</Text>
             </>
           ) : null}
           <View style={styles.metaDot} />

@@ -1,6 +1,7 @@
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getParticipatedEvents, type ParticipatedEvent } from "@/lib/eventWindows";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getStorageFileUrl } from "@/lib/storage";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -17,12 +18,11 @@ import {
   View,
 } from "react-native";
 
-const formatDate = (value?: string | null) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
-};
+// Batch 3C.2 — the EVENT schedule date in the venue's local calendar (date only,
+// preserving this list's existing density); device-local fallback when the Event
+// has no known timezone.
+const formatEventScheduleDate = (event: Pick<ParticipatedEvent, "scheduledAt" | "timezone">) =>
+  formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone }).primaryDateMediumText || null;
 
 // The Home "Windows" tab is a personal navigation/history surface, not a
 // live feed — a focus-refresh (covers new participation and returning from
@@ -114,7 +114,7 @@ function ParticipatedWindowsList() {
     >
       {events.map((event) => {
         const imageUri = event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null;
-        const dateLabel = formatDate(event.scheduledAt);
+        const dateLabel = formatEventScheduleDate(event);
         const windowCount = event.participatedWindows.length;
 
         return (

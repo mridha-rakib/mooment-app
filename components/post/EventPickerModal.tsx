@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useBottomSheetDragDismiss } from '@/components/ui/useBottomSheetDragDismiss';
 import { getMyPostTagEvents, type PostTagEvent, type PostTagEventStatus } from '@/lib/events';
+import { classifyEventRelativeDay, formatEventTimeDisplay } from '@/lib/eventTimeDisplay';
 
 type SelectedEvent = {
   id: string;
@@ -30,7 +31,11 @@ const STATUS_CONFIG: Record<PostTagEventStatus, { label: string; color: string; 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop';
 const ANDROID_NAV_FALLBACK = 48;
 
-function formatEventMeta(event: PostTagEvent): string {
+// Batch 3C.3 — the relative day label AND the time follow the Event's own
+// timezone (`Tonight`/`Tomorrow` per the New York calendar, not the viewer's).
+// A null/invalid timezone falls back to the previous device-local behaviour.
+// `now` is passed in so one classification pass compares against one instant.
+function formatEventMeta(event: PostTagEvent, now: Date): string {
   const parts: string[] = [];
 
   if (event.location?.venue) {
@@ -40,15 +45,14 @@ function formatEventMeta(event: PostTagEvent): string {
   }
 
   if (event.scheduledAt) {
-    const date = new Date(event.scheduledAt);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const isTomorrow = date.toDateString() === tomorrow.toDateString();
+    const relativeDay = classifyEventRelativeDay(event.scheduledAt, event.timezone, now);
+    const model = formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone });
 
-    const dayLabel = isToday ? 'Tonight' : isTomorrow ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const timeLabel = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const dayLabel =
+      relativeDay === 'today' ? 'Tonight' : relativeDay === 'tomorrow' ? 'Tomorrow' : model.primaryDateText;
+    const timeLabel = model.primaryZoneText
+      ? `${model.primaryTimeText} ${model.primaryZoneText}`
+      : model.primaryTimeText;
 
     parts.push(`${dayLabel} • ${timeLabel}`);
   }
@@ -61,6 +65,9 @@ export default function EventPickerModal({ visible, onClose, onSelect, selectedE
   const [search, setSearch] = useState('');
   const [events, setEvents] = useState<PostTagEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  // One instant shared by every row's relative-day classification in this render
+  // pass (§20), so no two rows straddle a midnight boundary.
+  const classificationNow = new Date();
   const bottomInset = Platform.OS === 'android'
     ? Math.max(insets.bottom, ANDROID_NAV_FALLBACK)
     : insets.bottom;
@@ -162,7 +169,7 @@ export default function EventPickerModal({ visible, onClose, onSelect, selectedE
                     ) : null}
                     <View style={styles.eventInfo}>
                       <Text style={styles.eventTitle} numberOfLines={1}>{item.name}</Text>
-                      <Text style={styles.eventMeta} numberOfLines={1}>{formatEventMeta(item)}</Text>
+                      <Text style={styles.eventMeta} numberOfLines={1}>{formatEventMeta(item, classificationNow)}</Text>
                     </View>
                     <View style={[
                       styles.statusBadge,

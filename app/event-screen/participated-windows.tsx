@@ -1,6 +1,7 @@
 import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { getParticipatedEvents, type ParticipatedEvent, type ParticipatedWindow } from "@/lib/eventWindows";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getStorageFileUrl } from "@/lib/storage";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -16,12 +17,19 @@ const STATUS_COLORS = {
   cancelled: "#DC2626",
 } as const;
 
+// Participation-WINDOW timestamps (below) stay device-local — unchanged.
 const formatDate = (value?: string | null) => {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
 };
+
+// Batch 3C.2 — the EVENT schedule date in the venue's local calendar (date only,
+// preserving this surface's existing density); device-local fallback when the
+// Event has no known timezone.
+const formatEventScheduleDate = (event: Pick<ParticipatedEvent, "scheduledAt" | "timezone">) =>
+  formatEventTimeDisplay({ scheduledAt: event.scheduledAt, timezone: event.timezone }).primaryDateMediumText || null;
 
 const formatTime = (value: string) => {
   const date = new Date(value);
@@ -131,8 +139,8 @@ export default function ParticipatedWindowsScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {imageUri ? <Image source={{ uri: imageUri }} style={styles.banner} contentFit="cover" /> : null}
-          {formatDate(event.scheduledAt) ? (
-            <Text style={[styles.eventDate, { color: colors.textSecondary }]}>{formatDate(event.scheduledAt)}</Text>
+          {formatEventScheduleDate(event) ? (
+            <Text style={[styles.eventDate, { color: colors.textSecondary }]}>{formatEventScheduleDate(event)}</Text>
           ) : null}
 
           <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>

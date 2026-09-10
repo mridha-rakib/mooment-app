@@ -31,6 +31,10 @@ export type EventTimeDisplayModel = {
   hasKnownZone: boolean;
   /** `"Sun, Sep 20"` — Event-local (or device-local when the zone is unknown). */
   primaryDateText: string;
+  /** `"Sep 20"` — compact month/day only (no weekday), for dense list rows. */
+  primaryDateShortText: string;
+  /** `"Sep 20, 2026"` — month/day/year (no weekday), for surfaces that show the year. */
+  primaryDateMediumText: string;
   /** `"7:00 PM"` — Event-local start. */
   primaryTimeText: string;
   /** `"9:00 PM"` — Event-local end, or `null` when there is no `endAt`. */
@@ -54,7 +58,7 @@ export type EventTimeDisplayModel = {
   viewerDateTimeText: string | null;
 };
 
-type FormatterKind = "weekday" | "time" | "zone";
+type FormatterKind = "weekday" | "dateShort" | "dateMedium" | "time" | "zone";
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
@@ -63,9 +67,13 @@ const buildFormatter = (kind: FormatterKind, timeZone: string | null): Intl.Date
   const options: Intl.DateTimeFormatOptions =
     kind === "weekday"
       ? { ...zoneOption, weekday: "short", month: "short", day: "numeric" }
-      : kind === "time"
-        ? { ...zoneOption, hour: "numeric", minute: "2-digit" }
-        : { ...zoneOption, hour: "numeric", timeZoneName: "short" };
+      : kind === "dateShort"
+        ? { ...zoneOption, month: "short", day: "numeric" }
+        : kind === "dateMedium"
+          ? { ...zoneOption, month: "short", day: "numeric", year: "numeric" }
+          : kind === "time"
+            ? { ...zoneOption, hour: "numeric", minute: "2-digit" }
+            : { ...zoneOption, hour: "numeric", timeZoneName: "short" };
   return new Intl.DateTimeFormat(DISPLAY_LOCALE, options);
 };
 
@@ -139,9 +147,78 @@ const sameWallClock = (a: WallClock, b: WallClock): boolean =>
 const sameLocalDay = (a: WallClock, b: WallClock): boolean =>
   a.year === b.year && a.month === b.month && a.day === b.day;
 
+// ── Batch 3C.3 — Event-local relative-day classification ─────────────────
+//
+// "Tonight" / "Tomorrow" / a later date on Event-schedule surfaces follow the
+// EVENT'S OWN local calendar (its IANA timezone) — never the viewer's device
+// day. A null / invalid timezone falls back to the device calendar, exactly as
+// before. This is calendar-part comparison, not `now + 24h`.
+
+type CalendarDate = { year: number; month: number; day: number };
+
+/** `{year,month,day}` of `instant` in `timeZone` (device-local when `timeZone` is null/invalid). */
+const calendarDateInZone = (instant: Date, timeZone: string | null): CalendarDate => {
+  if (timeZone) {
+    const parts = instantToWallClockPartsForEvent(instant, timeZone);
+    if (parts) {
+      return {
+        year: Number(parts.dateKey.slice(0, 4)),
+        month: Number(parts.dateKey.slice(5, 7)),
+        day: Number(parts.dateKey.slice(8, 10)),
+      };
+    }
+  }
+  const wall = deviceWallClock(instant);
+  return { year: wall.year, month: wall.month, day: wall.day };
+};
+
+const sameCalendarDate = (a: CalendarDate, b: CalendarDate): boolean =>
+  a.year === b.year && a.month === b.month && a.day === b.day;
+
+/** Advance a calendar tuple by one civil day — pure arithmetic, no timezone offset math. */
+const nextCalendarDate = (date: CalendarDate): CalendarDate => {
+  const rolled = new Date(Date.UTC(date.year, date.month - 1, date.day + 1));
+  return {
+    year: rolled.getUTCFullYear(),
+    month: rolled.getUTCMonth() + 1,
+    day: rolled.getUTCDate(),
+  };
+};
+
+export type EventRelativeDay = "today" | "tomorrow" | "later";
+
+/**
+ * Classify an Event's schedule date relative to `now`, in the Event's own
+ * timezone (device timezone when the Event has no usable IANA zone). Returns
+ * `null` only for a missing / unparseable `scheduledAt`.
+ */
+export const classifyEventRelativeDay = (
+  scheduledAt: string | Date | null | undefined,
+  timezone: string | null | undefined,
+  now: Date = new Date(),
+): EventRelativeDay | null => {
+  const start = toDate(scheduledAt);
+  if (!start) {
+    return null;
+  }
+  const zone = isUsableTimeZone(timezone) ? (timezone as string) : null;
+  const eventDate = calendarDateInZone(start, zone);
+  const nowDate = calendarDateInZone(now, zone);
+
+  if (sameCalendarDate(eventDate, nowDate)) {
+    return "today";
+  }
+  if (sameCalendarDate(eventDate, nextCalendarDate(nowDate))) {
+    return "tomorrow";
+  }
+  return "later";
+};
+
 const emptyModel: EventTimeDisplayModel = {
   hasKnownZone: false,
   primaryDateText: "",
+  primaryDateShortText: "",
+  primaryDateMediumText: "",
   primaryTimeText: "",
   primaryEndTimeText: null,
   primaryTimeRangeText: "",
@@ -171,6 +248,8 @@ export const formatEventTimeDisplay = (input: EventTimeDisplayInput): EventTimeD
   // ── Zone unknown / invalid → device-local rendering, exactly as pre-3C ──
   if (!knownZone) {
     const startDate = getFormatter("weekday", null).format(start);
+    const startDateShort = getFormatter("dateShort", null).format(start);
+    const startDateMedium = getFormatter("dateMedium", null).format(start);
     const startTime = getFormatter("time", null).format(start);
     const endTime = end ? getFormatter("time", null).format(end) : null;
     const endSameDay = end ? sameLocalDay(deviceWallClock(start), deviceWallClock(end)) : false;
@@ -179,6 +258,8 @@ export const formatEventTimeDisplay = (input: EventTimeDisplayInput): EventTimeD
     return {
       ...emptyModel,
       primaryDateText: startDate,
+      primaryDateShortText: startDateShort,
+      primaryDateMediumText: startDateMedium,
       primaryTimeText: startTime,
       primaryEndTimeText: endTime,
       primaryTimeRangeText: range,
@@ -189,6 +270,8 @@ export const formatEventTimeDisplay = (input: EventTimeDisplayInput): EventTimeD
 
   // ── Zone known → Event-local primary + viewer-local secondary ──────────
   const primaryDateText = getFormatter("weekday", knownZone).format(start);
+  const primaryDateShortText = getFormatter("dateShort", knownZone).format(start);
+  const primaryDateMediumText = getFormatter("dateMedium", knownZone).format(start);
   const primaryTimeText = getFormatter("time", knownZone).format(start);
   const primaryZoneText = shortZoneLabel(start, knownZone);
 
@@ -235,6 +318,8 @@ export const formatEventTimeDisplay = (input: EventTimeDisplayInput): EventTimeD
     return {
       hasKnownZone: true,
       primaryDateText,
+      primaryDateShortText,
+      primaryDateMediumText,
       primaryTimeText,
       primaryEndTimeText,
       primaryTimeRangeText,
@@ -259,6 +344,8 @@ export const formatEventTimeDisplay = (input: EventTimeDisplayInput): EventTimeD
   return {
     hasKnownZone: true,
     primaryDateText,
+    primaryDateShortText,
+    primaryDateMediumText,
     primaryTimeText,
     primaryEndTimeText,
     primaryTimeRangeText,

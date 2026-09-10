@@ -5,6 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getAuthErrorMessage } from "@/lib/authErrors";
 import { safeBack } from "@/lib/navigation";
 import { getEventTicket, type EventResponse, type EventTicketPayload } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getStorageFileUrl } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 import { useEventDraftStore } from "@/stores/eventDraftStore";
@@ -109,6 +110,28 @@ const formatDateTime = (value?: string | null) => {
   });
 
   return `${dateLabel} • ${timeLabel}`;
+};
+
+// Batch 3C.1 — Event start/end in the venue timezone so this agrees with Event
+// Detail (never one screen at 7 PM and this one at 5 AM). Device-local fallback
+// when `event.timezone` is unknown. `Sales end` above stays a device-local
+// deadline and is unchanged.
+const formatEventScheduleValue = (
+  event: Pick<EventResponse, "scheduledAt" | "endAt" | "timezone"> | null | undefined,
+  which: "start" | "end",
+): string => {
+  const model = formatEventTimeDisplay({
+    scheduledAt: event?.scheduledAt,
+    endAt: event?.endAt,
+    timezone: event?.timezone,
+  });
+  const dateText = which === "start" ? model.primaryDateText : model.primaryEndDateText ?? model.primaryDateText;
+  const timeText = which === "start" ? model.primaryTimeText : model.primaryEndTimeText;
+  if (!dateText || !timeText) {
+    return "Date TBA";
+  }
+  const withZone = model.primaryZoneText ? `${timeText} ${model.primaryZoneText}` : timeText;
+  return `${dateText} • ${withZone}`;
 };
 
 const getHostHandle = (event?: EventResponse | null) => {
@@ -427,8 +450,8 @@ const TicketDetailScreen = () => {
     { label: "Price", value: formatPrice(ticket) },
     { label: "Sales end", value: formatDateTime(ticket?.salesEndAt) },
     { label: "Event", value: event?.name ?? "Event unavailable" },
-    { label: "Event start", value: formatDateTime(event?.scheduledAt) },
-    { label: "Event end", value: formatDateTime(event?.endAt) },
+    { label: "Event start", value: formatEventScheduleValue(event, "start") },
+    { label: "Event end", value: formatEventScheduleValue(event, "end") },
     { label: "Venue", value: event?.location?.venue ?? "Venue TBA" },
     { label: "Address", value: event?.location?.address ?? event?.location?.searchLabel ?? "Address TBA" },
   ];

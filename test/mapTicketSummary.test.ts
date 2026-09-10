@@ -171,9 +171,14 @@ test("EventPreviewModal renders the ticket type count without fabricating one", 
   );
 });
 
-test("Start/End event date rows remain based on scheduledAt/endAt derived values", () => {
-  assert.match(mapContainerSource, /eventDate:\s*formatEventDate\(event\.scheduledAt\)/);
-  assert.match(mapContainerSource, /eventEndDate:\s*formatEventDate\(event\.endAt\)/);
+test("Start/End event date rows are derived from scheduledAt/endAt via the shared venue-local helper", () => {
+  // Batch 3C moved Map-card schedule formatting to the shared timezone-aware
+  // helper; start + end are still derived from scheduledAt / endAt.
+  assert.match(mapContainerSource, /const buildMapEventSchedule = \(event: EventResponse\) => \{/);
+  assert.match(mapContainerSource, /scheduledAt: event\.scheduledAt,[\s\S]*endAt: event\.endAt,/);
+  assert.match(mapContainerSource, /eventDate: model\.primaryDateText/);
+  assert.match(mapContainerSource, /eventEndTime: model\.primaryEndTimeText/);
+  assert.match(mapContainerSource, /\.\.\.buildMapEventSchedule\(event\),/);
   assert.match(eventPreviewModalSource, />Start<\/Text>/);
   assert.match(eventPreviewModalSource, />End<\/Text>/);
 });

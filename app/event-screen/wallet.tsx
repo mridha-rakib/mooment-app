@@ -30,6 +30,7 @@ import {
   type TicketWalletItem,
 } from "@/lib/payments";
 import { getStorageFileUrl } from "@/lib/storage";
+import { classifyEventRelativeDay, formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 
 type WalletTab = "Shared" | "Active" | "Used" | "Canceled";
 type WalletSubFilter = "Active" | "Expired";
@@ -59,34 +60,27 @@ function resolveStorageUrl(key?: string | null, fallback: string | null = DEFAUL
   }
 }
 
-const isSameDay = (left: Date, right: Date) =>
-  left.getFullYear() === right.getFullYear() &&
-  left.getMonth() === right.getMonth() &&
-  left.getDate() === right.getDate();
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) {
+// Batch 3C.2 — venue-local Event schedule (matches Event Detail / Ticket Detail);
+// device-local fallback when `event.timezone` is unknown. Compact rows → primary
+// only, no viewer-secondary. Batch 3C.3: the `tonight` / `upcoming` grouping
+// (see `getTicketSections`) now uses the Event-local calendar day too.
+const formatWalletEventSchedule = (
+  event: Pick<TicketWalletItem["event"], "scheduledAt" | "endAt" | "timezone">,
+  which: "start" | "end",
+): string => {
+  const model = formatEventTimeDisplay({
+    scheduledAt: event.scheduledAt,
+    endAt: event.endAt,
+    timezone: event.timezone,
+  });
+  const dateText =
+    which === "start" ? model.primaryDateText : model.primaryEndDateText ?? model.primaryDateText;
+  const timeText = which === "start" ? model.primaryTimeText : model.primaryEndTimeText;
+  if (!dateText || !timeText) {
     return "Date TBA";
   }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Date TBA";
-  }
-
-  const dateLabel = date.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    weekday: "short",
-  });
-  const timeLabel = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    hour12: true,
-    minute: "2-digit",
-  });
-
-  return `${dateLabel} • ${timeLabel}`;
+  const withZone = model.primaryZoneText ? `${timeText} ${model.primaryZoneText}` : timeText;
+  return `${dateText} • ${withZone}`;
 };
 
 const getLocationLabel = (item: TicketWalletItem) =>
@@ -200,14 +194,15 @@ const toTabWalletItems = (item: TicketWalletItem, tab: WalletTab): TicketWalletI
 };
 
 const getTicketSections = (items: TicketWalletItem[]): WalletSection[] => {
+  // Batch 3C.3 — "Tonight" means the Event is on the same calendar day as now IN
+  // THE EVENT'S OWN TIMEZONE (null/invalid timezone → device-local, unchanged).
+  // One `now` for the whole pass so no two Events straddle a boundary (§20).
   const now = new Date();
   const tonight: TicketWalletItem[] = [];
   const upcoming: TicketWalletItem[] = [];
 
   for (const item of items) {
-    const scheduledAt = item.event.scheduledAt ? new Date(item.event.scheduledAt) : null;
-
-    if (scheduledAt && !Number.isNaN(scheduledAt.getTime()) && isSameDay(scheduledAt, now)) {
+    if (classifyEventRelativeDay(item.event.scheduledAt, item.event.timezone, now) === "today") {
       tonight.push(item);
     } else {
       upcoming.push(item);
@@ -493,7 +488,7 @@ const TicketWalletScreen = () => {
                           {getLocationLabel(item)}
                         </Text>
                       </View>
-                      <Text style={[styles.dateTimeText, { color: colors.text }]}>{formatDateTime(item.event.scheduledAt)}</Text>
+                      <Text style={[styles.dateTimeText, { color: colors.text }]}>{formatWalletEventSchedule(item.event, "start")}</Text>
                       <Text style={[styles.addressText, { color: colors.textSecondary }]} numberOfLines={2}>
                         {getAddressLabel(item)}
                       </Text>
@@ -525,9 +520,9 @@ const TicketWalletScreen = () => {
                               bannerImageKey: item.event.bannerOriginalImageKey ?? item.event.bannerImageKey ?? "",
                               location: getLocationLabel(item),
                               address: getAddressLabel(item),
-                              dateTime: formatDateTime(item.event.scheduledAt),
-                              eventStartDateTime: formatDateTime(item.event.scheduledAt),
-                              eventEndDateTime: formatDateTime(item.event.endAt),
+                              dateTime: formatWalletEventSchedule(item.event, "start"),
+                              eventStartDateTime: formatWalletEventSchedule(item.event, "start"),
+                              eventEndDateTime: formatWalletEventSchedule(item.event, "end"),
                               amount: String(item.totalAmount),
                               currency: item.currency,
                               offerClaimed: item.rewardSnapshot ? "true" : "",
