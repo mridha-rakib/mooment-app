@@ -502,7 +502,7 @@ const TicketWalletScreen = () => {
                               source: "wallet",
                               walletSource: item.source,
                               walletStatus: item.walletStatus,
-                              cancellationReason: item.event.cancellationDisplayReason ?? (item.event.status === "cancelled" ? "Event cancelled" : ""),
+                              cancellationReason: item.event.cancellationDisplayReason ?? (item.event.status === "cancelled" ? "Event canceled" : ""),
                               purchaseCount: String(item.quantity),
                               paidQuantity: String(item.paidQuantity ?? item.quantity),
                               freeQuantity: String(item.freeQuantity ?? 0),

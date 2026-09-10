@@ -124,7 +124,7 @@ export const getMapTicketSummary = (
   }
 
   return {
-    ticketTypeCountLabel: `${ticketTypeCount} ${ticketTypeCount === 1 ? "Ticket Type" : "Ticket Types"}`,
+    ticketTypeCountLabel: ticketTypeCount === 0 ? "No Ticket Types" : `${ticketTypeCount} ${ticketTypeCount === 1 ? "Ticket Type" : "Ticket Types"}`,
     priceLabel,
     ticketsAvailableLabel,
     salesEndLabel,

@@ -231,7 +231,7 @@ const COMMON_EMOJIS = [
 ];
 
 const formatRealtimeTime = (value: string) =>
-  new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  new Date(value).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
 
 const isObjectId = (value?: string) => /^[a-f\d]{24}$/i.test(value ?? '');
 
@@ -426,7 +426,7 @@ const toMessageFromAttachment = (
   if (attachment?.type === 'event') {
     message.eventTitle = attachment.title || 'Event';
     message.eventDate = attachment.scheduledAt
-      ? new Date(attachment.scheduledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      ? new Date(attachment.scheduledAt).toLocaleString("en-US", { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
       : attachment.locationName || attachment.address || '';
     message.eventLocation = attachment.locationName || attachment.address || '';
     message.eventImage = previewUri || undefined;

@@ -172,7 +172,7 @@ const getWindowMessage = (window: EventWindow) => {
   }
   if (window.computedStatus === "open" && window.remainingSlots > 0) return "Post to unlock this scene.";
   if (window.computedStatus === "scheduled") return "Posting opens when this scene starts.";
-  if (window.computedStatus === "cancelled") return "This scene was cancelled.";
+  if (window.computedStatus === "cancelled") return "This scene was canceled.";
   if (window.remainingSlots === 0) return "This scene is full.";
   return "This scene is closed.";
 };
