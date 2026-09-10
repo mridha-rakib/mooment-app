@@ -122,7 +122,7 @@ export default function ProductStatScreen() {
       {/* Header */}
       <View style={styles.header}>
         <BackButton />
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Product Stat</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Product Stats</Text>
         <View style={{ width: 40 }} />
       </View>
 

@@ -26,7 +26,7 @@ export default function Onboarding() {
               <View style={styles.content}>
                 <Text style={styles.title}>Discover Your Vibe</Text>
                 <Text style={styles.subtitle}>
-                  Find events happening near you! Connect with hosts and attendees, Get tickets seamlessly and share experiences.
+                  Find events happening near you! Connect with hosts and attendees, get tickets seamlessly and share experiences.
                 </Text>
                 
                 <TouchableOpacity 

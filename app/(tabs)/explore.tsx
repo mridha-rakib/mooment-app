@@ -50,7 +50,7 @@ const formatTime = (dateStr: string): string => {
   if (diffDays === 1) return "yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
 const getActorDisplayName = (item: NotificationItem, fallback = "Someone") =>

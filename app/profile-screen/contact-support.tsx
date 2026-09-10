@@ -60,7 +60,7 @@ export default function ContactSupportScreen() {
             <Text style={[styles.label, { color: colors.textSecondary }]}>TITLE</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              placeholder="Enter Title of the message"
+              placeholder="Enter message title"
               placeholderTextColor={colors.textSecondary}
               value={title}
               onChangeText={setTitle}
@@ -71,7 +71,7 @@ export default function ContactSupportScreen() {
             <Text style={[styles.label, { color: colors.textSecondary }]}>DESCRIPTION</Text>
             <TextInput
               style={[styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              placeholder="Write down your message . . . ."
+              placeholder="Write your message..."
               placeholderTextColor={colors.textSecondary}
               value={description}
               onChangeText={setDescription}

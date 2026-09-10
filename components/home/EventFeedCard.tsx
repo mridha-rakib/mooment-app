@@ -524,7 +524,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
       await refreshHostedEventEligibility();
       setCancelReasonVisible(false);
       onEventCancelled?.(event.id);
-      Alert.alert("Event cancelled", "Refunds are being processed for attendees.");
+      Alert.alert("Event canceled", "Refunds are being processed for attendees.");
     } catch (error) {
       Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
     } finally {
