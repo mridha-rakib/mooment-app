@@ -474,6 +474,19 @@ export default function RootLayout() {
               presentation: "fullScreenModal",
             }}
           />
+          {/* CRT-010: the default iOS swipe-back gesture would leave the
+              screen (and abandon any unsaved caption/media/tags) without
+              ever running the discard confirmation, which only guards the
+              header X and Android hardware Back. Disabling it routes every
+              exit through the same requestCloseComposer() decision — the
+              same fix already applied to add-story above for the same
+              reason. No other screen behavior changes. */}
+          <Stack.Screen
+            name="post-screen/create-post"
+            options={{
+              gestureEnabled: false,
+            }}
+          />
         </Stack>
         <TicketWalletShortcut />
         <ThemePreferenceGate />

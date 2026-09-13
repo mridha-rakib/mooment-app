@@ -36,11 +36,6 @@ const handleCloseSource = sliceBetween(
   "const handleClose = () => {",
   "const handleDone = async () => {",
 );
-const handleDoneSource = sliceBetween(
-  createPostSource,
-  "const handleDone = async () => {",
-  "const taggedLabel",
-);
 const handlePickImageSource = sliceBetween(
   createPostSource,
   "const handlePickImage = async () => {",
@@ -101,9 +96,13 @@ test("P0: exactly one create request and one media build per publishMoment call"
 });
 
 test("P0: the Done button remains disabled while the submit lock is held", () => {
+  // CRT-011: the button is now also content-aware (isPostButtonDisabled =
+  // isSubmitting || !hasValidPostContent), but isSubmitting must still be
+  // part of the OR — the submit lock alone is still sufficient to disable it.
+  assert.match(createPostSource, /const isPostButtonDisabled = isSubmitting \|\| !hasValidPostContent;/);
   assert.match(
     createPostSource,
-    /<TouchableOpacity style=\{\[styles\.doneBtn, isSubmitting && styles\.doneBtnDisabled\]\} onPress=\{handleDone\} activeOpacity=\{0\.8\} disabled=\{isSubmitting\}>/,
+    /<TouchableOpacity style=\{\[styles\.doneBtn, isPostButtonDisabled && styles\.doneBtnDisabled\]\} onPress=\{handleDone\} activeOpacity=\{0\.8\} disabled=\{isPostButtonDisabled\}>/,
   );
 });
 
@@ -122,11 +121,22 @@ test("P1: handleClose is a synchronous one-shot guard around the existing safeBa
   assert.equal((handleCloseSource.match(/safeBack\(/g) ?? []).length, 1);
 });
 
-test("P1: the header X button and the post-success navigation both route through handleClose", () => {
-  assert.match(createPostSource, /<CreateMomentCloseButton onPress=\{handleClose\} \/>/);
-  assert.match(handleDoneSource, /setTimeout\(\(\) => \{\s*handleClose\(\);\s*\}, 1500\);/);
+test("P1: the post-success navigation still routes directly through handleClose (never through the CRT-010 discard-confirmation guard)", () => {
+  const handleDoneBody = sliceBetween(createPostSource, "const handleDone = async () => {", "};\n\n  // CRT-010:");
+  assert.match(handleDoneBody, /setTimeout\(\(\) => \{\s*handleClose\(\);\s*\}, 1500\);/);
   // No bare safeBack calls remain inside the screen body's handlers.
-  assert.doesNotMatch(handleDoneSource, /safeBack\(/);
+  assert.doesNotMatch(handleDoneBody, /safeBack\(/);
+  // A successful/pending Post never passes through requestCloseComposer, so
+  // it can never trigger the "Discard post?" confirmation added in CRT-010.
+  assert.doesNotMatch(handleDoneBody, /requestCloseComposer/);
+});
+
+// CRT-010 follow-up: the header X now routes through requestCloseComposer
+// (discard-confirmation-aware), not handleClose directly. See
+// createPostDiscardConfirmation.test.ts for full coverage of that guard.
+test("P1: the header X button routes through the CRT-010 discard-confirmation guard, not directly through handleClose", () => {
+  assert.match(createPostSource, /<CreateMomentCloseButton onPress=\{requestCloseComposer\} \/>/);
+  assert.doesNotMatch(createPostSource, /<CreateMomentCloseButton onPress=\{handleClose\} \/>/);
 });
 
 test("P1: safeBack itself is unchanged", () => {
@@ -197,9 +207,12 @@ test("FREEZE: CameraSheet and AudioPickerSheet are not moved behind the video fl
   assert.doesNotMatch(createPostSource, /VIDEO_MOMENT_CREATION_ENABLED && \(\s*<AudioPickerSheet/);
 });
 
-test("FREEZE: Create Post header design (X icon, Done label/style) is unchanged", () => {
+test("FREEZE: Create Post header design (X icon, submit button style) is unchanged", () => {
   assert.match(createPostSource, /<Text style=\{styles\.headerTitle\}>Create Post<\/Text>/);
-  assert.match(createPostSource, /<Text style=\{styles\.doneBtnText\}>Done<\/Text>/);
+  // Batch C copy cleanup: the submit button now reads "Post" instead of the
+  // ambiguous "Done" — the style/wiring/handler this test protects are
+  // otherwise unchanged (see createPostCopyCleanup.test.ts for the copy proof).
+  assert.match(createPostSource, /<Text style=\{styles\.doneBtnText\}>Post<\/Text>/);
   assert.match(createPostSource, /function CreateMomentCloseButton\(\{ onPress \}: \{ onPress: \(\) => void \}\)/);
 });
 

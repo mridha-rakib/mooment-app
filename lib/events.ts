@@ -423,7 +423,9 @@ export type EventHostReviewResponse = {
   createdAt: string;
 };
 
-export type PostTagEventStatus = "live" | "active" | "upcoming";
+// "starting_soon" is additive (CRT-003) — an upcoming Event within the
+// backend's STARTING_SOON_MS of its start. Existing values are unchanged.
+export type PostTagEventStatus = "live" | "starting_soon" | "active" | "upcoming";
 
 export type PostTagEvent = {
   id: string;

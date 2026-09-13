@@ -139,11 +139,16 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   const audioUri = audioMedia ? resolveMediaUri(audioMedia, options.storageUrlResolver) : undefined;
   const taggedPeople = moment.taggedPeople ?? [];
   const taggedFriends = (moment.taggedFriends ?? []).filter((friend) => friend.id && getAuthorDisplayName(friend));
+  // The muted connectives (" with ", ", ") of the hydrated-friend sentence are
+  // flagged `taggedSummary` so FeedPost can make them open the read-only
+  // TaggedPeopleSheet with the complete list — the individual bold name nodes
+  // keep their own profile-navigation press. The legacy name-only branch has no
+  // per-user objects, so it is never flagged (no sheet for it).
   const taggedContextNodes = taggedFriends.length > 0
     ? [
-        { text: " with ", type: "muted" as const },
+        { text: " with ", type: "muted" as const, taggedSummary: true },
         ...taggedFriends.flatMap((friend, index) => [
-          ...(index > 0 ? [{ text: ", ", type: "muted" as const }] : []),
+          ...(index > 0 ? [{ text: ", ", type: "muted" as const, taggedSummary: true }] : []),
           {
             text: getAuthorDisplayName(friend),
             type: "bold" as const,
@@ -186,6 +191,9 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
     authorId: moment.author?.id ?? moment.userId,
     authorName,
     authorContextNodes,
+    // Complete hydrated tagged-user list (API order preserved, display-valid
+    // only). Empty for legacy name-only posts — FeedPost then offers no sheet.
+    taggedFriends,
     eventId: moment.eventId ?? undefined,
     authorAvatar,
     isFollowing: moment.author?.isFollowing ?? false,

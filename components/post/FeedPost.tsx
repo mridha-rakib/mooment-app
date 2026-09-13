@@ -18,8 +18,9 @@ import { usePopAnimation } from '@/hooks/usePopAnimation';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
 import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
-import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type Moment, type MomentInteractionSummary } from '@/lib/moments';
+import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type Moment, type MomentAuthor, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
+import { getTaggedFriendName } from '@/lib/taggedPeople';
 import { retryBlockOnly, submitReportWithOptionalBlock } from '@/lib/reportBlockFlow';
 import { submitReport } from '@/lib/reports';
 import { notifySuccess } from '@/lib/successFeedback';
@@ -32,6 +33,7 @@ import UserAvatar from '../ui/UserAvatar';
 import EditPostModal from './EditPostModal';
 import MoreMenuModal from "./MoreMenuModal";
 import ReportedContentCard, { type ReportedContentOutcome } from './ReportedContentCard';
+import TaggedPeopleSheet from './TaggedPeopleSheet';
 import HashtagText from './HashtagText';
 import PostInteractionBar from './PostInteractionBar';
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -101,6 +103,10 @@ export type PostContextNode = {
   taggedEvent?: {
     id?: string | null;
   };
+  // Muted connective of the tagged-friends sentence ("with"/","). When the post
+  // carries the hydrated `taggedFriends` list, FeedPost makes these open the
+  // read-only TaggedPeopleSheet with the complete list.
+  taggedSummary?: boolean;
 };
 
 export type AudioDetails = {
@@ -179,6 +185,9 @@ export type PostData = {
   authorId?: string;
   authorName: string;
   authorContextNodes?: PostContextNode[];
+  // Complete hydrated tagged-user list for the read-only TaggedPeopleSheet.
+  // Absent/empty on legacy name-only posts (no sheet offered then).
+  taggedFriends?: MomentAuthor[];
   authorAvatar?: string | null;
   isFollowing?: boolean;
   timeAgo: string;
@@ -1487,6 +1496,12 @@ function FeedPost({
   const [showEditModal, setShowEditModal] = useState(false);
   const isNormalPost = post.postType === 'standard';
 
+  // Regular-post tagged-user full list. Mirrors RepostFeedCard's pattern:
+  // one sheet per mounted card, driven by the muted connective in the header.
+  const [showTaggedSheet, setShowTaggedSheet] = useState(false);
+  const postTaggedFriends = post.taggedFriends ?? [];
+  const hasTaggedFriends = postTaggedFriends.length > 0;
+
   // Dynamic Interaction State
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
   const [isSaved, setIsSaved] = useState(post.isSaved || false);
@@ -1921,6 +1936,17 @@ function FeedPost({
     });
   };
 
+  // Row tap inside TaggedPeopleSheet — reuses the same tagged-user navigation
+  // path as an inline name press (the sheet closes itself).
+  const handleTaggedPersonPress = (person: MomentAuthor) => {
+    handleTaggedUserPress({
+      id: person.id,
+      name: getTaggedFriendName(person),
+      avatar: person.avatarUrl,
+      isFollowing: person.isFollowing,
+    });
+  };
+
   const handleTaggedEventPress = (taggedEvent: NonNullable<PostContextNode['taggedEvent']>) => {
     handleEventPress(taggedEvent.id ?? null);
   };
@@ -1999,22 +2025,33 @@ function FeedPost({
             <View style={[styles.authorTextContainer, isNormalPost && styles.normalAuthorTextContainer]}>
               <Text style={[styles.authorLine, isNormalPost && styles.normalAuthorLine]} numberOfLines={2}>
                 <Text style={[styles.postAuthor, { color: colors.text }]} onPress={handleAuthorPress} suppressHighlighting>{post.authorName}</Text>
-                {post.authorContextNodes?.map((node, i) => (
-                  <Text
-                    key={i}
-                    style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}
-                    onPress={
-                      node.taggedUser?.id
-                        ? () => handleTaggedUserPress(node.taggedUser!)
-                        : node.taggedEvent?.id
-                          ? () => handleTaggedEventPress(node.taggedEvent!)
+                {post.authorContextNodes?.map((node, i) => {
+                  const opensTaggedSheet = Boolean(node.taggedSummary && hasTaggedFriends);
+                  return (
+                    <Text
+                      key={i}
+                      style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}
+                      onPress={
+                        node.taggedUser?.id
+                          ? () => handleTaggedUserPress(node.taggedUser!)
+                          : node.taggedEvent?.id
+                            ? () => handleTaggedEventPress(node.taggedEvent!)
+                            : opensTaggedSheet
+                              ? () => setShowTaggedSheet(true)
+                              : undefined
+                      }
+                      suppressHighlighting={Boolean(node.taggedUser?.id || node.taggedEvent?.id) || opensTaggedSheet}
+                      accessibilityRole={opensTaggedSheet ? 'button' : undefined}
+                      accessibilityLabel={
+                        opensTaggedSheet
+                          ? `View ${postTaggedFriends.length} tagged ${postTaggedFriends.length === 1 ? 'person' : 'people'}`
                           : undefined
-                    }
-                    suppressHighlighting={Boolean(node.taggedUser?.id || node.taggedEvent?.id)}
-                  >
-                    {node.text}
-                  </Text>
-                ))}
+                      }
+                    >
+                      {node.text}
+                    </Text>
+                  );
+                })}
               </Text>
 
               <View style={[styles.timeRow, isNormalPost && styles.normalTimeRow]}>
@@ -2359,6 +2396,15 @@ function FeedPost({
             onIndexChange={setCurrentMediaIndex}
             mediaItems={fullScreenMediaItems}
             initialIndex={currentMediaIndex}
+          />
+        )}
+
+        {hasTaggedFriends && (
+          <TaggedPeopleSheet
+            visible={showTaggedSheet}
+            people={postTaggedFriends}
+            onClose={() => setShowTaggedSheet(false)}
+            onPressPerson={handleTaggedPersonPress}
           />
         )}
       </View>

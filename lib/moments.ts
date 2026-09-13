@@ -160,6 +160,7 @@ export type CreateMomentPayload = {
   eventCode?: string | null;
   eventId?: string | null;
   mediaItems?: MomentMediaItem[];
+  clientRequestId?: string | null;
 };
 
 export const getEventMoments = async (eventId: string): Promise<Moment[]> => {
