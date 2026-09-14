@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { tapFeedback } from '@/lib/microFeedback';
+import { ngrokSkipWarningHeaders } from '@/lib/api';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -18,8 +19,9 @@ import { usePopAnimation } from '@/hooks/usePopAnimation';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import { classifyFeedVideoPlaybackError, isStaleFeedVideoGeneration, shouldRunFeedVideoTimeUpdates, shouldShowFeedVideoRetry, type FeedVideoPlaybackFailure } from '@/lib/feedVideoPlayback';
 import { clampFeedVideoSeekTarget, commitFeedVideoSeek, getFeedVideoSeekTargetFromLocation } from '@/lib/feedVideoSeek';
-import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type Moment, type MomentInteractionSummary } from '@/lib/moments';
+import { retryMomentVideoProcessing, toggleMomentReaction, toggleMomentSave, type Moment, type MomentAuthor, type MomentInteractionSummary } from '@/lib/moments';
 import { navigateToProfile } from '@/lib/profileNavigation';
+import { getTaggedFriendName } from '@/lib/taggedPeople';
 import { retryBlockOnly, submitReportWithOptionalBlock } from '@/lib/reportBlockFlow';
 import { submitReport } from '@/lib/reports';
 import { notifySuccess } from '@/lib/successFeedback';
@@ -32,6 +34,7 @@ import UserAvatar from '../ui/UserAvatar';
 import EditPostModal from './EditPostModal';
 import MoreMenuModal from "./MoreMenuModal";
 import ReportedContentCard, { type ReportedContentOutcome } from './ReportedContentCard';
+import TaggedPeopleSheet from './TaggedPeopleSheet';
 import HashtagText from './HashtagText';
 import PostInteractionBar from './PostInteractionBar';
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -101,6 +104,10 @@ export type PostContextNode = {
   taggedEvent?: {
     id?: string | null;
   };
+  // Muted connective of the tagged-friends sentence ("with"/","). When the post
+  // carries the hydrated `taggedFriends` list, FeedPost makes these open the
+  // read-only TaggedPeopleSheet with the complete list.
+  taggedSummary?: boolean;
 };
 
 export type AudioDetails = {
@@ -164,6 +171,11 @@ export type PostMediaProcessingErrorCode =
 
 export type PostMediaItem = {
   uri: string;
+  // The API's resolved URL is retained when `uri` is the locally generated
+  // storage-stream URL. It is a one-time recovery source for a proxy request
+  // that a native image loader cannot complete (for example, a legacy
+  // storage object with an incompatible stream response).
+  fallbackUri?: string | null;
   fullUri?: string | null;
   type: 'image' | 'video';
   displayCrop?: MediaDisplayCrop | null;
@@ -179,6 +191,9 @@ export type PostData = {
   authorId?: string;
   authorName: string;
   authorContextNodes?: PostContextNode[];
+  // Complete hydrated tagged-user list for the read-only TaggedPeopleSheet.
+  // Absent/empty on legacy name-only posts (no sheet offered then).
+  taggedFriends?: MomentAuthor[];
   authorAvatar?: string | null;
   isFollowing?: boolean;
   timeAgo: string;
@@ -1028,26 +1043,142 @@ const VideoProcessingPlaceholder = React.memo(function VideoProcessingPlaceholde
   );
 });
 
-function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
+function CroppedFeedImage({
+  item,
+  postId,
+  mediaIndex,
+  frameWidth,
+  frameHeight = 340,
+}: {
+  item: PostMediaItem;
+  postId: string;
+  mediaIndex: number;
+  frameWidth: number;
+  frameHeight?: number;
+}) {
   const { colors } = useTheme();
-  const resolvedUri = item.fullUri?.trim() || item.uri.trim();
+  const primaryUri = item.fullUri?.trim() || item.uri.trim();
+  const fallbackUri = item.fallbackUri?.trim() || null;
+  const mediaIdentity = `${primaryUri}\u0000${fallbackUri ?? ''}`;
+  const [activeUri, setActiveUri] = useState(primaryUri);
+  const fallbackAttemptedRef = useRef(false);
+  const previousMediaIdentityRef = useRef(mediaIdentity);
+  const previousMediaItemRef = useRef(item);
+  const renderedMediaItemRef = useRef(item);
+  const requestRevisionRef = useRef(0);
+  if (renderedMediaItemRef.current !== item) {
+    renderedMediaItemRef.current = item;
+    requestRevisionRef.current += 1;
+  }
+  const requestRevision = requestRevisionRef.current;
+  const resolvedUri = activeUri;
+  // Ngrok tunnels (a supported dev/test backend, see lib/api.ts) serve an
+  // HTML interstitial instead of the real file to any request missing this
+  // header. Axios requests already carry it by default; ExpoImage bypasses
+  // axios entirely, so it has to be attached here or feed media silently
+  // fails to decode against an ngrok-hosted API.
+  const imageSource = useMemo(() => ({
+    uri: resolvedUri,
+    headers: ngrokSkipWarningHeaders(resolvedUri),
+  }), [resolvedUri]);
   const frameStyle = useMemo(() => ({
     width: frameWidth,
     height: frameHeight,
   }), [frameHeight, frameWidth]);
+  // A media surface is intentionally distinct from the surrounding card in
+  // both themes. `colors.card` is white in light mode, which made a pending
+  // image indistinguishable from an empty media frame; using it as the image
+  // loading surface also made a dark-frame failure look like a blacked-out
+  // image. This is a behind-the-image surface only, never a tint or filter.
+  // Existing theme token: #F5F5F7 in light mode (subtle against a white card)
+  // and #111111 in dark mode (separate from the black page, not a black hole).
+  const mediaSurfaceColor = colors.backgroundSecondary;
   const [imageSize, setImageSize] = useState(() => ({
     width: item.displayCrop?.imageWidth ?? 0,
     height: item.displayCrop?.imageHeight ?? 0,
   }));
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  // Starts true (rather than waiting on onLoadStart) so a request that never
+  // fires that callback still shows the spinner instead of a silent, static
+  // colors.card rectangle while it's in flight.
+  const [isLoading, setIsLoading] = useState(() => Boolean(resolvedUri));
   const [hasLoadError, setHasLoadError] = useState(false);
   const didLoadRef = useRef(false);
-  const lastLoadedUriRef = useRef<string | null>(null);
   const previousImageIdentityRef = useRef(resolvedUri);
   const crop = item.displayCrop?.crop;
-  const imageInstanceKey = `${resolvedUri}-${loadAttempt}`;
+  // `mediaIdentity` changes when a fresh feed response supplies a renewed
+  // fallback URL even if its stable storage proxy URL does not. It must be in
+  // the native image key, otherwise ExpoImage can retain an earlier failed
+  // request under the same proxy URI after pull-to-refresh.
+  const requestIdentity = `${mediaIdentity}\u0000${requestRevision}\u0000${resolvedUri}\u0000${loadAttempt}`;
+  const activeRequestIdentityRef = useRef(requestIdentity);
+  activeRequestIdentityRef.current = requestIdentity;
+  const imageInstanceKey = requestIdentity;
   const shouldShowFallback = hasLoadError && !isLoading;
+  const isCurrentRequest = useCallback((identity: string) => (
+    activeRequestIdentityRef.current === identity
+  ), []);
+
+  const redactUri = useCallback((uri: string | null) => {
+    if (!uri) return null;
+    try {
+      const parsed = new URL(uri);
+      return `${parsed.origin}${parsed.pathname}${parsed.search ? '?…' : ''}`;
+    } catch {
+      return uri.split('?')[0];
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.debug('[FeedImage] mount', {
+      postId,
+      mediaIndex,
+      mediaType: item.type,
+      primaryUri: redactUri(primaryUri),
+      fallbackUri: redactUri(fallbackUri),
+    });
+
+    return () => {
+      console.debug('[FeedImage] unmount', { postId, mediaIndex });
+    };
+  }, [fallbackUri, item.type, mediaIndex, postId, primaryUri, redactUri]);
+
+  // A carousel cell can receive a refreshed/signed URL while staying mounted.
+  // Reset its selected source and recovery state as one transaction so an old
+  // error can never leak into the next slide.
+  useEffect(() => {
+    const isFreshMediaObject = previousMediaItemRef.current !== item;
+
+    if (previousMediaIdentityRef.current === mediaIdentity && !isFreshMediaObject) {
+      return;
+    }
+
+    previousMediaIdentityRef.current = mediaIdentity;
+    previousMediaItemRef.current = item;
+    fallbackAttemptedRef.current = false;
+    didLoadRef.current = false;
+    // Explicitly clear every per-request state even when the new primary URI
+    // equals the old one. This is the refresh path that used to leave a
+    // fallback view mounted forever.
+    setLoadAttempt(0);
+    setIsLoading(Boolean(primaryUri));
+    setHasLoadError(false);
+    setActiveUri(primaryUri);
+    if (__DEV__) {
+      console.debug('[FeedImage] source reset', {
+        postId,
+        mediaIndex,
+        mediaType: item.type,
+        primaryUri: redactUri(primaryUri),
+        fallbackUri: redactUri(fallbackUri),
+        activeUriBeforeReset: redactUri(resolvedUri),
+        primaryChanged: primaryUri !== resolvedUri,
+        headerNames: Object.keys(ngrokSkipWarningHeaders(primaryUri) ?? {}),
+      });
+    }
+  }, [fallbackUri, item, item.type, mediaIdentity, mediaIndex, postId, primaryUri, redactUri, resolvedUri]);
 
   useEffect(() => {
     const previousIdentity = previousImageIdentityRef.current;
@@ -1058,58 +1189,113 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
     previousImageIdentityRef.current = resolvedUri;
     setLoadAttempt(0);
-    setIsLoading(false);
+    setIsLoading(Boolean(resolvedUri));
     setHasLoadError(false);
     didLoadRef.current = false;
   }, [resolvedUri]);
 
+  // Watchdog: fires regardless of whether ExpoImage ever calls onLoadStart.
+  // Each retry bumps loadAttempt, which changes imageInstanceKey and forces a
+  // fresh ExpoImage mount; the callback bails via didLoadRef if onLoad has
+  // already landed by the time it fires, so a successful load is never
+  // clobbered by a stale timer.
   useEffect(() => {
-    if (hasLoadError || didLoadRef.current) {
+    if (!isCurrentRequest(requestIdentity) || hasLoadError || didLoadRef.current) {
       return;
     }
 
     const timeout = setTimeout(() => {
-      if (didLoadRef.current) {
+      if (!isCurrentRequest(requestIdentity) || didLoadRef.current) {
         return;
       }
 
       if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
+        setIsLoading(true);
         setLoadAttempt(loadAttempt + 1);
       } else {
-        setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
+        setIsLoading(false);
+        setHasLoadError(true);
       }
     }, FEED_IMAGE_RECOVERY_DELAY_MS);
 
     return () => clearTimeout(timeout);
-  }, [hasLoadError, loadAttempt, resolvedUri, imageInstanceKey]);
+  }, [hasLoadError, isCurrentRequest, loadAttempt, requestIdentity, resolvedUri]);
 
   const handleImageLoadStart = useCallback(() => {
+    if (!isCurrentRequest(requestIdentity)) return;
     didLoadRef.current = false;
     setIsLoading(true);
     setHasLoadError(false);
-  }, []);
+    if (__DEV__) console.debug('[FeedImage] load start', { postId, mediaIndex, request: redactUri(resolvedUri) });
+  }, [isCurrentRequest, mediaIndex, postId, redactUri, requestIdentity, resolvedUri]);
 
   const handleImageLoad = useCallback(() => {
+    if (!isCurrentRequest(requestIdentity)) return;
     didLoadRef.current = true;
-    lastLoadedUriRef.current = resolvedUri;
     setIsLoading(false);
     setHasLoadError(false);
-  }, [resolvedUri]);
+    if (__DEV__) console.debug('[FeedImage] loaded', { postId, mediaIndex, request: redactUri(resolvedUri) });
+  }, [isCurrentRequest, mediaIndex, postId, redactUri, requestIdentity, resolvedUri]);
 
   const handleImageLoadEnd = useCallback(() => {
-    setIsLoading(false);
-  }, []);
+    if (!isCurrentRequest(requestIdentity)) return;
+    // Expo Image can emit load-end after a failed or cancelled request. Do
+    // not reveal an empty frame until onLoad has confirmed a decoded image;
+    // onError/the watchdog own the retry-or-fallback transition in that case.
+    if (didLoadRef.current) {
+      setIsLoading(false);
+    }
+    if (__DEV__) console.debug('[FeedImage] load end', { postId, mediaIndex, loaded: didLoadRef.current });
+  }, [isCurrentRequest, mediaIndex, postId, requestIdentity]);
 
-  const handleImageError = useCallback(() => {
+  const handleImageError = useCallback((event: unknown) => {
+    if (!isCurrentRequest(requestIdentity)) return;
     didLoadRef.current = false;
-    setIsLoading(false);
+
+    const canTryFallback = Boolean(
+      fallbackUri
+      && fallbackUri !== primaryUri
+      && resolvedUri === primaryUri
+      && !fallbackAttemptedRef.current,
+    );
+
+    if (__DEV__) {
+      // URL query values can contain signed credentials. Keep the diagnostic
+      // useful on a physical device without ever emitting those values.
+      const nativeMessage = typeof event === 'object' && event && 'error' in event
+        ? String((event as { error?: unknown }).error ?? '').slice(0, 240)
+        : '';
+
+      console.warn('[FeedImage] load failed', {
+        postId,
+        mediaIndex,
+        mediaType: item.type,
+        source: resolvedUri === primaryUri ? 'storage-stream' : 'api-url-fallback',
+        uri: redactUri(resolvedUri),
+        hasFallback: Boolean(fallbackUri && fallbackUri !== primaryUri),
+        willTryFallback: canTryFallback,
+        nativeMessage,
+      });
+    }
+
+    if (canTryFallback && fallbackUri) {
+      fallbackAttemptedRef.current = true;
+      setIsLoading(true);
+      setHasLoadError(false);
+      setActiveUri(fallbackUri);
+      return;
+    }
 
     if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
+      // Keep the spinner up across the retry's remount instead of letting it
+      // ever be visible without one.
+      setIsLoading(true);
       setLoadAttempt(loadAttempt + 1);
     } else {
-      setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
+      setIsLoading(false);
+      setHasLoadError(true);
     }
-  }, [resolvedUri, loadAttempt]);
+  }, [fallbackUri, isCurrentRequest, item.type, loadAttempt, mediaIndex, postId, primaryUri, redactUri, requestIdentity, resolvedUri]);
 
   useEffect(() => {
     if (!crop || !resolvedUri) {
@@ -1120,8 +1306,9 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
       return;
     }
 
-    Image.getSize(
+    Image.getSizeWithHeaders(
       resolvedUri,
+      imageSource.headers ?? {},
       (resolvedWidth, resolvedHeight) => {
         setImageSize({ width: resolvedWidth, height: resolvedHeight });
       },
@@ -1129,7 +1316,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         setImageSize({ width: 0, height: 0 });
       },
     );
-  }, [crop, imageSize.height, imageSize.width, resolvedUri]);
+  }, [crop, imageSize.height, imageSize.width, imageSource.headers, resolvedUri]);
 
   useEffect(() => {
     const nextWidth = item.displayCrop?.imageWidth ?? 0;
@@ -1150,17 +1337,17 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   if (!crop || !imageSize.width || !imageSize.height) {
     if (shouldShowFallback) {
       return (
-        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: colors.card }]}>
+        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: mediaSurfaceColor }]}>
           <Feather name="image" size={28} color="#8E8E9B" />
         </View>
       );
     }
 
     return resolvedUri ? (
-      <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: colors.card }]}>
+      <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: mediaSurfaceColor }]}>
         <ExpoImage
           key={imageInstanceKey}
-          source={{ uri: resolvedUri }}
+          source={imageSource}
           style={[styles.postImage, frameStyle]}
           contentFit="cover"
           cachePolicy="memory-disk"
@@ -1171,11 +1358,13 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
           onError={handleImageError}
         />
         {isLoading ? (
-          <ActivityIndicator style={styles.imageLoadingIndicator} color="#FFFFFF" />
+          <View pointerEvents="none" style={styles.imageLoadingOverlay}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
         ) : null}
       </View>
     ) : (
-      <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: colors.card }]}>
+      <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: mediaSurfaceColor }]}>
         <Feather name="image" size={28} color="#8E8E9B" />
       </View>
     );
@@ -1190,15 +1379,15 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
   const top = (frameHeight - cropPixelHeight * scale) / 2 - crop.y * imageSize.height * scale;
 
   return (
-    <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: colors.card }]}>
+    <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: mediaSurfaceColor }]}>
       {shouldShowFallback ? (
-        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: colors.card }]}>
+        <View style={[styles.postImage, frameStyle, styles.imageLoadFallback, { backgroundColor: mediaSurfaceColor }]}>
           <Feather name="image" size={28} color="#8E8E9B" />
         </View>
       ) : (
         <ExpoImage
           key={imageInstanceKey}
-          source={{ uri: resolvedUri }}
+          source={imageSource}
           style={[
             styles.croppedImage,
             {
@@ -1218,7 +1407,9 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         />
       )}
       {isLoading && !shouldShowFallback ? (
-        <ActivityIndicator style={styles.imageLoadingIndicator} color="#FFFFFF" />
+        <View pointerEvents="none" style={styles.imageLoadingOverlay}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
       ) : null}
     </View>
   );
@@ -1248,9 +1439,7 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
 
     return {
       uri: details.uri,
-      headers: details.uri.includes('ngrok-free')
-        ? { 'ngrok-skip-browser-warning': 'true' }
-        : undefined,
+      headers: ngrokSkipWarningHeaders(details.uri),
     };
   }, [details.uri]);
   const player = useAudioPlayer(audioSource, {
@@ -1487,6 +1676,12 @@ function FeedPost({
   const [showEditModal, setShowEditModal] = useState(false);
   const isNormalPost = post.postType === 'standard';
 
+  // Regular-post tagged-user full list. Mirrors RepostFeedCard's pattern:
+  // one sheet per mounted card, driven by the muted connective in the header.
+  const [showTaggedSheet, setShowTaggedSheet] = useState(false);
+  const postTaggedFriends = post.taggedFriends ?? [];
+  const hasTaggedFriends = postTaggedFriends.length > 0;
+
   // Dynamic Interaction State
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
   const [isSaved, setIsSaved] = useState(post.isSaved || false);
@@ -1502,10 +1697,15 @@ function FeedPost({
 
     return sourceItems.filter((item) => Boolean(item.uri?.trim()));
   }, [post.mediaItems, post.mediaUris]);
-  const fullScreenMediaItems = useMemo(() => mediaItems.map((item) => ({
-    uri: item.fullUri?.trim() || item.uri.trim(),
-    type: item.type,
-  })), [mediaItems]);
+  const fullScreenMediaItems = useMemo(() => mediaItems.map((item) => {
+    const uri = item.fullUri?.trim() || item.uri.trim();
+
+    return {
+      uri,
+      type: item.type,
+      headers: ngrokSkipWarningHeaders(uri),
+    };
+  }), [mediaItems]);
   // A text-only post rendered inside a repost/share card (RepostFeedCard's
   // compact shell). Only this case gets the bounded 3-line excerpt + a small
   // "View post" affordance — standalone posts and any post with media are
@@ -1921,6 +2121,17 @@ function FeedPost({
     });
   };
 
+  // Row tap inside TaggedPeopleSheet — reuses the same tagged-user navigation
+  // path as an inline name press (the sheet closes itself).
+  const handleTaggedPersonPress = (person: MomentAuthor) => {
+    handleTaggedUserPress({
+      id: person.id,
+      name: getTaggedFriendName(person),
+      avatar: person.avatarUrl,
+      isFollowing: person.isFollowing,
+    });
+  };
+
   const handleTaggedEventPress = (taggedEvent: NonNullable<PostContextNode['taggedEvent']>) => {
     handleEventPress(taggedEvent.id ?? null);
   };
@@ -1999,22 +2210,33 @@ function FeedPost({
             <View style={[styles.authorTextContainer, isNormalPost && styles.normalAuthorTextContainer]}>
               <Text style={[styles.authorLine, isNormalPost && styles.normalAuthorLine]} numberOfLines={2}>
                 <Text style={[styles.postAuthor, { color: colors.text }]} onPress={handleAuthorPress} suppressHighlighting>{post.authorName}</Text>
-                {post.authorContextNodes?.map((node, i) => (
-                  <Text
-                    key={i}
-                    style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}
-                    onPress={
-                      node.taggedUser?.id
-                        ? () => handleTaggedUserPress(node.taggedUser!)
-                        : node.taggedEvent?.id
-                          ? () => handleTaggedEventPress(node.taggedEvent!)
+                {post.authorContextNodes?.map((node, i) => {
+                  const opensTaggedSheet = Boolean(node.taggedSummary && hasTaggedFriends);
+                  return (
+                    <Text
+                      key={i}
+                      style={[node.type === 'muted' ? styles.authorMuted : styles.postAuthor, { color: node.type === 'muted' ? colors.textSecondary : colors.text }]}
+                      onPress={
+                        node.taggedUser?.id
+                          ? () => handleTaggedUserPress(node.taggedUser!)
+                          : node.taggedEvent?.id
+                            ? () => handleTaggedEventPress(node.taggedEvent!)
+                            : opensTaggedSheet
+                              ? () => setShowTaggedSheet(true)
+                              : undefined
+                      }
+                      suppressHighlighting={Boolean(node.taggedUser?.id || node.taggedEvent?.id) || opensTaggedSheet}
+                      accessibilityRole={opensTaggedSheet ? 'button' : undefined}
+                      accessibilityLabel={
+                        opensTaggedSheet
+                          ? `View ${postTaggedFriends.length} tagged ${postTaggedFriends.length === 1 ? 'person' : 'people'}`
                           : undefined
-                    }
-                    suppressHighlighting={Boolean(node.taggedUser?.id || node.taggedEvent?.id)}
-                  >
-                    {node.text}
-                  </Text>
-                ))}
+                      }
+                    >
+                      {node.text}
+                    </Text>
+                  );
+                })}
               </Text>
 
               <View style={[styles.timeRow, isNormalPost && styles.normalTimeRow]}>
@@ -2154,7 +2376,13 @@ function FeedPost({
                         accessibilityRole="imagebutton"
                         accessibilityLabel={`Open image ${index + 1} of ${mediaItems.length} full screen`}
                       >
-                        <CroppedFeedImage item={item} frameWidth={mediaFrameWidth} frameHeight={isNormalPost ? mediaFrameWidth : 340} />
+                        <CroppedFeedImage
+                          item={item}
+                          postId={post.id}
+                          mediaIndex={index}
+                          frameWidth={mediaFrameWidth}
+                          frameHeight={isNormalPost ? mediaFrameWidth : 340}
+                        />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -2359,6 +2587,15 @@ function FeedPost({
             onIndexChange={setCurrentMediaIndex}
             mediaItems={fullScreenMediaItems}
             initialIndex={currentMediaIndex}
+          />
+        )}
+
+        {hasTaggedFriends && (
+          <TaggedPeopleSheet
+            visible={showTaggedSheet}
+            people={postTaggedFriends}
+            onClose={() => setShowTaggedSheet(false)}
+            onPressPerson={handleTaggedPersonPress}
           />
         )}
       </View>
@@ -2643,14 +2880,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#121212",
   },
-  imageLoadingIndicator: {
+  // Deliberately transparent and non-interactive: the indicator must never
+  // become a theme-colored layer above the actual image or block opening it.
+  imageLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   mediaSlide: {
     height: "100%",
   },
   mediaImageButton: {
     flex: 1,
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
   },
   croppedImageFrame: {
     width: "100%",

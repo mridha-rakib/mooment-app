@@ -34,7 +34,7 @@ type Props = {
 
 export default function AudiencePickerModal({ visible, onClose, onSelect, current }: Props) {
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.handle} />

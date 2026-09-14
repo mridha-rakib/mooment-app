@@ -18,6 +18,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import {
   AudioModule,
+  createAudioPlayer,
   getRecordingPermissionsAsync,
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -38,6 +39,7 @@ import React,
 import {
   Alert,
   Animated,
+  BackHandler,
   Dimensions,
   Image,
   Modal,
@@ -71,11 +73,59 @@ const { width } = Dimensions.get('window');
 
 const FALLBACK_AUTHOR_NAME = 'Mooment User';
 const MAX_MEDIA_ITEMS = 10;
+// CRT-011: mirrors the backend's authoritative caption cap exactly
+// (moment.validation.ts's `optionalText("Caption", 5000)`) so the frontend
+// can never accept text the backend would reject.
+const MAX_POST_CAPTION_LENGTH = 5000;
 const MAX_VIDEO_RECORDING_DURATION_SECONDS = 60;
 const MAX_VIDEO_DURATION_ERROR = 'Create Post videos can be up to 1 minute. Please record a shorter video.';
 // Video Moment/Post creation is temporarily disabled (resource-constrained deploy).
 // This gates every video entry point in this screen; flip back to re-enable.
 const VIDEO_MOMENT_CREATION_ENABLED = false;
+
+// CRT-011 media policy — approved product limits. Binary byte units
+// throughout (1 MB = 1024 * 1024 bytes), matching exactly across frontend and
+// backend so a file the client accepts can never be rejected by the server,
+// and vice versa.
+const IMAGE_MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
+const IMAGE_MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024;
+const AUDIO_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const AUDIO_MIN_DURATION_SECONDS = 1;
+const AUDIO_MAX_DURATION_SECONDS = 5 * 60;
+
+// HEIC/HEIF deliberately excluded: no evidence in this codebase that the full
+// active pipeline (Android rendering in particular — RN's <Image> cannot
+// decode HEIC without a native codec library, which isn't installed here)
+// reliably supports it end to end. Only proven-safe formats are approved.
+const APPROVED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+// Covers every MIME the app's own audio paths can actually produce: the
+// recorder always reports 'audio/mp4' (see AudioPickerSheet's stopRecording),
+// and the document picker + getMediaContentType's extension fallback can
+// surface any of the remaining forms for a picked file.
+const APPROVED_AUDIO_MIME_TYPES = new Set([
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/ogg',
+]);
+
+// Strips harmless MIME parameters (e.g. "audio/mp4; codecs=mp4a.40.2") and
+// normalizes case/whitespace before comparing against the approved sets.
+const normalizeMimeType = (value?: string | null): string => (
+  (value ?? '').trim().toLowerCase().split(';')[0]?.trim() ?? ''
+);
+
+const isApprovedImageMimeType = (contentType?: string | null): boolean => (
+  APPROVED_IMAGE_MIME_TYPES.has(normalizeMimeType(contentType))
+);
+
+const isApprovedAudioMimeType = (contentType?: string | null): boolean => (
+  APPROVED_AUDIO_MIME_TYPES.has(normalizeMimeType(contentType))
+);
 const CREATE_MOMENT_COLORS = {
   background: '#0E0D12',
   text: '#FFFFFF',
@@ -94,6 +144,32 @@ type SelectedImageItem = {
   source: MomentMediaSource;
   contentType: string;
   name?: string | null;
+  sizeBytes?: number | null;
+};
+
+// CRT-012: one logical Post submission attempt. A retry of the SAME unchanged
+// draft reuses this (same clientRequestId, same already-uploaded media);
+// a materially changed draft always gets a fresh attempt instead. Kept purely
+// in memory (a ref) — never persisted, never a global store.
+type PendingSubmissionAttempt = {
+  draftSignature: string;
+  clientRequestId: string;
+  uploadedMedia: Map<string, MomentMediaItem>;
+  mediaKeySlots: Map<string, string>;
+};
+
+type UploadPhase = 'idle' | 'uploading' | 'failed' | 'completed';
+type SubmissionFailureStage = 'upload' | 'create' | null;
+
+// Bounds a possibly-untrusted progress callback value (NaN/Infinity/negative/
+// over 100%) into a safe 0-1 range so a broken transport reading can never
+// render garbage percentage text.
+const clampProgress = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, value));
 };
 
 const normalizeAudience = (value: string): MomentAudience => {
@@ -228,6 +304,23 @@ const getMediaExtension = (contentType: string) => {
   return "jpg";
 };
 
+// CRT-012 safe-restart storage key: stable per (attempt, media item) so a
+// retry of the same logical attempt re-targets the exact same destination
+// key instead of generating a fresh orphaned object on every retry. A new
+// attempt (draft materially changed) always carries a new clientRequestId,
+// so its keys never collide with an older attempt's.
+const getAttemptMediaSlot = (attempt: PendingSubmissionAttempt, cacheKey: string): string => {
+  const existingSlot = attempt.mediaKeySlots.get(cacheKey);
+
+  if (existingSlot) {
+    return existingSlot;
+  }
+
+  const slot = Math.random().toString(36).slice(2);
+  attempt.mediaKeySlots.set(cacheKey, slot);
+  return slot;
+};
+
 function VideoPreview({ uri, style, paused }: { uri: string; style: object; paused?: boolean }) {
   const player = useVideoPlayer(uri, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -307,7 +400,7 @@ function CameraSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={[camStyles.root, { backgroundColor: '#000' }]}>
         <StatusBar barStyle="light-content" />
         {permission.granted ? (
@@ -699,6 +792,7 @@ function VideoCameraSheet({
       presentationStyle="fullScreen"
       onShow={() => setIsCameraModalShown(true)}
       onDismiss={() => setIsCameraModalShown(false)}
+      onRequestClose={onClose}
     >
       <View style={camStyles.root}>
         <StatusBar barStyle="light-content" />
@@ -1106,6 +1200,83 @@ const formatAudioPreviewTime = (status: AudioStatus, fallbackSeconds?: number | 
   return formatAudioSeconds(duration);
 };
 
+// Presentation-only. Never derive storageKey, upload key, payload filename,
+// or MIME type from this — it exists purely to keep internal/opaque values
+// (storage paths, content:// handles, UUID/timestamp-generated basenames) off
+// the screen, while letting a genuinely useful original filename through.
+const MEDIA_DISPLAY_NAME_FALLBACK = 'Audio';
+const MEDIA_DISPLAY_NAME_MAX_LENGTH = 60;
+
+const isSchemeUri = (value: string) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+const hasPathSeparator = (value: string) => value.includes('/') || value.includes('\\');
+const isBackendObjectPath = (value: string) => /^\/?(moments|uploads)\//i.test(value);
+const isUuid = (value: string) => (
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+);
+const isGeneratedToken = (value: string) => /^\d{6,}[-_][a-z0-9]{4,}$/i.test(value);
+
+const extractBasename = (value: string) => {
+  const withoutQueryOrHash = value.split(/[?#]/)[0] ?? value;
+  const segments = withoutQueryOrHash.split(/[\\/]/);
+  return segments[segments.length - 1] ?? withoutQueryOrHash;
+};
+
+const truncateDisplayName = (value: string, maxLength: number) => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  const extensionMatch = value.match(/\.[a-z0-9]{1,5}$/i);
+  const extension = extensionMatch ? extensionMatch[0] : '';
+  const base = extension ? value.slice(0, -extension.length) : value;
+  const truncatedBase = base.slice(0, Math.max(maxLength - extension.length - 1, 1)).trimEnd();
+
+  return `${truncatedBase}…${extension}`;
+};
+
+const getProfessionalMediaDisplayName = (
+  rawName?: string | null,
+  fallback: string = MEDIA_DISPLAY_NAME_FALLBACK,
+): string => {
+  if (!rawName) {
+    return fallback;
+  }
+
+  const withoutControlChars = rawName.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+
+  if (!withoutControlChars) {
+    return fallback;
+  }
+
+  if (isBackendObjectPath(withoutControlChars)) {
+    return fallback;
+  }
+
+  if (isSchemeUri(withoutControlChars)) {
+    // content://, file://, http(s):// handles are opaque — the last path
+    // segment (often a numeric id) is not a meaningful filename.
+    return fallback;
+  }
+
+  let candidate = hasPathSeparator(withoutControlChars)
+    ? extractBasename(withoutControlChars).trim()
+    : withoutControlChars;
+
+  candidate = candidate.replace(/\s+/g, ' ').trim();
+
+  if (!candidate) {
+    return fallback;
+  }
+
+  const withoutExtension = candidate.replace(/\.[a-z0-9]{1,5}$/i, '');
+
+  if (isUuid(withoutExtension) || isGeneratedToken(withoutExtension)) {
+    return fallback;
+  }
+
+  return truncateDisplayName(candidate, MEDIA_DISPLAY_NAME_MAX_LENGTH);
+};
+
 const RECORDING_AUDIO_MODE = {
   allowsRecording: true,
   playsInSilentMode: true,
@@ -1187,6 +1358,70 @@ const validateReadableFile = async (uri: string) => {
 
   return fileInfo.size;
 };
+
+// CRT-011: size-policy support for images, which (unlike audio) have no
+// existing readability gate. Never throws — an unreadable/unknown-size local
+// file is treated as 0 bytes so it isn't blocked by a size check it can't
+// answer; MIME/count checks still apply independently. Remote URIs (not a
+// path Create Post's own pickers produce) are also treated as 0 bytes rather
+// than fetched, since this must never upload just to discover size.
+const getLocalFileSizeBytes = async (uri: string): Promise<number> => {
+  if (isRemoteUri(uri)) {
+    return 0;
+  }
+
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(uri);
+    return fileInfo.exists && typeof fileInfo.size === 'number' ? fileInfo.size : 0;
+  } catch {
+    return 0;
+  }
+};
+
+// CRT-011: a picked audio file's real duration is only knowable once its
+// metadata has loaded — expo-document-picker never reports it. This uses the
+// smallest available imperative path in the installed `expo-audio` library
+// (createAudioPlayer + the playbackStatusUpdate event) rather than the
+// `useAudioPlayer`/`useAudioPlayerStatus` hooks (which are render-bound and
+// can't be awaited from an event handler), so a picked file's duration can be
+// validated BEFORE it is ever committed to composer state. Always releases
+// the temporary player, success or failure.
+const resolvePickedAudioDurationSeconds = (uri: string): Promise<number> => (
+  new Promise((resolve, reject) => {
+    let settled = false;
+    let subscription: { remove: () => void } | null = null;
+    const player = createAudioPlayer(uri);
+
+    const finish = (run: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      subscription?.remove();
+      try {
+        player.remove();
+      } catch {
+        // Best-effort cleanup of the temporary metadata-only player.
+      }
+      run();
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish(() => reject(new Error('Could not read the audio duration.')));
+    }, 8000);
+
+    try {
+      subscription = player.addListener('playbackStatusUpdate', (status) => {
+        if (status.isLoaded && Number.isFinite(status.duration) && status.duration > 0) {
+          finish(() => resolve(status.duration));
+        }
+      });
+    } catch (error) {
+      finish(() => reject(error instanceof Error ? error : new Error('Could not read the audio duration.')));
+    }
+  })
+);
 
 function AudioPickerSheet({
   visible,
@@ -1538,23 +1773,53 @@ function AudioPickerSheet({
         return;
       }
 
-      if (!recording.durationMillis || recording.durationMillis <= 0) {
-        Alert.alert('Recording failed', 'The recorded audio was too short. Please try recording again.');
+      // CRT-011: clamp to the approved max rather than rejecting — the
+      // auto-stop effect below is what actually enforces the 5-minute
+      // ceiling in real time, but native stop() can report a few hundred
+      // milliseconds past the tick that triggered it. Clamping here honors
+      // "automatically stop at 5:00" truthfully instead of discarding an
+      // otherwise-legitimate auto-stopped recording over stop latency.
+      const rawDurationSeconds = recording.durationMillis ? recording.durationMillis / 1000 : 0;
+      const recordingDurationSeconds = Math.min(rawDurationSeconds, AUDIO_MAX_DURATION_SECONDS);
+
+      if (recordingDurationSeconds < AUDIO_MIN_DURATION_SECONDS) {
+        Alert.alert('Recording is too short', `Record at least ${AUDIO_MIN_DURATION_SECONDS} second of audio.`);
         return;
       }
 
-      await validateReadableFile(uri);
+      const sizeBytes = await validateReadableFile(uri);
+
+      if (sizeBytes > AUDIO_MAX_FILE_SIZE_BYTES) {
+        Alert.alert('Audio file is too large', 'Choose an audio file that is 20 MB or smaller.');
+        return;
+      }
 
       onRecorded(
         uri,
         'audio/mp4',
         `Recording ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-        recording.durationMillis ? recording.durationMillis / 1000 : null,
+        recordingDurationSeconds,
       );
     } catch (error) {
       Alert.alert('Recording failed', getAuthErrorMessage(error, 'Please try stopping the recording again.'));
     }
   };
+
+  // CRT-011: auto-stop at the approved 5-minute ceiling, reusing the existing
+  // recordingDurationMillis tick (no second timer). stopRecording()'s own
+  // isRecording/isStoppingRecording guard (and stopNativeRecorder's
+  // stopPromiseRef single-flight guard) already make this safe against a
+  // race with a simultaneous manual Stop press — this can never finalize the
+  // recording twice.
+  useEffect(() => {
+    if (isRecording && recordingDurationMillis >= AUDIO_MAX_DURATION_SECONDS * 1000) {
+      stopRecording();
+    }
+    // stopRecording is intentionally omitted: it's a plain (non-memoized)
+    // function recreated every render, and this effect must only re-run when
+    // the recording tick actually changes, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording, recordingDurationMillis]);
 
   const closeSheet = async () => {
     if (isRecording || stopPromiseRef.current) {
@@ -1591,7 +1856,8 @@ function AudioPickerSheet({
             <View style={audioStyles.header}>
               <View>
                 <Text style={audioStyles.title}>Audio</Text>
-                <Text style={audioStyles.subtitle}>Record or choose audio for your post</Text>
+                <Text style={audioStyles.subtitle}>Record or choose audio for your post.</Text>
+                <Text style={audioStyles.policyHint}>1 sec–5 min · Max 20 MB · MP3, M4A, AAC, WAV, OGG</Text>
               </View>
             </View>
           </View>
@@ -1605,7 +1871,7 @@ function AudioPickerSheet({
               <Text style={audioStyles.recordTime}>
                 {hasPreview
                   ? formatAudioPreviewTime(previewStatus, previewDurationSeconds)
-                  : formatAudioDuration(recordingDurationMillis)}
+                  : `${formatAudioDuration(recordingDurationMillis)} / ${formatAudioDuration(AUDIO_MAX_DURATION_SECONDS * 1000)}`}
               </Text>
             </View>
             <TouchableOpacity
@@ -1676,6 +1942,11 @@ const audioStyles = StyleSheet.create({
     color: CREATE_MOMENT_COLORS.bodyText,
     fontSize: 13,
     marginTop: 4,
+  },
+  policyHint: {
+    color: CREATE_MOMENT_COLORS.muted,
+    fontSize: 11,
+    marginTop: 2,
   },
   closeBtn: {
     width: 36,
@@ -1784,9 +2055,33 @@ export default function CreateMomentScreen() {
       setSelectedEvent(params.eventName);
     }
   }, [params.eventId, params.eventName]);
+  // CRT-010 discard confirmation: the screen can legitimately start with a
+  // route-preselected Event (above), so "unsaved" must compare against
+  // whatever Event this specific mount actually started with, not against
+  // null. Captured once — this is an in-memory baseline for the currently
+  // mounted screen only, never persisted.
+  const initialEventIdRef = useRef<string | null>(
+    params.eventId && params.eventName ? params.eventId : null,
+  );
   const [taggedFriends, setTaggedFriends] = useState<TaggedFriend[]>([]);
   const [audience, setAudience] = useState('Public');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Display-only: true only while the actual network upload of a local audio
+  // file is in flight (inside buildMediaItem). Never true for recording,
+  // local file selection, player metadata loading, or the createMoment call
+  // itself — it must not gate/replace the isSubmitting submit lock.
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  // CRT-012: real (transport-reported) media upload state for the current
+  // submission attempt — never a fake/timer-estimated value. `uploadProgress`
+  // is a 0-1 aggregate across whatever media the current attempt needs to
+  // upload; cached (already-uploaded, reused-on-retry) items count as 1.
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const uploadProgressMapRef = useRef<Map<string, number>>(new Map());
+  // Which stage a submission last failed at (upload vs createMoment), so the
+  // inline retry banner/copy and uploadPhase reflect the true failure point.
+  const [submissionFailureStage, setSubmissionFailureStage] = useState<SubmissionFailureStage>(null);
+  const pendingAttemptRef = useRef<PendingSubmissionAttempt | null>(null);
   const isSubmittingRef = useRef(false);
   const isAudioPickerOpeningRef = useRef(false);
   const isVideoPickerOpeningRef = useRef(false);
@@ -1924,19 +2219,18 @@ export default function CreateMomentScreen() {
     }
   }, [user?.avatarKey]);
 
-  const handleImageSelect = (
+  const handleImageSelect = async (
     images: {
       uri: string;
       source?: MomentMediaSource;
       contentType?: string | null;
       name?: string | null;
+      sizeBytes?: number | null;
     }[],
   ) => {
     if (images.length === 0) {
       return;
     }
-
-    stopAudioPreview();
 
     const existingImageCount = selectedMediaType === 'image' ? selectedImages.length : 0;
     const availableSlots = Math.max(MAX_MEDIA_ITEMS - existingImageCount, 0);
@@ -1946,12 +2240,55 @@ export default function CreateMomentScreen() {
       return;
     }
 
-    const nextImages = images.slice(0, availableSlots).map((image) => ({
+    const candidates = images.slice(0, availableSlots);
+    const overflowCount = images.length - candidates.length;
+
+    // CRT-011: resolve MIME + byte size for every candidate before committing
+    // anything. The newly-picked batch is accepted or rejected atomically —
+    // if any candidate fails policy, existing valid selectedImages are left
+    // completely untouched rather than partially merging the batch (the
+    // current architecture has no per-item "some accepted, some skipped" UI,
+    // and inventing one here would be a bigger change than this policy task
+    // calls for).
+    const resolvedCandidates = await Promise.all(candidates.map(async (image) => {
+      const contentType = getMediaContentType(image.uri, 'image', image.contentType);
+      const sizeBytes = typeof image.sizeBytes === 'number' ? image.sizeBytes : await getLocalFileSizeBytes(image.uri);
+      return { ...image, contentType, sizeBytes };
+    }));
+
+    const unsupportedImage = resolvedCandidates.find((image) => !isApprovedImageMimeType(image.contentType));
+
+    if (unsupportedImage) {
+      Alert.alert('Unsupported photo format', 'Choose a JPEG, PNG, or WebP image.');
+      return;
+    }
+
+    const oversizedImage = resolvedCandidates.find((image) => image.sizeBytes > IMAGE_MAX_FILE_SIZE_BYTES);
+
+    if (oversizedImage) {
+      Alert.alert('Photo is too large', 'Choose a photo that is 15 MB or smaller.');
+      return;
+    }
+
+    const existingTotalBytes = selectedMediaType === 'image'
+      ? selectedImages.reduce((sum, image) => sum + (image.sizeBytes ?? 0), 0)
+      : 0;
+    const candidateTotalBytes = resolvedCandidates.reduce((sum, image) => sum + image.sizeBytes, 0);
+
+    if (existingTotalBytes + candidateTotalBytes > IMAGE_MAX_TOTAL_SIZE_BYTES) {
+      Alert.alert('Photo limit reached', 'Selected photos can be up to 50 MB in total.');
+      return;
+    }
+
+    stopAudioPreview();
+
+    const nextImages: SelectedImageItem[] = resolvedCandidates.map((image) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       uri: image.uri,
       source: image.source ?? 'gallery',
-      contentType: getMediaContentType(image.uri, 'image', image.contentType),
+      contentType: image.contentType,
       name: image.name ?? null,
+      sizeBytes: image.sizeBytes,
     }));
 
     setSelectedImages((currentImages) => (
@@ -1966,7 +2303,7 @@ export default function CreateMomentScreen() {
     setSelectedMediaName(null);
     setSelectedMediaDurationSeconds(null);
 
-    if (images.length > availableSlots) {
+    if (overflowCount > 0) {
       Alert.alert('Image limit reached', `Only ${MAX_MEDIA_ITEMS} images can be attached to a post.`);
     }
   };
@@ -2008,7 +2345,7 @@ export default function CreateMomentScreen() {
     setSelectedMediaType('audio');
     setSelectedMediaSource(source);
     setSelectedMediaContentType(getMediaContentType(uri, 'audio', contentType));
-    setSelectedMediaName(name ?? 'Audio');
+    setSelectedMediaName(getProfessionalMediaDisplayName(name, 'Audio'));
     setSelectedMediaDurationSeconds(durationSeconds ?? null);
   };
 
@@ -2054,9 +2391,43 @@ export default function CreateMomentScreen() {
       }
 
       const audio = result.assets[0];
-      await validateReadableFile(audio.uri);
+      // CRT-011 order: readable -> MIME -> size -> duration known -> duration
+      // range -> only then commit to composer state (handleAudioSelect),
+      // which is what applies image/audio exclusivity. An invalid candidate
+      // never reaches handleAudioSelect, so it can never clear valid images.
+      const sizeBytes = await validateReadableFile(audio.uri);
+      const contentType = getMediaContentType(audio.uri, 'audio', audio.mimeType);
 
-      handleAudioSelect(audio.uri, 'upload', audio.mimeType, audio.name);
+      if (!isApprovedAudioMimeType(contentType)) {
+        Alert.alert('Unsupported audio format', 'Choose an M4A, AAC, MP3, WAV, or OGG file.');
+        return;
+      }
+
+      if (sizeBytes > AUDIO_MAX_FILE_SIZE_BYTES) {
+        Alert.alert('Audio file is too large', 'Choose an audio file that is 20 MB or smaller.');
+        return;
+      }
+
+      let durationSeconds: number;
+
+      try {
+        durationSeconds = await resolvePickedAudioDurationSeconds(audio.uri);
+      } catch (error) {
+        Alert.alert('Unable to choose audio', getAuthErrorMessage(error, 'Could not read this audio file. Please choose another.'));
+        return;
+      }
+
+      if (durationSeconds < AUDIO_MIN_DURATION_SECONDS) {
+        Alert.alert('Audio is too short', `Audio must be at least ${AUDIO_MIN_DURATION_SECONDS} second.`);
+        return;
+      }
+
+      if (durationSeconds > AUDIO_MAX_DURATION_SECONDS) {
+        Alert.alert('Audio is too long', 'Audio can be up to 5 minutes.');
+        return;
+      }
+
+      handleAudioSelect(audio.uri, 'upload', contentType, audio.name, durationSeconds);
       setShowAudioPicker(false);
     } catch (error) {
       Alert.alert('Unable to choose audio', getAuthErrorMessage(error, 'Please choose another audio file.'));
@@ -2099,12 +2470,13 @@ export default function CreateMomentScreen() {
         return;
       }
 
-      handleImageSelect(
+      await handleImageSelect(
         result.assets.map((image) => ({
           uri: image.uri,
           source: 'gallery',
           contentType: image.mimeType,
           name: image.fileName,
+          sizeBytes: image.fileSize,
         })),
       );
     } catch (error) {
@@ -2179,32 +2551,136 @@ export default function CreateMomentScreen() {
     }
   };
 
+  // CRT-012 draft signature: identifies the current logical post content, so
+  // a retry with an UNCHANGED draft can reuse the same clientRequestId and
+  // already-uploaded media, while a materially changed draft always starts a
+  // fresh attempt. Deliberately excludes volatile values (upload progress,
+  // storage keys, isSubmitting/isUploadingAudio, timestamps) — only the
+  // logical post inputs.
+  const computeDraftSignature = useCallback((): string => {
+    const mediaSignature = selectedMediaType === 'image'
+      ? selectedImages.map((image) => image.id).join(',')
+      : selectedImage
+        ? `${selectedMediaType}:${selectedImage}:${selectedMediaContentType ?? ''}:${selectedMediaDurationSeconds ?? ''}`
+        : '';
+
+    return [
+      caption.trim(),
+      normalizeAudience(audience),
+      selectedEventId ?? '',
+      selectedMediaType ?? '',
+      mediaSignature,
+      [...taggedFriends.map((friend) => friend.id)].sort().join(','),
+    ].join('|');
+  }, [
+    caption,
+    audience,
+    selectedEventId,
+    selectedMediaType,
+    selectedImages,
+    selectedImage,
+    selectedMediaContentType,
+    selectedMediaDurationSeconds,
+    taggedFriends,
+  ]);
+
+  // Returns the in-flight/last attempt for the CURRENT draft, creating a new
+  // one (new clientRequestId, empty media cache) only when the draft actually
+  // changed since the last attempt was created.
+  const getOrCreatePendingAttempt = useCallback((): PendingSubmissionAttempt => {
+    const draftSignature = computeDraftSignature();
+    const existingAttempt = pendingAttemptRef.current;
+
+    if (existingAttempt && existingAttempt.draftSignature === draftSignature) {
+      return existingAttempt;
+    }
+
+    const attempt: PendingSubmissionAttempt = {
+      draftSignature,
+      clientRequestId: `post:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+      uploadedMedia: new Map(),
+      mediaKeySlots: new Map(),
+    };
+
+    pendingAttemptRef.current = attempt;
+    return attempt;
+  }, [computeDraftSignature]);
+
+  // If the draft changes while a failed attempt's stale progress/error UI is
+  // still showing, clear it immediately rather than leaving a "Upload
+  // failed" / stale percentage banner attached to content the user has
+  // already moved on from. The next submit still creates its own new attempt
+  // via getOrCreatePendingAttempt above.
+  useEffect(() => {
+    const attempt = pendingAttemptRef.current;
+
+    if (attempt && attempt.draftSignature !== computeDraftSignature()) {
+      setSubmissionFailureStage(null);
+      setUploadPhase('idle');
+      setUploadProgress(0);
+    }
+  }, [computeDraftSignature]);
+
+  const reportMediaUploadProgress = useCallback((cacheKey: string, value: number, totalCount: number) => {
+    uploadProgressMapRef.current.set(cacheKey, clampProgress(value));
+
+    if (totalCount <= 0) {
+      setUploadProgress(0);
+      return;
+    }
+
+    let sum = 0;
+    uploadProgressMapRef.current.forEach((itemProgress) => {
+      sum += itemProgress;
+    });
+    setUploadProgress(clampProgress(sum / totalCount));
+  }, []);
+
   const buildMediaItem = async ({
     uri,
     type,
     source,
     contentType,
     durationSeconds,
+    cacheKey,
+    attempt,
+    onProgress,
   }: {
     uri: string;
     type: SelectedMediaType;
     source: MomentMediaSource;
     contentType: string;
     durationSeconds?: number | null;
+    cacheKey: string;
+    attempt: PendingSubmissionAttempt;
+    onProgress?: (progress: number) => void;
   }): Promise<MomentMediaItem> => {
+    // CRT-012: an unchanged retry of the same logical attempt reuses an
+    // already-uploaded result instead of re-uploading the same local bytes
+    // (and instead of generating another orphaned storage object).
+    const cachedMediaItem = attempt.uploadedMedia.get(cacheKey);
+
+    if (cachedMediaItem) {
+      onProgress?.(1);
+      return cachedMediaItem;
+    }
+
     const mediaSource = source ?? (isRemoteUri(uri) ? 'external' : 'upload');
     const mediaDurationSeconds = (type === 'audio' || type === 'video') && durationSeconds != null && Number.isFinite(durationSeconds)
       ? Math.max(0, durationSeconds)
       : null;
 
     if (isRemoteUri(uri)) {
-      return {
+      const remoteMediaItem: MomentMediaItem = {
         type,
         source: mediaSource,
         url: uri,
         contentType,
         durationSeconds: mediaDurationSeconds,
       };
+      onProgress?.(1);
+      attempt.uploadedMedia.set(cacheKey, remoteMediaItem);
+      return remoteMediaItem;
     }
 
     if (type === 'video' && !VIDEO_MOMENT_CREATION_ENABLED) {
@@ -2214,38 +2690,86 @@ export default function CreateMomentScreen() {
       throw new Error('Video posts are temporarily unavailable.');
     }
 
-    const storageKey = type === 'video'
-      ? await uploadMomentVideoFile({ uri, contentType })
-      : await uploadFileToStorage({
-        uri,
-        key: `moments/${type}/${Date.now()}-${Math.random().toString(36).slice(2)}.${getMediaExtension(contentType)}`,
-        contentType,
-      });
+    // Real network upload work only happens past this point (isRemoteUri
+    // already returned above). Only audio gets a visible upload-state
+    // indicator here; the flag is scoped to this single await and always
+    // cleared via finally, success or failure.
+    const isLocalAudioUpload = type === 'audio';
 
-    return {
-      type,
-      source: mediaSource,
-      storageKey,
-      contentType,
-      durationSeconds: mediaDurationSeconds,
-    };
+    if (isLocalAudioUpload) {
+      setIsUploadingAudio(true);
+    }
+
+    try {
+      // CRT-012: the storage key is derived from the attempt's stable
+      // clientRequestId plus a per-media slot assigned once per cacheKey per
+      // attempt, so retrying a failed upload within the SAME logical attempt
+      // targets the same destination (safe restart from byte 0) instead of a
+      // fresh orphaned key every retry.
+      const storageKey = type === 'video'
+        ? await uploadMomentVideoFile({ uri, contentType })
+        : await uploadFileToStorage({
+          uri,
+          key: `moments/${type}/${attempt.clientRequestId}-${getAttemptMediaSlot(attempt, cacheKey)}.${getMediaExtension(contentType)}`,
+          contentType,
+          onProgress,
+        });
+
+      const uploadedMediaItem: MomentMediaItem = {
+        type,
+        source: mediaSource,
+        storageKey,
+        contentType,
+        durationSeconds: mediaDurationSeconds,
+      };
+      attempt.uploadedMedia.set(cacheKey, uploadedMediaItem);
+      return uploadedMediaItem;
+    } finally {
+      if (isLocalAudioUpload) {
+        setIsUploadingAudio(false);
+      }
+    }
   };
 
   const buildMediaItems = async (): Promise<MomentMediaItem[]> => {
+    const attempt = pendingAttemptRef.current;
+
+    if (!attempt) {
+      // Defensive only: publishMoment always calls getOrCreatePendingAttempt()
+      // before calling buildMediaItems().
+      throw new Error('No active submission attempt.');
+    }
+
+    uploadProgressMapRef.current = new Map();
+
     if (selectedMediaType === 'image') {
+      const totalCount = selectedImages.length;
+      setUploadPhase(totalCount > 0 ? 'uploading' : 'idle');
+      setUploadProgress(0);
+
       return Promise.all(
         selectedImages.map((image) => buildMediaItem({
           uri: image.uri,
           type: 'image',
           source: image.source,
           contentType: image.contentType,
+          cacheKey: image.id,
+          attempt,
+          onProgress: (value) => reportMediaUploadProgress(image.id, value, totalCount),
         })),
       );
     }
 
     if (!selectedImage || !selectedMediaType) {
+      setUploadPhase('idle');
+      setUploadProgress(0);
       return [];
     }
+
+    setUploadPhase('uploading');
+    setUploadProgress(0);
+
+    const singleCacheKey = `${selectedMediaType}:${selectedImage}`;
 
     return [
       await buildMediaItem({
@@ -2254,6 +2778,9 @@ export default function CreateMomentScreen() {
         source: selectedMediaSource ?? (isRemoteUri(selectedImage) ? 'external' : 'upload'),
         contentType: getMediaContentType(selectedImage, selectedMediaType, selectedMediaContentType),
         durationSeconds: selectedMediaDurationSeconds,
+        cacheKey: singleCacheKey,
+        attempt,
+        onProgress: (value) => reportMediaUploadProgress(singleCacheKey, value, 1),
       }),
     ];
   };
@@ -2278,11 +2805,17 @@ export default function CreateMomentScreen() {
     const trimmedCaption = caption.trim();
 
     if (!trimmedCaption && selectedImages.length === 0 && !selectedImage) {
-      Alert.alert('Create Mooment', 'Write a stitch or add media before creating a post.');
+      Alert.alert('Add something to your post', 'Write a caption or add media before posting.');
       isSubmittingRef.current = false;
       setIsSubmitting(false);
       return false;
     }
+
+    // CRT-012: reuse the SAME clientRequestId + already-uploaded media for an
+    // unchanged retry of this exact draft; a materially changed draft (see
+    // computeDraftSignature) always starts a fresh attempt/id instead.
+    const attempt = getOrCreatePendingAttempt();
+    setSubmissionFailureStage(null);
 
     const eventTitle = (eventTitleOverride ?? selectedEvent).trim() || null;
     const eventCode = eventCodeOverride?.trim() || selectedEventCode?.trim() || null;
@@ -2295,8 +2828,10 @@ export default function CreateMomentScreen() {
       eventTitle,
       eventCode,
       eventId: selectedEventId,
+      clientRequestId: attempt.clientRequestId,
     };
     let shouldReleaseSubmitLock = true;
+    let failureStage: 'upload' | 'create' = 'upload';
 
     try {
       stopAudioPreview();
@@ -2324,6 +2859,8 @@ export default function CreateMomentScreen() {
       }
 
       const mediaItems = await buildMediaItems();
+      setUploadPhase('completed');
+      failureStage = 'create';
 
       const newMoment = await createMoment({
         ...momentPayload,
@@ -2331,15 +2868,19 @@ export default function CreateMomentScreen() {
       });
 
       setPendingNewMoment(newMoment);
+      pendingAttemptRef.current = null;
       // Success: hold the submit lock until the screen leaves. handleDone runs
       // its existing delayed navigation after this returns, and during that
       // window the Done button would otherwise re-enable and allow a second
-      // POST /moments (and a second media upload). The backend has no
-      // duplicate-create idempotency for this flow, so the lock stays held on
-      // this path and is only released on failure (in `finally`) for retry.
+      // POST /moments (and a second media upload). clientRequestId now makes
+      // a genuine retry of THIS attempt idempotent server-side too, but the
+      // lock still stays held here so a stray extra tap can't even start a
+      // separately-keyed attempt while this one is still resolving.
       shouldReleaseSubmitLock = false;
       return 'created';
     } catch (error) {
+      setSubmissionFailureStage(failureStage);
+      setUploadPhase(failureStage === 'upload' ? 'failed' : 'completed');
       Alert.alert(
         'Unable to create post',
         getAuthErrorMessage(error, 'Please check the post details and try again.'),
@@ -2378,6 +2919,102 @@ export default function CreateMomentScreen() {
     }
   };
 
+  // CRT-010: "unsaved" is deliberately NOT hasValidPostContent — an
+  // Event-only, friends-only, or audience-only change may leave Post
+  // disabled while still representing real user work worth protecting.
+  // Caption uses the raw (untrimmed) value, since this protects *input*, not
+  // submission validity — matches hasValidPostContent's own selectedImage
+  // reasoning: only ever set once a selection has already passed its
+  // readability/policy validation, so no invalid candidate can appear here.
+  // Deliberately excludes all transient UI state (modal visibility, search
+  // text, upload progress, submissionFailureStage, isSubmitting/
+  // isUploadingAudio, clientRequestId/pendingAttemptRef/media caches).
+  const hasUnsavedComposerChanges = (
+    caption.length > 0
+    || selectedImages.length > 0
+    || Boolean(selectedImage)
+    || taggedFriends.length > 0
+    || selectedEventId !== initialEventIdRef.current
+    || audience !== 'Public'
+  );
+
+  // CRT-010: single choke point for every user-initiated exit attempt (header
+  // X, Android hardware Back at the root screen). The post-success/pending
+  // paths above call handleClose() directly and never pass through here, so
+  // a successful Post can never trigger this confirmation. While a submit is
+  // in flight, exit attempts are suppressed entirely rather than offering a
+  // "Discard" that would be misleading if the request actually succeeds on
+  // the backend — the existing submit lock/CRT-012 retry state is untouched.
+  const requestCloseComposer = useCallback(() => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!hasUnsavedComposerChanges) {
+      handleClose();
+      return;
+    }
+
+    Alert.alert(
+      'Discard post?',
+      'Your changes will be lost if you leave now.',
+      [
+        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: handleClose },
+      ],
+    );
+    // handleClose is intentionally omitted: it's a plain (non-memoized)
+    // function recreated every render, and its own isClosingRef guard makes
+    // it safe to close over here regardless of which render created it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSubmitting, hasUnsavedComposerChanges]);
+
+  // Android hardware Back at the root Create Post screen. Guarded on every
+  // child modal's own visibility flag so it never fires while a sheet/picker
+  // owns the Back event — those already close via their own onRequestClose
+  // (fixed in the prior CRT-010 batch) and must never also trigger this
+  // composer-level confirmation.
+  useEffect(() => {
+    const isChildModalOpen = showCamera
+      || showVideoPicker
+      || showVideoCamera
+      || showAudioPicker
+      || showEventModal
+      || showPeopleModal
+      || showAudienceModal;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isChildModalOpen) {
+        return false;
+      }
+
+      requestCloseComposer();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [
+    showCamera,
+    showVideoPicker,
+    showVideoCamera,
+    showAudioPicker,
+    showEventModal,
+    showPeopleModal,
+    showAudienceModal,
+    requestCloseComposer,
+  ]);
+
+  // CRT-011: the SAME rule the backend enforces (caption OR mediaItems,
+  // moment.validation.ts's superRefine) — deliberately not re-derived from a
+  // second normalization, and deliberately excludes Event/tags/audience,
+  // which are never content on their own. `selectedImage` alone (without
+  // requiring a specific type) already only ever gets set once audio/video
+  // selection has passed its own readability validation (handleAudioSelect /
+  // handleVideoSelect are only ever called after validateReadableFile
+  // succeeds), so it can never represent an invalid selection.
+  const hasValidPostContent = caption.trim().length > 0 || selectedImages.length > 0 || Boolean(selectedImage);
+  const isPostButtonDisabled = isSubmitting || !hasValidPostContent;
+
   const taggedLabel = taggedFriends.map((friend) => friend.name).join(', ');
   const clearSelectedEvent = () => {
     setSelectedEvent('');
@@ -2391,10 +3028,10 @@ export default function CreateMomentScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <CreateMomentCloseButton onPress={handleClose} />
+        <CreateMomentCloseButton onPress={requestCloseComposer} />
         <Text style={styles.headerTitle}>Create Post</Text>
-        <TouchableOpacity style={[styles.doneBtn, isSubmitting && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isSubmitting}>
-          <Text style={styles.doneBtnText}>Done</Text>
+        <TouchableOpacity style={[styles.doneBtn, isPostButtonDisabled && styles.doneBtnDisabled]} onPress={handleDone} activeOpacity={0.8} disabled={isPostButtonDisabled}>
+          <Text style={styles.doneBtnText}>Post</Text>
         </TouchableOpacity>
       </View>
 
@@ -2477,7 +3114,37 @@ export default function CreateMomentScreen() {
                   </View>
                 ))}
               </ScrollView>
+              {uploadPhase === 'uploading' ? (
+                <Text style={styles.mediaUploadStatusText}>
+                  {selectedImages.length > 1
+                    ? `Uploading media… ${Math.round(clampProgress(uploadProgress) * 100)}%`
+                    : `Uploading… ${Math.round(clampProgress(uploadProgress) * 100)}%`}
+                </Text>
+              ) : (
+                // CRT-011: compact inline guidance, informational (not an
+                // error) — mirrors the authoritative MAX_MEDIA_ITEMS/
+                // IMAGE_MAX_FILE_SIZE_BYTES/IMAGE_MAX_TOTAL_SIZE_BYTES the
+                // picker/Alert already enforce, never separate literals.
+                <Text style={styles.mediaUploadStatusText}>
+                  {selectedImages.length} / {MAX_MEDIA_ITEMS} photos · {IMAGE_MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB each · {IMAGE_MAX_TOTAL_SIZE_BYTES / (1024 * 1024)} MB total
+                </Text>
+              )}
             </View>
+          ) : null}
+
+          {submissionFailureStage ? (
+            <TouchableOpacity
+              style={styles.retryBanner}
+              onPress={handleDone}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Retry post"
+            >
+              <Feather name="alert-circle" size={14} color="#FFFFFF" />
+              <Text style={styles.retryBannerText}>
+                {submissionFailureStage === 'upload' ? 'Upload failed.' : 'Post failed.'} Tap to retry
+              </Text>
+            </TouchableOpacity>
           ) : null}
 
           {selectedImage && selectedMediaType === 'video' ? (
@@ -2504,14 +3171,24 @@ export default function CreateMomentScreen() {
                 <Feather name={audioPreviewStatus.playing ? 'pause' : 'play'} size={20} color={screenColors.primary} />
               </TouchableOpacity>
               <View style={styles.audioAttachmentInfo}>
-                <Text style={styles.audioAttachmentTitle} numberOfLines={1}>{selectedMediaName ?? 'Audio'}</Text>
+                <Text style={styles.audioAttachmentTitle} numberOfLines={1}>
+                  {selectedMediaName ?? MEDIA_DISPLAY_NAME_FALLBACK}
+                </Text>
                 <Text style={styles.audioAttachmentMeta}>
-                  {audioPreviewDurationSeconds > 0
-                    ? formatAudioPreviewTime(audioPreviewStatus, selectedMediaDurationSeconds)
-                    : selectedMediaContentType ?? 'audio'}
+                  {isUploadingAudio
+                    ? (uploadProgress > 0 ? `Uploading audio… ${Math.round(clampProgress(uploadProgress) * 100)}%` : 'Uploading audio…')
+                    : audioPreviewDurationSeconds > 0
+                      ? formatAudioPreviewTime(audioPreviewStatus, selectedMediaDurationSeconds)
+                      : 'Loading audio…'}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.audioRemoveBtn} onPress={clearSelectedMedia} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.audioRemoveBtn}
+                onPress={clearSelectedMedia}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Remove audio"
+              >
                 <Feather name="x" size={14} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
@@ -2524,12 +3201,19 @@ export default function CreateMomentScreen() {
             value={caption}
             onChangeText={setCaption}
             multiline
+            maxLength={MAX_POST_CAPTION_LENGTH}
             onFocus={scrollToCaption}
             onLayout={(event) => {
               captionPosition.current = event.nativeEvent.layout.y;
             }}
             disableFullscreenUI={Platform.OS === 'android'}
           />
+          <Text
+            style={styles.captionCounterText}
+            accessibilityLabel={`${caption.length} of ${MAX_POST_CAPTION_LENGTH} characters`}
+          >
+            {caption.length} / {MAX_POST_CAPTION_LENGTH}
+          </Text>
 
           <View style={styles.keyboardSpacer} />
         </ScrollView>
@@ -2757,6 +3441,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     gap: 12,
   },
+  mediaUploadStatusText: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 28,
+    marginTop: 8,
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 28,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,69,58,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,69,58,0.4)',
+  },
+  retryBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
   imagePreviewCard: {
     width: width - 56,
     height: 220,
@@ -2858,6 +3568,14 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     minHeight: 180,
     textAlignVertical: 'top',
+  },
+  captionCounterText: {
+    color: CREATE_MOMENT_COLORS.bodyText,
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'right',
+    paddingHorizontal: 28,
+    marginTop: 4,
   },
 
   keyboardSpacer: {

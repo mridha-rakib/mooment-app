@@ -2,12 +2,13 @@ import { Feather } from '@expo/vector-icons';
 import { FilterHorizontalIcon, Search01Icon } from '@hugeicons/core-free-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FilterModal, { type HomeFeedFilters } from './FilterModal';
 import { hasActiveEventFilters, type SharedEventFilters } from '@/lib/eventFilters';
 import { useTheme } from '@/hooks/useTheme';
 import CinematicButton from '../ui/CinematicButton';
+import Logo from '../ui/Logo';
 
 interface HomeHeaderProps {
   selectedType: string;
@@ -53,11 +54,7 @@ function HomeHeader({
         </TouchableOpacity>
 
         <View pointerEvents="none" style={styles.logoSlot}>
-          <Image
-            source={require('@/assets/images/image.png')}
-            style={[styles.logoImage, { tintColor: colors.text }]}
-            resizeMode="contain"
-          />
+          <Logo width={112} />
         </View>
 
         <View style={styles.headerIcons}>
@@ -190,10 +187,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "bold",
     marginRight: 4,
-  },
-  logoImage: {
-    width: 112,
-    height: 26,
   },
   logoSlot: {
     ...StyleSheet.absoluteFillObject,

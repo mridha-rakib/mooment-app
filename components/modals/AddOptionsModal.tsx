@@ -36,7 +36,7 @@ const BASE_OPTIONS = [
     id: "moment",
     label: "New Post",
     description:
-      "Share one to your followers in just about on event you're attending",
+      "Share a post with your followers or tag an event you're attending.",
     icon: PencilEdit01Icon,
     color: "#54268F",
     bg: "#AFA9EC",
@@ -234,7 +234,7 @@ export default function AddOptionsModal({
           >
             <View style={[styles.handle, { backgroundColor: colors.text + "CC" }]} />
             <Text style={[styles.sheetTitle, { color: colors.text }]}>
-              Select to proceed
+              What would you like to create?
             </Text>
           </View>
 

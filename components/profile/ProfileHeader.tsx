@@ -3,7 +3,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 
@@ -12,6 +12,7 @@ import BackButton from "../ui/BackButton";
 import ChevronRightIcon from "../ui/ChevronRightIcon";
 import CinematicButton from "../ui/CinematicButton";
 import FadeInOnReady from "../ui/FadeInOnReady";
+import Logo from "../ui/Logo";
 import UserAvatar from "../ui/UserAvatar";
 import { ProfileAvatarSkeleton, ProfileStatsRowSkeleton } from "./ProfileSkeletons";
 
@@ -77,11 +78,7 @@ export default function ProfileHeader({
           <CinematicButton icon={Menu01Icon} onPress={onMenuPress} size={24} />
 
           <View pointerEvents="none" style={styles.logoSlot}>
-            <Image
-              source={require("@/assets/images/image.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
+            <Logo width={120} />
           </View>
 
           <CinematicButton
@@ -301,10 +298,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     height: "100%",
     padding: 0,
-  },
-  logoImage: {
-    width: 120,
-    height: 28,
   },
   logoSlot: {
     ...StyleSheet.absoluteFillObject,

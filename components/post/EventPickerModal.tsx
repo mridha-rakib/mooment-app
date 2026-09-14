@@ -23,9 +23,11 @@ type Props = {
 };
 
 const STATUS_CONFIG: Record<PostTagEventStatus, { label: string; color: string; bg: string; dot: boolean }> = {
-  live:     { label: 'Live',     color: '#16D869', bg: 'rgba(22,216,105,0.12)', dot: true },
-  active:   { label: 'Active',   color: '#16D869', bg: 'transparent',           dot: false },
-  upcoming: { label: 'Upcoming', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  dot: false },
+  live:          { label: 'Live',          color: '#16D869', bg: 'rgba(22,216,105,0.12)', dot: true },
+  // CRT-003: reuses the existing amber "upcoming" badge treatment.
+  starting_soon: { label: 'Starting Soon', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', dot: false },
+  active:        { label: 'Active',        color: '#16D869', bg: 'transparent',           dot: false },
+  upcoming:      { label: 'Upcoming',      color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', dot: false },
 };
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop';
@@ -112,7 +114,7 @@ export default function EventPickerModal({ visible, onClose, onSelect, selectedE
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 

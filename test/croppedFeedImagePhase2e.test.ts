@@ -26,15 +26,18 @@ test("imageSize reset effect still updates when incoming dimensions differ", () 
   assert.match(imageSizeResetEffectSource, /return \{\s*width: nextWidth,\s*height: nextHeight,\s*\};/);
 });
 
-test("Image.getSize fallback remains intact for missing dimensions", () => {
+test("Image.getSizeWithHeaders fallback remains intact for missing dimensions", () => {
   assert.match(croppedFeedImageSource, /if \(imageSize\.width > 0 && imageSize\.height > 0\) \{\s*return;\s*\}/);
-  assert.match(croppedFeedImageSource, /Image\.getSize\(/);
+  // getSizeWithHeaders (not plain getSize) so this crop-measurement request also
+  // carries the ngrok-skip-browser-warning header on a tunneled backend.
+  assert.match(croppedFeedImageSource, /Image\.getSizeWithHeaders\(/);
   assert.match(croppedFeedImageSource, /setImageSize\(\{ width: resolvedWidth, height: resolvedHeight \}\);/);
   assert.match(croppedFeedImageSource, /setImageSize\(\{ width: 0, height: 0 \}\);/);
 });
 
-test("crop rendering, cache policy, and recovery key remain unchanged", () => {
-  assert.match(croppedFeedImageSource, /const imageInstanceKey = `\$\{resolvedUri\}-\$\{loadAttempt\}`;/);
+test("crop rendering, cache policy, and refresh-aware recovery key remain intact", () => {
+  assert.match(croppedFeedImageSource, /const requestIdentity = `\$\{mediaIdentity\}\\u0000\$\{requestRevision\}\\u0000\$\{resolvedUri\}\\u0000\$\{loadAttempt\}`;/);
+  assert.match(croppedFeedImageSource, /const imageInstanceKey = requestIdentity;/);
   assert.match(croppedFeedImageSource, /contentFit="cover"/);
   assert.match(croppedFeedImageSource, /contentFit="fill"/);
   assert.equal((croppedFeedImageSource.match(/cachePolicy="memory-disk"/g) ?? []).length, 2);
