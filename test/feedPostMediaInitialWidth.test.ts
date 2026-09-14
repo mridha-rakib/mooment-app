@@ -72,7 +72,7 @@ test("handleMediaLayout still measures, guards with a tolerance, and corrects re
 test("final media geometry is unchanged: CroppedFeedImage still receives mediaFrameWidth-driven frame", () => {
   assert.match(
     feedPostSource,
-    /<CroppedFeedImage item=\{item\} frameWidth=\{mediaFrameWidth\} frameHeight=\{isNormalPost \? mediaFrameWidth : 340\} \/>/,
+    /<CroppedFeedImage[\s\S]*?item=\{item\}[\s\S]*?postId=\{post\.id\}[\s\S]*?mediaIndex=\{index\}[\s\S]*?frameWidth=\{mediaFrameWidth\}[\s\S]*?frameHeight=\{isNormalPost \? mediaFrameWidth : 340\}/,
   );
   assert.match(feedPostSource, /style=\{\[styles\.mediaSlide, \{ width: mediaFrameWidth \}\]\}/);
 });
@@ -90,7 +90,7 @@ test("CroppedFeedImage image-resolution + ExpoImage props are configured", () =>
   assert.match(feedPostSource, /contentFit="cover"/);
   assert.match(feedPostSource, /contentFit="fill"/);
   assert.match(feedPostSource, /transition=\{150\}/);
-  assert.match(feedPostSource, /const imageInstanceKey = `\$\{resolvedUri\}-\$\{loadAttempt\}`;/);
+  assert.match(feedPostSource, /const imageInstanceKey = requestIdentity;/);
 });
 
 test("dormant Video flag is still false/inert", () => {

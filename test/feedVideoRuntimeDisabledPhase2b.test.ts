@@ -100,7 +100,7 @@ test("7. video-containing RepostFeedCard remains safe and unchanged in the media
 
 // 8 ─────────────────────────────────────────────────────────────────────────
 test("8. image post rendering is untouched", () => {
-  assert.match(feedPostSource, /<CroppedFeedImage item=\{item\} frameWidth=\{mediaFrameWidth\} frameHeight=\{isNormalPost \? mediaFrameWidth : 340\} \/>/);
+  assert.match(feedPostSource, /<CroppedFeedImage[\s\S]*?item=\{item\}[\s\S]*?postId=\{post\.id\}[\s\S]*?mediaIndex=\{index\}[\s\S]*?frameWidth=\{mediaFrameWidth\}[\s\S]*?frameHeight=\{isNormalPost \? mediaFrameWidth : 340\}/);
   assert.match(feedPostSource, /cachePolicy="memory-disk"/);
 });
 

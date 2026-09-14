@@ -119,7 +119,7 @@ test("ready and legacy (undefined processingStatus) videos use VideoFeedMedia wi
 test("image media rendering is untouched by the processing-state branch", () => {
   assert.match(
     mediaRenderBranchSource,
-    /<CroppedFeedImage item=\{item\} frameWidth=\{mediaFrameWidth\} frameHeight=\{isNormalPost \? mediaFrameWidth : 340\} \/>/,
+    /<CroppedFeedImage[\s\S]*?item=\{item\}[\s\S]*?postId=\{post\.id\}[\s\S]*?mediaIndex=\{index\}[\s\S]*?frameWidth=\{mediaFrameWidth\}[\s\S]*?frameHeight=\{isNormalPost \? mediaFrameWidth : 340\}/,
   );
 });
 

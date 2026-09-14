@@ -35,8 +35,9 @@ test("Image.getSizeWithHeaders fallback remains intact for missing dimensions", 
   assert.match(croppedFeedImageSource, /setImageSize\(\{ width: 0, height: 0 \}\);/);
 });
 
-test("crop rendering, cache policy, and recovery key remain unchanged", () => {
-  assert.match(croppedFeedImageSource, /const imageInstanceKey = `\$\{resolvedUri\}-\$\{loadAttempt\}`;/);
+test("crop rendering, cache policy, and refresh-aware recovery key remain intact", () => {
+  assert.match(croppedFeedImageSource, /const requestIdentity = `\$\{mediaIdentity\}\\u0000\$\{requestRevision\}\\u0000\$\{resolvedUri\}\\u0000\$\{loadAttempt\}`;/);
+  assert.match(croppedFeedImageSource, /const imageInstanceKey = requestIdentity;/);
   assert.match(croppedFeedImageSource, /contentFit="cover"/);
   assert.match(croppedFeedImageSource, /contentFit="fill"/);
   assert.equal((croppedFeedImageSource.match(/cachePolicy="memory-disk"/g) ?? []).length, 2);

@@ -94,9 +94,9 @@ test("isLoading no longer depends solely on onLoadStart firing", () => {
 });
 
 test("the watchdog and error handler resolve to a deterministic loading/error state and never both retry and error at once", () => {
-  assert.match(croppedFeedImageSource, /if \(didLoadRef\.current\) \{\s*return;\s*\}/);
+  assert.match(croppedFeedImageSource, /if \(!isCurrentRequest\(requestIdentity\) \|\| didLoadRef\.current\) \{\s*return;\s*\}/);
   assert.match(
     croppedFeedImageSource,
-    /if \(loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS\) \{\s*setIsLoading\(true\);\s*setLoadAttempt\(loadAttempt \+ 1\);\s*\} else \{\s*setIsLoading\(false\);\s*setHasLoadError\(lastLoadedUriRef\.current !== resolvedUri\);\s*\}/g,
+    /if \(loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS\) \{\s*setIsLoading\(true\);\s*setLoadAttempt\(loadAttempt \+ 1\);\s*\} else \{\s*setIsLoading\(false\);\s*setHasLoadError\(true\);\s*\}/g,
   );
 });

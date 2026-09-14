@@ -123,14 +123,27 @@ export const mapMomentToPost = (moment: Moment, options: MomentPostMapperOptions
   const momentMediaItems = moment.mediaItems ?? [];
   const visualMedia = momentMediaItems
     .filter(isVisualMediaItem)
-    .map((mediaItem) => ({
-      uri: resolveMediaUri(mediaItem, options.storageUrlResolver),
-      type: mediaItem.type as "image" | "video",
-      processingStatus: mediaItem.processingStatus ?? null,
-      processingErrorCode: mediaItem.processingErrorCode ?? null,
-    }))
+    .map((mediaItem) => {
+      const uri = resolveMediaUri(mediaItem, options.storageUrlResolver);
+      // Keep the backend-supplied URL as an image-only recovery source when a
+      // storage key causes the primary URL above to use the API stream proxy.
+      // This is deliberately additive: the proxy remains the normal path and
+      // direct/external URLs with no storage key have no duplicate fallback.
+      const fallbackUri = mediaItem.type === "image" && mediaItem.storageKey && mediaItem.url && mediaItem.url !== uri
+        ? mediaItem.url
+        : undefined;
+
+      return {
+        uri,
+        fallbackUri,
+        type: mediaItem.type as "image" | "video",
+        processingStatus: mediaItem.processingStatus ?? null,
+        processingErrorCode: mediaItem.processingErrorCode ?? null,
+      };
+    })
     .filter((mediaItem): mediaItem is {
       uri: string;
+      fallbackUri?: string;
       type: "image" | "video";
       processingStatus: Exclude<MomentMediaItem["processingStatus"], undefined>;
       processingErrorCode: Exclude<MomentMediaItem["processingErrorCode"], undefined>;
