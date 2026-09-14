@@ -1,38 +1,10 @@
-import LocationSearchModal from '@/components/post/LocationSearchModal';
 import EventRadiusSlider from '@/components/home/EventRadiusSlider';
 import LocationRecoveryState from '@/components/home/LocationRecoveryState';
-import {
-  getBestCurrentDeviceLocation,
-  getCurrentLocationIfPermissionGranted,
-  type DeviceLocationFailureStatus,
-  type DeviceLocationResult,
-} from '@/lib/locationSharing';
-import type { LocationSearchContext, LocationSearchResult } from '@/lib/locationSearch';
+import LocationSearchModal from '@/components/post/LocationSearchModal';
 import { Spinner } from '@/components/ui/spinner';
 import {
-  useTheme } from '@/hooks/useTheme';
-import { Feather } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import React,
-  { useCallback,
-  useEffect,
-  useRef,
-  useState } from 'react';
-import { Modal,
-  Alert,
-  AppState,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { parseHashtagFilterInput } from '@/lib/hashtags';
+  useTheme
+} from '@/hooks/useTheme';
 import {
   DEFAULT_EVENT_RADIUS_MILES,
   confirmVisibleEventFilters,
@@ -50,6 +22,37 @@ import {
   type SharedEventFilters,
 } from '@/lib/eventFilters';
 import type { EventAgeRestriction } from '@/lib/events';
+import { parseHashtagFilterInput } from '@/lib/hashtags';
+import type { LocationSearchContext, LocationSearchResult } from '@/lib/locationSearch';
+import {
+  getBestCurrentDeviceLocation,
+  getCurrentLocationIfPermissionGranted,
+  type DeviceLocationFailureStatus,
+  type DeviceLocationResult,
+} from '@/lib/locationSharing';
+import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react';
+import {
+  Alert,
+  AppState,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export type NearbyEventsFilter = EventLocationFilter;
@@ -126,12 +129,12 @@ const isValidLocationCoords = (
 ): coords is { latitude: number; longitude: number } =>
   Boolean(
     coords &&
-      isFiniteCoordinate(coords.latitude) &&
-      isFiniteCoordinate(coords.longitude) &&
-      coords.latitude >= -90 &&
-      coords.latitude <= 90 &&
-      coords.longitude >= -180 &&
-      coords.longitude <= 180,
+    isFiniteCoordinate(coords.latitude) &&
+    isFiniteCoordinate(coords.longitude) &&
+    coords.latitude >= -90 &&
+    coords.latitude <= 90 &&
+    coords.longitude >= -180 &&
+    coords.longitude <= 180,
   );
 
 export default function FilterModal({
@@ -379,10 +382,10 @@ export default function FilterModal({
 
       setLocationSearchContext(isValidLocationCoords(location)
         ? {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            label: 'Device Location',
-          }
+          latitude: location.latitude,
+          longitude: location.longitude,
+          label: 'Device Location',
+        }
         : null);
     } catch {
       if (requestId === searchContextRequestIdRef.current) {
@@ -659,10 +662,7 @@ export default function FilterModal({
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
               {renderPills(TIME_OPTIONS, activeTime, setActiveTime)}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 831b39e64aaef8e68359d5000b8455d257806047
+
               <View style={styles.dateRow}>
                 <TouchableOpacity
                   style={[styles.inputBox, styles.dateInput, { backgroundColor: colors.card }]}
@@ -686,8 +686,7 @@ export default function FilterModal({
                   </TouchableOpacity>
                 ) : null}
               </View>
-<<<<<<< HEAD
-=======
+
               <TouchableOpacity
                 style={[styles.inputBox, { backgroundColor: colors.card }]}
                 activeOpacity={0.8}
@@ -698,9 +697,6 @@ export default function FilterModal({
                   {selectedDate ? selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : 'Pick a date'}
                 </Text>
               </TouchableOpacity>
->>>>>>> backup-before-sync
-=======
->>>>>>> 831b39e64aaef8e68359d5000b8455d257806047
 
               {showDatePicker && (
                 <DateTimePicker
