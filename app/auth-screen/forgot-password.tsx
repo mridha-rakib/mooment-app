@@ -3,7 +3,7 @@ import {
 import { useRouter } from "expo-router";
 import React,
   { useState } from "react";
-import { Image,
+import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -16,6 +16,7 @@ import { Image,
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { Spinner } from "@/components/ui/spinner";
+import Logo from "@/components/ui/Logo";
 import { useAuthStore } from "@/stores/authStore";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -58,12 +59,8 @@ export default function ForgotPassword() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <Image
-              source={require("@/assets/images/image.png")}
-              style={[styles.logoImage, { tintColor: colors.text }]}
-              resizeMode="contain"
-            />
-             
+            <Logo width={154} style={styles.logoImage} />
+
             <Text style={[styles.title, { color: colors.text }]}>Forgot Password</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Type your email to recover your account</Text>
           </View>
@@ -127,8 +124,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logoImage: {
-    width: 154,
-    height: 36,
     marginBottom: 48,
   },
   title: {

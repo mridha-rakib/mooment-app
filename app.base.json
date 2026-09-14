@@ -4,7 +4,7 @@
     "slug": "mooments",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/logo-icon-flattened.png",
     "scheme": "mooments",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -17,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0E0D12",
-        "foregroundImage": "./assets/images/logo.png"
+        "foregroundImage": "./assets/images/logo-icon.png"
       },
       "permissions": [
         "android.permission.CAMERA",
@@ -46,8 +46,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/Splash-logo.png",
-          "imageWidth": 200,
+          "image": "./assets/images/logo-splash.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#0E0D12",
           "dark": {
@@ -91,7 +91,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/logo.png",
+          "icon": "./assets/images/logo-notification.png",
           "color": "#0E0D12",
           "defaultChannel": "messages"
         }

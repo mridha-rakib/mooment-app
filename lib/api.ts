@@ -125,7 +125,7 @@ const resolveApiBaseUrl = () => {
 
 const baseURL = resolveApiBaseUrl();
 
-const isNgrokUrl = (url: string | undefined) => {
+export const isNgrokUrl = (url: string | undefined) => {
   if (!url) {
     return false;
   }
@@ -136,6 +136,15 @@ const isNgrokUrl = (url: string | undefined) => {
     return url.includes("ngrok-free");
   }
 };
+
+// Requests to an ngrok-free tunnel need this header or ngrok serves its HTML
+// interstitial page instead of the real response — see isNgrokUrl above. Any
+// code issuing a raw (non-axios) request against a URL that may point at the
+// same backend (e.g. media/storage URLs handed straight to an image or audio
+// player) should merge this in, since `api`'s own header default only covers
+// requests made through the axios instance.
+export const ngrokSkipWarningHeaders = (url: string | undefined) =>
+  isNgrokUrl(url) ? { "ngrok-skip-browser-warning": "true" } : undefined;
 
 let getAccessToken = () => null as string | null;
 let handleUnauthorized = () => {};

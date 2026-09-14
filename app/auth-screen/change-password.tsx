@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/hooks/useTheme";
+import Logo from "@/components/ui/Logo";
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
 export default function ChangePassword() {
@@ -28,8 +29,8 @@ export default function ChangePassword() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={[styles.logoText, { color: colors.text }]}>Mooment</Text>
-            
+            <Logo height={40} style={styles.logoImage} />
+
             <Text style={[styles.title, { color: colors.text }]}>New Password</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Set a new password and continue using this app</Text>
           </View>
@@ -111,9 +112,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
-  logoText: {
-    fontSize: 40,
-    fontFamily: 'OleoScript-Regular',
+  logoImage: {
     marginBottom: 32,
   },
   title: {

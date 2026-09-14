@@ -85,7 +85,7 @@ test("normalPostMediaContainer stays width/aspect-ratio driven (row height unaff
 });
 
 test("CroppedFeedImage image-resolution + ExpoImage props are configured", () => {
-  assert.match(feedPostSource, /Image\.getSize\(/);
+  assert.match(feedPostSource, /Image\.getSizeWithHeaders\(/);
   assert.match(feedPostSource, /cachePolicy="memory-disk"/);
   assert.match(feedPostSource, /contentFit="cover"/);
   assert.match(feedPostSource, /contentFit="fill"/);

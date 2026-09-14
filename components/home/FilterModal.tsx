@@ -659,7 +659,6 @@ export default function FilterModal({
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
               {renderPills(TIME_OPTIONS, activeTime, setActiveTime)}
 
-<<<<<<< HEAD
               <View style={styles.dateRow}>
                 <TouchableOpacity
                   style={[styles.inputBox, styles.dateInput, { backgroundColor: colors.card }]}
@@ -668,7 +667,7 @@ export default function FilterModal({
                 >
                   <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
                   <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-                    {selectedDate ? selectedDate.toLocaleDateString() : 'Pick a date'}
+                    {selectedDate ? selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : 'Pick a date'}
                   </Text>
                 </TouchableOpacity>
                 {selectedDate ? (
@@ -683,18 +682,6 @@ export default function FilterModal({
                   </TouchableOpacity>
                 ) : null}
               </View>
-=======
-              <TouchableOpacity
-                style={[styles.inputBox, { backgroundColor: colors.card }]}
-                activeOpacity={0.8}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-                  {selectedDate ? selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : 'Pick a date'}
-                </Text>
-              </TouchableOpacity>
->>>>>>> backup-before-sync
 
               {showDatePicker && (
                 <DateTimePicker

@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { tapFeedback } from '@/lib/microFeedback';
+import { ngrokSkipWarningHeaders } from '@/lib/api';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -1040,6 +1041,15 @@ const VideoProcessingPlaceholder = React.memo(function VideoProcessingPlaceholde
 function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostMediaItem; frameWidth: number; frameHeight?: number }) {
   const { colors } = useTheme();
   const resolvedUri = item.fullUri?.trim() || item.uri.trim();
+  // Ngrok tunnels (a supported dev/test backend, see lib/api.ts) serve an
+  // HTML interstitial instead of the real file to any request missing this
+  // header. Axios requests already carry it by default; ExpoImage bypasses
+  // axios entirely, so it has to be attached here or feed media silently
+  // fails to decode against an ngrok-hosted API.
+  const imageSource = useMemo(() => ({
+    uri: resolvedUri,
+    headers: ngrokSkipWarningHeaders(resolvedUri),
+  }), [resolvedUri]);
   const frameStyle = useMemo(() => ({
     width: frameWidth,
     height: frameHeight,
@@ -1049,7 +1059,10 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
     height: item.displayCrop?.imageHeight ?? 0,
   }));
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  // Starts true (rather than waiting on onLoadStart) so a request that never
+  // fires that callback still shows the spinner instead of a silent, static
+  // colors.card rectangle while it's in flight.
+  const [isLoading, setIsLoading] = useState(() => Boolean(resolvedUri));
   const [hasLoadError, setHasLoadError] = useState(false);
   const didLoadRef = useRef(false);
   const lastLoadedUriRef = useRef<string | null>(null);
@@ -1067,11 +1080,16 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
     previousImageIdentityRef.current = resolvedUri;
     setLoadAttempt(0);
-    setIsLoading(false);
+    setIsLoading(Boolean(resolvedUri));
     setHasLoadError(false);
     didLoadRef.current = false;
   }, [resolvedUri]);
 
+  // Watchdog: fires regardless of whether ExpoImage ever calls onLoadStart.
+  // Each retry bumps loadAttempt, which changes imageInstanceKey and forces a
+  // fresh ExpoImage mount; the callback bails via didLoadRef if onLoad has
+  // already landed by the time it fires, so a successful load is never
+  // clobbered by a stale timer.
   useEffect(() => {
     if (hasLoadError || didLoadRef.current) {
       return;
@@ -1083,8 +1101,10 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
       }
 
       if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
+        setIsLoading(true);
         setLoadAttempt(loadAttempt + 1);
       } else {
+        setIsLoading(false);
         setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
       }
     }, FEED_IMAGE_RECOVERY_DELAY_MS);
@@ -1111,11 +1131,14 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
 
   const handleImageError = useCallback(() => {
     didLoadRef.current = false;
-    setIsLoading(false);
 
     if (loadAttempt < FEED_IMAGE_MAX_RECOVERY_ATTEMPTS) {
+      // Keep the spinner up across the retry's remount instead of letting it
+      // ever be visible without one.
+      setIsLoading(true);
       setLoadAttempt(loadAttempt + 1);
     } else {
+      setIsLoading(false);
       setHasLoadError(lastLoadedUriRef.current !== resolvedUri);
     }
   }, [resolvedUri, loadAttempt]);
@@ -1129,8 +1152,9 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
       return;
     }
 
-    Image.getSize(
+    Image.getSizeWithHeaders(
       resolvedUri,
+      imageSource.headers ?? {},
       (resolvedWidth, resolvedHeight) => {
         setImageSize({ width: resolvedWidth, height: resolvedHeight });
       },
@@ -1138,7 +1162,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
         setImageSize({ width: 0, height: 0 });
       },
     );
-  }, [crop, imageSize.height, imageSize.width, resolvedUri]);
+  }, [crop, imageSize.height, imageSize.width, imageSource.headers, resolvedUri]);
 
   useEffect(() => {
     const nextWidth = item.displayCrop?.imageWidth ?? 0;
@@ -1169,7 +1193,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
       <View style={[styles.croppedImageFrame, frameStyle, { backgroundColor: colors.card }]}>
         <ExpoImage
           key={imageInstanceKey}
-          source={{ uri: resolvedUri }}
+          source={imageSource}
           style={[styles.postImage, frameStyle]}
           contentFit="cover"
           cachePolicy="memory-disk"
@@ -1207,7 +1231,7 @@ function CroppedFeedImage({ item, frameWidth, frameHeight = 340 }: { item: PostM
       ) : (
         <ExpoImage
           key={imageInstanceKey}
-          source={{ uri: resolvedUri }}
+          source={imageSource}
           style={[
             styles.croppedImage,
             {
@@ -1257,9 +1281,7 @@ function AudioFeedPlayer({ details }: { details: AudioDetails }) {
 
     return {
       uri: details.uri,
-      headers: details.uri.includes('ngrok-free')
-        ? { 'ngrok-skip-browser-warning': 'true' }
-        : undefined,
+      headers: ngrokSkipWarningHeaders(details.uri),
     };
   }, [details.uri]);
   const player = useAudioPlayer(audioSource, {
@@ -1517,10 +1539,15 @@ function FeedPost({
 
     return sourceItems.filter((item) => Boolean(item.uri?.trim()));
   }, [post.mediaItems, post.mediaUris]);
-  const fullScreenMediaItems = useMemo(() => mediaItems.map((item) => ({
-    uri: item.fullUri?.trim() || item.uri.trim(),
-    type: item.type,
-  })), [mediaItems]);
+  const fullScreenMediaItems = useMemo(() => mediaItems.map((item) => {
+    const uri = item.fullUri?.trim() || item.uri.trim();
+
+    return {
+      uri,
+      type: item.type,
+      headers: ngrokSkipWarningHeaders(uri),
+    };
+  }), [mediaItems]);
   // A text-only post rendered inside a repost/share card (RepostFeedCard's
   // compact shell). Only this case gets the bounded 3-line excerpt + a small
   // "View post" affordance — standalone posts and any post with media are

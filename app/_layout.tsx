@@ -8,10 +8,7 @@ import { readThemePreference } from "@/lib/themePreference";
 import { setTheme } from "@/redux/slice/preference";
 import { useAuthStore } from "@/stores/authStore";
 import { useLocationSharingStore } from "@/stores/locationSharingStore";
-import {
-  OleoScript_400Regular,
-  useFonts,
-} from "@expo-google-fonts/oleo-script";
+import { useFonts } from "expo-font";
 import {
   Feather,
   Ionicons,
@@ -49,7 +46,7 @@ SplashScreen.preventAutoHideAsync().catch(() => undefined);
 // streams in. Non-blocking — see BootSplashGate.
 const CRITICAL_IMAGE_ASSETS = [
   require("../assets/images/splash.png"),
-  require("../assets/images/Splash-logo.png"),
+  require("../assets/images/logo-splash.png"),
 ];
 
 function AuthSessionGate() {
@@ -428,7 +425,6 @@ export default function RootLayout() {
   // ready draw nothing, which is why the login checkbox/spinner only broke
   // on a fresh launch.
   const [fontsLoaded, fontError] = useFonts({
-    "OleoScript-Regular": OleoScript_400Regular,
     ...Feather.font,
     ...Ionicons.font,
     ...MaterialCommunityIcons.font,
