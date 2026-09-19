@@ -17,7 +17,8 @@ import {
   hasBoundedNearbyFilter,
   type EventMapViewport,
 } from "@/lib/mapEventRequests";
-import { getStorageFileUrl } from "@/lib/storage";
+import { EVENT_BANNER_FALLBACK_URI, resolveEventBannerUri } from "@/lib/eventBanner";
+import { formatEventAgeRestriction } from "@/lib/eventAgeRestriction";
 import { getMapTicketSummary } from "@/lib/mapTicketSummary";
 import { getCategoryMarkerColor } from "@/constants/categoryColors";
 import type { EventCategory } from "@/constants/eventCategories";
@@ -25,8 +26,10 @@ import { isValidLocationCoordinate } from "@/lib/locationSharing";
 
 const EVENT_MAP_LIMIT = 100;
 const VIEWPORT_REQUEST_DEBOUNCE_MS = 500;
-const FALLBACK_EVENT_IMAGE =
-  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop";
+// Same fallback image as Event Detail (see app/lib/eventBanner.ts), so an
+// Event with no banner never shows different stock imagery depending on
+// which surface renders it.
+const FALLBACK_EVENT_IMAGE = EVENT_BANNER_FALLBACK_URI;
 
 type MapContainerProps = {
   onBack?: () => void;
@@ -102,18 +105,6 @@ const buildMapEventSchedule = (event: EventResponse) => {
 const formatLocation = (event: EventResponse) =>
   event.location?.venue || event.location?.address || event.location?.searchLabel || "Location TBA";
 
-const formatAgeLimit = (ageRestriction: EventResponse["ageRestriction"]) => {
-  if (ageRestriction === "18_plus") {
-    return "18+";
-  }
-
-  if (ageRestriction === "21_plus") {
-    return "21+";
-  }
-
-  return "All Ages";
-};
-
 const getHostName = (event: EventResponse) =>
   (event.host?.username || event.host?.name || `user-${event.userId.slice(-4)}`).replace(/^@/, "");
 
@@ -138,7 +129,7 @@ const toMapMarker = (
     id: event.id,
     latitude,
     longitude,
-    image: event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : FALLBACK_EVENT_IMAGE,
+    image: resolveEventBannerUri(event, FALLBACK_EVENT_IMAGE) ?? FALLBACK_EVENT_IMAGE,
     label: event.name || "Event",
     glowColor: getCategoryMarkerColor({ category: primaryCategory, categories, activeCategory }),
     category: primaryCategory,
@@ -158,7 +149,7 @@ const toMapMarker = (
     // publicGoingSummary.going (paid, non-cancelled ticket passes). Never
     // checkedInCount — that has different semantics and stays on the marker glow.
     attendeesCount: event.publicGoingSummary?.going ?? 0,
-    ageLimit: formatAgeLimit(event.ageRestriction),
+    ageLimit: formatEventAgeRestriction(event.ageRestriction),
     price: ticketSummary.priceLabel,
     ticketsAvailable: ticketSummary.ticketsAvailableLabel,
     ticketSalesEndDate: ticketSummary.salesEndLabel,

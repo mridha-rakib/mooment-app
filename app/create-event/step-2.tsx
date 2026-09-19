@@ -1,4 +1,5 @@
 import BackButton from '@/components/ui/BackButton';
+import CreateEventStepNavigator from '@/components/create-event/CreateEventStepNavigator';
 import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constants/eventCategories';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -8,6 +9,12 @@ import {
   getEventStepTwoScheduleErrors,
   isOngoingPublishedEventEdit,
 } from '@/lib/eventStepTwoValidation';
+import {
+  getEventWizardStepPath,
+  getEventWizardStepValidity,
+  getEventWizardStepStatesByKey,
+  type EventWizardStepKey,
+} from '@/lib/eventWizardSteps';
 import { fromAgeRestriction, toAgeRestriction, useEventDraftStore } from '@/stores/eventDraftStore';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -80,6 +87,13 @@ export default function CreateEventStep2() {
   const draftTimezone = useEventDraftStore((state) => state.timezone);
   const originalScheduledAt = useEventDraftStore((state) => state.originalScheduledAt);
   const persistedEndAt = useEventDraftStore((state) => state.persistedEndAt);
+  // Read-only elsewhere-in-wizard fields, needed only to render the step
+  // navigator's eligibility for Basics/Location (this screen never edits
+  // them).
+  const draftName = useEventDraftStore((state) => state.name);
+  const draftDescription = useEventDraftStore((state) => state.description);
+  const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
+  const draftLocation = useEventDraftStore((state) => state.location);
   const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
@@ -322,6 +336,29 @@ export default function CreateEventStep2() {
     });
   };
 
+  // EVT-002: step-navigator eligibility. Details (this screen) is evaluated
+  // from live local state, since it hasn't been flushed to the store yet;
+  // every other step is evaluated from the store's already-persisted values.
+  const stepValidity = getEventWizardStepValidity({
+    name: draftName,
+    description: draftDescription,
+    bannerImageUri: draftBannerImageUri,
+    categoryCount: selectedCategories.length,
+    hasStart: Boolean(startDate && startTime),
+    hasEnd: Boolean(endDate && endTime),
+    location: draftLocation,
+  });
+  const stepStates = getEventWizardStepStatesByKey(stepValidity, 'details');
+
+  const handleStepNavigatorPress = (step: EventWizardStepKey) => {
+    if (step === 'details') return;
+    // Persist whatever is currently selected, valid or not — a navigator tap
+    // must never discard in-progress edits, and must never call the backend
+    // (Save Draft remains the only explicit persistence action).
+    persistStepTwo();
+    router.replace(getEventWizardStepPath(step));
+  };
+
   const handleSaveDraft = async () => {
     if (isSaving) return;
     if (!validateCategorySelection()) {
@@ -469,11 +506,8 @@ export default function CreateEventStep2() {
         )}
       </View>
 
-      {/* Steps */}
-      <View style={styles.stepContainer}>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 2</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>2 out of 5</Text>
-      </View>
+      {/* Step navigator */}
+      <CreateEventStepNavigator stepStates={stepStates} onStepPress={handleStepNavigatorPress} />
 
       {/* Form Content */}
       <View style={styles.formContainer}>
@@ -526,7 +560,11 @@ export default function CreateEventStep2() {
           {errors.categories ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.categories}</Text> : null}
         </View>
 
-        {/* Start/end dates and times */}
+        {/* Start/end dates and times — EVT-007: grouped by event boundary
+            (Start row, End row), not by field type, so the Start Date +
+            Start Time pairing and End Date + End Time pairing are visually
+            obvious. Field bindings/handlers are unchanged from before —
+            only the JSX order/grouping moved. */}
         <View style={styles.dateTimeGroup}>
           <View style={[styles.row, styles.dateRow]}>
             <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
@@ -549,6 +587,30 @@ export default function CreateEventStep2() {
             </View>
 
             <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>START TIME</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.startTime ? colors.danger : 'transparent' },
+                  isOngoingEdit ? styles.disabledControl : null,
+                ]}
+                onPress={() => setShowStartTimePicker(true)}
+                disabled={isOngoingEdit}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text
+                  style={[styles.compactSelectorText, { color: startTime && !isOngoingEdit ? colors.text : colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {startTime ? formatTime(startTime) : 'Select time'}
+                </Text>
+              </TouchableOpacity>
+              {errors.startTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.startTime}</Text> : null}
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
               <TouchableOpacity
                 style={[
@@ -564,27 +626,6 @@ export default function CreateEventStep2() {
               </TouchableOpacity>
               {errors.endDate ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endDate}</Text> : null}
             </View>
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>START TIME</Text>
-              <TouchableOpacity
-                style={[
-                  styles.selector,
-                  { backgroundColor: colors.card, borderColor: errors.startTime ? colors.danger : 'transparent' },
-                  isOngoingEdit ? styles.disabledControl : null,
-                ]}
-                onPress={() => setShowStartTimePicker(true)}
-                disabled={isOngoingEdit}
-              >
-                <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: startTime && !isOngoingEdit ? colors.text : colors.textSecondary }]}>
-                  {startTime ? formatTime(startTime) : 'Select time'}
-                </Text>
-              </TouchableOpacity>
-              {errors.startTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.startTime}</Text> : null}
-            </View>
 
             <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
@@ -596,7 +637,10 @@ export default function CreateEventStep2() {
                 onPress={() => setShowEndTimePicker(true)}
               >
                 <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectorText, { color: endTime ? colors.text : colors.textSecondary }]}>
+                <Text
+                  style={[styles.compactSelectorText, { color: endTime ? colors.text : colors.textSecondary }]}
+                  numberOfLines={1}
+                >
                   {endTime ? formatTime(endTime) : 'Select time'}
                 </Text>
               </TouchableOpacity>

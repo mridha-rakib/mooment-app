@@ -40,6 +40,11 @@ import {
 } from "@/lib/events";
 import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
 import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
+import {
+  EVENT_BANNER_FALLBACK_URI,
+  getEventBannerContentPosition,
+  getEventBannerKey,
+} from "@/lib/eventBanner";
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
 import { blockUser, followUser, unfollowUser } from "@/lib/users";
@@ -107,8 +112,7 @@ import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDis
 const { width } = Dimensions.get("window");
 const CHAT_COMPOSER_KEYBOARD_GAP = 8;
 const REVIEW_KEYBOARD_GAP = 12;
-const DEFAULT_BANNER =
-  "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1200&auto=format&fit=crop";
+const DEFAULT_BANNER = EVENT_BANNER_FALLBACK_URI;
 
 const isDirectMediaUrl = (value?: string | null) =>
   Boolean(value && /^(https?:|data:|file:|content:)/i.test(value.trim()));
@@ -371,7 +375,7 @@ const getDistanceLabel = (
 };
 
 const getBannerImageUri = (event?: EventResponse | null) =>
-  resolveStorageUrl(event?.bannerOriginalImageKey ?? event?.bannerImageKey, DEFAULT_BANNER);
+  resolveStorageUrl(getEventBannerKey(event), DEFAULT_BANNER);
 
 const getEventBannerImageUris = (event?: EventResponse | null) => {
   const urls = [
@@ -1022,6 +1026,10 @@ const EventScreen = () => {
   );
 
   const bannerImageUri = getBannerImageUri(event);
+  const bannerContentPosition = useMemo(
+    () => getEventBannerContentPosition(event?.bannerImageDisplay),
+    [event?.bannerImageDisplay],
+  );
   const eventImageUris = useMemo(() => {
     const bannerUris = getEventBannerImageUris(event);
 
@@ -1921,7 +1929,12 @@ const EventScreen = () => {
         ]}
       >
         <View style={styles.imageContainer}>
-          <Image source={{ uri: bannerImageUri }} style={styles.heroImage} contentFit="cover" />
+          <Image
+            source={{ uri: bannerImageUri }}
+            style={styles.heroImage}
+            contentFit="cover"
+            contentPosition={bannerContentPosition}
+          />
           <LinearGradient
             pointerEvents="none"
             colors={["rgba(0, 0, 0, 0.5)", "rgba(0, 0, 0, 0)"]}
@@ -2561,11 +2574,14 @@ const EventScreen = () => {
                   if (!src) return "Date TBA";
                   const d = new Date(src);
                   if (Number.isNaN(d.getTime())) return "Date TBA";
-                  return (
-                    d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
-                    " • " +
-                    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                  );
+                  // EVT-008: Event-local, not device-local — the reward is
+                  // presented in the context of this Event, so it uses the
+                  // same Event timezone every primary surface uses.
+                  const expiresTimeModel = formatEventTimeDisplay({
+                    scheduledAt: d,
+                    timezone: event?.timezone,
+                  });
+                  return `${expiresTimeModel.primaryDateText} • ${expiresTimeModel.primaryTimeText}`;
                 })()}
               </Text>
             </View>
@@ -2825,11 +2841,22 @@ const EventScreen = () => {
           type: "event",
           id: event.id,
           preview: event.name,
-          imageUrl: event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null,
+          imageUrl: resolveStorageUrl(getEventBannerKey(event), null),
           authorName: event.host?.name ?? null,
           canShareToChat: event.privacy !== "private",
           categoryLabels: event.categories?.length ? event.categories : event.category ? [event.category] : [],
-          dateTimeLabel: event.scheduledAt ? new Date(event.scheduledAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null,
+          dateTimeLabel: event.scheduledAt
+            ? (() => {
+                // EVT-008: Event-local, not device-local — same helper every
+                // primary surface uses, so the Share sheet matches Feed/Map/
+                // Event Detail for the same Event.
+                const shareTimeModel = formatEventTimeDisplay({
+                  scheduledAt: event.scheduledAt,
+                  timezone: event.timezone,
+                });
+                return `${shareTimeModel.primaryDateShortText}, ${shareTimeModel.primaryTimeText}`;
+              })()
+            : null,
           locationLabel: event.location?.venue ?? event.location?.address ?? event.location?.searchLabel ?? null,
         } : undefined}
       />

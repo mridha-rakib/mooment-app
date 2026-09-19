@@ -31,6 +31,7 @@ import {
   type EventResponse,
   type EventStatus,
 } from "@/lib/events";
+import { formatEventAgeRestriction } from "@/lib/eventAgeRestriction";
 import { optimizeStoryImageForUpload } from "@/lib/storyImageOptimizer";
 import { generateStoryThumbnail, getCachedStoryThumbnail, setCachedStoryThumbnail, type StoryThumbnailSource } from "@/lib/storyThumbnails";
 import { getLocalUriByteSize, prepareEventGalleryVideoForUpload } from "@/lib/videoProcessor";
@@ -90,18 +91,6 @@ type PendingUploadItem = {
   phase: PendingUploadPhase;
   progress: number | null;
   previewSource: StoryThumbnailSource;
-};
-
-const formatAgeLabel = (ageRestriction?: EventAgeRestriction | null) => {
-  if (ageRestriction === "18_plus") {
-    return "18+ only";
-  }
-
-  if (ageRestriction === "21_plus") {
-    return "21+ only";
-  }
-
-  return "All ages";
 };
 
 const formatCompactCount = (value?: number | null) =>
@@ -1227,7 +1216,7 @@ const AboutTab = ({
             </Text>
             <View style={[styles.ageTag, { backgroundColor: isAgeRestricted ? "#FFFFFF" : "rgba(255, 255, 255, 0.08)" }]}>
               <Text style={[styles.ageTagText, { color: isAgeRestricted ? "#E83030" : colors.text }]}>
-                {formatAgeLabel(ageRestriction)}
+                {formatEventAgeRestriction(ageRestriction)}
               </Text>
             </View>
 

@@ -15,12 +15,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import DeleteModal from '../../components/ui/DeleteModal';
 import BackButton from '@/components/ui/BackButton';
+import CreateEventStepNavigator from '@/components/create-event/CreateEventStepNavigator';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage } from '@/lib/authErrors';
 import {
   isTicketCreationCutoffReached,
   TICKET_CREATION_CUTOFF_MESSAGE,
 } from '@/lib/ticketAvailability';
+import {
+  getEventWizardStepPath,
+  getEventWizardStepValidity,
+  getEventWizardStepStatesByKey,
+  type EventWizardStepKey,
+} from '@/lib/eventWizardSteps';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -37,6 +44,16 @@ export default function CreateEventStep4() {
   const isAdvancingRef = React.useRef(false);
   const tickets = useEventDraftStore((state) => state.tickets);
   const endAt = useEventDraftStore((state) => state.endAt);
+  // Read-only elsewhere-in-wizard fields, needed only to render the step
+  // navigator's eligibility for Basics/Details/Location (this screen never
+  // edits them, and tickets themselves have no navigator-blocking
+  // requirement today).
+  const draftName = useEventDraftStore((state) => state.name);
+  const draftDescription = useEventDraftStore((state) => state.description);
+  const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
+  const draftCategories = useEventDraftStore((state) => state.categories);
+  const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const draftLocation = useEventDraftStore((state) => state.location);
   const removeTicket = useEventDraftStore((state) => state.removeTicket);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
@@ -90,6 +107,30 @@ export default function CreateEventStep4() {
       minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
       maximumFractionDigits: Number.isInteger(price) ? 0 : 2,
     })}`;
+
+  // EVT-002: step-navigator eligibility. Tickets has no local unflushed
+  // state — every ticket mutation already writes straight through to the
+  // store (see saveTicket/removeTicket in eventDraftStore.ts) — and no
+  // required-ticket-count rule exists today, so this step is always valid
+  // once reached (it can never block Privacy).
+  const stepValidity = getEventWizardStepValidity({
+    name: draftName,
+    description: draftDescription,
+    bannerImageUri: draftBannerImageUri,
+    categoryCount: draftCategories.length,
+    hasStart: Boolean(draftScheduledAt),
+    hasEnd: Boolean(endAt),
+    location: draftLocation,
+  });
+  const stepStates = getEventWizardStepStatesByKey(stepValidity, 'tickets');
+
+  const handleStepNavigatorPress = (step: EventWizardStepKey) => {
+    if (step === 'tickets') return;
+    // No local field to flush here — tickets are always already persisted
+    // to the store via saveTicket()/removeTicket(). Navigator taps still
+    // must not call Save Draft; they are pure UI navigation.
+    router.replace(getEventWizardStepPath(step));
+  };
 
   const handleSaveDraft = async () => {
     if (isSaving) return;
@@ -204,11 +245,8 @@ export default function CreateEventStep4() {
         )}
       </View>
 
-      {/* Steps */}
-      <View style={styles.stepContainer}>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 4</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>4 out of 5</Text>
-      </View>
+      {/* Step navigator */}
+      <CreateEventStepNavigator stepStates={stepStates} onStepPress={handleStepNavigatorPress} />
 
       {/* Form Content */}
       <ScrollView

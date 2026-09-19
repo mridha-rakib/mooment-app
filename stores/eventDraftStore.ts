@@ -22,6 +22,7 @@ import type {
   EventTicketPayload,
   EventTicketRequestPayload,
 } from "@/lib/events";
+import { toEventTicketInput } from "@/lib/eventTicketPayload";
 import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
 import {
   instantToWallClockPartsForEvent,
@@ -45,6 +46,11 @@ type EventDraftState = {
   description: string;
   bannerImageUri: string | null;
   bannerImageKey: string | null;
+  // The real MIME type reported by the image picker for `bannerImageUri`,
+  // captured (and validated) at selection time. `null` for a restored
+  // remote URI/legacy session, where upload doesn't apply or the type isn't
+  // known — `buildEventPayload` falls back to a filename-based guess then.
+  bannerContentType: string | null;
   bannerOriginalImageUri: string | null;
   bannerOriginalImageKey: string | null;
   bannerImageDisplay: EventImageDisplay | null;
@@ -72,6 +78,7 @@ type EventDraftState = {
     name: string;
     description: string;
     bannerImageUri: string | null;
+    bannerContentType?: string | null;
     bannerOriginalImageUri?: string | null;
     bannerImageDisplay?: EventImageDisplay | null;
   }) => void;
@@ -128,6 +135,7 @@ const createInitialState = () => {
     description: "",
     bannerImageUri: null,
     bannerImageKey: null,
+    bannerContentType: null,
     bannerOriginalImageUri: null,
     bannerOriginalImageKey: null,
     bannerImageDisplay: null,
@@ -151,7 +159,15 @@ const isRemoteUri = (uri: string) => /^https?:\/\//i.test(uri);
 const requiresBannerUpload = (uri: string | null, key: string | null) =>
   Boolean(uri && !isRemoteUri(uri) && !key);
 
-const getImageContentType = (uri: string) => {
+// Filename-based fallback, used only when no reliable picker-reported MIME
+// type is available (e.g. the Android "original" content:// URI, which
+// shares the same underlying photo as the validated `bannerImageUri` pick
+// but has no separate MIME reading of its own).
+const getImageContentType = (uri: string, knownContentType?: string | null) => {
+  if (knownContentType === "image/jpeg" || knownContentType === "image/png") {
+    return knownContentType;
+  }
+
   const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
 
   if (normalizedUri.endsWith(".png")) {
@@ -187,14 +203,13 @@ export const fromAgeRestriction = (value: EventAgeRestriction) => {
   return "All Ages";
 };
 
-const stripLocalTicketFields = (tickets: EventDraftTicket[]): EventTicketRequestPayload[] =>
-  tickets.map(stripLocalTicketField);
-
-const stripLocalTicketField = ({
-  localId: _localId,
-  availableCount: _availableCount,
-  ...ticket
-}: EventDraftTicket): EventTicketRequestPayload => ticket;
+// Allowlist sanitizer (see app/lib/eventTicketPayload.ts) — a draft ticket is
+// a full response ticket plus `localId`, so this both drops the local-only
+// field and, critically, drops every server-owned/computed response field
+// (salesEnded, availableCount) rather than relying on an exclusion list that
+// has to be kept in sync by hand every time a new response field is added.
+const toEventTicketInputs = (tickets: EventDraftTicket[]): EventTicketRequestPayload[] =>
+  tickets.map(toEventTicketInput);
 
 const stripTicketIdentity = ({
   id: _id,
@@ -317,7 +332,7 @@ const getComparablePayloadFromState = (state: EventDraftState): EventPayload | n
     privacy: state.privacy,
     scheduledAt: state.scheduledAt,
     endAt: state.endAt,
-    tickets: stripLocalTicketFields(state.tickets),
+    tickets: toEventTicketInputs(state.tickets),
   };
 };
 
@@ -337,7 +352,7 @@ const getComparablePayloadFromEvent = (event: EventResponse): EventPayload => {
     privacy: event.privacy,
     scheduledAt: event.scheduledAt ?? null,
     endAt: event.endAt ?? null,
-    tickets: stripLocalTicketFields(mergeTicketsFromEvent(event.tickets, [])),
+    tickets: toEventTicketInputs(mergeTicketsFromEvent(event.tickets, [])),
   };
 };
 
@@ -380,16 +395,34 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
   lastPublishedDraftId: null,
   clearLastPublishedDraftId: () => set({ lastPublishedDraftId: null }),
 
-  setStepOne: ({ name, description, bannerImageUri, bannerOriginalImageUri, bannerImageDisplay }) => {
+  setStepOne: ({
+    name,
+    description,
+    bannerImageUri,
+    bannerContentType,
+    bannerOriginalImageUri,
+    bannerImageDisplay,
+  }) => {
     set((state) => ({
       name,
       description,
       bannerImageUri,
       bannerImageKey: bannerImageUri === state.bannerImageUri ? state.bannerImageKey : null,
+      bannerContentType:
+        bannerImageUri === state.bannerImageUri ? state.bannerContentType : bannerContentType ?? null,
       bannerOriginalImageUri: bannerOriginalImageUri ?? bannerImageUri,
       bannerOriginalImageKey:
         (bannerOriginalImageUri ?? bannerImageUri) === state.bannerOriginalImageUri ? state.bannerOriginalImageKey : null,
-      bannerImageDisplay: bannerImageDisplay ?? null,
+      // Only reset crop/display metadata when the banner asset itself is
+      // actually changing (or the caller explicitly supplies a new value,
+      // e.g. a future crop UI). A save/navigation that leaves the banner
+      // untouched must not silently drop a restored draft's crop metadata.
+      bannerImageDisplay:
+        bannerImageDisplay !== undefined
+          ? bannerImageDisplay
+          : bannerImageUri === state.bannerImageUri
+            ? state.bannerImageDisplay
+            : null,
     }));
   },
 
@@ -477,7 +510,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       }
 
       if (currentState.isEditingPublishedEvent) {
-        const ticketPayload = stripLocalTicketField(nextTicket);
+        const ticketPayload = toEventTicketInput(nextTicket);
         const event = nextTicket.id
           ? await updateEventTicket(currentState.draftId, nextTicket.id, stripTicketIdentity(ticketPayload))
           : await createEventTicket(currentState.draftId, ticketPayload);
@@ -493,7 +526,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
         return await currentState.saveDraft();
       }
 
-      const ticketPayload = stripLocalTicketField(nextTicket);
+      const ticketPayload = toEventTicketInput(nextTicket);
       const event = nextTicket.id
         ? await updateDraftTicket(currentState.draftId, nextTicket.id, stripTicketIdentity(ticketPayload))
         : await createDraftTicket(currentState.draftId, ticketPayload);
@@ -629,7 +662,7 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       privacy: state.privacy,
       scheduledAt: state.scheduledAt,
       endAt: state.endAt,
-      tickets: stripLocalTicketFields(state.tickets),
+      tickets: toEventTicketInputs(state.tickets),
     };
     let event: EventResponse;
 
@@ -684,6 +717,9 @@ export const useEventDraftStore = create<EventDraftState>((set, get) => ({
       description: event.description ?? "",
       bannerImageUri,
       bannerImageKey: event.bannerImageKey ?? null,
+      // A restored Event's banner is already a remote key/URI — no local
+      // picker MIME type applies until the user selects a new image.
+      bannerContentType: null,
       bannerOriginalImageUri,
       bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
       bannerImageDisplay: event.bannerImageDisplay ?? null,
@@ -736,7 +772,7 @@ const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> 
       return bannerImageKey;
     }
 
-    const contentType = getImageContentType(state.bannerImageUri);
+    const contentType = getImageContentType(state.bannerImageUri, state.bannerContentType);
     const extension = getImageExtension(contentType);
 
     return uploadFileToStorage({
@@ -751,7 +787,7 @@ const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> 
       return bannerOriginalImageKey;
     }
 
-    const contentType = getImageContentType(state.bannerOriginalImageUri);
+    const contentType = getImageContentType(state.bannerOriginalImageUri, state.bannerContentType);
     const extension = getImageExtension(contentType);
 
     try {
@@ -784,7 +820,7 @@ const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> 
     scheduledAt: state.scheduledAt,
     endAt: state.endAt,
     ...buildWallClockTransportFields(state),
-    tickets: stripLocalTicketFields(state.tickets),
+    tickets: toEventTicketInputs(state.tickets),
   };
 };
 

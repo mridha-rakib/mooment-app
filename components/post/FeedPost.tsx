@@ -1706,6 +1706,22 @@ function FeedPost({
       headers: ngrokSkipWarningHeaders(uri),
     };
   }), [mediaItems]);
+  // TEMP DEBUG (remove once the blank-media-with-successful-onLoad bug is
+  // root-caused): correlates a post's id/caption with its postType and
+  // whether the event-details overlay renders on top of its media, since
+  // that overlay is a sibling of the media ScrollView and could visually
+  // cover a successfully loaded image without any onLoad/onError signal.
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.debug('[FeedPostDebug] mount', {
+      postId: post.id,
+      postType: post.postType,
+      captionPreview: post.caption?.slice(0, 40),
+      mediaCount: mediaItems.length,
+      hasEventDetails: Boolean(post.eventDetails),
+    });
+  }, [post.id, post.postType, post.caption, mediaItems.length, post.eventDetails]);
+
   // A text-only post rendered inside a repost/share card (RepostFeedCard's
   // compact shell). Only this case gets the bounded 3-line excerpt + a small
   // "View post" affordance — standalone posts and any post with media are

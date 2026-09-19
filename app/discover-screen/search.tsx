@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { getMapEvents, getHashtagEvents, searchEvents, type EventResponse } from '@/lib/events';
 import { formatEventTimeDisplay } from '@/lib/eventTimeDisplay';
+import { formatEventAgeRestriction } from '@/lib/eventAgeRestriction';
 import { normalizeSearchText } from '@/lib/searchText';
 import { getStorageFileUrl } from '@/lib/storage';
 import { getSuggestedUsers, searchPeople } from '@/lib/users';
@@ -96,8 +97,9 @@ const formatEventSchedule = (event: Pick<EventResponse, "scheduledAt" | "timezon
 const getEventSubtitle = (event: EventResponse) => {
   const host = event.host?.name || event.host?.username;
   const location = event.location?.venue || event.location?.address || event.location?.searchLabel;
+  const ageLabel = formatEventAgeRestriction(event.ageRestriction);
 
-  return [host, formatEventSchedule(event), location].filter(Boolean).join(" • ");
+  return [host, formatEventSchedule(event), location, ageLabel].filter(Boolean).join(" • ");
 };
 
 const toSearchEvent = (event: EventResponse): SearchEvent => ({

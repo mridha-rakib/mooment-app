@@ -59,7 +59,13 @@ export type EventTicketPayload = {
   availableCount?: number | null;
 };
 
-export type EventTicketRequestPayload = Omit<EventTicketPayload, "availableCount">;
+// Write-model shape: excludes every response-only/server-owned field.
+// `availableCount` is server-owned inventory; `salesEnded` is a server-derived
+// computed flag (see the comment on it above) — neither is ever legal in a
+// write request. Build values of this type via toEventTicketInput() in
+// app/lib/eventTicketPayload.ts rather than spreading a response ticket
+// directly, so a future response-only field can't silently leak through.
+export type EventTicketRequestPayload = Omit<EventTicketPayload, "availableCount" | "salesEnded">;
 
 export type EventRewardPayload = {
   id?: string;

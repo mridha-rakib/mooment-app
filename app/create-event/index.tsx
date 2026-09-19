@@ -8,19 +8,32 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
-  Image,
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { z } from 'zod';
 import BackButton from '@/components/ui/BackButton';
+import CreateEventStepNavigator from '@/components/create-event/CreateEventStepNavigator';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage, isBusinessAccountRequiredError } from '@/lib/authErrors';
 import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
+import {
+  getEventBannerContentPosition,
+  isAllowedEventBannerMimeType,
+  isEventBannerFileSizeAllowed,
+} from '@/lib/eventBanner';
+import {
+  getEventWizardStepPath,
+  getEventWizardStepValidity,
+  getEventWizardStepStatesByKey,
+  type EventWizardStepKey,
+} from '@/lib/eventWizardSteps';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -53,6 +66,34 @@ const getAndroidOriginalImageUri = (asset: ImagePicker.ImagePickerAsset) => {
   return `content://media/external/images/media/${asset.assetId}`;
 };
 
+const BANNER_INVALID_TYPE_MESSAGE = 'Please choose a JPEG or PNG image for the event banner.';
+const BANNER_TOO_LARGE_MESSAGE = 'That image is too large. Choose a banner image under 15 MB.';
+
+// Reliable local metadata only (picker-reported MIME/size, falling back to a
+// file-system read for size) — no byte-signature sniffing. If the picker
+// asset carries no MIME type at all, the type check is skipped rather than
+// guessed; see app/lib/eventBanner.ts for the shared allow-list/size limit.
+const getEventBannerRejectionReason = async (
+  asset: ImagePicker.ImagePickerAsset,
+): Promise<string | null> => {
+  if (asset.mimeType && !isAllowedEventBannerMimeType(asset.mimeType)) {
+    return BANNER_INVALID_TYPE_MESSAGE;
+  }
+
+  let fileSize = asset.fileSize;
+
+  if (typeof fileSize !== 'number') {
+    const info = await FileSystem.getInfoAsync(asset.uri).catch(() => null);
+    fileSize = info?.exists ? info.size : undefined;
+  }
+
+  if (typeof fileSize === 'number' && !isEventBannerFileSizeAllowed(fileSize)) {
+    return BANNER_TOO_LARGE_MESSAGE;
+  }
+
+  return null;
+};
+
 export default function CreateEventScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const formPosition = useRef(0);
@@ -65,6 +106,15 @@ export default function CreateEventScreen() {
   const draftDescription = useEventDraftStore((state) => state.description);
   const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
   const draftBannerOriginalImageUri = useEventDraftStore((state) => state.bannerOriginalImageUri);
+  const draftBannerContentType = useEventDraftStore((state) => state.bannerContentType);
+  const bannerImageDisplay = useEventDraftStore((state) => state.bannerImageDisplay);
+  // Read-only elsewhere-in-wizard fields, needed only to render the step
+  // navigator's eligibility for Details/Location (this screen never edits
+  // them).
+  const draftCategories = useEventDraftStore((state) => state.categories);
+  const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const draftEndAt = useEventDraftStore((state) => state.endAt);
+  const draftLocation = useEventDraftStore((state) => state.location);
   const setStepOne = useEventDraftStore((state) => state.setStepOne);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const currentUser = useAuthStore((state) => state.user);
@@ -76,12 +126,14 @@ export default function CreateEventScreen() {
   const [bannerOriginalImage, setBannerOriginalImage] = useState<string | null>(
     draftBannerOriginalImageUri ?? draftBannerImageUri,
   );
+  const [bannerContentType, setBannerContentType] = useState<string | null>(draftBannerContentType);
   const [errors, setErrors] = useState<CreateEventStepOneErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingAndExiting, setIsSavingAndExiting] = useState(false);
   const [savedLabel, setSavedLabel] = useState(false);
   const isMountedRef = useRef(true);
   const isAdvancingRef = useRef(false);
+  const bannerContentPosition = getEventBannerContentPosition(bannerImageDisplay);
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -127,18 +179,30 @@ export default function CreateEventScreen() {
       quality: 1,
     });
 
-    if (!result.canceled) {
-      const [asset] = result.assets;
-
-      setBannerImage(asset.uri);
-      setBannerOriginalImage(getAndroidOriginalImageUri(asset) ?? asset.uri);
-      clearFieldError('bannerImageUri');
+    if (result.canceled) {
+      return;
     }
+
+    const [asset] = result.assets;
+    const rejectionReason = await getEventBannerRejectionReason(asset);
+
+    if (rejectionReason) {
+      // Reject the replacement and leave the existing valid banner (if any)
+      // — and the rest of the draft — completely untouched.
+      Alert.alert('Unable to use this image', rejectionReason);
+      return;
+    }
+
+    setBannerImage(asset.uri);
+    setBannerOriginalImage(getAndroidOriginalImageUri(asset) ?? asset.uri);
+    setBannerContentType(asset.mimeType ?? null);
+    clearFieldError('bannerImageUri');
   };
 
   const removeImage = () => {
     setBannerImage(null);
     setBannerOriginalImage(null);
+    setBannerContentType(null);
   };
 
   const persistStepOne = (values?: CreateEventStepOneValues) => {
@@ -146,12 +210,46 @@ export default function CreateEventScreen() {
       name: values?.name ?? name,
       description: values?.description ?? description,
       bannerImageUri: values?.bannerImageUri ?? bannerImage,
+      bannerContentType,
       bannerOriginalImageUri: bannerOriginalImage,
     });
   };
 
+  // EVT-002: step-navigator eligibility. Basics (this screen) is evaluated
+  // from live local state, since it hasn't been flushed to the store yet;
+  // every other step is evaluated from the store's already-persisted values.
+  const stepValidity = getEventWizardStepValidity({
+    name,
+    description,
+    bannerImageUri: bannerImage,
+    categoryCount: draftCategories.length,
+    hasStart: Boolean(draftScheduledAt),
+    hasEnd: Boolean(draftEndAt),
+    location: draftLocation,
+  });
+  const stepStates = getEventWizardStepStatesByKey(stepValidity, 'basics');
+
+  const handleStepNavigatorPress = (step: EventWizardStepKey) => {
+    if (step === 'basics') return;
+    // Persist whatever is currently typed, valid or not — a navigator tap
+    // must never discard in-progress edits, and must never call the backend
+    // (Save Draft remains the only explicit persistence action).
+    persistStepOne();
+    router.replace(getEventWizardStepPath(step));
+  };
+
   const handleSaveDraft = async () => {
     if (isSaving) return;
+
+    // Banner is required to save a draft. Presence is enough — an existing
+    // valid banner that the user hasn't touched already satisfies this, and
+    // nothing is uploaded/saved when it's missing.
+    if (!bannerImage) {
+      setErrors((currentErrors) => ({ ...currentErrors, bannerImageUri: 'Banner image is required' }));
+      return;
+    }
+
+    clearFieldError('bannerImageUri');
     persistStepOne();
     setIsSaving(true);
 
@@ -338,11 +436,8 @@ export default function CreateEventScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Steps */}
-          <View style={styles.stepContainer}>
-            <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 1</Text>
-            <Text style={[styles.stepText, { color: colors.textSecondary }]}>1 out of 5</Text>
-          </View>
+          {/* Step navigator */}
+          <CreateEventStepNavigator stepStates={stepStates} onStepPress={handleStepNavigatorPress} />
 
           {/* Form Content */}
           <View
@@ -365,7 +460,7 @@ export default function CreateEventScreen() {
                   { backgroundColor: colors.card, color: colors.text },
                   errors.name ? [styles.fieldError, { borderColor: colors.danger }] : null,
                 ]}
-                placeholder="Name"
+                placeholder="Event name"
                 placeholderTextColor={colors.textSecondary}
                 value={name}
                 onChangeText={handleNameChange}
@@ -390,7 +485,7 @@ export default function CreateEventScreen() {
                   { backgroundColor: colors.card, color: colors.text },
                   errors.description ? [styles.fieldError, { borderColor: colors.danger }] : null,
                 ]}
-                placeholder="Event main highlights"
+                placeholder="Tell people what to expect"
                 placeholderTextColor={colors.textSecondary}
                 multiline
                 textAlignVertical="top"
@@ -423,18 +518,21 @@ export default function CreateEventScreen() {
               >
                 {bannerImage ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image source={{ uri: bannerImage }} style={styles.bannerImagePreview} />
+                    <Image
+                      source={{ uri: bannerImage }}
+                      style={styles.bannerImagePreview}
+                      contentFit="cover"
+                      contentPosition={bannerContentPosition}
+                    />
                   </View>
                 ) : (
                   <>
-                    <Text style={[styles.uploadText, { color: colors.textSecondary }]}>You can only upload one image for the banner</Text>
+                    <Text style={[styles.uploadText, { color: colors.textSecondary }]}>Upload one event banner image - JPEG or PNG.</Text>
 
                     <View style={[styles.uploadButton, { backgroundColor: isDark ? "#D1D1D6" : colors.card }]}>
                       <Feather name="arrow-up-circle" size={16} color={isDark ? "#1A1A22" : colors.text} />
                       <Text style={[styles.uploadButtonText, { color: isDark ? "#1A1A22" : colors.text }]}>Upload Image</Text>
                     </View>
-
-                    <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>JPEG, or PNG</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -548,7 +646,6 @@ const styles = StyleSheet.create({
   bannerImagePreview: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   labelRow: {
     flexDirection: 'row',

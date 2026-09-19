@@ -23,8 +23,10 @@ import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
 import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
 import { cancelEvent, type EventResponse } from "@/lib/events";
 import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
+import { formatEventAgeRestriction } from "@/lib/eventAgeRestriction";
 import { shareMoment, toggleMomentReaction, toggleMomentSave, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
 import { tapFeedback } from "@/lib/microFeedback";
+import { getEventBannerContentPosition, resolveEventBannerUri } from "@/lib/eventBanner";
 import { getStorageFileUrl } from "@/lib/storage";
 import { navigateToProfile } from "@/lib/profileNavigation";
 import { retryBlockOnly, submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
@@ -168,9 +170,13 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
   const [bannerFailed, setBannerFailed] = useState(false);
 
   const bannerUri = useMemo(() => {
-    if (!event.bannerImageKey || bannerFailed) return null;
-    try { return getStorageFileUrl(event.bannerImageKey); } catch { return null; }
-  }, [bannerFailed, event.bannerImageKey]);
+    if (bannerFailed) return null;
+    return resolveEventBannerUri(event, null);
+  }, [bannerFailed, event]);
+  const bannerContentPosition = useMemo(
+    () => getEventBannerContentPosition(event.bannerImageDisplay),
+    [event.bannerImageDisplay],
+  );
 
   const hostAvatarUri = useMemo(() => {
     if (event.host?.avatarKey) {
@@ -227,6 +233,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
   const eventTime = eventTimeModel.primaryZoneText
     ? `${eventTimeModel.primaryTimeText} ${eventTimeModel.primaryZoneText}`
     : eventTimeModel.primaryTimeText;
+  const ageLabel = formatEventAgeRestriction(event.ageRestriction);
   const location = getLocation(event);
   const timestamp = timeAgo(event.publishedAt ?? event.createdAt);
   const likedByContext = useMemo(() => formatLikedByContext(event), [event]);
@@ -825,6 +832,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
             source={{ uri: bannerUri }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            contentPosition={bannerContentPosition}
             cachePolicy="disk"
             recyclingKey={event.id}
             onError={() => setBannerFailed(true)}
@@ -917,6 +925,8 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
                   {Boolean(eventDate) && <Text style={styles.metaText}>{eventDate}</Text>}
                   {Boolean(eventDate) && Boolean(eventTime) && <View style={styles.metaDot} />}
                   {Boolean(eventTime) && <Text style={styles.metaText}>{eventTime}</Text>}
+                  {(Boolean(eventDate) || Boolean(eventTime)) && <View style={styles.metaDot} />}
+                  <Text style={styles.metaText}>{ageLabel}</Text>
                 </View>
               ) : null}
 

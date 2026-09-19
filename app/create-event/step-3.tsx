@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { z } from 'zod';
 import BackButton from '@/components/ui/BackButton';
+import CreateEventStepNavigator from '@/components/create-event/CreateEventStepNavigator';
 import { useTheme } from '@/hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuthErrorMessage } from '@/lib/authErrors';
@@ -25,6 +26,12 @@ import {
 } from '@/lib/eventStepThreeLocation';
 import { getCurrentLocationIfPermissionGranted } from '@/lib/locationSharing';
 import { reverseGeocodeLocation } from '@/lib/locationSearch';
+import {
+  getEventWizardStepPath,
+  getEventWizardStepValidity,
+  getEventWizardStepStatesByKey,
+  type EventWizardStepKey,
+} from '@/lib/eventWizardSteps';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 
 import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
@@ -48,6 +55,15 @@ export default function CreateEventStep3() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const draftLocation = useEventDraftStore((state) => state.location);
+  // Read-only elsewhere-in-wizard fields, needed only to render the step
+  // navigator's eligibility for Basics/Details (this screen never edits
+  // them).
+  const draftName = useEventDraftStore((state) => state.name);
+  const draftDescription = useEventDraftStore((state) => state.description);
+  const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
+  const draftCategories = useEventDraftStore((state) => state.categories);
+  const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const draftEndAt = useEventDraftStore((state) => state.endAt);
   const setStepThree = useEventDraftStore((state) => state.setStepThree);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
@@ -160,6 +176,29 @@ export default function CreateEventStep3() {
         additionalInfo,
       }),
     });
+  };
+
+  // EVT-002: step-navigator eligibility. Location (this screen) is evaluated
+  // from live local state, since it hasn't been flushed to the store yet;
+  // every other step is evaluated from the store's already-persisted values.
+  const stepValidity = getEventWizardStepValidity({
+    name: draftName,
+    description: draftDescription,
+    bannerImageUri: draftBannerImageUri,
+    categoryCount: draftCategories.length,
+    hasStart: Boolean(draftScheduledAt),
+    hasEnd: Boolean(draftEndAt),
+    location: { venue, address, searchLabel: draftLocation.searchLabel },
+  });
+  const stepStates = getEventWizardStepStatesByKey(stepValidity, 'location');
+
+  const handleStepNavigatorPress = (step: EventWizardStepKey) => {
+    if (step === 'location') return;
+    // Persist whatever is currently entered, valid or not — a navigator tap
+    // must never discard in-progress edits, and must never call the backend
+    // (Save Draft remains the only explicit persistence action).
+    persistStepThree();
+    router.replace(getEventWizardStepPath(step));
   };
 
   const handleSaveDraft = async () => {
@@ -306,11 +345,8 @@ export default function CreateEventStep3() {
         )}
       </View>
 
-      {/* Steps */}
-      <View style={styles.stepContainer}>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 3</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>3 out of 5</Text>
-      </View>
+      {/* Step navigator */}
+      <CreateEventStepNavigator stepStates={stepStates} onStepPress={handleStepNavigatorPress} />
 
       {/* Form Content + Footer */}
       <KeyboardAvoidingView

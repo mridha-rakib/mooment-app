@@ -12,10 +12,17 @@ import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackButton from '@/components/ui/BackButton';
+import CreateEventStepNavigator from '@/components/create-event/CreateEventStepNavigator';
 import { useTheme } from '@/hooks/useTheme';
 import { getAuthErrorMessage, isBusinessAccountRequiredError } from '@/lib/authErrors';
 import { requireBusinessAccountForEvent } from '@/lib/eventGuard';
 import { notifySuccess } from '@/lib/successFeedback';
+import {
+  getEventWizardStepPath,
+  getEventWizardStepValidity,
+  getEventWizardStepStatesByKey,
+  type EventWizardStepKey,
+} from '@/lib/eventWizardSteps';
 import { useEventDraftStore } from '@/stores/eventDraftStore';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventPrivacy } from '@/lib/events';
@@ -28,6 +35,13 @@ export default function CreateEventStep5() {
   const categories = useEventDraftStore((state) => state.categories);
   const scheduledAt = useEventDraftStore((state) => state.scheduledAt);
   const endAt = useEventDraftStore((state) => state.endAt);
+  // Read-only elsewhere-in-wizard fields, needed only to render the step
+  // navigator's eligibility for Basics/Details/Location (this screen never
+  // edits them; Privacy itself has no navigator-blocking requirement today).
+  const draftName = useEventDraftStore((state) => state.name);
+  const draftDescription = useEventDraftStore((state) => state.description);
+  const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
+  const draftLocation = useEventDraftStore((state) => state.location);
   const setDraftPrivacy = useEventDraftStore((state) => state.setPrivacy);
   const saveDraft = useEventDraftStore((state) => state.saveDraft);
   const publishEvent = useEventDraftStore((state) => state.publish);
@@ -45,6 +59,29 @@ export default function CreateEventStep5() {
   const handlePrivacyChange = (value: EventPrivacy) => {
     setPrivacy(value);
     setDraftPrivacy(value);
+  };
+
+  // EVT-002: step-navigator eligibility. Privacy has no local unflushed
+  // state — every selection already writes straight through to the store
+  // (handlePrivacyChange above) — and always has a valid default, so it can
+  // never block navigation.
+  const stepValidity = getEventWizardStepValidity({
+    name: draftName,
+    description: draftDescription,
+    bannerImageUri: draftBannerImageUri,
+    categoryCount: categories.length,
+    hasStart: Boolean(scheduledAt),
+    hasEnd: Boolean(endAt),
+    location: draftLocation,
+  });
+  const stepStates = getEventWizardStepStatesByKey(stepValidity, 'privacy');
+
+  const handleStepNavigatorPress = (step: EventWizardStepKey) => {
+    if (step === 'privacy') return;
+    // Privacy is already synced to the store on every selection above.
+    // Navigator taps still must not call Save Draft/Publish; they are pure
+    // UI navigation.
+    router.replace(getEventWizardStepPath(step));
   };
 
   const handleSaveDraft = async () => {
@@ -144,11 +181,8 @@ export default function CreateEventStep5() {
         )}
       </View>
 
-      {/* Steps */}
-      <View style={styles.stepContainer}>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>Step 5</Text>
-        <Text style={[styles.stepText, { color: colors.textSecondary }]}>5 out of 5</Text>
-      </View>
+      {/* Step navigator */}
+      <CreateEventStepNavigator stepStates={stepStates} onStepPress={handleStepNavigatorPress} />
 
       {/* Form Content */}
       <View style={styles.formContainer}>
