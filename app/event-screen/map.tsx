@@ -1,0 +1,469 @@
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import * as Location from "expo-location";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import Mapbox from "@rnmapbox/maps";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/useTheme";
+import { MAPBOX_PUBLIC_TOKEN } from "@/lib/mapbox";
+import { APP_MAP_STYLE_URL } from "@/lib/mapStyles";
+import { getCategoryColor } from "@/constants/categoryColors";
+
+Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+
+const USER_MARKER_COLOR = "#2F80ED";
+
+const firstParam = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+const parseCoordinate = (value: string | string[] | undefined) => {
+  const numericValue = Number(firstParam(value));
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const getDistanceMiles = (
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+) => {
+  const earthRadiusMiles = 3958.8;
+  const latitudeDelta = toRadians(to.latitude - from.latitude);
+  const longitudeDelta = toRadians(to.longitude - from.longitude);
+  const startLatitude = toRadians(from.latitude);
+  const endLatitude = toRadians(to.latitude);
+  const haversine =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(startLatitude) *
+      Math.cos(endLatitude) *
+      Math.sin(longitudeDelta / 2) *
+      Math.sin(longitudeDelta / 2);
+
+  return earthRadiusMiles * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
+
+const formatDistance = (miles: number) => {
+  if (miles < 0.1) {
+    return `${Math.max(1, Math.round(miles * 5280))} ft from you`;
+  }
+
+  if (miles < 10) {
+    return `${miles.toFixed(1)} mi from you`;
+  }
+
+  return `${Math.round(miles)} mi from you`;
+};
+
+const generateBezierArc = (
+  start: [number, number],
+  end: [number, number],
+  numPoints = 64,
+): [number, number][] => {
+  const midLng = (start[0] + end[0]) / 2;
+  const midLat = (start[1] + end[1]) / 2;
+  const latSpan = Math.abs(end[1] - start[1]);
+  const lngSpan = Math.abs(end[0] - start[0]);
+  const dist = Math.sqrt(latSpan * latSpan + lngSpan * lngSpan);
+  const arcHeight = Math.max(dist * 0.28, 0.004);
+  const controlLng = midLng;
+  const controlLat = midLat + arcHeight;
+  const points: [number, number][] = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    const u = 1 - t;
+    const lng = u * u * start[0] + 2 * t * u * controlLng + t * t * end[0];
+    const lat = u * u * start[1] + 2 * t * u * controlLat + t * t * end[1];
+    points.push([lng, lat]);
+  }
+  return points;
+};
+
+export default function EventMapScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const params = useLocalSearchParams<{
+    eventLatitude?: string;
+    eventLongitude?: string;
+    eventTitle?: string;
+    eventVenue?: string;
+    eventAddress?: string;
+    markerImage?: string;
+    userLatitude?: string;
+    userLongitude?: string;
+    eventCategory?: string;
+  }>();
+  const cameraRef = useRef<Mapbox.Camera>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const initialPositioned = useRef(false);
+
+  const eventLatitude = parseCoordinate(params.eventLatitude);
+  const eventLongitude = parseCoordinate(params.eventLongitude);
+  const paramUserLatitude = parseCoordinate(params.userLatitude);
+  const paramUserLongitude = parseCoordinate(params.userLongitude);
+  const hasEventCoordinates = isFiniteCoordinate(eventLatitude) && isFiniteCoordinate(eventLongitude);
+  const eventCoordinate: [number, number] | null = hasEventCoordinates ? [eventLongitude, eventLatitude] : null;
+  const eventTitle = firstParam(params.eventTitle)?.trim() || "Event location";
+  const eventVenue = firstParam(params.eventVenue)?.trim() || "";
+  const eventAddress = firstParam(params.eventAddress)?.trim() || "";
+  const markerImage = firstParam(params.markerImage)?.trim() || "";
+  const markerColor = getCategoryColor(firstParam(params.eventCategory));
+
+  const paramUserCoordinate: [number, number] | null =
+    isFiniteCoordinate(paramUserLatitude) && isFiniteCoordinate(paramUserLongitude)
+      ? [paramUserLongitude, paramUserLatitude]
+      : null;
+
+  const [liveUserCoordinate, setLiveUserCoordinate] = useState<[number, number] | null>(paramUserCoordinate);
+
+  useEffect(() => {
+    Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);
+  }, []);
+
+  useEffect(() => {
+    let locationSub: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      locationSub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 5000,
+          distanceInterval: 10,
+        },
+        (loc) => {
+          setLiveUserCoordinate([loc.coords.longitude, loc.coords.latitude]);
+        },
+      );
+    };
+
+    startTracking();
+
+    return () => {
+      locationSub?.remove();
+    };
+  }, []);
+
+  const distanceLabel = useMemo(() => {
+    if (!hasEventCoordinates || !liveUserCoordinate) {
+      return null;
+    }
+
+    return formatDistance(
+      getDistanceMiles(
+        { latitude: liveUserCoordinate[1], longitude: liveUserCoordinate[0] },
+        { latitude: eventLatitude, longitude: eventLongitude },
+      ),
+    );
+  }, [eventLatitude, eventLongitude, hasEventCoordinates, liveUserCoordinate]);
+
+  const routeShape = useMemo(() => {
+    if (!eventCoordinate || !liveUserCoordinate) {
+      return null;
+    }
+
+    return {
+      type: "Feature" as const,
+      geometry: {
+        type: "LineString" as const,
+        coordinates: generateBezierArc(liveUserCoordinate, eventCoordinate),
+      },
+      properties: {},
+    };
+  }, [eventCoordinate, liveUserCoordinate]);
+
+  useEffect(() => {
+    if (!mapLoaded || !eventCoordinate) {
+      return;
+    }
+
+    if (liveUserCoordinate) {
+      if (initialPositioned.current) return;
+      initialPositioned.current = true;
+
+      const northEast: [number, number] = [
+        Math.max(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.max(eventCoordinate[1], liveUserCoordinate[1]),
+      ];
+      const southWest: [number, number] = [
+        Math.min(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.min(eventCoordinate[1], liveUserCoordinate[1]),
+      ];
+
+      cameraRef.current?.fitBounds(northEast, southWest, [110, 60, 220, 60], 800);
+      return;
+    }
+
+    if (!initialPositioned.current) {
+      cameraRef.current?.setCamera({
+        animationDuration: 600,
+        animationMode: "easeTo",
+        centerCoordinate: eventCoordinate,
+        zoomLevel: 15,
+      });
+    }
+  }, [eventCoordinate, mapLoaded, liveUserCoordinate]);
+
+  const recenterMap = () => {
+    if (!eventCoordinate) {
+      return;
+    }
+
+    if (liveUserCoordinate) {
+      const northEast: [number, number] = [
+        Math.max(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.max(eventCoordinate[1], liveUserCoordinate[1]),
+      ];
+      const southWest: [number, number] = [
+        Math.min(eventCoordinate[0], liveUserCoordinate[0]),
+        Math.min(eventCoordinate[1], liveUserCoordinate[1]),
+      ];
+
+      cameraRef.current?.fitBounds(northEast, southWest, [110, 60, 220, 60], 800);
+      return;
+    }
+
+    cameraRef.current?.setCamera({
+      animationDuration: 600,
+      animationMode: "easeTo",
+      centerCoordinate: eventCoordinate,
+      zoomLevel: 15,
+    });
+  };
+
+  if (!eventCoordinate) {
+    return (
+      <View style={[styles.container, styles.fallbackContainer, { backgroundColor: colors.background }]}>
+        <TouchableOpacity
+          style={[styles.roundButton, { top: insets.top + 12, left: 18 }]}
+          activeOpacity={0.85}
+          onPress={() => router.back()}
+        >
+          <Feather name="chevron-left" size={26} color={colors.text} />
+        </TouchableOpacity>
+        <Ionicons name="map-outline" size={32} color={colors.textSecondary} />
+        <Text style={[styles.fallbackTitle, { color: colors.text }]}>Map unavailable</Text>
+        <Text style={[styles.fallbackText, { color: colors.textSecondary }]}>
+          This event does not have map coordinates.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Mapbox.MapView
+        style={styles.map}
+        styleURL={APP_MAP_STYLE_URL}
+        logoEnabled={false}
+        attributionEnabled={false}
+        rotateEnabled
+        pitchEnabled
+        onDidFinishLoadingMap={() => setMapLoaded(true)}
+      >
+        <Mapbox.Camera
+          ref={cameraRef}
+          animationDuration={0}
+          centerCoordinate={eventCoordinate}
+          zoomLevel={liveUserCoordinate ? 13 : 15}
+        />
+
+        {routeShape && (
+          <Mapbox.ShapeSource id="event-distance-line-source" shape={routeShape}>
+            <Mapbox.LineLayer
+              id="event-distance-line"
+              style={{
+                lineCap: "round",
+                lineJoin: "round",
+                lineColor: "#FFFFFF",
+                lineOpacity: 0.88,
+                lineWidth: 2.5,
+              }}
+            />
+          </Mapbox.ShapeSource>
+        )}
+
+        {liveUserCoordinate && (
+          <Mapbox.MarkerView coordinate={liveUserCoordinate} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={styles.userMarkerOuter} accessibilityLabel="Your location">
+              <View style={styles.userMarkerInner} />
+            </View>
+          </Mapbox.MarkerView>
+        )}
+
+        <Mapbox.MarkerView coordinate={eventCoordinate} anchor={{ x: 0.5, y: 0.5 }}>
+          <View
+            style={[styles.eventMarkerButton, { borderColor: markerColor, shadowColor: markerColor }]}
+            accessibilityLabel={`${eventTitle} location`}
+          >
+            {markerImage ? (
+              <Image source={{ uri: markerImage }} style={styles.eventMarkerImage} contentFit="cover" />
+            ) : (
+              <View style={[styles.eventMarkerDot, { backgroundColor: markerColor }]} />
+            )}
+          </View>
+        </Mapbox.MarkerView>
+      </Mapbox.MapView>
+
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity style={styles.roundButton} activeOpacity={0.85} onPress={() => router.back()}>
+          <Feather name="chevron-left" size={26} color="#FFFFFF" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.roundButton} activeOpacity={0.85} onPress={recenterMap}>
+          <Feather name="crosshair" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.infoCard, { bottom: insets.bottom + 18, backgroundColor: colors.card }]}>
+        {!!distanceLabel && (
+          <View style={[styles.distancePill, { backgroundColor: markerColor }]}>
+            <Feather name="navigation" size={14} color="#FFFFFF" />
+            <Text style={styles.distanceText}>{distanceLabel}</Text>
+          </View>
+        )}
+        <Text style={[styles.infoTitle, { color: colors.text }]} numberOfLines={1}>
+          {eventTitle}
+        </Text>
+        {!!eventVenue && (
+          <Text style={[styles.infoLine, { color: colors.textSecondary }]} numberOfLines={1}>
+            Venue: {eventVenue}
+          </Text>
+        )}
+        {!!eventAddress && (
+          <Text style={[styles.infoLine, { color: colors.textSecondary }]} numberOfLines={2}>
+            Address: {eventAddress}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fallbackContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  fallbackTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 12,
+  },
+  fallbackText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    left: 18,
+    position: "absolute",
+    right: 18,
+    top: 0,
+  },
+  roundButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(17, 17, 17, 0.72)",
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    borderRadius: 26,
+    borderWidth: 1,
+    height: 52,
+    justifyContent: "center",
+    width: 52,
+  },
+  eventMarkerButton: {
+    alignItems: "center",
+    backgroundColor: "#080808",
+    borderRadius: 30,
+    borderWidth: 3,
+    height: 60,
+    justifyContent: "center",
+    overflow: "hidden",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.75,
+    shadowRadius: 12,
+    width: 60,
+  },
+  eventMarkerImage: {
+    height: "100%",
+    width: "100%",
+  },
+  eventMarkerDot: {
+    borderRadius: 8,
+    height: 16,
+    width: 16,
+  },
+  userMarkerOuter: {
+    alignItems: "center",
+    backgroundColor: "rgba(47, 128, 237, 0.24)",
+    borderColor: "#FFFFFF",
+    borderRadius: 17,
+    borderWidth: 2,
+    height: 34,
+    justifyContent: "center",
+    shadowColor: USER_MARKER_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.85,
+    shadowRadius: 12,
+    width: 34,
+  },
+  userMarkerInner: {
+    backgroundColor: USER_MARKER_COLOR,
+    borderColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 2,
+    height: 16,
+    width: 16,
+  },
+  infoCard: {
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
+    left: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    position: "absolute",
+    right: 18,
+  },
+  distancePill: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  distanceText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 22,
+  },
+  infoLine: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
+});

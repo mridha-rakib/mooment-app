@@ -1,0 +1,543 @@
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import CinematicButton from '@/components/ui/CinematicButton';
+import UserAvatar from '@/components/ui/UserAvatar';
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { createGroup, getDirectMessageConversations } from '@/lib/chat';
+import { safeBack } from '@/lib/navigation';
+import type { DirectMessageConversationResponse } from '@/lib/chat';
+import { uploadFileToStorage } from '@/lib/storage';
+import { useTheme } from '@/hooks/useTheme';
+
+export default function CreateGroupScreen() {
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [friends, setFriends] = useState<DirectMessageConversationResponse[]>([]);
+  const [isFriendsLoading, setIsFriendsLoading] = useState(true);
+  const [friendsError, setFriendsError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
+  const [pendingAvatarKey, setPendingAvatarKey] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadFriends = async () => {
+      setIsFriendsLoading(true);
+      setFriendsError(null);
+
+      try {
+        const dms = await getDirectMessageConversations();
+
+        if (isMounted) {
+          setFriends(dms);
+        }
+      } catch {
+        if (isMounted) {
+          setFriendsError('Unable to load friends. Please try again.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsFriendsLoading(false);
+        }
+      }
+    };
+
+    void loadFriends();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredFriends = friends.filter((friend) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      friend.name.toLowerCase().includes(q) ||
+      (friend.username ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  const toggleUser = useCallback((id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id],
+    );
+  }, []);
+
+  const handleContinue = () => {
+    if (selectedIds.length === 0) {
+      Alert.alert('No Members Selected', 'Please select at least one friend to add to the group.');
+      return;
+    }
+    setIsModalVisible(true);
+  };
+
+  const handlePickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permission Required', 'Please allow photo library access to set a group image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      mediaTypes: ['images'],
+      quality: 0.85,
+    });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const extension = (asset.uri.split('.').pop() ?? 'jpg').toLowerCase();
+    const contentType = extension === 'png' ? 'image/png' : 'image/jpeg';
+    const key = `groups/avatars/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+
+    setPendingAvatarUri(asset.uri);
+    setIsUploadingImage(true);
+
+    try {
+      const uploadedKey = await uploadFileToStorage({ uri: asset.uri, key, contentType });
+      setPendingAvatarKey(uploadedKey);
+    } catch {
+      Alert.alert('Upload Failed', 'Unable to upload the group image. You can still create the group without one.');
+      setPendingAvatarUri(null);
+      setPendingAvatarKey(null);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    const trimmedName = groupName.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Group Name Required', 'Please enter a name for your group.');
+      return;
+    }
+
+    setIsCreating(true);
+
+    try {
+      await createGroup({
+        name: trimmedName,
+        memberIds: selectedIds,
+        avatarKey: pendingAvatarKey ?? null,
+      });
+
+      setIsModalVisible(false);
+      safeBack(router, '/(tabs)/messages');
+    } catch (error: unknown) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Unable to create the group. Please try again.';
+      Alert.alert('Creation Failed', message);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleDismissModal = () => {
+    if (isCreating || isUploadingImage) return;
+    setIsModalVisible(false);
+  };
+
+  const renderFriend = ({ item }: { item: DirectMessageConversationResponse }) => {
+    const isSelected = selectedIds.includes(item.friendId);
+
+    return (
+      <View style={styles.contactRow}>
+        <UserAvatar uri={item.avatarUrl} name={item.name} size={48} style={[styles.avatar, isSelected && { borderColor: colors.primary, borderWidth: 2 }]} />
+        <View style={styles.contactInfo}>
+          <Text style={[styles.contactName, { color: colors.text }]}>{item.name}</Text>
+          {item.username ? (
+            <Text style={[styles.contactHandle, { color: colors.textSecondary }]}>@{item.username}</Text>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.addBtn,
+            {
+              backgroundColor: isSelected
+                ? (isDark ? '#1F1F27' : '#E5E5EA')
+                : (isDark ? '#2A2A35' : '#F2F2F7'),
+              borderColor: isSelected ? 'transparent' : colors.border,
+              borderWidth: isSelected ? 0 : StyleSheet.hairlineWidth,
+            },
+          ]}
+          onPress={() => toggleUser(item.friendId)}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.addBtnText,
+              {
+                color: isSelected
+                  ? colors.textSecondary
+                  : (isDark ? '#FFFFFF' : '#000000'),
+              },
+            ]}
+          >
+            {isSelected ? 'Added' : 'Add'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <CinematicButton onPress={() => safeBack(router, '/(tabs)/messages')} icon={ArrowLeft01Icon} size={20} />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Group</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Feather name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search"
+          placeholderTextColor={colors.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
+      {/* Selected count hint */}
+      {selectedIds.length > 0 && (
+        <Text style={[styles.selectionHint, { color: colors.primary }]}>
+          {selectedIds.length} {selectedIds.length === 1 ? 'friend' : 'friends'} selected
+        </Text>
+      )}
+
+      {/* Friend List */}
+      {isFriendsLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : friendsError ? (
+        <View style={styles.centered}>
+          <Text style={[styles.errorText, { color: colors.danger }]}>{friendsError}</Text>
+          <TouchableOpacity
+            style={[styles.retryBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
+            onPress={() => {
+              setFriendsError(null);
+              setIsFriendsLoading(true);
+              getDirectMessageConversations()
+                .then(setFriends)
+                .catch(() => setFriendsError('Unable to load friends. Please try again.'))
+                .finally(() => setIsFriendsLoading(false));
+            }}
+          >
+            <Text style={[styles.retryText, { color: colors.text }]}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredFriends.length === 0 ? (
+        <View style={styles.centered}>
+          <Feather name="users" size={40} color={colors.textSecondary} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            {searchQuery.trim() ? 'No friends match your search' : 'No mutual friends found'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredFriends}
+          keyExtractor={(item) => item.friendId}
+          renderItem={renderFriend}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {/* Bottom Action Bar */}
+      <View style={[styles.bottomBar, { backgroundColor: colors.background, borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+        <TouchableOpacity
+          style={[styles.bottomCancelBtn, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, borderWidth: 1 }]}
+          onPress={() => safeBack(router, '/(tabs)/messages')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.bottomCancelText, { color: colors.text }]}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.bottomContinueBtn,
+            { backgroundColor: isDark ? '#FFFFFF' : '#000000' },
+            selectedIds.length === 0 && styles.bottomContinueBtnDisabled,
+          ]}
+          onPress={handleContinue}
+          activeOpacity={0.8}
+          disabled={selectedIds.length === 0}
+        >
+          <Text style={[styles.bottomContinueText, { color: isDark ? '#000000' : '#FFFFFF' }]}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Create Group Modal */}
+      <Modal
+        visible={isModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleDismissModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={handleDismissModal}
+          />
+
+          <View style={[styles.modalSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.dragHandleWrap}>
+              <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Group Name</Text>
+
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, borderWidth: 1, color: colors.text }]}
+              placeholder="Name your group"
+              placeholderTextColor={colors.textSecondary}
+              value={groupName}
+              onChangeText={setGroupName}
+              maxLength={100}
+              returnKeyType="done"
+            />
+
+            {/* Image preview or upload button */}
+            {pendingAvatarUri ? (
+              <TouchableOpacity
+                style={styles.avatarPreviewWrap}
+                onPress={isUploadingImage ? undefined : handlePickImage}
+                activeOpacity={0.8}
+              >
+                <Image source={{ uri: pendingAvatarUri }} style={styles.avatarPreview} />
+                {isUploadingImage ? (
+                  <View style={styles.avatarOverlay}>
+                    <ActivityIndicator color="#FFF" />
+                  </View>
+                ) : (
+                  <View style={styles.avatarOverlay}>
+                    <Feather name="edit-2" size={16} color="#FFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.uploadBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+                onPress={isUploadingImage ? undefined : handlePickImage}
+                activeOpacity={0.8}
+              >
+                {isUploadingImage ? (
+                  <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} style={{ marginRight: 8 }} />
+                ) : (
+                  <Feather name="arrow-up-circle" size={18} color={isDark ? '#000000' : '#FFFFFF'} style={styles.uploadIcon} />
+                )}
+                <Text style={[styles.uploadBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
+                  {isUploadingImage ? 'Uploading...' : 'Upload Image'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { backgroundColor: colors.backgroundSecondary, borderRadius: 12, marginRight: 8 }]}
+                onPress={handleDismissModal}
+                activeOpacity={0.8}
+                disabled={isCreating}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.text }, isCreating && { opacity: 0.4 }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalCreateBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }, isCreating && { opacity: 0.7 }]}
+                onPress={handleCreate}
+                activeOpacity={0.8}
+                disabled={isCreating}
+              >
+                {isCreating ? (
+                  <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} size="small" />
+                ) : (
+                  <Text style={[styles.modalCreateText, { color: isDark ? '#000000' : '#FFFFFF' }]}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
+
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 12,
+  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 14 },
+
+  selectionHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  errorText: { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  retryText: { fontSize: 13, fontWeight: '600' },
+  emptyText: { fontSize: 14, textAlign: 'center' },
+
+  listContent: { paddingHorizontal: 16, paddingBottom: 120 },
+  contactRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
+  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 14 },
+  avatarSelected: {},
+  contactInfo: { flex: 1 },
+  contactName: { fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
+  contactHandle: { fontSize: 12 },
+  addBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  addBtnSelected: {},
+  addBtnText: { fontSize: 13, fontWeight: 'bold' },
+  addBtnTextSelected: {},
+  separator: { height: 1, marginLeft: 64 },
+
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  bottomCancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  bottomCancelText: { fontSize: 15, fontWeight: 'bold' },
+  bottomContinueBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  bottomContinueBtnDisabled: { opacity: 0.4 },
+  bottomContinueText: { fontSize: 15, fontWeight: 'bold' },
+
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject },
+  modalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+    borderWidth: 1,
+  },
+  dragHandleWrap: { alignItems: 'center', marginBottom: 20 },
+  dragHandle: { width: 40, height: 4, borderRadius: 2 },
+
+  modalTitle: { fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
+  modalInput: {
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginBottom: 32,
+  },
+  uploadIcon: { marginRight: 8 },
+  uploadBtnText: { fontSize: 14, fontWeight: '600' },
+
+  avatarPreviewWrap: {
+    alignSelf: 'center',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 32,
+    overflow: 'hidden',
+  },
+  avatarPreview: { width: 80, height: 80, borderRadius: 40 },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  modalActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
+  modalCancelText: { fontSize: 14, fontWeight: '600' },
+  modalCreateBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  modalCreateText: { fontSize: 14, fontWeight: 'bold' },
+});

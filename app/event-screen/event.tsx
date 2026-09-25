@@ -1,0 +1,3593 @@
+import AboutTab from "@/components/eventTabs/AboutTab";
+import AccessTab from "@/components/eventTabs/AccessTab";
+import ChatTab, { type ChatTabRefreshHandle } from "@/components/eventTabs/ChatTab";
+// ProductTab hidden — preserved for future restoration
+// import ProductTab from "@/components/eventTabs/ProductTab";
+import HostEventWindowsTab from "@/components/eventTabs/HostEventWindowsTab";
+import AttendeeEventWindowsTab from "@/components/eventTabs/AttendeeEventWindowsTab";
+import EventCancellationReasonModal from "@/components/events/EventCancellationReasonModal";
+import CrowdStatusBadge, { EventLifecycleBadge } from "@/components/events/CrowdStatusBadge";
+import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
+import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import {
+    acceptJoinRequest,
+    cancelEvent,
+    claimEventReward,
+    declineJoinRequest,
+    deleteDraftReward,
+    deleteDraftTicket,
+    deleteEventReward,
+    deleteEventTicket,
+    getEventById,
+    getJoinRequests,
+    getMyEventRewardClaims,
+    publishEvent as publishSavedEventDraft,
+    saveEventDraft,
+    submitJoinRequest,
+    submitEventHostReview,
+    ticketAlreadyHasReward,
+    updateEvent,
+    type EventResponse,
+    type EventPrivacy,
+    type PublishedEventPayload,
+    type EventRewardPayload,
+    type EventRewardType,
+    type EventTicketPayload,
+    type JoinRequest,
+    type JoinRequestStatus,
+} from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
+import { getEventTicketStats, getMyTicketPurchaseCounts, type TicketStatEntry } from "@/lib/payments";
+import {
+  EVENT_BANNER_FALLBACK_URI,
+  getEventBannerContentPosition,
+  getEventBannerKey,
+} from "@/lib/eventBanner";
+import { getStorageFileUrl } from "@/lib/storage";
+import { navigateToProfile } from "@/lib/profileNavigation";
+import { blockUser, followUser, unfollowUser } from "@/lib/users";
+import { toggleMomentReaction, toggleMomentSave, shareMoment, type MomentInteractionSummary, type RepostPayload } from "@/lib/moments";
+import CommentsModal from "@/components/post/CommentsModal";
+import ShareModal from "@/components/post/ShareModal";
+import ReportModal from "@/components/modals/ReportModal";
+import ReportDetailsModal from "@/components/modals/ReportDetailsModal";
+import PostInteractionBar from "@/components/post/PostInteractionBar";
+import PublicGoingSummaryRow from "@/components/events/PublicGoingSummaryRow";
+import { requireBusinessAccountForEvent } from "@/lib/eventGuard";
+import { submitReportWithOptionalBlock } from "@/lib/reportBlockFlow";
+import { submitReport } from "@/lib/reports";
+import { notifySuccess } from "@/lib/successFeedback";
+import { tapFeedback } from "@/lib/microFeedback";
+import { useAuthStore } from "@/stores/authStore";
+import { useEventDraftStore } from "@/stores/eventDraftStore";
+import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
+import type { EventCategory } from "@/constants/eventCategories";
+import {
+    getEventCategoryFeedDestination,
+    getEventCategoryMapDestination,
+} from "@/lib/eventCategoryNavigation";
+import { normalizeEventCategoryFilter } from "@/lib/eventFilters";
+import { isEventEndedByTime } from "@/lib/eventStepTwoValidation";
+import {
+  getPurchasableTicketsRemaining,
+  isTicketSalesEnded as isTicketSalesEndedShared,
+} from "@/lib/mapTicketSummary";
+import { isTicketCreationCutoffReached } from "@/lib/ticketAvailability";
+import { Feather } from "@expo/vector-icons";
+import {
+    Bookmark01Icon,
+    Flag01Icon,
+    MoreHorizontalIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
+
+const { width } = Dimensions.get("window");
+const CHAT_COMPOSER_KEYBOARD_GAP = 8;
+const REVIEW_KEYBOARD_GAP = 12;
+const DEFAULT_BANNER = EVENT_BANNER_FALLBACK_URI;
+
+const isDirectMediaUrl = (value?: string | null) =>
+  Boolean(value && /^(https?:|data:|file:|content:)/i.test(value.trim()));
+
+const getNonEmptyString = (...values: (string | null | undefined)[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+};
+
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const getDistanceMiles = (from: [number, number], to: [number, number]) => {
+  const earthRadiusKm = 6371;
+  const [fromLongitude, fromLatitude] = from;
+  const [toLongitude, toLatitude] = to;
+  const latitudeDelta = toRadians(toLatitude - fromLatitude);
+  const longitudeDelta = toRadians(toLongitude - fromLongitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(fromLatitude)) *
+      Math.cos(toRadians(toLatitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  const distanceKm = 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return distanceKm * 0.621371;
+};
+
+function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
+function resolveStorageUrl(key?: string | null, fallback?: string | null): string | null;
+function resolveStorageUrl(key?: string | null, fallback: string | null = null) {
+  if (!key) {
+    return fallback;
+  }
+
+  if (isDirectMediaUrl(key)) {
+    return key.trim();
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return fallback;
+  }
+}
+
+const formatPrice = (tickets: EventResponse["tickets"]) => {
+  const prices = tickets
+    .map((ticket) => (ticket.type === "free" ? 0 : ticket.price))
+    .filter((price) => Number.isFinite(price));
+
+  if (prices.length === 0 || Math.min(...prices) <= 0) {
+    return "Free";
+  }
+
+  const price = Math.min(...prices);
+
+  return `From $${price.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(price) ? 0 : 2,
+  })}`;
+};
+
+// Purchasable inventory only: excludes tiers whose sales deadline has passed
+// (server-derived `salesEnded`), matching the Map summary and Checkout. Same
+// authoritative field (availableCount, with the legacy capacity fallback).
+const getTicketsLeft = (tickets: EventResponse["tickets"], nowMs = Date.now()) =>
+  getPurchasableTicketsRemaining(tickets ?? [], nowMs);
+
+const getTicketKey = (ticket: EventTicketPayload, index: number) =>
+  ticket.id ?? `${ticket.name}-${index}`;
+
+const clampTicketQuantity = (quantity: number, ticket: EventTicketPayload) =>
+  Math.min(Math.max(1, quantity), Math.min(2, Math.max(1, ticket.availableCount ?? ticket.capacity)));
+
+// Prefers the backend server-derived `salesEnded` flag (see mapTicketSummary);
+// only falls back to the device-clock comparison for legacy payloads without it.
+const isTicketSalesEnded = (ticket?: EventTicketPayload | null, nowMs = Date.now()) =>
+  ticket ? isTicketSalesEndedShared(ticket, nowMs) : false;
+
+const getDateTimeMs = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const time = new Date(value).getTime();
+
+  return Number.isNaN(time) ? null : time;
+};
+
+const shouldRefreshChatForEvent = (event?: EventResponse | null) => {
+  if (!event || event.status === "draft") {
+    return false;
+  }
+
+  const now = Date.now();
+  const startMs = getDateTimeMs(event.scheduledAt);
+  const endMs = getDateTimeMs(event.endAt);
+  const eventStarted = startMs === null || startMs <= now;
+  const eventClosed = event.status === "completed" || event.status === "cancelled" || (endMs !== null && endMs <= now);
+
+  return eventStarted && !eventClosed;
+};
+
+const getEventMediaOrder = (item: NonNullable<EventResponse["eventMedia"]>[number]) => (
+  typeof item.displayOrder === "number"
+    ? item.displayOrder
+    : new Date(item.createdAt).getTime()
+);
+
+const mergeEventMedia = (
+  currentMedia?: EventResponse["eventMedia"],
+  incomingMedia?: EventResponse["eventMedia"],
+) => {
+  if (!currentMedia?.length && !incomingMedia?.length) {
+    return incomingMedia;
+  }
+
+  const mediaById = new Map<string, NonNullable<EventResponse["eventMedia"]>[number]>();
+
+  for (const item of currentMedia ?? []) {
+    mediaById.set(item.id, item);
+  }
+
+  for (const item of incomingMedia ?? []) {
+    mediaById.set(item.id, item);
+  }
+
+  return [...mediaById.values()].sort((first, second) => {
+    const orderDelta = getEventMediaOrder(first) - getEventMediaOrder(second);
+
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    return first.id.localeCompare(second.id);
+  });
+};
+
+const mergeEventResponse = (
+  currentEvent: EventResponse | null,
+  updatedEvent: EventResponse,
+  options: { preserveCurrentMedia?: boolean; deletedMediaIds?: Set<string> } = {},
+): EventResponse => {
+  if (!currentEvent) {
+    return updatedEvent;
+  }
+
+  const mergedEvent: EventResponse = {
+    ...currentEvent,
+    ...updatedEvent,
+    host: updatedEvent.host ?? currentEvent.host,
+  };
+
+  if (options.preserveCurrentMedia || updatedEvent.eventMedia) {
+    const mergedMedia = mergeEventMedia(
+      options.preserveCurrentMedia ? currentEvent.eventMedia : undefined,
+      updatedEvent.eventMedia,
+    );
+    mergedEvent.eventMedia = options.deletedMediaIds?.size
+      ? mergedMedia?.filter((item) => !options.deletedMediaIds?.has(item.id))
+      : mergedMedia;
+  } else if (currentEvent.eventMedia) {
+    mergedEvent.eventMedia = currentEvent.eventMedia;
+  }
+
+  return mergedEvent;
+};
+
+const formatTicketPurchasePrice = (ticket: EventTicketPayload, quantity = 1) => {
+  if (ticket.type === "free" || ticket.price <= 0) {
+    return "Free";
+  }
+
+  const total = ticket.price * quantity;
+
+  return `$${total.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(total) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(total) ? 0 : 2,
+  })}`;
+};
+
+const buildPublishPayloadFromEvent = (event: EventResponse): PublishedEventPayload => {
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+
+  if (!event.name?.trim()) {
+    throw new Error("Event name is required before publishing.");
+  }
+
+  if (!event.ageRestriction) {
+    throw new Error("Age restriction is required before publishing.");
+  }
+
+  if (categories.length === 0) {
+    throw new Error("Select at least 1 category before publishing.");
+  }
+
+  if (!event.scheduledAt || !event.endAt) {
+    throw new Error("Select the event start and end dates and times before publishing.");
+  }
+
+  if (!event.location || !(event.location.venue || event.location.address || event.location.searchLabel)) {
+    throw new Error("Location is required before publishing.");
+  }
+
+  return {
+    ageRestriction: event.ageRestriction,
+    bannerImageKey: event.bannerImageKey ?? null,
+    bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+    bannerImageDisplay: event.bannerImageDisplay ?? null,
+    category: categories[0],
+    categories,
+    description: event.description ?? null,
+    endAt: event.endAt,
+    location: event.location,
+    name: event.name.trim(),
+    privacy: event.privacy,
+    scheduledAt: event.scheduledAt,
+    tickets: event.tickets.map(({ id, name, description, salesEndAt, type, price, capacity }) => ({
+      id,
+      name,
+      description: description ?? null,
+      salesEndAt: salesEndAt ?? null,
+      type,
+      price,
+      capacity,
+    })),
+  };
+};
+
+const getDistanceLabel = (
+  event: EventResponse | null,
+  userLocation: [number, number] | null,
+): string => {
+  const latitude = event?.location?.latitude;
+  const longitude = event?.location?.longitude;
+
+  if (
+    userLocation &&
+    isFiniteCoordinate(latitude) &&
+    isFiniteCoordinate(longitude)
+  ) {
+    const miles = getDistanceMiles(userLocation, [longitude, latitude]);
+
+    if (miles < 0.1) {
+      return "nearby";
+    }
+
+    return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()} mi`;
+  }
+
+    return "nearby";
+};
+
+const getBannerImageUri = (event?: EventResponse | null) =>
+  resolveStorageUrl(getEventBannerKey(event), DEFAULT_BANNER);
+
+const getEventBannerImageUris = (event?: EventResponse | null) => {
+  const urls = [
+    event?.bannerImageKey ? resolveStorageUrl(event.bannerImageKey, DEFAULT_BANNER) : null,
+    event?.bannerOriginalImageKey ? resolveStorageUrl(event.bannerOriginalImageKey, DEFAULT_BANNER) : null,
+  ].filter((url): url is string => Boolean(url));
+
+  return [...new Set(urls)];
+};
+
+const getHostAvatarUri = (event?: EventResponse | null) => {
+  const avatarKey = getNonEmptyString(event?.host?.avatarKey);
+
+  if (avatarKey) {
+    return resolveStorageUrl(avatarKey, null);
+  }
+
+  const avatarUrl = getNonEmptyString(event?.host?.avatarUrl);
+
+  if (avatarUrl) {
+    return resolveStorageUrl(avatarUrl, null);
+  }
+
+  return null;
+};
+
+const getHostHandle = (event?: EventResponse | null) => {
+  const handle = event?.host?.username?.trim().replace(/^@+/, "");
+
+  return handle ? `@${handle}` : "";
+};
+
+const getHeroCategoryTags = (event?: EventResponse | null) => {
+  if (!event) {
+    return [];
+  }
+
+  const tags = event.categories?.length
+    ? event.categories
+    : event.category
+      ? [event.category]
+      : [];
+
+  return tags.slice(0, 3);
+};
+
+const getPrivacyLabel = (privacy?: EventResponse["privacy"]) => {
+  if (privacy === "private") return "Private Event";
+  if (privacy === "locked") return "Locked Event";
+  return "Public Event";
+};
+
+const isSameId = (left?: string | null, right?: string | null) =>
+  Boolean(left && right && left.toLowerCase() === right.toLowerCase());
+
+const MONGO_OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
+const goBackOrHome = (router: ReturnType<typeof useRouter>) => {
+  // While logged out (or mid-logout) never step back into the stack — a
+  // previous entry could be another protected screen. Go straight to
+  // onboarding instead. Authenticated behavior is unchanged.
+  const { isAuthenticated, isLoggingOut } = useAuthStore.getState();
+  if (!isAuthenticated || isLoggingOut) {
+    router.replace("/auth-screen/onboarding");
+    return;
+  }
+
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+
+  router.replace("/(tabs)/home");
+};
+
+// Single source of truth for the posting-windows tab's label/identifier —
+// used as both the displayed tab text and the activeTab comparison key, so
+// renaming it never requires touching more than this one constant.
+const EVENT_WINDOW_TAB = "Scene";
+
+const EventScreen = () => {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ eventId?: string; id?: string; mode?: string; source?: string }>();
+  const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const currentUser = useAuthStore((state) => state.user);
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const draftId = useEventDraftStore((state) => state.draftId);
+  const loadEventForEdit = useEventDraftStore((state) => state.loadFromEvent);
+  const [activeTab, setActiveTab] = useState("About");
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [previewEditSelectorVisible, setPreviewEditSelectorVisible] = useState(false);
+  const [privacyDropdownVisible, setPrivacyDropdownVisible] = useState(false);
+  const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+  const [isPublishingDraft, setIsPublishingDraft] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowPending, setIsFollowPending] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+  const [deletingRewardId, setDeletingRewardId] = useState<string | null>(null);
+  const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [claimedRewardIds, setClaimedRewardIds] = useState<string[]>([]);
+  const [event, setEvent] = useState<EventResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [purchasedTicketCounts, setPurchasedTicketCounts] = useState<Record<string, number>>({});
+  const [ticketStats, setTicketStats] = useState<Record<string, TicketStatEntry> | undefined>(undefined);
+  const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
+  const [selectedTicketQuantity, setSelectedTicketQuantity] = useState(1);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+  const [accessSubTab, setAccessSubTab] = useState("Tickets");
+  const isEventCompleted = event?.status === 'completed';
+  const isEventCancelled = event?.status === 'cancelled';
+  const [selectedReward, setSelectedReward] = useState<EventRewardPayload | null>(null);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [submittingJoinRequest, setSubmittingJoinRequest] = useState(false);
+  const [acceptingJoinRequestId, setAcceptingJoinRequestId] = useState<string | null>(null);
+  const [decliningJoinRequestId, setDecliningJoinRequestId] = useState<string | null>(null);
+  const [myJoinRequestStatus, setMyJoinRequestStatus] = useState<JoinRequestStatus | null>(null);
+  const [localLikesCount, setLocalLikesCount] = useState(0);
+  const [localCommentsCount, setLocalCommentsCount] = useState(0);
+  const [localSharesCount, setLocalSharesCount] = useState(0);
+  const [localIsLiked, setLocalIsLiked] = useState(false);
+  const [isLikePending, setIsLikePending] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportReasonVisible, setReportReasonVisible] = useState(false);
+  const [reportDetailsVisible, setReportDetailsVisible] = useState(false);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
+  const isReportSubmittingRef = useRef(false);
+  const refreshRequestRef = useRef(false);
+  const eventMediaWriteGenerationRef = useRef(0);
+  const deletedEventMediaIdsRef = useRef(new Set<string>());
+  const windowsRefreshRef = useRef<{ refresh: () => Promise<void> } | null>(null);
+  const chatRefreshRef = useRef<ChatTabRefreshHandle | null>(null);
+  const outerScrollRef = useRef<ScrollView>(null);
+  const outerScrollMetricsRef = useRef({
+    contentHeight: 0,
+    offsetY: 0,
+    viewportHeight: Dimensions.get("window").height,
+  });
+  const keyboardTopRef = useRef(Dimensions.get("window").height);
+  const keyboardVisibleRef = useRef(false);
+  const [chatKeyboardSpacerHeight, setChatKeyboardSpacerHeight] = useState(0);
+  const scrollChatComposerIntoView = useCallback((animated = true) => {
+    const chatHandle = chatRefreshRef.current;
+
+    if (!chatHandle) {
+      return;
+    }
+
+    chatHandle.measureComposerInWindow((_, composerY, __, composerHeight) => {
+      const composerBottom = composerY + composerHeight;
+      const visibleBottom = keyboardVisibleRef.current
+        ? keyboardTopRef.current - CHAT_COMPOSER_KEYBOARD_GAP
+        : outerScrollMetricsRef.current.viewportHeight;
+      const requiredDelta = composerBottom - visibleBottom;
+
+      if (requiredDelta <= 0) {
+        return;
+      }
+
+      outerScrollRef.current?.scrollTo({
+        y: outerScrollMetricsRef.current.offsetY + requiredDelta,
+        animated,
+      });
+    });
+  }, []);
+  const scheduleChatComposerReveal = useCallback((animated = true) => {
+    requestAnimationFrame(() => scrollChatComposerIntoView(animated));
+  }, [scrollChatComposerIntoView]);
+  const handleComposerFocus = useCallback(() => {
+    if (keyboardVisibleRef.current) {
+      scheduleChatComposerReveal(true);
+    }
+  }, [scheduleChatComposerReveal]);
+  const handleOuterScrollLayout = useCallback((event: LayoutChangeEvent) => {
+    outerScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+
+    if (keyboardVisibleRef.current) {
+      scheduleChatComposerReveal(false);
+    }
+  }, [scheduleChatComposerReveal]);
+  const handleOuterScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    outerScrollMetricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
+    outerScrollMetricsRef.current.viewportHeight = event.nativeEvent.layoutMeasurement.height;
+  }, []);
+  const handleOuterContentSizeChange = useCallback((_: number, contentHeight: number) => {
+    outerScrollMetricsRef.current.contentHeight = contentHeight;
+
+    if (keyboardVisibleRef.current) {
+      scheduleChatComposerReveal(false);
+    }
+  }, [scheduleChatComposerReveal]);
+  const [pendingCategoryDestination, setPendingCategoryDestination] = useState<EventCategory | null>(null);
+  const [isCategoryDestinationNavigating, setIsCategoryDestinationNavigating] = useState(false);
+  const [localIsSaved, setLocalIsSaved] = useState(false);
+  const [hasReportedEvent, setHasReportedEvent] = useState(false);
+  const [isSavePending, setIsSavePending] = useState(false);
+  const [footerHeight, setFooterHeight] = useState(0);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewLiked, setReviewLiked] = useState<boolean | null>(null);
+  const [reviewText, setReviewText] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewKeyboardHeight, setReviewKeyboardHeight] = useState(0);
+  const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
+  const [isCancellingEvent, setIsCancellingEvent] = useState(false);
+
+  const eventId = useMemo(() => {
+    const explicitId = typeof params.eventId === "string" ? params.eventId : typeof params.id === "string" ? params.id : null;
+
+    return explicitId ?? draftId;
+  }, [draftId, params.eventId, params.id]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setCurrentTimeMs(Date.now()), 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "Chat") {
+      keyboardVisibleRef.current = false;
+      keyboardTopRef.current = Dimensions.get("window").height;
+      setChatKeyboardSpacerHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      keyboardVisibleRef.current = true;
+      keyboardTopRef.current =
+        event.endCoordinates.screenY > 0
+          ? event.endCoordinates.screenY
+          : Dimensions.get("window").height - event.endCoordinates.height;
+      setChatKeyboardSpacerHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      keyboardVisibleRef.current = false;
+      keyboardTopRef.current = Dimensions.get("window").height;
+      setChatKeyboardSpacerHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (chatKeyboardSpacerHeight > 0) {
+      scheduleChatComposerReveal(true);
+    }
+  }, [chatKeyboardSpacerHeight, scheduleChatComposerReveal]);
+
+  useEffect(() => {
+    if (!reviewModalVisible) {
+      setReviewKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setReviewKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setReviewKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [reviewModalVisible]);
+
+  const closeReviewModal = useCallback(() => {
+    if (isSubmittingReview) {
+      return;
+    }
+
+    Keyboard.dismiss();
+    setReviewModalVisible(false);
+  }, [isSubmittingReview]);
+
+  const { sheetTranslateY: reviewSheetTranslateY, dragPanHandlers: reviewDragPanHandlers } =
+    useBottomSheetDragDismiss({ visible: reviewModalVisible, onClose: closeReviewModal });
+
+  const isEventOwner = Boolean(
+    event && (isSameId(currentUser?.id, event.userId) || isSameId(currentUser?.id, event.host?.id)),
+  );
+  const isHostMode = params.mode === "host" || isEventOwner;
+  const isDraftPreview = Boolean(event && event.status === "draft" && isEventOwner);
+  const eventStartMs = getDateTimeMs(event?.scheduledAt);
+  const eventEndMs = getDateTimeMs(event?.endAt);
+  const isEventEndedByPersistedTime = isEventEndedByTime(event?.endAt, currentTimeMs);
+  const isEventEditBlocked = Boolean(isEventCompleted || isEventCancelled || isEventEndedByPersistedTime);
+  useEffect(() => {
+    if (eventStartMs === null || eventStartMs <= currentTimeMs) {
+      return;
+    }
+
+    const timeoutId = setTimeout(
+      () => setCurrentTimeMs(Date.now()),
+      Math.min(eventStartMs - currentTimeMs, 2_147_483_647),
+    );
+
+    return () => clearTimeout(timeoutId);
+  }, [currentTimeMs, eventStartMs]);
+
+  const showCancelEvent = Boolean(
+    isHostMode &&
+    event?.status === "published" &&
+    eventStartMs !== null &&
+    currentTimeMs < eventStartMs,
+  );
+  const showHostLifecycleFooter = showCancelEvent;
+  const hasValidEventWindowSchedule = Boolean(
+    eventStartMs !== null && eventEndMs !== null && eventStartMs < eventEndMs,
+  );
+  const canManageEventWindows = Boolean(
+    isEventOwner &&
+    event &&
+    (event.status === "draft" || event.status === "published" || event.status === "live") &&
+    hasValidEventWindowSchedule &&
+    eventEndMs !== null &&
+    eventEndMs > currentTimeMs,
+  );
+  const visibleTabs = useMemo(
+    () => ["About", "Access", EVENT_WINDOW_TAB, "Chat"],
+    [],
+  );
+
+  const loadEventDetails = useCallback(async ({
+    setInitialLoading = false,
+    navigateOnError = false,
+    isActive = () => true,
+  }: {
+    setInitialLoading?: boolean;
+    navigateOnError?: boolean;
+    isActive?: () => boolean;
+  } = {}) => {
+    // Logout in progress (or already signed out): do not fetch, do not
+    // surface "Unable to load event", do not navigate. The auth gate owns
+    // the redirect to onboarding. Authenticated loads are unaffected.
+    const { isAuthenticated, isLoggingOut } = useAuthStore.getState();
+    if (isLoggingOut || !isAuthenticated) {
+      return null;
+    }
+
+    if (!eventId) {
+      if (navigateOnError) {
+        Alert.alert("Unable to load event", "Missing event id.");
+        goBackOrHome(router);
+      }
+      return null;
+    }
+
+    if (setInitialLoading) {
+      setIsLoading(true);
+    }
+
+    const mediaWriteGenerationAtStart = eventMediaWriteGenerationRef.current;
+
+    try {
+      const loadedEvent = await getEventById(eventId);
+      const isLoadedDraft = loadedEvent.status === "draft";
+      const isLoadedOwner = Boolean(
+        currentUser?.id &&
+        (isSameId(currentUser.id, loadedEvent.userId) || isSameId(currentUser.id, loadedEvent.host?.id)),
+      );
+      const shouldLoadJoinRequests = loadedEvent.privacy === "locked" && isLoadedOwner && !isLoadedDraft;
+      const shouldLoadTicketStats = (params.mode === "host" || isLoadedOwner) && !isLoadedDraft;
+      const [
+        loadedClaims,
+        loadedCounts,
+        loadedJoinRequests,
+        loadedTicketStatsResult,
+      ] = await Promise.all([
+        isLoadedDraft ? Promise.resolve([]) : getMyEventRewardClaims(eventId).catch(() => []),
+        isLoadedDraft ? Promise.resolve({}) : getMyTicketPurchaseCounts(eventId).catch(() => ({})),
+        shouldLoadJoinRequests ? getJoinRequests(eventId).catch(() => []) : Promise.resolve([]),
+        shouldLoadTicketStats
+          ? getEventTicketStats(eventId)
+              .then((stats) => ({ ok: true as const, stats }))
+              .catch(() => ({ ok: false as const }))
+          : Promise.resolve({ ok: true as const, stats: undefined }),
+      ]);
+
+      if (!isActive()) {
+        return null;
+      }
+
+      setEvent((currentEvent) =>
+        mergeEventResponse(currentEvent, loadedEvent, {
+          preserveCurrentMedia: eventMediaWriteGenerationRef.current > mediaWriteGenerationAtStart,
+          deletedMediaIds: deletedEventMediaIdsRef.current,
+        }));
+      setIsFollowing(Boolean(loadedEvent.host?.isFollowing));
+      setClaimedRewardIds(loadedClaims.map((c) => c.rewardId));
+      setPurchasedTicketCounts(loadedCounts);
+      setMyJoinRequestStatus(loadedEvent.myJoinRequestStatus ?? null);
+      setJoinRequests(loadedJoinRequests);
+
+      if (!shouldLoadTicketStats) {
+        setTicketStats(undefined);
+      } else if (loadedTicketStatsResult.ok) {
+        setTicketStats(loadedTicketStatsResult.stats);
+      }
+
+      return loadedEvent;
+    } catch {
+      if (isActive() && navigateOnError) {
+        Alert.alert("Unable to load event", "Please try again.");
+        goBackOrHome(router);
+      }
+
+      return null;
+    } finally {
+      if (isActive() && setInitialLoading) {
+        setIsLoading(false);
+      }
+    }
+  }, [currentUser?.id, eventId, params.mode, router]);
+
+  const userLocation = useMemo(
+    () =>
+      typeof currentUser?.currentLocation?.longitude === "number" &&
+      typeof currentUser.currentLocation.latitude === "number"
+        ? ([currentUser.currentLocation.longitude, currentUser.currentLocation.latitude] as [number, number])
+        : null,
+    [currentUser?.currentLocation?.latitude, currentUser?.currentLocation?.longitude],
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    void loadEventDetails({
+      setInitialLoading: true,
+      navigateOnError: true,
+      isActive: () => isActive,
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [loadEventDetails]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      if (!eventId || isLoading) {
+        return () => {
+          isActive = false;
+        };
+      }
+
+      void loadEventDetails({ isActive: () => isActive });
+
+      return () => {
+        isActive = false;
+      };
+    }, [eventId, isLoading, loadEventDetails]),
+  );
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshRequestRef.current) {
+      return;
+    }
+
+    refreshRequestRef.current = true;
+    setIsRefreshing(true);
+
+    try {
+      const loadedEvent = await loadEventDetails();
+
+      if (activeTab === EVENT_WINDOW_TAB) {
+        await windowsRefreshRef.current?.refresh();
+      } else if (activeTab === "Chat" && shouldRefreshChatForEvent(loadedEvent)) {
+        await chatRefreshRef.current?.refresh();
+      }
+    } finally {
+      refreshRequestRef.current = false;
+      setIsRefreshing(false);
+    }
+  }, [activeTab, loadEventDetails]);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab("About");
+    }
+  }, [activeTab, visibleTabs]);
+
+  const updateHostFollowState = (nextIsFollowing: boolean) => {
+    setIsFollowing(nextIsFollowing);
+    setEvent((currentEvent) => {
+      if (!currentEvent?.host) {
+        return currentEvent;
+      }
+
+      const wasFollowing = Boolean(currentEvent.host.isFollowing);
+      const followerDelta = nextIsFollowing === wasFollowing ? 0 : nextIsFollowing ? 1 : -1;
+      const currentFollowers = currentEvent.host.followersCount ?? 0;
+
+      return {
+        ...currentEvent,
+        host: {
+          ...currentEvent.host,
+          isFollowing: nextIsFollowing,
+          followersCount: Math.max(0, currentFollowers + followerDelta),
+        },
+      };
+    });
+  };
+
+  const toggleHostFollow = async () => {
+    const hostId = event?.host?.id;
+
+    if (!hostId || isHostMode || isFollowPending) {
+      return;
+    }
+
+    const wasFollowing = isFollowing;
+    updateHostFollowState(!wasFollowing);
+    setIsFollowPending(true);
+
+    try {
+      const follow = wasFollowing ? await unfollowUser(hostId) : await followUser(hostId);
+      updateHostFollowState(follow.isFollowing);
+    } catch (error) {
+      updateHostFollowState(wasFollowing);
+      Alert.alert(
+        wasFollowing ? "Unable to unfollow" : "Unable to follow",
+        getAuthErrorMessage(error, "Please try again."),
+      );
+    } finally {
+      setIsFollowPending(false);
+    }
+  };
+
+  const handleHostProfilePress = () => {
+    if (!event) return;
+
+    const hostId = event.host?.id ?? event.userId;
+
+    navigateToProfile(router, currentUser?.id, {
+      userId: hostId,
+      name: hostName,
+      avatar: hostAvatarUri,
+      isFollowing,
+    });
+  };
+
+  const closeCategoryDestinationModal = useCallback(() => {
+    if (isCategoryDestinationNavigating) {
+      return;
+    }
+
+    setPendingCategoryDestination(null);
+  }, [isCategoryDestinationNavigating]);
+
+  const handleHeroCategoryPress = useCallback((category: string) => {
+    if (isDraftPreview) {
+      return;
+    }
+
+    const normalizedCategory = normalizeEventCategoryFilter(category);
+
+    if (!normalizedCategory || pendingCategoryDestination || isCategoryDestinationNavigating) {
+      return;
+    }
+
+    setPendingCategoryDestination(normalizedCategory);
+  }, [isCategoryDestinationNavigating, isDraftPreview, pendingCategoryDestination]);
+
+  const handleViewCategoryInFeed = useCallback(() => {
+    if (isCategoryDestinationNavigating) {
+      return;
+    }
+
+    const destination = getEventCategoryFeedDestination(pendingCategoryDestination);
+
+    if (!destination) {
+      setPendingCategoryDestination(null);
+      return;
+    }
+
+    setIsCategoryDestinationNavigating(true);
+    setPendingCategoryDestination(null);
+
+    try {
+      router.push(destination as never);
+    } finally {
+      setIsCategoryDestinationNavigating(false);
+    }
+  }, [isCategoryDestinationNavigating, pendingCategoryDestination, router]);
+
+  const handleViewCategoryOnMap = useCallback(() => {
+    if (isCategoryDestinationNavigating) {
+      return;
+    }
+
+    const destination = getEventCategoryMapDestination(pendingCategoryDestination);
+
+    if (!destination) {
+      setPendingCategoryDestination(null);
+      return;
+    }
+
+    setIsCategoryDestinationNavigating(true);
+    setPendingCategoryDestination(null);
+
+    try {
+      router.replace(destination as never);
+    } finally {
+      setIsCategoryDestinationNavigating(false);
+    }
+  }, [isCategoryDestinationNavigating, pendingCategoryDestination, router]);
+
+  const ticketsLeft = getTicketsLeft(event?.tickets ?? [], currentTimeMs);
+  const priceLabel = formatPrice(event?.tickets ?? []);
+  const selectedTicket = useMemo(() => {
+    if (!selectedTicketKey) {
+      return null;
+    }
+
+    return (event?.tickets ?? []).find((ticket, index) => getTicketKey(ticket, index) === selectedTicketKey) ?? null;
+  }, [event?.tickets, selectedTicketKey]);
+  const selectedTicketPriceLabel = selectedTicket
+    ? formatTicketPurchasePrice(selectedTicket, selectedTicketQuantity)
+    : priceLabel;
+  const selectedTicketSalesEnded = isTicketSalesEnded(selectedTicket, currentTimeMs);
+  const footerPriceLabel = selectedTicket
+    ? `${selectedTicketQuantity} ${selectedTicketQuantity === 1 ? "ticket" : "tickets"}`
+    : "From";
+  const hostName = event?.host?.name ?? "Host";
+  const hostHandle = getHostHandle(event);
+  const hostAvatarUri = getHostAvatarUri(event);
+  const canReviewHost = Boolean(event?.hostReviewEligibility?.canReview);
+  const shouldRenderEventFooter = Boolean(
+    isDraftPreview ||
+    !isHostMode ||
+    showHostLifecycleFooter ||
+    isEventCompleted ||
+    isEventCancelled,
+  );
+
+  const bannerImageUri = getBannerImageUri(event);
+  const bannerContentPosition = useMemo(
+    () => getEventBannerContentPosition(event?.bannerImageDisplay),
+    [event?.bannerImageDisplay],
+  );
+  const eventImageUris = useMemo(() => {
+    const bannerUris = getEventBannerImageUris(event);
+
+    return bannerUris.length > 0 ? bannerUris : [bannerImageUri];
+  }, [bannerImageUri, event]);
+  const distanceLabel = getDistanceLabel(event, userLocation);
+  // Batch 3C — venue-local primary schedule + a viewer-local "your time" line
+  // when the device clock differs. Falls back to device-local rendering when the
+  // Event has no known timezone (unchanged pre-3C behaviour).
+  const eventTimeModel = useMemo(
+    () =>
+      formatEventTimeDisplay({
+        scheduledAt: event?.scheduledAt,
+        endAt: event?.endAt,
+        timezone: event?.timezone,
+      }),
+    [event?.scheduledAt, event?.endAt, event?.timezone],
+  );
+  const eventZoneSuffix = eventTimeModel.primaryZoneText ? ` ${eventTimeModel.primaryZoneText}` : "";
+  const eventDate = eventTimeModel.primaryDateText || "Date TBA";
+  const eventTime = eventTimeModel.primaryTimeText
+    ? `${eventTimeModel.primaryTimeText}${eventZoneSuffix}`
+    : "Time TBA";
+  const eventScheduleDisplay = eventTimeModel.primaryEndTimeText
+    ? {
+        startDateTime: `${eventDate} • ${eventTimeModel.primaryTimeText}${eventZoneSuffix}`,
+        endDateTime: `${eventTimeModel.primaryEndDateText ?? eventDate} • ${eventTimeModel.primaryEndTimeText}${eventZoneSuffix}`,
+      }
+    : { startDateTime: `${eventDate} • ${eventTime}`, endDateTime: null as string | null };
+  const ticketsLeftText = `${ticketsLeft} tickets left`;
+  const eventStats = event as
+    | (EventResponse & {
+        likesCount?: number | null;
+        commentsCount?: number | null;
+        sharesCount?: number | null;
+        isLiked?: boolean;
+        isSaved?: boolean;
+        interactionMomentId?: string | null;
+        canReport?: boolean;
+      })
+    | null;
+  const interactionMomentId = eventStats?.interactionMomentId ?? null;
+  const canReportEvent = Boolean(eventStats?.canReport);
+
+  useEffect(() => {
+    setLocalLikesCount(eventStats?.likesCount ?? 0);
+    setLocalCommentsCount(eventStats?.commentsCount ?? 0);
+    setLocalSharesCount(eventStats?.sharesCount ?? 0);
+    setLocalIsLiked(Boolean(eventStats?.isLiked));
+    setLocalIsSaved(Boolean(eventStats?.isSaved));
+    if (eventStats?.hasReported) {
+      setHasReportedEvent(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event]);
+
+  useEffect(() => {
+    if (!selectedTicketKey) {
+      setSelectedTicketQuantity(1);
+      return;
+    }
+
+    const currentTicket = (event?.tickets ?? []).find((ticket, index) => getTicketKey(ticket, index) === selectedTicketKey);
+
+    if (!currentTicket || (currentTicket.availableCount ?? currentTicket.capacity) <= 0) {
+      setSelectedTicketKey(null);
+      setSelectedTicketQuantity(1);
+      return;
+    }
+
+    setSelectedTicketQuantity((quantity) => clampTicketQuantity(quantity, currentTicket));
+  }, [event?.tickets, selectedTicketKey]);
+
+  const handleLike = async () => {
+    if (isDraftPreview || !interactionMomentId || isLikePending) return;
+
+    const prevIsLiked = localIsLiked;
+    const prevCount = localLikesCount;
+    setLocalIsLiked(!prevIsLiked);
+    setLocalLikesCount(prevIsLiked ? Math.max(0, prevCount - 1) : prevCount + 1);
+    setIsLikePending(true);
+
+    try {
+      const summary = await toggleMomentReaction(interactionMomentId);
+      setLocalIsLiked(summary.isLiked);
+      setLocalLikesCount(summary.likesCount);
+    } catch {
+      setLocalIsLiked(prevIsLiked);
+      setLocalLikesCount(prevCount);
+    } finally {
+      setIsLikePending(false);
+    }
+  };
+
+  const handleInteractionChange = (summary: MomentInteractionSummary) => {
+    setLocalCommentsCount(summary.commentsCount);
+    setLocalLikesCount(summary.likesCount);
+  };
+
+  const handleShare = () => {
+    if (isDraftPreview) {
+      return;
+    }
+
+    setShowShare(true);
+  };
+
+  const handleRepost = async (payload: RepostPayload) => {
+    if (isDraftPreview || !interactionMomentId) return;
+    try {
+      const share = await shareMoment(interactionMomentId, payload);
+      setLocalSharesCount(share.moment.sharesCount);
+      setShowShare(false);
+    } catch (error) {
+      Alert.alert("Unable to repost", getAuthErrorMessage(error, "Please try again."));
+      throw error;
+    }
+  };
+
+  const handleReportPress = () => {
+    setMenuVisible(false);
+
+    if (!event || isDraftPreview || !canReportEvent || hasReportedEvent) {
+      return;
+    }
+
+    if (!MONGO_OBJECT_ID_PATTERN.test(event.id) || !MONGO_OBJECT_ID_PATTERN.test(event.userId)) {
+      Alert.alert("Unable to report event", "This event cannot be reported right now.");
+      return;
+    }
+
+    setReportReasonVisible(true);
+  };
+
+  const handleReportReason = (reason: string) => {
+    setReportReason(reason);
+    setReportReasonVisible(false);
+    setTimeout(() => setReportDetailsVisible(true), 300);
+  };
+
+  const handleReportDetailsClose = () => {
+    if (isReportSubmitting) return;
+    setReportDetailsVisible(false);
+    setReportReason(null);
+  };
+
+  const handleSubmitEventReport = async (details: string, alsoBlock: boolean) => {
+    if (isReportSubmittingRef.current || !reportReason || !event) {
+      return;
+    }
+
+    isReportSubmittingRef.current = true;
+    setIsReportSubmitting(true);
+
+    try {
+      const outcome = await submitReportWithOptionalBlock({
+        payload: {
+          reportedUserId: event.userId,
+          targetType: "event",
+          targetId: event.id,
+          reason: reportReason,
+          details: details.trim() || null,
+        },
+        alsoBlock,
+        submitReportFn: submitReport,
+        blockUserFn: blockUser,
+      });
+
+      setReportDetailsVisible(false);
+      setReportReason(null);
+      setHasReportedEvent(true);
+
+      if (outcome.kind === "already_reported") {
+        Alert.alert("Already reported", "You have already reported this event.");
+        return;
+      }
+
+      if (outcome.kind === "report_block_success") {
+        Alert.alert(
+          "Report submitted",
+          "Thanks for letting us know. We've also blocked this user for you.",
+        );
+        return;
+      }
+
+      if (outcome.kind === "report_block_failed") {
+        Alert.alert(
+          "Report submitted",
+          "Thanks for letting us know, but we couldn't block this user. You can block them from their profile.",
+        );
+        return;
+      }
+
+      Alert.alert(
+        "Report submitted",
+        "Thanks for letting us know. Our team will review this event.",
+      );
+    } catch (error) {
+      Alert.alert("Unable to submit report", getAuthErrorMessage(error, "Please try again."));
+      throw error;
+    } finally {
+      isReportSubmittingRef.current = false;
+      setIsReportSubmitting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setMenuVisible(false);
+
+    if (isDraftPreview || !interactionMomentId || isSavePending) {
+      return;
+    }
+
+    const wasSaved = localIsSaved;
+    setLocalIsSaved(!wasSaved);
+    setIsSavePending(true);
+
+    try {
+      const summary = await toggleMomentSave(interactionMomentId);
+      setLocalIsSaved(summary.isSaved);
+      setEvent((currentEvent) => currentEvent ? { ...currentEvent, isSaved: summary.isSaved } : currentEvent);
+      if (summary.isSaved) {
+        notifySuccess("Saved");
+      }
+    } catch (error) {
+      setLocalIsSaved(wasSaved);
+      Alert.alert("Unable to save event", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsSavePending(false);
+    }
+  };
+
+  const handleEdit = () => {
+    setMenuVisible(false);
+
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    if (isEventEditBlocked) {
+      return;
+    }
+
+    if (isDraftPreview) {
+      setPreviewEditSelectorVisible(true);
+      return;
+    }
+
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        loadEventForEdit(event);
+        router.push("/create-event");
+      },
+    });
+  };
+
+  const handlePreviewEditStep = (pathname: "/create-event" | "/create-event/step-2" | "/create-event/step-3" | "/create-event/step-4" | "/create-event/step-5") => {
+    if (!event || !isDraftPreview) {
+      return;
+    }
+
+    setPreviewEditSelectorVisible(false);
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => {
+        // Hydrate the existing server-backed draft; never reset or start a new session.
+        loadEventForEdit(event);
+        router.push(pathname);
+      },
+    });
+  };
+
+  const handlePublishDraft = async () => {
+    if (!event || !isDraftPreview || isPublishingDraft) {
+      return;
+    }
+
+    setIsPublishingDraft(true);
+
+    try {
+      const payload = buildPublishPayloadFromEvent(event);
+      const updated = await publishSavedEventDraft(payload, event.id);
+      mergeUpdatedEvent(updated);
+      await refreshHostedEventEligibility();
+      setActiveTab("About");
+      // SuccessToast is the app's existing native Animated + accessible
+      // confirmation. It is intentionally triggered only after the
+      // authoritative Event response has replaced the draft locally.
+      notifySuccess("Event published");
+    } catch (error) {
+      Alert.alert("Unable to publish event", getAuthErrorMessage(error, "Please check the event details and try again."));
+    } finally {
+      setIsPublishingDraft(false);
+    }
+  };
+
+  const handleBlock = () => {
+    setMenuVisible(false);
+
+    const targetId = event?.host?.id ?? event?.userId;
+
+    if (!event || isHostMode || !targetId) {
+      return;
+    }
+
+    Alert.alert(
+      "Block User",
+      "You won't see posts from this user in your feed anymore. They won't be notified.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(targetId);
+              goBackOrHome(router);
+            } catch (error) {
+              Alert.alert("Unable to block user", getAuthErrorMessage(error, "Please try again."));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCancelEvent = () => {
+    if (!event || isDraftPreview || !isHostMode) {
+      return;
+    }
+
+    requireBusinessAccountForEvent({
+      user: currentUser,
+      completedProfileTypes,
+      updateProfile,
+      router,
+      onReady: () => setCancelReasonVisible(true),
+    });
+  };
+
+  const submitEventCancellation = async (payload: Parameters<typeof cancelEvent>[1]) => {
+    if (!event || isCancellingEvent) return;
+
+    setIsCancellingEvent(true);
+    try {
+      const updated = await cancelEvent(event.id, payload);
+      mergeUpdatedEvent(updated);
+      await refreshHostedEventEligibility();
+      setCancelReasonVisible(false);
+      Alert.alert("Event cancelled", "Refunds are being processed for attendees.");
+    } catch (error) {
+      Alert.alert("Unable to cancel event", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsCancellingEvent(false);
+    }
+  };
+
+  const mergeUpdatedEvent = (updatedEvent: EventResponse) => {
+    if (updatedEvent.eventMedia) {
+      eventMediaWriteGenerationRef.current += 1;
+    }
+
+    setEvent((currentEvent) => {
+      if (currentEvent?.eventMedia && updatedEvent.eventMedia) {
+        const updatedIds = new Set(updatedEvent.eventMedia.map((item) => item.id));
+
+        for (const item of currentEvent.eventMedia) {
+          if (!updatedIds.has(item.id)) {
+            deletedEventMediaIdsRef.current.add(item.id);
+          }
+        }
+      }
+
+      return mergeEventResponse(currentEvent, updatedEvent, {
+        deletedMediaIds: deletedEventMediaIdsRef.current,
+      });
+    });
+  };
+
+  const handleCreateTicket = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    if (isEventCompleted || isEventCancelled) {
+      return;
+    }
+
+    if (isTicketCreationCutoffReached(event.endAt, currentTimeMs)) {
+      return;
+    }
+
+    loadEventForEdit(event);
+    router.push("/create-event/ticket-details");
+  };
+
+  const handleEditTicket = (ticket: EventTicketPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    if (isEventCompleted || isEventCancelled) {
+      return;
+    }
+
+    loadEventForEdit(event);
+
+    const draftTicket = useEventDraftStore
+      .getState()
+      .tickets.find((item) => (ticket.id ? item.id === ticket.id : item.name === ticket.name));
+
+    if (!draftTicket) {
+      Alert.alert("Unable to edit ticket", "Please try again.");
+      return;
+    }
+
+    router.push({
+      pathname: "/create-event/ticket-details",
+      params: { localId: draftTicket.localId },
+    });
+  };
+
+  const handleViewTicket = (ticket: EventTicketPayload) => {
+    if (!event) {
+      return;
+    }
+
+    router.push({
+      pathname: "/event-screen/ticket-detail",
+      params: {
+        eventId: event.id,
+        ticketId: ticket.id ?? ticket.name,
+        mode: isHostMode ? "host" : "guest",
+      },
+    });
+  };
+
+  const handleSelectTicket = (ticket: EventTicketPayload, ticketKey: string) => {
+    if (isDraftPreview) {
+      return;
+    }
+
+    if ((ticket.availableCount ?? ticket.capacity) <= 0) {
+      return;
+    }
+
+    const ticketId = ticket.id ?? ticket.name;
+    const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
+
+    if (alreadyPurchased >= 2) {
+      return;
+    }
+
+    if (selectedTicketKey === ticketKey) {
+      setSelectedTicketKey(null);
+      setSelectedTicketQuantity(1);
+      return;
+    }
+
+    setSelectedTicketKey(ticketKey);
+    setSelectedTicketQuantity(1);
+  };
+
+  const handleExpiredTicketPress = () => {
+    Alert.alert(
+      "Ticket sales ended",
+      "Sales for this ticket have ended. Please choose another available ticket.",
+    );
+  };
+
+  const handleTicketQuantityChange = (
+    ticket: EventTicketPayload,
+    ticketKey: string,
+    quantity: number,
+  ) => {
+    if ((ticket.availableCount ?? ticket.capacity) <= 0 || isTicketSalesEnded(ticket)) {
+      return;
+    }
+
+    setSelectedTicketKey(ticketKey);
+    setSelectedTicketQuantity(clampTicketQuantity(quantity, ticket));
+  };
+
+  const handleBuySelectedTicket = () => {
+    if (!event || isDraftPreview || !selectedTicket || !selectedTicketKey) {
+      return;
+    }
+
+    if (isTicketSalesEnded(selectedTicket)) {
+      Alert.alert(
+        "Ticket sales ended",
+        "Sales for this ticket have ended. Please choose another available ticket.",
+      );
+      return;
+    }
+
+    const ticketId = selectedTicket.id ?? selectedTicket.name;
+    const alreadyPurchased = purchasedTicketCounts[ticketId] ?? 0;
+    const maxAllowed = Math.max(0, 2 - alreadyPurchased);
+
+    if (maxAllowed <= 0) {
+      return;
+    }
+
+    const quantity = Math.min(clampTicketQuantity(selectedTicketQuantity, selectedTicket), maxAllowed);
+
+    const linkedReward = (event.rewards ?? []).find(
+      (r) => (
+        r.rewardType === "ticket"
+        && r.ticketId === ticketId
+        && r.id
+        && !r.disabledAt
+        && !claimedRewardIds.includes(r.id)
+        && !(r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now())
+      ),
+    );
+
+    router.push({
+      pathname: "/event-screen/checkout",
+      params: {
+        eventId: event.id,
+        eventName: event.name ?? "Event",
+        eventDateTime: `${eventDate} • ${eventTime} • ${hostName}`,
+        eventDateDisplay: `${eventDate} • ${eventTime}`,
+        hostName,
+        venue: event.location?.venue ?? event.location?.searchLabel ?? "",
+        address: event.location?.address ?? event.location?.searchLabel ?? "",
+        ticketId,
+        ticketKey: selectedTicketKey,
+        ticketName: selectedTicket.name,
+        ticketType: selectedTicket.type,
+        ticketPrice: String(selectedTicket.price),
+        quantity: String(quantity),
+        rewardId: linkedReward?.id ?? "",
+        ageRestriction: event.ageRestriction ?? "",
+      },
+    });
+  };
+
+  const handleTicketCtaPress = () => {
+    if (isDraftPreview) {
+      setActiveTab("Access");
+      setAccessSubTab("Tickets");
+      return;
+    }
+
+    if (!selectedTicket || !selectedTicketKey) {
+      setActiveTab("Access");
+      setAccessSubTab("Tickets");
+      return;
+    }
+
+    handleBuySelectedTicket();
+  };
+
+  const handleSubmitHostReview = async () => {
+    if (!event || reviewLiked === null || isSubmittingReview) {
+      return;
+    }
+
+    setIsSubmittingReview(true);
+
+    try {
+      await submitEventHostReview(event.id, {
+        liked: reviewLiked,
+        text: reviewText.trim() || null,
+      });
+      setReviewModalVisible(false);
+      setReviewLiked(null);
+      setReviewText("");
+      setEvent((currentEvent) =>
+        currentEvent
+          ? {
+              ...currentEvent,
+              hostReviewEligibility: {
+                canReview: false,
+                hasReviewed: true,
+              },
+            }
+          : currentEvent,
+      );
+      Alert.alert("Review submitted", "Thanks for reviewing the host.");
+    } catch (error) {
+      Alert.alert("Unable to submit review", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleDeleteTicket = (ticket: EventTicketPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    const ticketId = ticket.id ?? ticket.name;
+
+    Alert.alert(
+      "Delete Ticket",
+      "Are you sure you want to delete this ticket?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingTicketId(ticketId);
+
+            try {
+              const updatedEvent = isDraftPreview
+                ? await deleteDraftTicket(event.id, ticketId)
+                : await deleteEventTicket(event.id, ticketId);
+
+              mergeUpdatedEvent(updatedEvent);
+              setActiveTab("Access");
+              setAccessSubTab("Tickets");
+            } catch (error) {
+              Alert.alert("Unable to delete ticket", getAuthErrorMessage(error, "Please try again."));
+            } finally {
+              setDeletingTicketId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openRewardForm = (rewardType: EventRewardType, reward?: EventRewardPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    router.push({
+      pathname: "/event-screen/reward-details",
+      params: {
+        eventId: event.id,
+        rewardType,
+        ...(reward?.id ? { rewardId: reward.id } : {}),
+      },
+    });
+  };
+
+  const handleCreateReward = () => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    if (event.tickets.length === 0) {
+      Alert.alert(
+        "Create a ticket first",
+        "A ticket reward must be linked to a ticket. Create a ticket before adding a reward.",
+      );
+      return;
+    }
+
+    const hasAvailableTicket = event.tickets.some(
+      (ticket) => !ticketAlreadyHasReward(event.rewards, ticket.id ?? ticket.name),
+    );
+
+    if (!hasAvailableTicket) {
+      Alert.alert(
+        "All tickets already have rewards",
+        "Each ticket can have only one reward. Edit or delete an existing reward, or create another ticket before adding a new reward.",
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Create Reward",
+      "Choose the reward type.",
+      [
+        // { text: "Product reward", onPress: () => openRewardForm("product") },
+        { text: "Ticket reward", onPress: () => openRewardForm("ticket") },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  };
+
+  const handleEditReward = (reward: EventRewardPayload) => {
+    openRewardForm(reward.rewardType, reward);
+  };
+
+  const handleViewReward = (reward: EventRewardPayload) => {
+    setSelectedReward(reward);
+  };
+
+  const handleDeleteReward = (reward: EventRewardPayload) => {
+    if (!event || !isHostMode) {
+      return;
+    }
+
+    const rewardId = reward.id ?? reward.name;
+
+    Alert.alert(
+      "Delete Reward",
+      "Are you sure you want to delete this reward?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingRewardId(rewardId);
+
+            try {
+              const updatedEvent = isDraftPreview
+                ? await deleteDraftReward(event.id, rewardId)
+                : await deleteEventReward(event.id, rewardId);
+
+              mergeUpdatedEvent(updatedEvent);
+              setActiveTab("Access");
+              setAccessSubTab("Rewards");
+            } catch (error) {
+              Alert.alert("Unable to delete reward", getAuthErrorMessage(error, "Please try again."));
+            } finally {
+              setDeletingRewardId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleClaimReward = async (reward: EventRewardPayload) => {
+    if (!event || isDraftPreview || isHostMode) {
+      return;
+    }
+
+    const rewardId = reward.id;
+
+    if (!rewardId) {
+      Alert.alert("Unable to claim reward", "Reward information is incomplete.");
+      return;
+    }
+
+    if (reward.rewardType === "ticket") {
+      Alert.alert("Apply during checkout", "Ticket offers are applied from the ticket checkout screen.");
+      return;
+    }
+
+    setClaimingRewardId(rewardId);
+
+    try {
+      await claimEventReward(event.id, rewardId);
+      setClaimedRewardIds((prev) => [...prev, rewardId]);
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Please try again.");
+      Alert.alert("Unable to claim reward", message);
+    } finally {
+      setClaimingRewardId(null);
+    }
+  };
+
+  const handleAddMembers = () => {
+    if (!event || isDraftPreview || isEventCompleted || isEventCancelled) return;
+    router.push({
+      pathname: "/event-screen/members",
+      params: { eventId: event.id },
+    });
+  };
+
+  const handleSubmitJoinRequest = async () => {
+    if (!event || isDraftPreview || submittingJoinRequest) {
+      return;
+    }
+
+    tapFeedback();
+    setSubmittingJoinRequest(true);
+
+    try {
+      const result = await submitJoinRequest(event.id);
+      setMyJoinRequestStatus(result.status);
+      notifySuccess("Request sent");
+    } catch {
+      Alert.alert("Unable to submit request", "Please try again.");
+    } finally {
+      setSubmittingJoinRequest(false);
+    }
+  };
+
+  const handleAcceptJoinRequest = async (userId: string) => {
+    if (!event || isDraftPreview || acceptingJoinRequestId) {
+      return;
+    }
+
+    setAcceptingJoinRequestId(userId);
+
+    try {
+      await acceptJoinRequest(event.id, userId);
+      setJoinRequests((prev) =>
+        prev.map((r) => (r.userId === userId ? { ...r, status: "accepted" as JoinRequestStatus } : r)),
+      );
+      notifySuccess("Request accepted");
+    } catch {
+      Alert.alert("Unable to accept request", "Please try again.");
+    } finally {
+      setAcceptingJoinRequestId(null);
+    }
+  };
+
+  const handleDeclineJoinRequest = async (userId: string) => {
+    if (!event || isDraftPreview || decliningJoinRequestId) {
+      return;
+    }
+
+    setDecliningJoinRequestId(userId);
+
+    try {
+      await declineJoinRequest(event.id, userId);
+      setJoinRequests((prev) =>
+        prev.map((r) => (r.userId === userId ? { ...r, status: "declined" as JoinRequestStatus } : r)),
+      );
+      notifySuccess("Request declined");
+    } catch {
+      Alert.alert("Unable to decline request", "Please try again.");
+    } finally {
+      setDecliningJoinRequestId(null);
+    }
+  };
+
+  const handlePrivacyChange = async (newPrivacy: EventPrivacy) => {
+    setPrivacyDropdownVisible(false);
+
+    if (!event || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
+      return;
+    }
+
+    if (isEventCompleted || isEventCancelled) {
+      return;
+    }
+
+    setIsUpdatingPrivacy(true);
+
+    try {
+      const updatedEvent = isDraftPreview
+        ? await saveEventDraft({ privacy: newPrivacy }, event.id)
+        : await updateEvent(event.id, { privacy: newPrivacy });
+      mergeUpdatedEvent(updatedEvent);
+    } catch (error) {
+      Alert.alert("Unable to update privacy", getAuthErrorMessage(error, "Please try again."));
+    } finally {
+      setIsUpdatingPrivacy(false);
+    }
+  };
+
+  const renderHeader = () => (
+    <View style={[styles.headerActions, { top: insets.top + 10 }]}>
+      <BackButton color={colors.text} onPress={() => goBackOrHome(router)} />
+      {isHostMode &&
+        (!isDraftPreview || event?.privacy !== "private") &&
+        !isEventCompleted &&
+        !isEventCancelled && (
+        <TouchableOpacity
+          style={styles.privacyPill}
+          activeOpacity={0.8}
+          onPress={() => setPrivacyDropdownVisible(true)}
+          disabled={isUpdatingPrivacy}
+        >
+          <Feather
+            name={event?.privacy === "public" ? "globe" : "lock"}
+            size={13}
+            color="#FFFFFF"
+          />
+          <Text style={styles.privacyPillText}>
+            {getPrivacyLabel(event?.privacy).replace(" Event", "")}
+          </Text>
+          <Feather name="chevron-down" size={13} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+      <BackButton
+        iconName={MoreHorizontalIcon}
+        onPress={() => setMenuVisible(true)}
+        color={colors.text}
+      />
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const reviewKeyboardVisible = reviewKeyboardHeight > 0;
+  const reviewKeyboardClearance = reviewKeyboardVisible ? Math.max(insets.bottom, REVIEW_KEYBOARD_GAP) : 0;
+  const reviewSheetMaxHeight = reviewKeyboardVisible
+    ? Math.max(260, Dimensions.get("window").height - reviewKeyboardHeight - reviewKeyboardClearance - insets.top - REVIEW_KEYBOARD_GAP)
+    : undefined;
+  const reviewSheetBottomOffset = Platform.OS === "android"
+    ? reviewKeyboardHeight + reviewKeyboardClearance
+    : 0;
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      {renderHeader()}
+      <ScrollView
+        ref={outerScrollRef}
+        showsVerticalScrollIndicator={false}
+        onLayout={handleOuterScrollLayout}
+        onScroll={handleOuterScroll}
+        onContentSizeChange={handleOuterContentSizeChange}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (shouldRenderEventFooter ? footerHeight : 0) + 24 + chatKeyboardSpacerHeight },
+        ]}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: bannerImageUri }}
+            style={styles.heroImage}
+            contentFit="cover"
+            contentPosition={bannerContentPosition}
+          />
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(0, 0, 0, 0.5)", "rgba(0, 0, 0, 0)"]}
+            locations={[0, 1]}
+            style={styles.topShade}
+          />
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.15)", "rgba(0, 0, 0, 0.68)"]}
+            locations={[0, 0.4, 1]}
+            style={styles.bottomShade}
+          />
+          <View style={[styles.heroStatusStack, { top: insets.top + 62 }]} pointerEvents="none">
+            <EventLifecycleBadge lifecycle={event?.lifecycle} />
+            <CrowdStatusBadge eventLifecycle={event?.lifecycle} crowdStatus={event?.crowdStatus} />
+          </View>
+
+          <View style={styles.overlaidMeta}>
+            <View style={styles.metaTopRow}>
+              <View style={styles.tagsRow}>
+                {getHeroCategoryTags(event).map((tag) => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={styles.tag}
+                    activeOpacity={1}
+                    onPress={() => handleHeroCategoryPress(tag)}
+                  >
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+                  {isHostMode && !isDraftPreview && event?.privacy === "private" && !isEventCompleted && !isEventCancelled && (
+                <TouchableOpacity
+                  style={styles.addMembersBtn}
+                  activeOpacity={0.85}
+                  onPress={handleAddMembers}
+                >
+                  <Feather name="plus" size={15} color="#111111" />
+                  <Text style={styles.addMembersText}>
+                    {(event.memberCount ?? 0) > 0 ? `Members (${event.memberCount})` : "Add Members"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.hostRow}>
+              <TouchableOpacity activeOpacity={0.7} onPress={handleHostProfilePress}>
+                <UserAvatar
+                  uri={hostAvatarUri}
+                  name={event?.host?.name}
+                  size={42}
+                  style={[
+                    styles.hostAvatar,
+                    { borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" },
+                  ]}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.hostInfo} activeOpacity={0.7} onPress={handleHostProfilePress}>
+                <Text style={[styles.hostName, styles.heroOnImageShadow]}>{hostName}</Text>
+                <View style={styles.hostSubRow}>
+                  {!!hostHandle && <Text style={[styles.hostUser, styles.heroOnImageShadow]}>{hostHandle}</Text>}
+                  {!!hostHandle && <Text style={[styles.dotSeparator, styles.heroOnImageShadow]}> • </Text>}
+                  <Feather
+                    name={event?.privacy === "private" || event?.privacy === "locked" ? "lock" : "globe"}
+                    size={10}
+                    color="rgba(255, 255, 255, 0.78)"
+                  />
+                  <Text style={[styles.privateText, styles.heroOnImageShadow]}> {getPrivacyLabel(event?.privacy)}</Text>
+                </View>
+              </TouchableOpacity>
+              {!isHostMode && (
+                <TouchableOpacity
+                  style={[
+                    styles.followBtnSmall,
+                    isFollowing && styles.followingBtnSmall,
+                    !isFollowing && { borderColor: isDark ? "#AC86D4" : colors.primary },
+                  ]}
+                  disabled={isFollowPending}
+                  onPress={toggleHostFollow}
+                >
+                  <Text
+                    style={[
+                      styles.followBtnTextSmall,
+                      styles.heroOnImageShadow,
+                      isFollowing
+                        ? styles.followingBtnTextSmall
+                        : { color: isDark ? "#AC86D4" : colors.primary },
+                    ]}
+                  >
+                    {isFollowing ? "Following" : "Follow"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.attendeesStatsRow}>
+              <PublicGoingSummaryRow
+                eventId={event?.id ?? eventId}
+                eventName={event?.name ?? "Event"}
+                summary={event?.publicGoingSummary}
+                canViewCreatorList={isEventOwner}
+                trailingText={ticketsLeftText}
+                textStyle={[styles.statsText, styles.heroOnImageShadow]}
+              />
+            </View>
+
+            {!isDraftPreview && (
+              <PostInteractionBar
+                likesCount={localLikesCount}
+                commentsCount={localCommentsCount}
+                sharesCount={localSharesCount}
+                isLiked={localIsLiked}
+                onLikePress={handleLike}
+                onCommentPress={() => setShowComments(true)}
+                onSharePress={handleShare}
+                likeDisabled={isLikePending}
+                iconColor="rgba(255, 255, 255, 0.92)"
+                countColor="#FFFFFF"
+              />
+            )}
+          </View>
+        </View>
+
+        <View style={styles.contentPadding}>
+          <Text style={[styles.eventTitle, { color: colors.text }]}>{event?.name ?? "Event"}</Text>
+          <View style={styles.eventInfoRow}>
+            <View style={styles.eventScheduleRow}>
+              {eventScheduleDisplay.endDateTime ? (
+                <>
+                  <View style={styles.infoItem}>
+                    <Feather name="calendar" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                      {eventScheduleDisplay.startDateTime}
+                    </Text>
+                  </View>
+                  <Text style={[styles.infoText, { color: colors.textSecondary }]}>-</Text>
+                  <View style={styles.infoItem}>
+                    <Feather name="clock" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                      {eventScheduleDisplay.endDateTime}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.infoItem}>
+                    <Feather name="calendar" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventDate}</Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Feather name="clock" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>{eventTime}</Text>
+                  </View>
+                </>
+              )}
+              {eventTimeModel.showViewerEquivalent && eventTimeModel.viewerDateTimeText ? (
+                <Text
+                  style={[styles.infoText, styles.viewerEquivalentText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {eventTimeModel.viewerDateTimeText}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.infoItem}>
+              <Feather name="map-pin" size={14} color={colors.textSecondary} />
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{distanceLabel}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
+          {visibleTabs.map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[
+                styles.tabItem,
+                activeTab === tab && { borderBottomColor: colors.primary },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: activeTab === tab ? colors.text : colors.textSecondary },
+                ]}
+              >
+                {tab}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.contentPadding}>
+          {activeTab === "About" && (
+            <AboutTab
+              eventId={event?.id ?? eventId ?? null}
+              eventStatus={event?.status ?? null}
+              description={event?.description ?? null}
+              ageRestriction={event?.ageRestriction ?? null}
+              location={event?.location ?? null}
+              host={event?.host ?? null}
+              eventMedia={event?.eventMedia ?? []}
+              eventImageUris={eventImageUris}
+              isHostMode={isHostMode}
+              category={event?.categories?.[0] ?? event?.category ?? null}
+              isDraft={event?.status === "draft"}
+              onHostFollowChange={updateHostFollowState}
+              onEventMediaUpdated={mergeUpdatedEvent}
+            />
+          )}
+          {activeTab === "Access" && (
+            <AccessTab
+              tickets={event?.tickets ?? []}
+              rewards={event?.rewards ?? []}
+              scheduledAt={event?.scheduledAt ?? null}
+              endAt={event?.endAt ?? null}
+              privacy={event?.privacy}
+              ageRestriction={event?.ageRestriction ?? null}
+              isMember={event?.isMember ?? false}
+              purchasedTicketCounts={purchasedTicketCounts}
+              ticketStats={!isDraftPreview && isHostMode ? ticketStats : undefined}
+              isHostMode={!isDraftPreview && isHostMode}
+              isDraftPreview={isDraftPreview}
+              deletingTicketId={deletingTicketId}
+              deletingRewardId={deletingRewardId}
+              claimingRewardId={claimingRewardId}
+              claimedRewardIds={claimedRewardIds}
+              selectedTicketKey={selectedTicketKey}
+              selectedTicketQuantity={selectedTicketQuantity}
+              currentTimeMs={currentTimeMs}
+              selectedAccessSubTab={accessSubTab}
+              joinRequests={joinRequests}
+              myJoinRequestStatus={myJoinRequestStatus}
+              submittingJoinRequest={submittingJoinRequest}
+              acceptingJoinRequestId={acceptingJoinRequestId}
+              decliningJoinRequestId={decliningJoinRequestId}
+              onSelectAccessSubTab={setAccessSubTab}
+              onSelectTicket={handleSelectTicket}
+              onExpiredTicketPress={handleExpiredTicketPress}
+              onTicketQuantityChange={handleTicketQuantityChange}
+              onSubmitJoinRequest={handleSubmitJoinRequest}
+              onAcceptJoinRequest={handleAcceptJoinRequest}
+              onDeclineJoinRequest={handleDeclineJoinRequest}
+              onCreateTicket={isDraftPreview || isEventCompleted || isEventCancelled ? undefined : handleCreateTicket}
+              onViewTicket={handleViewTicket}
+              onEditTicket={isDraftPreview || isEventCompleted || isEventCancelled ? undefined : handleEditTicket}
+              onDeleteTicket={isDraftPreview ? undefined : handleDeleteTicket}
+              onCreateReward={isDraftPreview ? undefined : handleCreateReward}
+              onViewReward={handleViewReward}
+              onEditReward={isDraftPreview ? undefined : handleEditReward}
+              onDeleteReward={isDraftPreview ? undefined : handleDeleteReward}
+              onClaimReward={isDraftPreview ? undefined : handleClaimReward}
+              showRequestManagement={!isDraftPreview}
+            />
+          )}
+          {activeTab === EVENT_WINDOW_TAB && eventId && (
+            isEventOwner && !isDraftPreview ? (
+              <HostEventWindowsTab
+                ref={windowsRefreshRef}
+                eventId={eventId}
+                eventStartsAt={event?.scheduledAt}
+                eventEndsAt={event?.endAt}
+                canManageWindows={canManageEventWindows}
+              />
+            ) : (
+              <AttendeeEventWindowsTab ref={windowsRefreshRef} eventId={eventId} eventStatus={event?.status} />
+            )
+          )}
+          {activeTab === "Chat" && eventId && (
+            <ChatTab
+              ref={chatRefreshRef}
+              eventId={eventId}
+              eventName={event?.name ?? "Event"}
+              scheduledAt={event?.scheduledAt ?? null}
+              endAt={event?.endAt ?? null}
+              eventStatus={event?.status}
+              isDraftPreviewDisabled={isDraftPreview}
+              onComposerFocus={handleComposerFocus}
+            />
+          )}
+          {/* ProductTab hidden — preserved for future restoration
+          {activeTab === "Product" && (
+            <ProductTab
+              creatorId={event?.userId ?? null}
+              host={event?.host ?? null}
+              isHostMode={isHostMode}
+            />
+          )}
+          */}
+        </View>
+
+      </ScrollView>
+
+      {shouldRenderEventFooter && (
+        <View
+          onLayout={(layoutEvent) => setFooterHeight(layoutEvent.nativeEvent.layout.height)}
+          style={[
+            styles.footer,
+            {
+              paddingBottom: insets.bottom + 10,
+              backgroundColor: colors.background,
+              borderTopColor: colors.border,
+            },
+          ]}
+        >
+          {isDraftPreview ? (
+            <View style={styles.hostFooterBtns}>
+              <TouchableOpacity
+                style={[styles.cancelEventBtn, !isDark && styles.cancelEventBtnLight]}
+                activeOpacity={0.8}
+                onPress={handleEdit}
+                disabled={isPublishingDraft}
+              >
+                <Feather name="edit-3" size={18} color="#D44343" />
+                <Text style={styles.cancelEventBtnText}>Edit Event</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.publishDraftBtn,
+                  !isDark && styles.publishDraftBtnLight,
+                  { opacity: isPublishingDraft ? 0.7 : 1 },
+                ]}
+                activeOpacity={0.85}
+                onPress={handlePublishDraft}
+                disabled={isPublishingDraft}
+              >
+                {isPublishingDraft ? (
+                  <ActivityIndicator size="small" color="#111111" />
+                ) : (
+                  <Feather name="send" size={18} color="#111111" />
+                )}
+                <Text style={[styles.buyBtnText, { color: "#111111" }]}>
+                  {isPublishingDraft ? "Publishing..." : "Publish Event"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : isHostMode ? (
+            !isEventCompleted && !isEventCancelled && showHostLifecycleFooter ? (
+              <View style={styles.hostFooterBtns}>
+                {showCancelEvent && (
+                  <TouchableOpacity
+                    style={[
+                      styles.cancelEventBtn,
+                      !isDark && styles.cancelEventBtnLight,
+                      isCancellingEvent && { opacity: 0.7 },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={handleCancelEvent}
+                    disabled={isCancellingEvent}
+                  >
+                    {isCancellingEvent ? (
+                      <ActivityIndicator color="#D44343" />
+                    ) : (
+                      <Feather name="x-circle" size={18} color="#D44343" />
+                    )}
+                    <Text style={styles.cancelEventBtnText}>{isCancellingEvent ? "Cancelling..." : "Cancel Event"}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null
+          ) : canReviewHost ? (
+            <TouchableOpacity
+              style={[styles.reviewHostBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.85}
+              onPress={() => setReviewModalVisible(true)}
+            >
+              <Text style={styles.reviewHostBtnText}>Review The Host</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <View style={styles.priceContainer}>
+                <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>{footerPriceLabel}</Text>
+                <Text style={[styles.priceValue, { color: colors.text }]}>{selectedTicketPriceLabel}</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.buyBtn,
+                  {
+                    backgroundColor: selectedTicket && !selectedTicketSalesEnded ? colors.primary : colors.card,
+                    opacity: selectedTicketSalesEnded ? 0.55 : 1,
+                  },
+                ]}
+                activeOpacity={0.8}
+                disabled={selectedTicketSalesEnded}
+                onPress={handleTicketCtaPress}
+              >
+                <Text
+                  style={[
+                    styles.buyBtnText,
+                    { color: selectedTicket && !selectedTicketSalesEnded ? colors.background : colors.textSecondary },
+                  ]}
+                >
+                  {selectedTicketSalesEnded ? "Sales Ended" : selectedTicket ? "Join Event" : "Select Ticket"}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+
+      <Modal
+        visible={previewEditSelectorVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewEditSelectorVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setPreviewEditSelectorVisible(false)}
+        >
+          <View style={[styles.menuContent, { backgroundColor: isDark ? "#4A4A4A" : colors.card }]}>
+            {[
+              ["Edit Basics", "/create-event"],
+              ["Edit Details", "/create-event/step-2"],
+              ["Edit Location", "/create-event/step-3"],
+              ["Edit Tickets", "/create-event/step-4"],
+              ["Edit Privacy", "/create-event/step-5"],
+            ].map(([label, pathname]) => (
+              <TouchableOpacity
+                key={pathname}
+                style={styles.menuItem}
+                activeOpacity={0.7}
+                onPress={() => handlePreviewEditStep(pathname as Parameters<typeof handlePreviewEditStep>[0])}
+              >
+                <Feather name="edit-3" size={20} color={isDark ? "#FFF" : colors.text} />
+                <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.text }]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={privacyDropdownVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPrivacyDropdownVisible(false)}
+      >
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setPrivacyDropdownVisible(false)}>
+          <View
+            style={[
+              styles.privacyDropdown,
+              {
+                backgroundColor: isDark ? "#2A2A2A" : colors.card,
+                top: insets.top + 55,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.privacyDropdownItem,
+                event?.privacy === "public" && { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" },
+              ]}
+              onPress={() => handlePrivacyChange("public")}
+              activeOpacity={0.7}
+            >
+              <Feather name="globe" size={16} color={isDark ? "#FFFFFF" : colors.text} />
+              <Text style={[styles.privacyDropdownText, { color: isDark ? "#FFFFFF" : colors.text }]}>Public</Text>
+            </TouchableOpacity>
+            <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+            <TouchableOpacity
+              style={[
+                styles.privacyDropdownItem,
+                event?.privacy === "locked" && { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" },
+              ]}
+              onPress={() => handlePrivacyChange("locked")}
+              activeOpacity={0.7}
+            >
+              <Feather name="lock" size={16} color={isDark ? "#FFFFFF" : colors.text} />
+              <Text style={[styles.privacyDropdownText, { color: isDark ? "#FFFFFF" : colors.text }]}>Locked</Text>
+            </TouchableOpacity>
+            {!isDraftPreview && (
+              <>
+                <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+                <TouchableOpacity
+                  style={[
+                    styles.privacyDropdownItem,
+                    event?.privacy === "private" && { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" },
+                  ]}
+                  onPress={() => handlePrivacyChange("private")}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="lock" size={16} color={isDark ? "#FFFFFF" : colors.text} />
+                  <Text style={[styles.privacyDropdownText, { color: isDark ? "#FFFFFF" : colors.text }]}>Private</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+          <View
+            style={[
+              styles.menuContent,
+              {
+                backgroundColor: isDark ? "#4A4A4A" : colors.card,
+                top: insets.top + 60,
+              },
+            ]}
+          >
+            {isHostMode ? (
+              <>
+                {!isEventEditBlocked && (
+                  <>
+                    <TouchableOpacity style={styles.menuItem} onPress={handleEdit} activeOpacity={0.7}>
+                      <Feather name="edit-3" size={20} color={isDark ? "#FFF" : colors.text} />
+                      <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.text }]}>
+                        Edit Event
+                      </Text>
+                    </TouchableOpacity>
+
+                    {!isDraftPreview && (
+                      <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+                    )}
+                  </>
+                )}
+
+                {!isDraftPreview && (
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => {
+                      setMenuVisible(false);
+                      handleCancelEvent();
+                    }}
+                    activeOpacity={0.7}
+                    disabled={isCancellingEvent}
+                  >
+                    <Feather name="x-circle" size={20} color={isDark ? "#FFF" : colors.danger} />
+                    <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.danger }]}>
+                      {isCancellingEvent ? "Cancelling..." : "Cancel Event"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <>
+                {(canReportEvent || hasReportedEvent) && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={handleReportPress}
+                      activeOpacity={0.7}
+                      disabled={hasReportedEvent}
+                      accessibilityState={hasReportedEvent ? { disabled: true } : undefined}
+                    >
+                      <HugeiconsIcon
+                        icon={Flag01Icon}
+                        size={20}
+                        color={hasReportedEvent ? colors.primary : isDark ? "#FFF" : colors.danger}
+                      />
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          { color: hasReportedEvent ? colors.primary : isDark ? "#FFF" : colors.danger },
+                        ]}
+                      >
+                        {hasReportedEvent ? "Reported" : "Report"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+                  </>
+                )}
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleSave}
+                  activeOpacity={0.7}
+                  disabled={isSavePending}
+                >
+                  <HugeiconsIcon
+                    icon={Bookmark01Icon}
+                    size={20}
+                    color={localIsSaved ? colors.primary : isDark ? "#FFF" : colors.text}
+                  />
+                  <Text
+                    style={[
+                      styles.menuItemText,
+                      { color: localIsSaved ? colors.primary : isDark ? "#FFF" : colors.text },
+                    ]}
+                  >
+                    {localIsSaved ? "Saved" : "Save"}
+                  </Text>
+                </TouchableOpacity>
+
+                {Boolean(event?.host?.id ?? event?.userId) && (
+                  <>
+                    <View style={[styles.menuSeparator, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]} />
+
+                    <TouchableOpacity style={styles.menuItem} onPress={handleBlock} activeOpacity={0.7}>
+                      <Feather name="slash" size={20} color={isDark ? "#FFF" : colors.text} />
+                      <Text style={[styles.menuItemText, { color: isDark ? "#FFF" : colors.text }]}>
+                        Block
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={selectedReward !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedReward(null)}
+      >
+        <View style={styles.rewardDetailOverlay}>
+          <TouchableOpacity
+            style={styles.rewardDetailBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedReward(null)}
+          />
+          <View style={[styles.rewardDetailSheet, { backgroundColor: isDark ? "#1E1E1E" : colors.card }]}>
+            <View style={styles.rewardDetailHandle} />
+
+            <View style={styles.rewardDetailHeader}>
+              <View style={styles.rewardDetailTitleBlock}>
+                <Text style={[styles.rewardDetailName, { color: colors.text }]} numberOfLines={2}>
+                  {selectedReward?.name}
+                </Text>
+                <View style={[styles.rewardDetailTypeBadge, { backgroundColor: `${colors.primary}22` }]}>
+                  <Text style={[styles.rewardDetailTypeBadgeText, { color: colors.primary }]}>
+                    {selectedReward?.rewardType === "ticket" ? "Ticket Offer" : "Product Offer"}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.rewardDetailCloseBtn}
+                activeOpacity={0.7}
+                onPress={() => setSelectedReward(null)}
+              >
+                <Feather name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedReward?.targetName ? (
+              <View style={styles.rewardDetailRow}>
+                <Feather name="tag" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+                <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Applies to</Text>
+                <Text style={[styles.rewardDetailValue, { color: colors.text }]} numberOfLines={1}>
+                  {selectedReward.targetName}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.rewardDetailDivider, { backgroundColor: colors.border }]} />
+
+            {(selectedReward?.discountEnabled ?? ((selectedReward?.discountPercent ?? 0) > 0)) && (
+              <View style={styles.rewardDetailRow}>
+                <Feather name="percent" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+                <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Discount</Text>
+                <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
+                  {selectedReward?.discountPercent}% off
+                </Text>
+              </View>
+            )}
+
+            {(selectedReward?.bogoEnabled ?? (Boolean(selectedReward?.buyQuantity) && Boolean(selectedReward?.freeQuantity))) && (
+              <View style={styles.rewardDetailRow}>
+                <Feather name="gift" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+                <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>BOGO</Text>
+                <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
+                  Buy {selectedReward?.buyQuantity}, get {selectedReward?.freeQuantity} free
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.rewardDetailRow}>
+              <Feather name="users" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+              <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Capacity</Text>
+              <Text style={[styles.rewardDetailValue, { color: colors.text }]}>
+                {(selectedReward?.capacityLimited ?? ((selectedReward?.capacity ?? 0) > 0))
+                  ? `${Math.max(0, selectedReward?.availableCount ?? selectedReward?.capacity ?? 0)} users left`
+                  : "Unlimited users"}
+              </Text>
+            </View>
+
+            <View style={styles.rewardDetailRow}>
+              <Feather name="clock" size={15} color={colors.textSecondary} style={styles.rewardDetailRowIcon} />
+              <Text style={[styles.rewardDetailLabel, { color: colors.textSecondary }]}>Expires</Text>
+              <Text style={[styles.rewardDetailValue, { color: colors.text }]} numberOfLines={1}>
+                {(() => {
+                  const src = selectedReward?.expiresAt ?? event?.scheduledAt ?? null;
+                  if (!src) return "Date TBA";
+                  const d = new Date(src);
+                  if (Number.isNaN(d.getTime())) return "Date TBA";
+                  // EVT-008: Event-local, not device-local — the reward is
+                  // presented in the context of this Event, so it uses the
+                  // same Event timezone every primary surface uses.
+                  const expiresTimeModel = formatEventTimeDisplay({
+                    scheduledAt: d,
+                    timezone: event?.timezone,
+                  });
+                  return `${expiresTimeModel.primaryDateText} • ${expiresTimeModel.primaryTimeText}`;
+                })()}
+              </Text>
+            </View>
+
+            {selectedReward?.description?.trim() ? (
+              <>
+                <View style={[styles.rewardDetailDivider, { backgroundColor: colors.border }]} />
+                <Text style={[styles.rewardDetailDescLabel, { color: colors.textSecondary }]}>Description</Text>
+                <Text style={[styles.rewardDetailDesc, { color: colors.text }]}>
+                  {selectedReward.description.trim()}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={pendingCategoryDestination !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCategoryDestinationModal}
+      >
+        <View style={styles.categoryDestinationOverlay}>
+          <TouchableOpacity
+            style={styles.categoryDestinationBackdrop}
+            activeOpacity={1}
+            disabled={isCategoryDestinationNavigating}
+            onPress={closeCategoryDestinationModal}
+            accessibilityRole="button"
+            accessibilityLabel="Close category destination options"
+          />
+          <View style={[styles.categoryDestinationSheet, { backgroundColor: isDark ? "#1E1E1E" : colors.card }]}>
+            <View style={styles.rewardDetailHandle} />
+            <View style={styles.categoryDestinationHeader}>
+              <View style={styles.categoryDestinationTitleBlock}>
+                <Text style={[styles.categoryDestinationTitle, { color: colors.text }]}>View Category</Text>
+                {pendingCategoryDestination ? (
+                  <Text style={[styles.categoryDestinationSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {pendingCategoryDestination}
+                  </Text>
+                ) : null}
+              </View>
+              <TouchableOpacity
+                style={styles.rewardDetailCloseBtn}
+                activeOpacity={0.7}
+                disabled={isCategoryDestinationNavigating}
+                onPress={closeCategoryDestinationModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close category destination options"
+              >
+                <Feather name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.categoryDestinationAction, { borderColor: colors.border }]}
+              activeOpacity={0.85}
+              disabled={isCategoryDestinationNavigating}
+              onPress={handleViewCategoryInFeed}
+              accessibilityRole="button"
+              accessibilityLabel="View category in Feed"
+            >
+              <Feather name="list" size={18} color={colors.text} />
+              <Text style={[styles.categoryDestinationActionText, { color: colors.text }]}>View in Feed</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.categoryDestinationAction,
+                styles.categoryDestinationPrimaryAction,
+                { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              activeOpacity={0.85}
+              disabled={isCategoryDestinationNavigating}
+              onPress={handleViewCategoryOnMap}
+              accessibilityRole="button"
+              accessibilityLabel="View category on Map"
+            >
+              <Feather name="map" size={18} color="#111111" />
+              <Text style={styles.categoryDestinationPrimaryActionText}>View on Map</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.categoryDestinationCancelAction}
+              activeOpacity={0.85}
+              disabled={isCategoryDestinationNavigating}
+              onPress={closeCategoryDestinationModal}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel category destination selection"
+            >
+              <Text style={[styles.categoryDestinationCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={reviewModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeReviewModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.reviewModalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.reviewModalBackdrop}
+            activeOpacity={1}
+            onPress={closeReviewModal}
+          />
+          <Animated.View
+            style={[
+              styles.reviewModalSheet,
+              {
+                backgroundColor: isDark ? "#1E1E1E" : colors.card,
+                maxHeight: reviewSheetMaxHeight,
+                marginBottom: reviewSheetBottomOffset,
+                transform: [{ translateY: reviewSheetTranslateY }],
+              },
+            ]}
+          >
+            <View {...reviewDragPanHandlers} style={styles.reviewDragHandleArea}>
+              <View style={styles.rewardDetailHandle} />
+            </View>
+            <ScrollView
+              style={styles.reviewModalBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.reviewModalHeader}>
+                <Text style={[styles.reviewModalTitle, { color: colors.text }]}>Review The Host</Text>
+                <TouchableOpacity
+                  style={styles.rewardDetailCloseBtn}
+                  activeOpacity={0.7}
+                  disabled={isSubmittingReview}
+                  onPress={closeReviewModal}
+                >
+                  <Feather name="x" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.reviewChoiceRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.reviewChoiceBtn,
+                    {
+                      borderColor: reviewLiked === true ? colors.primary : colors.border,
+                      backgroundColor: reviewLiked === true ? `${colors.primary}22` : "transparent",
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={isSubmittingReview}
+                  onPress={() => setReviewLiked(true)}
+                >
+                  <Feather name="thumbs-up" size={18} color={reviewLiked === true ? colors.primary : colors.text} />
+                  <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Like</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.reviewChoiceBtn,
+                    {
+                      borderColor: reviewLiked === false ? colors.primary : colors.border,
+                      backgroundColor: reviewLiked === false ? `${colors.primary}22` : "transparent",
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={isSubmittingReview}
+                  onPress={() => setReviewLiked(false)}
+                >
+                  <Feather name="thumbs-down" size={18} color={reviewLiked === false ? colors.primary : colors.text} />
+                  <Text style={[styles.reviewChoiceText, { color: colors.text }]}>Dislike</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={[
+                  styles.reviewInput,
+                  {
+                    borderColor: colors.border,
+                    color: colors.text,
+                    backgroundColor: isDark ? "#111112" : colors.background,
+                  },
+                ]}
+                placeholder="Add an optional review"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                maxLength={1000}
+                value={reviewText}
+                editable={!isSubmittingReview}
+                onChangeText={setReviewText}
+              />
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.reviewSubmitBtn,
+                {
+                  backgroundColor: reviewLiked === null ? colors.card : colors.primary,
+                  opacity: isSubmittingReview ? 0.7 : 1,
+                },
+              ]}
+              activeOpacity={0.85}
+              disabled={reviewLiked === null || isSubmittingReview}
+              onPress={handleSubmitHostReview}
+            >
+              {isSubmittingReview ? (
+                <ActivityIndicator color="#111111" />
+              ) : (
+                <Text style={styles.reviewSubmitText}>Submit Review</Text>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <EventCancellationReasonModal
+        visible={cancelReasonVisible}
+        pending={isCancellingEvent}
+        onClose={() => {
+          if (!isCancellingEvent) setCancelReasonVisible(false);
+        }}
+        onSubmit={submitEventCancellation}
+      />
+
+      <CommentsModal
+        visible={showComments}
+        onClose={() => setShowComments(false)}
+        momentId={interactionMomentId}
+        likesCount={localLikesCount}
+        sharesCount={localSharesCount}
+        onInteractionChange={handleInteractionChange}
+      />
+
+      <ReportModal
+        visible={reportReasonVisible}
+        onClose={() => setReportReasonVisible(false)}
+        onReport={handleReportReason}
+      />
+
+      <ReportDetailsModal
+        visible={reportDetailsVisible}
+        onClose={handleReportDetailsClose}
+        onDone={handleSubmitEventReport}
+        isSubmitting={isReportSubmitting}
+        showBlockToggle
+      />
+
+      <ShareModal
+        visible={showShare}
+        onClose={() => setShowShare(false)}
+        shareUrl={event?.id ? `https://mooment.app/events/${event.id}` : undefined}
+        onRepost={handleRepost}
+        item={event ? {
+          type: "event",
+          id: event.id,
+          preview: event.name,
+          imageUrl: resolveStorageUrl(getEventBannerKey(event), null),
+          authorName: event.host?.name ?? null,
+          canShareToChat: event.privacy !== "private",
+          categoryLabels: event.categories?.length ? event.categories : event.category ? [event.category] : [],
+          dateTimeLabel: event.scheduledAt
+            ? (() => {
+                // EVT-008: Event-local, not device-local — same helper every
+                // primary surface uses, so the Share sheet matches Feed/Map/
+                // Event Detail for the same Event.
+                const shareTimeModel = formatEventTimeDisplay({
+                  scheduledAt: event.scheduledAt,
+                  timezone: event.timezone,
+                });
+                return `${shareTimeModel.primaryDateShortText}, ${shareTimeModel.primaryTimeText}`;
+              })()
+            : null,
+          locationLabel: event.location?.venue ?? event.location?.address ?? event.location?.searchLabel ?? null,
+        } : undefined}
+      />
+    </View>
+  );
+};
+
+export default EventScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  headerActions: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  imageContainer: {
+    width,
+    height: 302,
+    position: "relative",
+    overflow: "hidden",
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+  },
+  topShade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 130,
+  },
+  bottomShade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 200,
+  },
+  heroOnImageShadow: {
+    textShadowColor: "rgba(0, 0, 0, 0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  heroStatusStack: {
+    alignItems: "flex-end",
+    gap: 6,
+    position: "absolute",
+    right: 20,
+    zIndex: 3,
+  },
+  overlaidMeta: {
+    position: "absolute",
+    bottom: 24,
+    left: 20,
+    right: 20,
+  },
+  metaTopRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  tagsRow: {
+    flexDirection: "row",
+    flexShrink: 1,
+    flexWrap: "wrap",
+    gap: 6,
+    paddingRight: 10,
+  },
+  tag: {
+    backgroundColor: "rgba(255, 255, 255, 0.24)",
+    borderRadius: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  tagText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  addMembersBtn: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 6,
+    height: 24,
+    justifyContent: "center",
+    paddingHorizontal: 11,
+  },
+  addMembersText: {
+    color: "#111111",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  hostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  hostAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+  },
+  hostAvatarFallback: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  hostAvatarFallbackText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  hostInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  hostName: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "bold",
+  },
+  hostSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+  hostUser: {
+    color: "rgba(255, 255, 255, 0.78)",
+    fontSize: 12,
+  },
+  dotSeparator: {
+    color: "rgba(255, 255, 255, 0.78)",
+    fontSize: 12,
+  },
+  privateText: {
+    color: "rgba(255, 255, 255, 0.78)",
+    fontSize: 12,
+  },
+  followBtnSmall: {
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+  },
+  followingBtnSmall: {
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    borderWidth: 0,
+  },
+  followBtnTextSmall: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
+  },
+  followingBtnTextSmall: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  attendeesStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  statsText: {
+    fontSize: 13,
+  },
+  contentPadding: {
+    paddingHorizontal: 16,
+  },
+  eventTitle: {
+    fontSize: 23,
+    fontWeight: "bold",
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  eventInfoRow: {
+    gap: 8,
+    marginBottom: 20,
+  },
+  eventScheduleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    rowGap: 8,
+  },
+  infoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  infoText: {
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  viewerEquivalentText: {
+    width: "100%",
+    fontSize: 12,
+    opacity: 0.75,
+  },
+  tabBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    marginBottom: 0,
+    paddingHorizontal: 16,
+  },
+  tabItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 3,
+    borderBottomColor: "transparent",
+    alignItems: "center",
+    flex: 1,
+  },
+  tabLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 20,
+    zIndex: 100,
+  },
+  priceContainer: {
+    flex: 1,
+  },
+  priceLabel: {
+    fontSize: 12,
+  },
+  priceValue: {
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  buyBtn: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  reviewHostBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    flex: 1,
+    height: 52,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  reviewHostBtnText: {
+    color: "#111111",
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 24,
+    textAlign: "center",
+  },
+  hostFooterBtns: {
+    flex: 1,
+    flexDirection: "column",
+    gap: 10,
+  },
+  publishDraftBtn: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 14,
+  },
+  publishDraftBtnLight: {
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  endEventBtn: {
+    alignItems: "center",
+    backgroundColor: "#E65100",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 14,
+  },
+  cancelEventBtn: {
+    alignItems: "center",
+    backgroundColor: "#150B0B",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 14,
+  },
+  cancelEventBtnLight: {
+    backgroundColor: "rgba(212, 67, 67, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(212, 67, 67, 0.3)",
+  },
+  cancelEventBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#D44343",
+  },
+  buyBtnText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  privacyPill: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 20,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  privacyPillText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  privacyDropdown: {
+    borderRadius: 14,
+    elevation: 8,
+    minWidth: 130,
+    overflow: "hidden",
+    paddingVertical: 4,
+    position: "absolute",
+    right: "50%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    transform: [{ translateX: 65 }],
+  },
+  privacyDropdownItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  privacyDropdownText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  menuContent: {
+    position: "absolute",
+    right: 16,
+    width: 140,
+    borderRadius: 14,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: "hidden",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  menuSeparator: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    marginHorizontal: 8,
+  },
+  rewardDetailOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  rewardDetailBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  rewardDetailSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  rewardDetailHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(128,128,128,0.35)",
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  rewardDetailHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    gap: 12,
+  },
+  rewardDetailTitleBlock: {
+    flex: 1,
+    gap: 8,
+  },
+  rewardDetailName: {
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 26,
+  },
+  rewardDetailTypeBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  rewardDetailTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  rewardDetailCloseBtn: {
+    padding: 4,
+    marginTop: 2,
+  },
+  rewardDetailDivider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  rewardDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 10,
+  },
+  rewardDetailRowIcon: {
+    width: 20,
+    textAlign: "center",
+  },
+  rewardDetailLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    width: 80,
+    flexShrink: 0,
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
+  rewardDetailValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  rewardDetailDescLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  rewardDetailDesc: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  categoryDestinationOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  categoryDestinationBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  categoryDestinationSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  categoryDestinationHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  categoryDestinationTitleBlock: {
+    flex: 1,
+    marginRight: 14,
+  },
+  categoryDestinationTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  categoryDestinationSubtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginTop: 4,
+  },
+  categoryDestinationAction: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    height: 52,
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  categoryDestinationActionText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  categoryDestinationPrimaryAction: {
+    marginTop: 10,
+  },
+  categoryDestinationPrimaryActionText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  categoryDestinationCancelAction: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  categoryDestinationCancelText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  reviewModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  reviewModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  reviewModalSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  reviewDragHandleArea: {
+    alignItems: "center",
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+  },
+  reviewModalBody: {
+    flexShrink: 1,
+  },
+  reviewModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  reviewModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  reviewChoiceRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+  },
+  reviewChoiceBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingVertical: 13,
+  },
+  reviewChoiceText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  reviewInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 14,
+    minHeight: 110,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+    textAlignVertical: "top",
+  },
+  reviewSubmitBtn: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 50,
+    justifyContent: "center",
+    marginTop: 16,
+  },
+  reviewSubmitText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+});

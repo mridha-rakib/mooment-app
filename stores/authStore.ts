@@ -1,0 +1,882 @@
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
+import { create } from "zustand";
+import { api, configureApiAuth } from "@/lib/api";
+import { getAuthErrorDetails, getAuthErrorMessage } from "@/lib/authErrors";
+import { clearEventByIdCache } from "@/lib/eventByIdCache";
+import { removeFcmToken } from "@/lib/notifications";
+
+const AUTH_TOKEN_KEY = "xenog.mobile.accessToken";
+const AUTH_REFRESH_TOKEN_KEY = "xenog.mobile.refreshToken";
+const AUTH_USER_KEY = "xenog.mobile.user";
+const PENDING_VERIFICATION_EMAIL_KEY = "xenog.mobile.pendingVerificationEmail";
+const COMPLETED_PROFILE_TYPES_KEY = "xenog.mobile.completedProfileTypes";
+
+export type AuthUser = {
+  id: string;
+  name: string;
+  username?: string;
+  email: string;
+  accountType: "personal" | "business";
+  avatarKey?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  bio?: string | null;
+  address?: string | null;
+  businessDocumentKey?: string | null;
+  currentLocationSharingEnabled?: boolean;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number | null;
+    updatedAt?: string;
+  } | null;
+  notificationsEnabled?: boolean;
+  role: "user" | "admin";
+  isActive: boolean;
+  emailVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+type RegisterPayload = {
+  name: string;
+  username: string;
+  email: string;
+  password: string;
+  accountType: "personal" | "business";
+  acceptedLegal: true;
+  locale: string;
+};
+
+type VerifyEmailPayload = {
+  email: string;
+  code: string;
+};
+
+type RequestPasswordResetPayload = {
+  email: string;
+};
+
+type ValidatePasswordResetCodePayload = {
+  email: string;
+  code: string;
+};
+
+type ResetPasswordPayload = ValidatePasswordResetCodePayload & {
+  newPassword: string;
+};
+
+type AuthTokens = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+export type UpdateProfilePayload = {
+  name?: string;
+  username?: string;
+  email?: string;
+  accountType?: "personal" | "business";
+  avatarKey?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  bio?: string | null;
+  address?: string | null;
+  businessDocumentKey?: string | null;
+  currentLocationSharingEnabled?: boolean;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number | null;
+  } | null;
+  notificationsEnabled?: boolean;
+};
+
+type AuthState = {
+  user: AuthUser | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  pendingVerificationEmail: string | null;
+  completedProfileTypes: ('personal' | 'business')[];
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isLoggingOut: boolean;
+  isRestoring: boolean;
+  hasRestored: boolean;
+  error: string | null;
+  authErrorCode: string | null;
+  login: (payload: LoginPayload) => Promise<AuthUser>;
+  register: (payload: RegisterPayload) => Promise<string>;
+  verifyEmail: (payload: VerifyEmailPayload) => Promise<AuthUser>;
+  resendVerificationCode: (email?: string) => Promise<void>;
+  requestPasswordReset: (payload: RequestPasswordResetPayload) => Promise<string>;
+  validatePasswordResetCode: (payload: ValidatePasswordResetCodePayload) => Promise<void>;
+  resetPassword: (payload: ResetPasswordPayload) => Promise<void>;
+  updateProfile: (payload: UpdateProfilePayload) => Promise<AuthUser>;
+  deleteAccount: (password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  setUser: (user: AuthUser | null) => Promise<void>;
+  setToken: (accessToken: string | null) => Promise<void>;
+  setPendingVerificationEmail: (email: string | null) => Promise<void>;
+  refreshAuthSession: () => Promise<AuthUser>;
+  restoreAuthSession: (force?: boolean) => Promise<AuthUser | null>;
+  clearAuthState: () => Promise<void>;
+};
+
+const canUseWebStorage = () => Platform.OS === "web" && typeof localStorage !== "undefined";
+
+const canUseSecureStore = async () => Platform.OS !== "web" && (await SecureStore.isAvailableAsync());
+
+const readStoredValue = async (key: string) => {
+  try {
+    if (await canUseSecureStore()) {
+      return SecureStore.getItemAsync(key);
+    }
+
+    if (canUseWebStorage()) {
+      return localStorage.getItem(key);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const writeStoredValue = async (key: string, value: string) => {
+  try {
+    if (await canUseSecureStore()) {
+      await SecureStore.setItemAsync(key, value);
+      return;
+    }
+
+    if (canUseWebStorage()) {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // Secure storage failure should not crash the app
+  }
+};
+
+const deleteStoredValue = async (key: string) => {
+  try {
+    if (await canUseSecureStore()) {
+      await SecureStore.deleteItemAsync(key);
+      return;
+    }
+
+    if (canUseWebStorage()) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Secure storage failure should not crash the app
+  }
+};
+
+const readStoredUser = async () => {
+  const storedUser = await readStoredValue(AUTH_USER_KEY);
+
+  if (!storedUser) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedUser) as AuthUser;
+  } catch {
+    await deleteStoredValue(AUTH_USER_KEY);
+    return null;
+  }
+};
+
+const persistAuthState = async (user: AuthUser, tokens: AuthTokens) => {
+  await Promise.all([
+    writeStoredValue(AUTH_TOKEN_KEY, tokens.accessToken),
+    writeStoredValue(AUTH_REFRESH_TOKEN_KEY, tokens.refreshToken),
+    writeStoredValue(AUTH_USER_KEY, JSON.stringify(user)),
+  ]);
+};
+
+const persistRestoredAuthState = async (
+  user: AuthUser,
+  accessToken: string | null,
+  refreshToken: string | null,
+) => {
+  const storageUpdates: Promise<void>[] = [writeStoredValue(AUTH_USER_KEY, JSON.stringify(user))];
+
+  storageUpdates.push(accessToken ? writeStoredValue(AUTH_TOKEN_KEY, accessToken) : deleteStoredValue(AUTH_TOKEN_KEY));
+  storageUpdates.push(
+    refreshToken ? writeStoredValue(AUTH_REFRESH_TOKEN_KEY, refreshToken) : deleteStoredValue(AUTH_REFRESH_TOKEN_KEY),
+  );
+
+  await Promise.all(storageUpdates);
+};
+
+const clearStoredAuthState = async () => {
+  await Promise.all([
+    deleteStoredValue(AUTH_TOKEN_KEY),
+    deleteStoredValue(AUTH_REFRESH_TOKEN_KEY),
+    deleteStoredValue(AUTH_USER_KEY),
+    deleteStoredValue(COMPLETED_PROFILE_TYPES_KEY),
+  ]);
+};
+
+let authPersistenceQueue: Promise<void> = Promise.resolve();
+
+const enqueueAuthPersistence = <T>(operation: () => Promise<T>): Promise<T> => {
+  const result = authPersistenceQueue.then(operation, operation);
+  authPersistenceQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+};
+
+const readCompletedProfileTypes = async (): Promise<('personal' | 'business')[]> => {
+  const stored = await readStoredValue(COMPLETED_PROFILE_TYPES_KEY);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored) as ('personal' | 'business')[];
+  } catch {
+    return [];
+  }
+};
+
+const persistCompletedProfileType = async (
+  type: 'personal' | 'business',
+  current: ('personal' | 'business')[],
+): Promise<('personal' | 'business')[]> => {
+  if (current.includes(type)) return current;
+  const updated = [...current, type];
+  await writeStoredValue(COMPLETED_PROFILE_TYPES_KEY, JSON.stringify(updated));
+  return updated;
+};
+
+const setStoredPendingVerificationEmail = async (email: string | null) => {
+  if (email) {
+    await writeStoredValue(PENDING_VERIFICATION_EMAIL_KEY, email);
+    return;
+  }
+
+  await deleteStoredValue(PENDING_VERIFICATION_EMAIL_KEY);
+};
+
+const getSessionPayload = (response: unknown) => {
+  const data = (response as {
+    data?: {
+      data?: {
+        user?: AuthUser;
+        tokens?: { accessToken?: string; refreshToken?: string };
+        accessToken?: string;
+        refreshToken?: string;
+      };
+    };
+  })
+    ?.data?.data;
+
+  return {
+    user: data?.user ?? null,
+    accessToken: data?.tokens?.accessToken ?? data?.accessToken ?? null,
+    refreshToken: data?.tokens?.refreshToken ?? data?.refreshToken ?? null,
+  };
+};
+
+const normalizeRegistrationUsername = (username: string) => username.trim().replace(/^@+/, "").toLowerCase();
+const normalizeRegistrationEmail = (email: string) => email.trim().toLowerCase();
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null,
+  accessToken: null,
+  refreshToken: null,
+  pendingVerificationEmail: null,
+  completedProfileTypes: [],
+  isAuthenticated: false,
+  isLoading: false,
+  isLoggingOut: false,
+  isRestoring: true,
+  hasRestored: false,
+  error: null,
+  authErrorCode: null,
+
+  login: async ({ email, password }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      const response = await api.post("/auth/login", { email, password }, {
+        skipAuthHeader: true,
+        skipAuthRedirect: true,
+        skipAuthRefresh: true,
+      });
+      const { user, accessToken, refreshToken } = getSessionPayload(response);
+
+      if (!user || !accessToken || !refreshToken) {
+        throw new Error("The sign in response was incomplete.");
+      }
+
+      await deleteStoredValue(COMPLETED_PROFILE_TYPES_KEY);
+      const completedProfileTypes = await persistCompletedProfileType(user.accountType, []);
+      await persistAuthState(user, { accessToken, refreshToken });
+      set({
+        user,
+        accessToken,
+        refreshToken,
+        completedProfileTypes,
+        isAuthenticated: true,
+        isLoading: false,
+        isRestoring: false,
+        hasRestored: true,
+        error: null,
+      });
+
+      return user;
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to sign in. Check your credentials and try again.");
+      const details = getAuthErrorDetails(error);
+      const pendingEmail = details?.code === "EMAIL_NOT_VERIFIED" ? details.email ?? email.trim() : null;
+
+      if (pendingEmail) {
+        await setStoredPendingVerificationEmail(pendingEmail);
+      }
+
+      set({
+        isLoading: false,
+        error: message,
+        authErrorCode: details?.code ?? null,
+        pendingVerificationEmail: pendingEmail ?? get().pendingVerificationEmail,
+      });
+      throw new Error(message);
+    }
+  },
+
+  register: async ({ name, username, email, password, accountType, acceptedLegal, locale }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      const normalizedEmail = normalizeRegistrationEmail(email);
+      const normalizedUsername = normalizeRegistrationUsername(username);
+      const response = await api.post(
+        "/auth/register",
+        {
+          name: name.trim(),
+          username: normalizedUsername,
+          email: normalizedEmail,
+          password,
+          accountType,
+          acceptedLegal,
+          locale,
+        },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+      const pendingEmail = response.data?.data?.email ?? normalizedEmail;
+
+      await setStoredPendingVerificationEmail(pendingEmail);
+      set({
+        pendingVerificationEmail: pendingEmail,
+        isLoading: false,
+        error: null,
+        authErrorCode: null,
+      });
+
+      return pendingEmail;
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to create your account. Please try again.");
+      set({ isLoading: false, error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+  },
+
+  verifyEmail: async ({ email, code }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      const response = await api.post(
+        "/auth/verify-email",
+        {
+          email: email.trim(),
+          code: code.trim(),
+        },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+      const { user, accessToken, refreshToken } = getSessionPayload(response);
+
+      if (!user || !accessToken || !refreshToken) {
+        throw new Error("The verification response was incomplete.");
+      }
+
+      await deleteStoredValue(COMPLETED_PROFILE_TYPES_KEY);
+      const completedProfileTypes = await persistCompletedProfileType(user.accountType, []);
+      await persistAuthState(user, { accessToken, refreshToken });
+      await setStoredPendingVerificationEmail(null);
+      set({
+        user,
+        accessToken,
+        refreshToken,
+        completedProfileTypes,
+        pendingVerificationEmail: null,
+        isAuthenticated: true,
+        isLoading: false,
+        isRestoring: false,
+        hasRestored: true,
+        error: null,
+        authErrorCode: null,
+      });
+
+      return user;
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to verify your email. Please check the code and try again.");
+      set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
+  },
+
+  resendVerificationCode: async (email) => {
+    const verificationEmail = email ?? get().pendingVerificationEmail;
+
+    if (!verificationEmail) {
+      const message = "Enter your email address before requesting a new code.";
+      set({ error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.post("/auth/resend-verification", { email: verificationEmail }, {
+        skipAuthHeader: true,
+        skipAuthRedirect: true,
+        skipAuthRefresh: true,
+      });
+      await setStoredPendingVerificationEmail(verificationEmail);
+      set({
+        pendingVerificationEmail: verificationEmail,
+        isLoading: false,
+        error: null,
+        authErrorCode: null,
+      });
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to resend the verification code. Please try again.");
+      set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
+  },
+
+  requestPasswordReset: async ({ email }) => {
+    const normalizedEmail = normalizeRegistrationEmail(email);
+
+    if (!normalizedEmail) {
+      const message = "Enter your email address before requesting a reset code.";
+      set({ error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      const response = await api.post(
+        "/auth/forgot-password",
+        { email: normalizedEmail },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+      const resetEmail = response.data?.data?.email ?? normalizedEmail;
+
+      set({ isLoading: false, error: null, authErrorCode: null });
+      return resetEmail;
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to request a reset code. Please try again.");
+      set({ isLoading: false, error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+  },
+
+  validatePasswordResetCode: async ({ email, code }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.post(
+        "/auth/validate-reset-code",
+        {
+          email: normalizeRegistrationEmail(email),
+          code: code.trim(),
+        },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+
+      set({ isLoading: false, error: null, authErrorCode: null });
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Invalid or expired reset code.");
+      set({ isLoading: false, error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+  },
+
+  resetPassword: async ({ email, code, newPassword }) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.post(
+        "/auth/reset-password",
+        {
+          email: normalizeRegistrationEmail(email),
+          code: code.trim(),
+          newPassword,
+        },
+        {
+          skipAuthHeader: true,
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        },
+      );
+
+      set({ isLoading: false, error: null, authErrorCode: null });
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to reset your password. Please try again.");
+      set({ isLoading: false, error: message, authErrorCode: null });
+      throw new Error(message);
+    }
+  },
+
+  updateProfile: async (payload) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      const response = await api.patch("/auth/me", payload);
+      const user = (response.data?.data?.user ?? null) as AuthUser | null;
+
+      if (!user) {
+        throw new Error("The profile update response was incomplete.");
+      }
+
+      let completedProfileTypes = get().completedProfileTypes;
+      if (payload.accountType) {
+        completedProfileTypes = await persistCompletedProfileType(payload.accountType, completedProfileTypes);
+      }
+      await writeStoredValue(AUTH_USER_KEY, JSON.stringify(user));
+      set({
+        user,
+        completedProfileTypes,
+        isLoading: false,
+        error: null,
+        authErrorCode: null,
+        isAuthenticated: Boolean(get().accessToken),
+      });
+
+      return user;
+    } catch (error) {
+      const message = getAuthErrorMessage(error, "Unable to save profile. Please try again.");
+      set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
+  },
+
+  deleteAccount: async (password: string) => {
+    set({ isLoading: true, error: null, authErrorCode: null });
+
+    try {
+      await api.delete("/auth/me", {
+        data: { password },
+        skipAuthRedirect: true,
+        skipAuthRefresh: true,
+      });
+    } catch (error) {
+      // Password / obligation failures (401, 409) surface here with the
+      // server's message and leave the local session untouched.
+      const message = getAuthErrorMessage(error, "Unable to delete your account. Please try again.");
+      set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
+
+    // Deletion succeeded — reuse the same local teardown as logout:
+    // drop this device's push token, clear caches and secure storage.
+    try {
+      const Notifications = await import("expo-notifications");
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      const token = tokenData.data as string | undefined;
+      if (token) {
+        await removeFcmToken(token);
+      }
+    } catch {
+      // Best-effort only — the account is already gone.
+    }
+
+    clearEventByIdCache();
+    await setStoredPendingVerificationEmail(null);
+    await get().clearAuthState();
+    set({
+      pendingVerificationEmail: null,
+      isLoading: false,
+      isRestoring: false,
+      hasRestored: true,
+    });
+  },
+
+  logout: async () => {
+    set({ isLoading: true, isLoggingOut: true });
+
+    try {
+      if (get().accessToken) {
+        // Best-effort: stop this device from receiving push for the account
+        // being logged out. Must happen before /auth/logout clears the
+        // session below (the endpoint requires auth), and must never block
+        // or fail logout — no permission granted, no token ever registered,
+        // and network errors are all expected, common cases here.
+        try {
+          const Notifications = await import("expo-notifications");
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          const token = tokenData.data as string | undefined;
+          if (token) {
+            await removeFcmToken(token);
+          }
+        } catch {
+          // Ignore — see comment above.
+        }
+
+        await api.post("/auth/logout", null, {
+          skipAuthRedirect: true,
+          skipAuthRefresh: true,
+        });
+      }
+    } catch {
+      // The local session should still be cleared when the server is unavailable.
+    } finally {
+      // Drop the in-memory event-by-id read cache so a signed-out session's
+      // event data can never bleed into the next account. Logout-only — the
+      // cache mechanics for normal use are untouched.
+      clearEventByIdCache();
+      await setStoredPendingVerificationEmail(null);
+      await get().clearAuthState();
+      set({
+        pendingVerificationEmail: null,
+        isLoading: false,
+        isLoggingOut: false,
+        isRestoring: false,
+        hasRestored: true,
+      });
+    }
+  },
+
+  setUser: async (user) => {
+    if (user) {
+      await writeStoredValue(AUTH_USER_KEY, JSON.stringify(user));
+    } else {
+      await deleteStoredValue(AUTH_USER_KEY);
+    }
+
+    set({ user, isAuthenticated: Boolean(user && get().accessToken) });
+  },
+
+  setToken: async (accessToken) => {
+    if (accessToken) {
+      await writeStoredValue(AUTH_TOKEN_KEY, accessToken);
+    } else {
+      await deleteStoredValue(AUTH_TOKEN_KEY);
+    }
+
+    set({ accessToken, isAuthenticated: Boolean(accessToken && get().user) });
+  },
+
+  setPendingVerificationEmail: async (email) => {
+    await setStoredPendingVerificationEmail(email);
+    set({ pendingVerificationEmail: email, authErrorCode: null });
+  },
+
+  refreshAuthSession: async () => {
+    if (get().isLoggingOut) {
+      throw new Error("Authentication recovery was cancelled during logout.");
+    }
+
+    const storedRefreshToken = get().refreshToken ?? (await readStoredValue(AUTH_REFRESH_TOKEN_KEY));
+
+    if (!storedRefreshToken) {
+      throw new Error("Missing refresh token.");
+    }
+
+    const response = await api.post(
+      "/auth/refresh",
+      { refreshToken: storedRefreshToken },
+      {
+        skipAuthHeader: true,
+        skipAuthRedirect: true,
+        skipAuthRefresh: true,
+      },
+    );
+    const { user, accessToken, refreshToken } = getSessionPayload(response);
+
+    if (!user || !accessToken || !refreshToken) {
+      throw new Error("The refreshed session response was incomplete.");
+    }
+
+    const currentAuthState = get();
+    if (currentAuthState.isLoggingOut || currentAuthState.refreshToken !== storedRefreshToken) {
+      throw new Error("Authentication recovery was cancelled because the session changed.");
+    }
+
+    await enqueueAuthPersistence(() => persistAuthState(user, { accessToken, refreshToken }));
+
+    const latestAuthState = get();
+    if (latestAuthState.isLoggingOut || latestAuthState.refreshToken !== storedRefreshToken) {
+      throw new Error("Authentication recovery was cancelled because the session changed.");
+    }
+
+    set({
+      user,
+      accessToken,
+      refreshToken,
+      isAuthenticated: true,
+      isRestoring: false,
+      hasRestored: true,
+      error: null,
+      authErrorCode: null,
+    });
+
+    return user;
+  },
+
+  restoreAuthSession: async (force = false) => {
+    if (get().hasRestored && !force) {
+      return get().user;
+    }
+
+    set({ isRestoring: true, error: null, authErrorCode: null });
+
+    try {
+      const [accessToken, refreshToken, pendingVerificationEmail, storedUser, existingCompletedTypes] = await Promise.all([
+        readStoredValue(AUTH_TOKEN_KEY),
+        readStoredValue(AUTH_REFRESH_TOKEN_KEY),
+        readStoredValue(PENDING_VERIFICATION_EMAIL_KEY),
+        readStoredUser(),
+        readCompletedProfileTypes(),
+      ]);
+
+      if (!accessToken && !refreshToken) {
+        try {
+          await get().clearAuthState();
+        } catch {
+          // ignore
+        }
+        set({ pendingVerificationEmail, isRestoring: false, hasRestored: true });
+        return null;
+      }
+
+      set({
+        accessToken,
+        refreshToken,
+        pendingVerificationEmail,
+        user: storedUser,
+        isAuthenticated: Boolean(storedUser && (accessToken || refreshToken)),
+      });
+
+      if (!accessToken) {
+        try {
+          return await get().refreshAuthSession();
+        } catch (error) {
+          const message = getAuthErrorMessage(error, "Your session expired. Please sign in again.");
+          try {
+            await get().clearAuthState();
+          } catch {
+            // ignore
+          }
+          set({ pendingVerificationEmail, isRestoring: false, hasRestored: true, error: message });
+          return null;
+        }
+      }
+
+      try {
+        const response = await api.get("/auth/me", { skipAuthRedirect: true, timeout: 5000 });
+        const user = (response.data?.data?.user ?? null) as AuthUser | null;
+
+        if (!user) {
+          throw new Error("The restored session did not include a user.");
+        }
+
+        const currentAccessToken = get().accessToken ?? accessToken;
+        const currentRefreshToken = get().refreshToken ?? refreshToken;
+        const completedProfileTypes = await persistCompletedProfileType(user.accountType, existingCompletedTypes);
+
+        await persistRestoredAuthState(user, currentAccessToken, currentRefreshToken);
+        set({
+          user,
+          accessToken: currentAccessToken,
+          refreshToken: currentRefreshToken,
+          completedProfileTypes,
+          isAuthenticated: Boolean(currentAccessToken),
+          isRestoring: false,
+          hasRestored: true,
+          error: null,
+          authErrorCode: null,
+        });
+
+        return user;
+      } catch (error) {
+        // If we have a valid storedUser locally, allow offline/resilient entry instead of blocking startup
+        if (storedUser) {
+          set({
+            user: storedUser,
+            isAuthenticated: true,
+            isRestoring: false,
+            hasRestored: true,
+            error: null,
+            authErrorCode: null,
+          });
+          return storedUser;
+        }
+
+        const message = getAuthErrorMessage(error, "Your session expired. Please sign in again.");
+        try {
+          await get().clearAuthState();
+        } catch {
+          // ignore
+        }
+        set({ pendingVerificationEmail, isRestoring: false, hasRestored: true, error: message });
+        return null;
+      }
+    } catch {
+      // Ensure we NEVER get stuck on splash screen with isRestoring: true
+      set({ isRestoring: false, hasRestored: true });
+      return null;
+    }
+  },
+
+  clearAuthState: async () => {
+    await enqueueAuthPersistence(clearStoredAuthState);
+    set({
+      user: null,
+      accessToken: null,
+      refreshToken: null,
+      completedProfileTypes: [],
+      isAuthenticated: false,
+      isLoggingOut: false,
+      error: null,
+      authErrorCode: null,
+    });
+  },
+}));
+
+configureApiAuth({
+  getToken: () => useAuthStore.getState().accessToken,
+  onUnauthorized: () => {
+    void useAuthStore.getState().clearAuthState();
+  },
+  onRefreshToken: async () => {
+    await useAuthStore.getState().refreshAuthSession();
+  },
+});

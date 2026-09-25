@@ -1,0 +1,432 @@
+import { api } from "@/lib/api";
+
+export type MomentMode = "feed" | "event";
+export type MomentAudience = "public" | "friends" | "only_me";
+export type FeedAudience = "discover" | "friends";
+export type MomentMediaType = "image" | "video" | "audio";
+export type MomentMediaSource = "gallery" | "camera" | "upload" | "external";
+// Mirrors the backend's momentMediaProcessingStatuses (see xenog-api
+// src/modules/moments/moment.interface.ts). Absent on legacy media items and
+// on non-video media — always optional, never assumed present.
+export type MomentMediaProcessingStatus = "queued" | "processing" | "ready" | "failed";
+// Mirrors the backend's momentMediaProcessingErrorCodes — a safe, coarse
+// classification only. Never a raw FFmpeg/S3 error, job id, or storage key.
+export type MomentMediaProcessingErrorCode =
+  | "source_invalid"
+  | "source_too_large"
+  | "encode_failed"
+  | "storage_failed"
+  | "timeout"
+  | "unknown";
+
+export type MomentMediaItem = {
+  type: MomentMediaType;
+  source: MomentMediaSource;
+  url?: string | null;
+  storageKey?: string | null;
+  contentType?: string | null;
+  durationSeconds?: number | null;
+  processingStatus?: MomentMediaProcessingStatus | null;
+  processingErrorCode?: MomentMediaProcessingErrorCode | null;
+};
+
+export type MomentAuthor = {
+  id: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
+  isFollowing?: boolean;
+};
+
+export type SmartFeedSocialContext = {
+  previewUsers: {
+    id: string;
+    name: string;
+    avatarKey?: string | null;
+    avatarUrl?: string | null;
+  }[];
+  totalMutualReactions: number;
+};
+
+export type SmartFeedMetadata = {
+  nearbyScore: number;
+  freshnessScore: number;
+  socialScore: number;
+  finalScore: number;
+};
+
+export type Moment = {
+  id: string;
+  userId: string;
+  author?: MomentAuthor | null;
+  mode: MomentMode;
+  caption?: string | null;
+  hashtags: string[];
+  audience: MomentAudience;
+  taggedPeople: string[];
+  taggedFriends?: MomentAuthor[];
+  eventTitle?: string | null;
+  eventCode?: string | null;
+  eventId?: string | null;
+  mediaItems: MomentMediaItem[];
+  likesCount: number;
+  commentsCount: number;
+  sharesCount: number;
+  isLiked: boolean;
+  isSaved: boolean;
+  // Current viewer only — backend-authoritative, survives refresh/app restart.
+  hasReported?: boolean;
+  socialContext?: SmartFeedSocialContext;
+  smartFeed?: SmartFeedMetadata;
+  smartFeedScore?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MomentTimelineItem = {
+  id: string;
+  type: "post" | "share";
+  createdAt: string;
+  sharedAt?: string | null;
+  moment: Moment;
+  repostCaption?: string | null;
+  taggedFriends?: MomentAuthor[];
+  sharedBy?: MomentAuthor | null;
+  originalItem?: { type: "post" | "event"; id: string };
+  smartFeedScore?: number;
+};
+
+export type RepostPayload = {
+  caption?: string | null;
+  taggedFriendIds?: string[];
+  clientRequestId?: string | null;
+};
+
+export type UpdateMomentSharePayload = {
+  caption?: string | null;
+  taggedFriendIds?: string[];
+};
+
+export type ProfileTimeline = {
+  items: MomentTimelineItem[];
+  stats: {
+    posts: number;
+  };
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type MomentInteractionSummary = {
+  momentId: string;
+  likesCount: number;
+  commentsCount: number;
+  sharesCount: number;
+  isLiked: boolean;
+};
+
+export type MomentCommentAuthor = {
+  id: string;
+  name: string;
+  username?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
+};
+
+export type MomentComment = {
+  id: string;
+  momentId: string;
+  parentCommentId?: string | null;
+  author?: MomentCommentAuthor | null;
+  text: string;
+  likesCount: number;
+  isLiked: boolean;
+  createdAt: string;
+  updatedAt: string;
+  replies: MomentComment[];
+};
+
+export type CreateMomentPayload = {
+  mode: MomentMode;
+  caption?: string | null;
+  audience: MomentAudience;
+  taggedPeople?: string[];
+  taggedFriendIds?: string[];
+  eventTitle?: string | null;
+  eventCode?: string | null;
+  eventId?: string | null;
+  mediaItems?: MomentMediaItem[];
+  clientRequestId?: string | null;
+};
+
+export const getEventMoments = async (eventId: string): Promise<Moment[]> => {
+  const response = await api.get(`/moments/event/${encodeURIComponent(eventId)}`);
+  return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+export const createMoment = async (payload: CreateMomentPayload): Promise<Moment> => {
+  const response = await api.post("/moments", payload);
+  const moment = response.data?.data?.moment as Moment | undefined;
+
+  if (!moment) {
+    throw new Error("The moment response was incomplete.");
+  }
+
+  return moment;
+};
+
+export const getMyMoments = async (): Promise<Moment[]> => {
+  const response = await api.get("/moments/mine");
+
+  return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+export const getFeedMoments = async (options: {
+  hashtags?: string[];
+  limit?: number;
+  audience?: FeedAudience;
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+} = {}): Promise<Moment[]> => {
+  const response = await api.get("/moments", {
+    params: {
+      ...(options.hashtags?.length ? { hashtags: options.hashtags.join(',') } : {}),
+      ...(options.limit ? { limit: options.limit } : {}),
+      ...(options.audience ? { audience: options.audience } : {}),
+      ...(typeof options.latitude === "number" ? { latitude: options.latitude } : {}),
+      ...(typeof options.longitude === "number" ? { longitude: options.longitude } : {}),
+      ...(typeof options.radiusKm === "number" ? { radiusKm: options.radiusKm } : {}),
+    },
+  });
+
+  return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+export const getMoment = async (momentId: string): Promise<Moment> => {
+  const response = await api.get(`/moments/${encodeURIComponent(momentId)}`);
+  const moment = response.data?.data?.moment as Moment | undefined;
+  if (!moment) throw new Error("The moment response was incomplete.");
+  return moment;
+};
+
+export const getHashtagMoments = async (
+  hashtag: string,
+  limit = 100,
+  options: { expand?: boolean } = {},
+): Promise<Moment[]> => {
+  const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, {
+    params: { limit, ...(options.expand ? { expand: '1' } : {}) },
+  });
+  return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+export type HashtagMomentPage = {
+  moments: Moment[];
+  nextCursor: string | null;
+};
+
+// Cursor-paginated, EXACT-tag hashtag Moments for the hashtag detail screen.
+// Opt-in `paginate=1` mode — the response gains `nextCursor` but is otherwise
+// the same envelope `getHashtagMoments` reads, so the Search probe is unaffected.
+export const getHashtagMomentsPage = async (
+  hashtag: string,
+  options: { limit?: number; cursor?: string | null } = {},
+): Promise<HashtagMomentPage> => {
+  const response = await api.get(`/moments/hashtags/${encodeURIComponent(hashtag)}`, {
+    params: {
+      paginate: '1',
+      limit: options.limit ?? 30,
+      ...(options.cursor ? { cursor: options.cursor } : {}),
+    },
+  });
+  const moments = response.data?.data?.moments;
+  const nextCursor = response.data?.data?.nextCursor;
+
+  return {
+    moments: Array.isArray(moments) ? (moments as Moment[]) : [],
+    nextCursor: typeof nextCursor === 'string' && nextCursor.length > 0 ? nextCursor : null,
+  };
+};
+
+export const getProfileTimeline = async (
+  userId: string,
+  options: { page?: number; limit?: number } = {},
+): Promise<ProfileTimeline> => {
+  const response = await api.get(`/moments/profile/${encodeURIComponent(userId)}/timeline`, { params: options });
+  const data = response.data?.data as ProfileTimeline | undefined;
+
+  return {
+    items: data?.items ?? [],
+    stats: {
+      posts: data?.stats?.posts ?? 0,
+    },
+    pagination: data?.pagination ?? response.data?.meta?.pagination,
+  };
+};
+
+export const shareMoment = async (momentId: string, payload: RepostPayload = {}): Promise<MomentTimelineItem> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/share`, payload);
+  const share = response.data?.data?.share as MomentTimelineItem | undefined;
+
+  if (!share) {
+    throw new Error("The share response was incomplete.");
+  }
+
+  return share;
+};
+
+export const getFeedReposts = async (limit = 50, audience?: FeedAudience): Promise<MomentTimelineItem[]> => {
+  const response = await api.get("/moments/shares/feed", {
+    params: {
+      limit,
+      ...(audience ? { audience } : {}),
+    },
+  });
+  const shares = response.data?.data?.shares;
+  return Array.isArray(shares) ? (shares as MomentTimelineItem[]) : [];
+};
+
+export const deleteMoment = async (momentId: string): Promise<void> => {
+  await api.delete(`/moments/${encodeURIComponent(momentId)}`);
+};
+
+// Caption-only edit of an existing Moment/Post. Media, audience, tagged
+// people/friends, and location are not editable through this call.
+export const updateMoment = async (momentId: string, caption: string | null): Promise<Moment> => {
+  const response = await api.patch(`/moments/${encodeURIComponent(momentId)}`, { caption });
+  const moment = response.data?.data?.moment as Moment | undefined;
+
+  if (!moment) {
+    throw new Error("The update response was incomplete.");
+  }
+
+  return moment;
+};
+
+// Edits ONLY the authenticated user's own repost/share row. Never touches the
+// original Post/Event, and only updates the supported mutable share fields.
+export const updateMomentShare = async (
+  shareId: string,
+  payload: UpdateMomentSharePayload,
+): Promise<MomentTimelineItem> => {
+  const response = await api.patch(`/moments/shares/${encodeURIComponent(shareId)}`, payload);
+  const share = response.data?.data?.share as MomentTimelineItem | undefined;
+
+  if (!share) {
+    throw new Error("The update response was incomplete.");
+  }
+
+  return share;
+};
+
+export const deleteMomentShare = async (shareId: string): Promise<void> => {
+  await api.delete(`/moments/shares/${encodeURIComponent(shareId)}`);
+};
+
+// Owner-only manual retry for a Moment's failed video processing. The
+// backend identifies the eligible failed video server-side — this never
+// sends a job id, storage key, or user id; the Moment id (already trusted,
+// already the post's own id) is the only input.
+export const retryMomentVideoProcessing = async (momentId: string): Promise<Moment> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/retry-video-processing`);
+  const moment = response.data?.data?.moment as Moment | undefined;
+
+  if (!moment) {
+    throw new Error("The retry response was incomplete.");
+  }
+
+  return moment;
+};
+
+export const toggleMomentReaction = async (momentId: string): Promise<MomentInteractionSummary> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/reaction`);
+  const summary = response.data?.data?.summary as MomentInteractionSummary | undefined;
+
+  if (!summary) {
+    throw new Error("The reaction response was incomplete.");
+  }
+
+  return summary;
+};
+
+export const toggleCommentReaction = async (
+  momentId: string,
+  commentId: string,
+): Promise<{ isLiked: boolean; likesCount: number }> => {
+  const response = await api.post(
+    `/moments/${encodeURIComponent(momentId)}/comments/${encodeURIComponent(commentId)}/reaction`,
+  );
+  const data = response.data?.data as { isLiked: boolean; likesCount: number } | undefined;
+
+  if (!data) {
+    throw new Error("The comment reaction response was incomplete.");
+  }
+
+  return data;
+};
+
+export const getMomentComments = async (momentId: string): Promise<MomentComment[]> => {
+  const response = await api.get(`/moments/${encodeURIComponent(momentId)}/comments`);
+
+  return (response.data?.data?.comments ?? []) as MomentComment[];
+};
+
+export type MomentSaveSummary = {
+  momentId: string;
+  isSaved: boolean;
+};
+
+export const toggleMomentSave = async (momentId: string): Promise<MomentSaveSummary> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/save`);
+  const summary = response.data?.data?.summary as MomentSaveSummary | undefined;
+
+  if (!summary) {
+    throw new Error("The save response was incomplete.");
+  }
+
+  return summary;
+};
+
+export const getSavedMoments = async (): Promise<Moment[]> => {
+  const response = await api.get("/moments/saved");
+
+  return (response.data?.data?.moments ?? []) as Moment[];
+};
+
+let _pendingNewMoment: Moment | null = null;
+
+export const setPendingNewMoment = (moment: Moment): void => {
+  _pendingNewMoment = moment;
+};
+
+export const consumePendingNewMoment = (): Moment | null => {
+  const moment = _pendingNewMoment;
+  _pendingNewMoment = null;
+  return moment;
+};
+
+export const createMomentComment = async (
+  momentId: string,
+  payload: {
+    text: string;
+    parentCommentId?: string | null;
+  },
+): Promise<{ comment: MomentComment; summary: MomentInteractionSummary }> => {
+  const response = await api.post(`/moments/${encodeURIComponent(momentId)}/comments`, payload);
+  const comment = response.data?.data?.comment as MomentComment | undefined;
+  const summary = response.data?.data?.summary as MomentInteractionSummary | undefined;
+
+  if (!comment || !summary) {
+    throw new Error("The comment response was incomplete.");
+  }
+
+  return {
+    comment,
+    summary,
+  };
+};

@@ -1,0 +1,803 @@
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
+import { useTheme } from "@/hooks/useTheme";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import CinematicButton from "@/components/ui/CinematicButton";
+import UserAvatar from "@/components/ui/UserAvatar";
+import CrowdStatusBadge, { LiveLifecycleBadge } from "@/components/events/CrowdStatusBadge";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import {
+  emitTicketWalletChanged,
+  getActiveTicketWalletCount,
+  getMyTicketWallet,
+  isTicketWalletItemExpired,
+  type TicketWalletItem,
+} from "@/lib/payments";
+import { getStorageFileUrl } from "@/lib/storage";
+import { classifyEventRelativeDay, formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
+import { getPurchasedTicketDetailParams } from "@/lib/purchasedTicketNavigation";
+
+type WalletTab = "Shared" | "Active" | "Used" | "Canceled";
+type WalletSubFilter = "Active" | "Expired";
+
+type WalletSection = {
+  title: string;
+  items: TicketWalletItem[];
+};
+
+const DEFAULT_EVENT_IMAGE =
+  "https://images.unsplash.com/photo-1514525253361-bee8a187499b?q=80&w=400&auto=format&fit=crop";
+const WALLET_TABS: WalletTab[] = ["Shared", "Active", "Used", "Canceled"];
+const WALLET_SUB_FILTERS: WalletSubFilter[] = ["Active", "Expired"];
+
+function resolveStorageUrl(key?: string | null): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: string): string;
+function resolveStorageUrl(key: string | null | undefined, fallback: null): string | null;
+function resolveStorageUrl(key?: string | null, fallback: string | null = DEFAULT_EVENT_IMAGE) {
+  if (!key) {
+    return fallback;
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return fallback;
+  }
+}
+
+// Batch 3C.2 — venue-local Event schedule (matches Event Detail / Ticket Detail);
+// device-local fallback when `event.timezone` is unknown. Compact rows → primary
+// only, no viewer-secondary. Batch 3C.3: the `tonight` / `upcoming` grouping
+// (see `getTicketSections`) now uses the Event-local calendar day too.
+const formatWalletEventSchedule = (
+  event: Pick<TicketWalletItem["event"], "scheduledAt" | "endAt" | "timezone">,
+  which: "start" | "end",
+): string => {
+  const model = formatEventTimeDisplay({
+    scheduledAt: event.scheduledAt,
+    endAt: event.endAt,
+    timezone: event.timezone,
+  });
+  const dateText =
+    which === "start" ? model.primaryDateText : model.primaryEndDateText ?? model.primaryDateText;
+  const timeText = which === "start" ? model.primaryTimeText : model.primaryEndTimeText;
+  if (!dateText || !timeText) {
+    return "Date TBA";
+  }
+  const withZone = model.primaryZoneText ? `${timeText} ${model.primaryZoneText}` : timeText;
+  return `${dateText} • ${withZone}`;
+};
+
+const getLocationLabel = (item: TicketWalletItem) =>
+  item.event.location?.venue ||
+  item.event.location?.searchLabel ||
+  item.event.location?.address ||
+  "Location TBA";
+
+const getAddressLabel = (item: TicketWalletItem) =>
+  item.event.location?.address || item.event.location?.searchLabel || "Address TBA";
+
+const getRefundStatusLabel = (item: TicketWalletItem): string | null => {
+  const passCancellation = item.ticketPasses?.[0]?.cancellation ?? null;
+  if (passCancellation) {
+    if (passCancellation.refundStatus === "succeeded") return "Refunded";
+    if (
+      passCancellation.status === "needs_attention" ||
+      passCancellation.refundStatus === "failed_terminal" ||
+      passCancellation.refundStatus === "reconciliation_required"
+    ) {
+      return "Refund needs attention";
+    }
+    if (passCancellation.refundStatus !== "not_required") return "Refund processing";
+    return "Canceled";
+  }
+
+  if (!item.refund) return null;
+  if (item.refund.status === "succeeded") return "Refunded";
+  if (item.refund.status === "failed_terminal" || item.refund.status === "reconciliation_required") {
+    return "Refund needs attention";
+  }
+  return "Refund processing";
+};
+
+const getWalletEventId = (item: TicketWalletItem) =>
+  typeof item.event?.id === "string" ? item.event.id.trim() : "";
+
+const getWalletOfferDetails = (item: TicketWalletItem) => {
+  const snapshot = item.rewardSnapshot;
+
+  if (!snapshot) {
+    return "";
+  }
+
+  return [
+    snapshot.discountEnabled && snapshot.discountPercent
+      ? `${snapshot.discountPercent}% off`
+      : null,
+    snapshot.bogoEnabled && snapshot.buyQuantity && snapshot.freeQuantity
+      ? `Buy ${snapshot.buyQuantity} Get ${snapshot.freeQuantity} Free`
+      : null,
+    snapshot.discountAmount > 0 ? `Saved ${snapshot.discountAmount.toFixed(2)} ${snapshot.currency.toUpperCase()}` : null,
+    snapshot.freeQuantityIssued > 0 ? `${snapshot.freeQuantityIssued} free ticket${snapshot.freeQuantityIssued === 1 ? "" : "s"}` : null,
+  ].filter(Boolean).join(" · ");
+};
+
+const getPassesForTab = (item: TicketWalletItem, tab: WalletTab) => {
+  const passes = item.ticketPasses ?? [];
+
+  switch (tab) {
+    case "Shared":
+      if (item.source === "shared") {
+        return passes.filter((pass) => pass.status !== "used");
+      }
+
+      return passes.filter((pass) => Boolean(pass.currentShare) && pass.status !== "used");
+    case "Active":
+      if (item.source !== "owned" || item.walletStatus === "cancelled") {
+        return [];
+      }
+
+      return passes.filter((pass) => !pass.currentShare && pass.status === "active");
+    case "Used":
+      return passes.filter((pass) => pass.status === "used");
+    case "Canceled":
+      return passes.filter((pass) => pass.status === "cancelled" || item.walletStatus === "cancelled");
+    default:
+      return [];
+  }
+};
+
+const toTabWalletItems = (item: TicketWalletItem, tab: WalletTab): TicketWalletItem[] => {
+  const passes = getPassesForTab(item, tab);
+
+  if (passes.length === 0) {
+    return [];
+  }
+
+  return passes.map((pass) => {
+    const paidQuantity = pass.ticketIndex <= (item.paidQuantity ?? item.quantity) ? 1 : 0;
+    const freeQuantity = paidQuantity > 0 ? 0 : 1;
+    const passCancellation = pass.cancellation ?? null;
+    const walletContextPasses = item.walletContextPasses ?? item.ticketPasses ?? [];
+
+    return {
+    ...item,
+      id: `${item.id}-${pass.orderId}-${pass.ticketIndex}`,
+      ticketNo: pass.ticketNo,
+      quantity: 1,
+      paidQuantity,
+      freeQuantity,
+      totalQuantity: 1,
+      totalAmount: passCancellation ? passCancellation.requestedAmountMinor / 100 : paidQuantity > 0 ? item.unitAmount : 0,
+      ticketPasses: [pass],
+      walletContextPasses,
+      currentShare: pass.currentShare ?? null,
+      refund: item.source === "shared" ? null : item.refund,
+      walletStatus: pass.status === "cancelled" || tab === "Canceled" ? "cancelled" : pass.status === "used" ? "used" : "active",
+    };
+  });
+};
+
+const getTicketSections = (items: TicketWalletItem[]): WalletSection[] => {
+  // Batch 3C.3 — "Tonight" means the Event is on the same calendar day as now IN
+  // THE EVENT'S OWN TIMEZONE (null/invalid timezone → device-local, unchanged).
+  // One `now` for the whole pass so no two Events straddle a boundary (§20).
+  const now = new Date();
+  const tonight: TicketWalletItem[] = [];
+  const upcoming: TicketWalletItem[] = [];
+
+  for (const item of items) {
+    if (classifyEventRelativeDay(item.event.scheduledAt, item.event.timezone, now) === "today") {
+      tonight.push(item);
+    } else {
+      upcoming.push(item);
+    }
+  }
+
+  return [
+    { title: "Tonight", items: tonight },
+    { title: "Upcoming", items: upcoming },
+  ].filter((section) => section.items.length > 0);
+};
+
+const getExpiredTicketSections = (items: TicketWalletItem[]): WalletSection[] =>
+  items.length > 0 ? [{ title: "Expired", items }] : [];
+
+const TicketWalletScreen = () => {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const [activeTab, setActiveTab] = useState<WalletTab>("Active");
+  const [activeSubFilter, setActiveSubFilter] = useState<WalletSubFilter>("Active");
+  const [sharedSubFilter, setSharedSubFilter] = useState<WalletSubFilter>("Active");
+  const [tickets, setTickets] = useState<TicketWalletItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadTickets = useCallback(async (refreshing = false) => {
+    if (refreshing) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    setErrorMessage(null);
+
+    try {
+      const walletTickets = await getMyTicketWallet();
+      setTickets(walletTickets);
+      emitTicketWalletChanged({
+        activeTicketCount: getActiveTicketWalletCount(walletTickets),
+      });
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error, "Unable to load ticket wallet."));
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadTickets();
+    }, [loadTickets]),
+  );
+
+  const tabTickets = useMemo(() => {
+    return tickets
+      .flatMap((ticket) => toTabWalletItems(ticket, activeTab));
+  }, [activeTab, tickets]);
+
+  const visibleTickets = useMemo(() => {
+    if (activeTab !== "Shared" && activeTab !== "Active") {
+      return tabTickets;
+    }
+
+    const subFilter = activeTab === "Shared" ? sharedSubFilter : activeSubFilter;
+    const showExpired = subFilter === "Expired";
+    const nowMs = Date.now();
+
+    return tabTickets.filter((ticket) => isTicketWalletItemExpired(ticket, nowMs) === showExpired);
+  }, [activeSubFilter, activeTab, sharedSubFilter, tabTickets]);
+
+  const sections = useMemo(() => {
+    if (
+      (activeTab === "Shared" && sharedSubFilter === "Expired") ||
+      (activeTab === "Active" && activeSubFilter === "Expired")
+    ) {
+      return getExpiredTicketSections(visibleTickets);
+    }
+
+    return getTicketSections(visibleTickets);
+  }, [activeSubFilter, activeTab, sharedSubFilter, visibleTickets]);
+
+  const emptyLabel =
+    activeTab === "Shared"
+      ? `No ${sharedSubFilter.toLowerCase()} shared tickets yet.`
+      : activeTab === "Active"
+        ? activeSubFilter === "Expired"
+          ? "No expired active tickets yet."
+          : "No active tickets yet."
+      : `No ${activeTab.toLowerCase()} tickets yet.`;
+
+  const handleSelectTab = (tab: string) => {
+    if (WALLET_TABS.includes(tab as WalletTab)) {
+      setActiveTab(tab as WalletTab);
+    }
+  };
+
+  const showSubFilter = activeTab === "Shared" || activeTab === "Active";
+  const selectedSubFilter = activeTab === "Shared" ? sharedSubFilter : activeSubFilter;
+  const isExpiredSubFilter = showSubFilter && selectedSubFilter === "Expired";
+  const renderSubFilterOption = (option: string, isSelected: boolean) => {
+    const iconColor = isSelected ? colors.text : isDark ? "#D4D0DA" : "#302B35";
+
+    return (
+      <View key={`${option}-${isSelected}`} style={styles.subFilterOption}>
+        {option === "Active" ? (
+          <Ionicons key={`${option}-${isSelected}-icon`} name="ticket-outline" size={20} color={iconColor} />
+        ) : (
+          <Feather key={`${option}-${isSelected}-icon`} name="clock" size={18} color={iconColor} />
+        )}
+      </View>
+    );
+  };
+
+  const handleSelectSubFilter = (option: string) => {
+    if (!WALLET_SUB_FILTERS.includes(option as WalletSubFilter)) {
+      return;
+    }
+
+    if (activeTab === "Shared") {
+      setSharedSubFilter(option as WalletSubFilter);
+      return;
+    }
+
+    if (activeTab === "Active") {
+      setActiveSubFilter(option as WalletSubFilter);
+    }
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      {/* Header */}
+      <View style={styles.header}>
+        <CinematicButton
+          onPress={() => router.back()}
+          icon={ArrowLeft01Icon}
+          size={24}
+        />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Wallet</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        <SegmentedControl
+          options={WALLET_TABS}
+          selectedOption={activeTab}
+          onSelect={handleSelectTab}
+        />
+      </View>
+      {showSubFilter && (
+        <View style={styles.subFilterContainer}>
+          <SegmentedControl
+            flat
+            options={WALLET_SUB_FILTERS}
+            selectedOption={selectedSubFilter}
+            onSelect={handleSelectSubFilter}
+            containerStyle={[styles.subFilterControl, isDark ? styles.subFilterControlDark : styles.subFilterControlLight]}
+            activeSegmentStyle={[styles.subFilterActiveSegment, isDark ? styles.subFilterActiveSegmentDark : styles.subFilterActiveSegmentLight]}
+            renderOption={renderSubFilterOption}
+            getAccessibilityLabel={(option) => `${option} tickets`}
+          />
+        </View>
+      )}
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void loadTickets(true)}
+            tintColor={colors.text}
+          />
+        }
+      >
+        {isLoading ? (
+          <View style={styles.stateContainer}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.stateContainer}>
+            <Text style={[styles.stateText, { color: colors.textSecondary }]}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { borderColor: colors.border }]}
+              onPress={() => void loadTickets()}
+            >
+              <Text style={[styles.retryText, { color: colors.text }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : sections.length === 0 ? (
+          <View style={styles.stateContainer}>
+            <Text style={[styles.stateText, { color: colors.textSecondary }]}>{emptyLabel}</Text>
+          </View>
+        ) : sections.map((section, idx) => (
+          <View key={idx} style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
+            {section.items.map((item) => (
+              <View key={item.id} style={styles.cardContainer}>
+                <View style={styles.sharedInfo}>
+                  <UserAvatar
+                    uri={resolveStorageUrl(
+                      item.source === "shared"
+                        ? item.sharedBy?.avatarKey
+                        : item.currentShare?.friend?.avatarKey ?? item.event.host?.avatarKey,
+                      null,
+                    )}
+                    name={
+                      item.source === "shared"
+                        ? item.sharedBy?.name ?? "Friend"
+                        : item.currentShare
+                          ? item.currentShare.friend?.name ?? "Friend"
+                          : item.event.host?.name ?? "Host"
+                    }
+                    size={28}
+                    style={styles.avatar}
+                  />
+                  <Text style={[styles.sharedText, { color: colors.textSecondary }]}>
+                    {item.source === "shared" ? "Shared by " : item.currentShare ? "Shared with " : "Hosted by "}
+                    <Text style={[styles.sharedName, { color: colors.text }]}>
+                      {item.source === "shared"
+                        ? item.sharedBy?.name ?? "Friend"
+                        : item.currentShare
+                          ? item.currentShare.friend?.name ?? "Friend"
+                          : item.event.host?.name ?? "Host"}
+                    </Text>
+                  </Text>
+                </View>
+
+                <TouchableOpacity style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.9}>
+                  {/* Card Header */}
+                  <LinearGradient
+                    colors={[isDark ? "rgba(212, 176, 235, 0.12)" : "rgba(212, 176, 235, 0.05)", "transparent"]}
+                    start={{ x: 1, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={styles.cardHeader}
+                  >
+                    <View>
+                      <Text style={[styles.eventTitle, { color: colors.text }]}>{item.event.name ?? item.ticketName}</Text>
+                      <Text style={[styles.hostText, { color: colors.textSecondary }]}>by {item.event.host?.name ?? "Host"}</Text>
+                      {getRefundStatusLabel(item) && (
+                        <Text style={[styles.refundStatusText, { color: colors.textSecondary }]}>{getRefundStatusLabel(item)}</Text>
+                      )}
+                    </View>
+                    <View style={styles.statusStack}>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          isExpiredSubFilter
+                            ? styles.expiredStatusBadge
+                            : { backgroundColor: isDark ? "rgba(22, 216, 105, 0.1)" : "rgba(22, 216, 105, 0.05)" },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.statusText,
+                            { color: isExpiredSubFilter ? "#B3B3B3" : colors.success },
+                          ]}
+                        >
+                          {isExpiredSubFilter ? "Expired" : item.walletStatus === "cancelled" ? "Canceled" : item.walletStatus === "used" ? "Used" : "Active"}
+                        </Text>
+                      </View>
+                      <LiveLifecycleBadge eventStatus={item.event.status} />
+                      <CrowdStatusBadge eventStatus={item.event.status} crowdStatus={item.event.crowdStatus} />
+                    </View>
+                  </LinearGradient>
+
+                  {/* Card Body */}
+                  <View style={styles.cardBody}>
+                    <Image
+                      source={{
+                        uri: resolveStorageUrl(item.event.bannerOriginalImageKey ?? item.event.bannerImageKey),
+                      }}
+                      style={styles.ticketImage}
+                    />
+                    <View style={styles.ticketInfo}>
+                      <View style={styles.locationRow}>
+                        <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+                        <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={1}>
+                          {getLocationLabel(item)}
+                        </Text>
+                      </View>
+                      <Text style={[styles.dateTimeText, { color: colors.text }]}>{formatWalletEventSchedule(item.event, "start")}</Text>
+                      <Text style={[styles.addressText, { color: colors.textSecondary }]} numberOfLines={2}>
+                        {getAddressLabel(item)}
+                      </Text>
+                      
+                      <TouchableOpacity 
+                        style={[styles.viewTicketBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/event-screen/ticket-detail",
+                            params: {
+                              ...getPurchasedTicketDetailParams(item, item.ticketPasses?.[0]!),
+                              source: "wallet",
+                              walletSource: item.source,
+                              walletStatus: item.walletStatus,
+                              cancellationReason: item.event.cancellationDisplayReason ?? (item.event.status === "cancelled" ? "Event canceled" : ""),
+                              purchaseCount: String(item.quantity),
+                              paidQuantity: String(item.paidQuantity ?? item.quantity),
+                              freeQuantity: String(item.freeQuantity ?? 0),
+                              totalQuantity: String(item.totalQuantity ?? item.quantity),
+                              ticketNo: item.ticketNo,
+                              orderId: item.orderId,
+                              eventId: getWalletEventId(item),
+                              eventStatus: item.event.status,
+                              crowdStatus: item.event.crowdStatus ?? "",
+                              ticketId: item.ticketId,
+                              eventTitle: item.event.name ?? item.ticketName,
+                              ticketName: item.ticketName,
+                              hostName: item.event.host?.name ?? "Host",
+                              hostHandle: item.event.host?.username ? `@${item.event.host.username}` : "",
+                              bannerImageKey: item.event.bannerOriginalImageKey ?? item.event.bannerImageKey ?? "",
+                              location: getLocationLabel(item),
+                              address: getAddressLabel(item),
+                              dateTime: formatWalletEventSchedule(item.event, "start"),
+                              eventStartDateTime: formatWalletEventSchedule(item.event, "start"),
+                              eventEndDateTime: formatWalletEventSchedule(item.event, "end"),
+                              amount: String(item.totalAmount),
+                              currency: item.currency,
+                              offerClaimed: item.rewardSnapshot ? "true" : "",
+                              offerDetails: getWalletOfferDetails(item),
+                              refundStatus: item.refund?.status ?? "",
+                              refundRequestedAmountMinor: item.refund ? String(item.refund.requestedAmountMinor) : "",
+                              refundCompletedAmountMinor: item.refund ? String(item.refund.completedAmountMinor) : "",
+                              refundUpdatedAt: item.refund?.updatedAt ?? "",
+                              refundCompletedAt: item.refund?.completedAt ?? "",
+                              refundError: item.refund?.safeLastErrorMessage ?? "",
+                              currentShareId: item.currentShare?.id ?? "",
+                              currentShareFriendName: item.currentShare?.friend?.name ?? "",
+                              currentShareFriendId: item.currentShare?.friend?.id ?? "",
+                              ticketPasses: JSON.stringify(item.ticketPasses ?? []),
+                              walletContextPasses: JSON.stringify(item.walletContextPasses ?? item.ticketPasses ?? []),
+                              selectedOrderId: item.ticketPasses?.[0]?.orderId ?? item.orderId,
+                              selectedTicketIndex: String(item.ticketPasses?.[0]?.ticketIndex ?? 1),
+                            },
+                          })
+                        }
+                      >
+                        <Text style={[styles.viewTicketText, { color: colors.textSecondary }]}>View Ticket</Text>
+                        <Feather name="arrow-right" size={14} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ))}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
+  );
+};
+
+export default TicketWalletScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  tabContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  subFilterContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 22,
+  },
+  subFilterControl: {
+    width: "100%",
+    height: 44,
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+  },
+  subFilterControlDark: {
+    backgroundColor: "rgba(17, 17, 17, 0.78)",
+    borderColor: "rgba(255, 255, 255, 0.09)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.26,
+    elevation: 6,
+  },
+  subFilterControlLight: {
+    backgroundColor: "#F5F5F7",
+    borderColor: "#E5E5E5",
+    shadowColor: "#000000",
+    shadowOpacity: 0.06,
+    elevation: 2,
+  },
+  subFilterActiveSegment: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 12,
+  },
+  subFilterActiveSegmentDark: {
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.14,
+  },
+  subFilterActiveSegmentLight: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E5E5E5",
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+  },
+  subFilterOption: {
+    alignItems: "center",
+    height: 34,
+    justifyContent: "center",
+  },
+  tabWrapper: {
+    flexDirection: "row",
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  stateContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 260,
+    paddingHorizontal: 24,
+  },
+  stateText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  retryBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  retryText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  cardContainer: {
+    marginBottom: 20,
+  },
+  sharedInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+    paddingLeft: 4,
+  },
+  avatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  sharedText: {
+    fontSize: 12,
+  },
+  sharedName: {
+    fontWeight: "600",
+  },
+  card: {
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    paddingBottom: 12,
+  },
+  eventTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  hostText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  refundStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusStack: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  expiredStatusBadge: {
+    backgroundColor: "rgba(179, 179, 179, 0.12)",
+    borderColor: "rgba(179, 179, 179, 0.24)",
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  cardBody: {
+    flexDirection: "row",
+    padding: 12,
+    gap: 12,
+  },
+  ticketImage: {
+    width: 100,
+    height: 110,
+    borderRadius: 12,
+  },
+  ticketInfo: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 4,
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  dateTimeText: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  addressText: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  viewTicketBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 6,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  viewTicketText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+});

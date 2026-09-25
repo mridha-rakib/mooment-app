@@ -1,0 +1,247 @@
+import { create, isAxiosError } from "axios";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    _authRetry?: boolean;
+    skipAuthHeader?: boolean;
+    skipAuthRedirect?: boolean;
+    skipAuthRefresh?: boolean;
+  }
+
+  export interface InternalAxiosRequestConfig {
+    _authRetry?: boolean;
+    skipAuthHeader?: boolean;
+    skipAuthRedirect?: boolean;
+    skipAuthRefresh?: boolean;
+  }
+}
+
+type ExpoConstantsWithDevHost = typeof Constants & {
+  expoConfig?: {
+    extra?: Record<string, unknown>;
+    hostUri?: string;
+  };
+  manifest?: {
+    debuggerHost?: string;
+    hostUri?: string;
+  };
+  manifest2?: {
+    extra?: {
+      expoClient?: {
+        hostUri?: string;
+      };
+    };
+  };
+};
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
+
+// Hosts that are only reachable from a developer machine or the Android
+// emulator. A release build (APK/AAB — including EAS "preview" and
+// "production", where __DEV__ is false) must never use one of these as its API
+// target: resolveApiBaseUrl() discards such a value so the request layer fails
+// clearly (see the "Missing EXPO_PUBLIC_API_BASE_URL." guards) instead of
+// silently calling localhost.
+const DEV_ONLY_API_HOSTS = new Set([...LOCAL_HOSTS, "10.0.2.2"]);
+
+const isDevOnlyApiHost = (hostname: string | null | undefined) =>
+  Boolean(hostname) && DEV_ONLY_API_HOSTS.has(hostname as string);
+
+const getHostFromUri = (uri: string | undefined) => {
+  if (!uri) {
+    return null;
+  }
+
+  const normalizedUri = uri.includes("://") ? uri : `http://${uri}`;
+
+  try {
+    return new URL(normalizedUri).hostname;
+  } catch {
+    return null;
+  }
+};
+
+const getExpoDevServerHost = () => {
+  const constants = Constants as ExpoConstantsWithDevHost;
+  const hostCandidates = [
+    constants.expoConfig?.hostUri,
+    constants.manifest2?.extra?.expoClient?.hostUri,
+    constants.manifest?.debuggerHost,
+    constants.manifest?.hostUri,
+  ];
+
+  for (const candidate of hostCandidates) {
+    const host = getHostFromUri(candidate);
+
+    if (host && !LOCAL_HOSTS.has(host)) {
+      return host;
+    }
+  }
+
+  return null;
+};
+
+const resolveApiBaseUrl = () => {
+  const configuredUrl =
+    process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
+    (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined)?.trim();
+
+  if (!configuredUrl) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(configuredUrl);
+
+    if (Platform.OS === "android" && LOCAL_HOSTS.has(url.hostname)) {
+      const devServerHost = getExpoDevServerHost();
+
+      // A LAN-hosted Expo session needs the computer's LAN address. When the
+      // session itself uses localhost, keep localhost so `adb reverse` (set up
+      // by the Android start/reload scripts) can carry API traffic to port 4000.
+      // Replacing it with 10.0.2.2 breaks physical Android devices because that
+      // alias exists only inside the Android emulator.
+      if (devServerHost) {
+        url.hostname = devServerHost;
+      }
+    }
+
+    // Never let a release build fall back to a developer-only API host.
+    if (!__DEV__ && isDevOnlyApiHost(url.hostname)) {
+      return undefined;
+    }
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    if (!__DEV__ && isDevOnlyApiHost(getHostFromUri(configuredUrl))) {
+      return undefined;
+    }
+
+    return configuredUrl.replace(/\/$/, "");
+  }
+};
+
+const baseURL = resolveApiBaseUrl();
+
+export const isNgrokUrl = (url: string | undefined) => {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    return new URL(url).hostname.includes("ngrok-free");
+  } catch {
+    return url.includes("ngrok-free");
+  }
+};
+
+// Requests to an ngrok-free tunnel need this header or ngrok serves its HTML
+// interstitial page instead of the real response — see isNgrokUrl above. Any
+// code issuing a raw (non-axios) request against a URL that may point at the
+// same backend (e.g. media/storage URLs handed straight to an image or audio
+// player) should merge this in, since `api`'s own header default only covers
+// requests made through the axios instance.
+export const ngrokSkipWarningHeaders = (url: string | undefined) =>
+  isNgrokUrl(url) ? { "ngrok-skip-browser-warning": "true" } : undefined;
+
+let getAccessToken = () => null as string | null;
+let handleUnauthorized = () => {};
+let refreshAccessToken = async () => {};
+let refreshTokenPromise: Promise<void> | null = null;
+
+export const getConfiguredAccessToken = () => getAccessToken();
+
+export const configureApiAuth = ({
+  getToken,
+  onUnauthorized,
+  onRefreshToken,
+}: {
+  getToken: () => string | null;
+  onUnauthorized: () => void;
+  onRefreshToken: () => Promise<void>;
+}) => {
+  getAccessToken = getToken;
+  handleUnauthorized = onUnauthorized;
+  refreshAccessToken = onRefreshToken;
+};
+
+export const refreshConfiguredAuthToken = async (
+  options: { clearOnUnauthorized?: boolean } = {},
+): Promise<string> => {
+  if (!refreshTokenPromise) {
+    refreshTokenPromise = refreshAccessToken().finally(() => {
+      refreshTokenPromise = null;
+    });
+  }
+
+  try {
+    await refreshTokenPromise;
+  } catch (error) {
+    if (options.clearOnUnauthorized && isAxiosError(error) && error.response?.status === 401) {
+      handleUnauthorized();
+    }
+    throw error;
+  }
+
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error("The refreshed session did not include an access token.");
+  }
+
+  return token;
+};
+
+export const api = create({
+  baseURL,
+  headers: {
+    "Content-Type": "application/json",
+    ...(isNgrokUrl(baseURL) ? { "ngrok-skip-browser-warning": "true" } : {}),
+  },
+  timeout: 15000,
+});
+
+api.interceptors.request.use((config) => {
+  if (!baseURL) {
+    return Promise.reject(new Error("Missing EXPO_PUBLIC_API_BASE_URL."));
+  }
+
+  const token = getAccessToken();
+
+  if (token && !config.skipAuthHeader) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status;
+    const originalRequest = isAxiosError(error) ? error.config : undefined;
+    const skipAuthRedirect = originalRequest?.skipAuthRedirect;
+    const skipAuthRefresh = originalRequest?.skipAuthRefresh;
+
+    if (status === 401 && originalRequest && !skipAuthRefresh && !originalRequest._authRetry) {
+      originalRequest._authRetry = true;
+
+      try {
+        const token = await refreshConfiguredAuthToken();
+
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+
+        return api(originalRequest);
+      } catch {
+        // Fall through to local sign-out handling below.
+      }
+    }
+
+    if (status === 401 && !skipAuthRedirect) {
+      handleUnauthorized();
+    }
+
+    return Promise.reject(error);
+  },
+);

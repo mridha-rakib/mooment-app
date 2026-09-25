@@ -1,0 +1,134 @@
+import Constants from "expo-constants";
+import * as Linking from "expo-linking";
+import { Platform } from "react-native";
+import {
+  cancelCheckoutOrder,
+  confirmCheckoutOrder,
+  createCheckoutIntent,
+  type CheckoutOrder,
+  type CreateCheckoutIntentPayload,
+} from "@/lib/payments";
+
+const stripeMerchantIdentifier =
+  (Constants.expoConfig?.extra?.stripeMerchantIdentifier as string | undefined)?.trim() ||
+  process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER?.trim();
+const stripeUrlScheme = Array.isArray(Constants.expoConfig?.scheme)
+  ? Constants.expoConfig.scheme[0]
+  : Constants.expoConfig?.scheme;
+
+const loadStripeSdk = async () => {
+  try {
+    return await import("@stripe/stripe-react-native");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (
+      message.includes("StripeSdk") ||
+      message.includes("@stripe/stripe-react-native")
+    ) {
+      throw new Error(
+        "Stripe payments are not available in this dev build. Rebuild the Expo dev client after installing @stripe/stripe-react-native.",
+      );
+    }
+
+    throw error;
+  }
+};
+
+export const startStripeCheckout = async (
+  payload: CreateCheckoutIntentPayload,
+  options?: { isDark?: boolean; onCheckoutCreated?: (checkout: Awaited<ReturnType<typeof createCheckoutIntent>>) => void },
+): Promise<CheckoutOrder | null> => {
+  if (payload.paymentMethod === "apple_pay" && Platform.OS !== "ios") {
+    throw new Error("Apple Pay is only available on iOS devices.");
+  }
+
+  if (payload.paymentMethod === "apple_pay" && !stripeMerchantIdentifier) {
+    throw new Error(
+      __DEV__
+        ? "Apple Pay is not configured. Add EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER to the build environment."
+        : "Apple Pay is currently unavailable. Please choose Card.",
+    );
+  }
+
+  const { initPaymentSheet, initStripe, presentPaymentSheet, confirmPlatformPayPayment, PlatformPay } =
+    await loadStripeSdk();
+  const checkout = await createCheckoutIntent(payload);
+  options?.onCheckoutCreated?.(checkout);
+
+  if (!checkout.publishableKey || !checkout.paymentIntentClientSecret) {
+    throw new Error("Stripe checkout was not initialized by the server.");
+  }
+
+  await initStripe({
+    publishableKey: checkout.publishableKey,
+    merchantIdentifier: stripeMerchantIdentifier,
+    urlScheme: stripeUrlScheme,
+  });
+
+  if (payload.paymentMethod === "apple_pay") {
+    // Explicit Apple Pay selection — open the native Apple Pay sheet directly
+    // instead of Stripe's generic multi-method PaymentSheet.
+    const { error: applePayError } = await confirmPlatformPayPayment(checkout.paymentIntentClientSecret, {
+      applePay: {
+        merchantCountryCode: checkout.merchantCountryCode,
+        currencyCode: checkout.order.currency.toUpperCase(),
+        cartItems: [
+          {
+            paymentType: PlatformPay.PaymentType.Immediate,
+            label: checkout.merchantDisplayName,
+            amount: checkout.order.totalAmount.toFixed(2),
+          },
+        ],
+      },
+    });
+
+    if (applePayError) {
+      if (applePayError.code === "Canceled") {
+        // User dismissed the Apple Pay sheet — not an error; release the reservation server-side
+        await cancelCheckoutOrder(checkout.order.id).catch(() => {});
+        return null;
+      }
+
+      // Genuine payment failure — release the reservation and surface the error
+      await cancelCheckoutOrder(checkout.order.id).catch(() => {});
+      throw new Error(applePayError.message);
+    }
+  } else {
+    const { error: initError } = await initPaymentSheet({
+      merchantDisplayName: checkout.merchantDisplayName,
+      paymentIntentClientSecret: checkout.paymentIntentClientSecret,
+      returnURL: Linking.createURL("stripe-redirect"),
+      style: options?.isDark === false ? "automatic" : "alwaysDark",
+      allowsDelayedPaymentMethods: false,
+      primaryButtonLabel: "Pay now",
+      paymentMethodOrder: ["card"],
+    });
+
+    if (initError) {
+      throw new Error(initError.message);
+    }
+
+    const { error: paymentError } = await presentPaymentSheet();
+
+    if (paymentError) {
+      if (paymentError.code === "Canceled") {
+        // User dismissed the PaymentSheet — not an error; release the reservation server-side
+        await cancelCheckoutOrder(checkout.order.id).catch(() => {});
+        return null;
+      }
+
+      // Genuine payment failure — release the reservation and surface the error
+      await cancelCheckoutOrder(checkout.order.id).catch(() => {});
+      throw new Error(paymentError.message);
+    }
+  }
+
+  const order = await confirmCheckoutOrder(checkout.order.id);
+
+  if (order.paymentStatus !== "paid" && order.paymentStatus !== "processing") {
+    throw new Error("Payment was not completed.");
+  }
+
+  return order;
+};

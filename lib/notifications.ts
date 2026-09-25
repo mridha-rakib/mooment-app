@@ -1,0 +1,79 @@
+import { api } from "@/lib/api";
+
+export type NotificationType =
+  | "follow"
+  | "ticket_buyer"
+  | "ticket_creator"
+  | "ticket_share"
+  | "join_request"
+  | "join_request_accepted"
+  | "event_member_added"
+  | "moment_reaction"
+  | "moment_comment"
+  | "moment_share";
+
+// Only meaningful for the moment_* interaction types — explicit rather than
+// inferred from `type`, since an Event's Interaction Moment shares those same
+// types with normal Post interactions.
+export type NotificationContentType = "post" | "event";
+
+export type NotificationItem = {
+  id: string;
+  type: NotificationType;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorUsername?: string | null;
+  actorAvatarUrl?: string | null;
+  isFollowing?: boolean | null;
+  eventId?: string | null;
+  orderId?: string | null;
+  ticketId?: string | null;
+  ticketIndex?: number | null;
+  momentId?: string | null;
+  contentType?: NotificationContentType | null;
+  eventName?: string | null;
+  ticketName?: string | null;
+  title?: string | null;
+  message?: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export const getNotifications = async (): Promise<NotificationItem[]> => {
+  const response = await api.get("/notifications");
+  const notifications = response.data?.data?.notifications;
+
+  return Array.isArray(notifications) ? (notifications as NotificationItem[]) : [];
+};
+
+const getUnreadCountFromResponse = (response: unknown): number | null => {
+  const count = (response as { data?: { data?: { unreadCount?: unknown; count?: unknown } } })?.data?.data?.unreadCount
+    ?? (response as { data?: { data?: { count?: unknown } } })?.data?.data?.count;
+
+  return typeof count === "number" ? count : null;
+};
+
+export const markAllNotificationsRead = async (): Promise<number | null> => {
+  const response = await api.patch("/notifications/read-all");
+  return getUnreadCountFromResponse(response);
+};
+
+export const markNotificationRead = async (notificationId: string): Promise<number | null> => {
+  const response = await api.patch(`/notifications/${encodeURIComponent(notificationId)}/read`);
+  return getUnreadCountFromResponse(response);
+};
+
+export const getUnreadNotificationCount = async (): Promise<number> => {
+  const response = await api.get("/notifications/unread-count");
+  const count = response.data?.data?.count;
+
+  return typeof count === "number" ? count : 0;
+};
+
+export const registerFcmToken = async (token: string, platform?: string): Promise<void> => {
+  await api.post("/notifications/fcm-token", { token, platform: platform ?? "android" });
+};
+
+export const removeFcmToken = async (token: string): Promise<void> => {
+  await api.delete("/notifications/fcm-token", { data: { token } });
+};

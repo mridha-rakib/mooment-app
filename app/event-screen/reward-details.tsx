@@ -1,0 +1,1239 @@
+import BackButton from "@/components/ui/BackButton";
+import { Spinner } from "@/components/ui/spinner";
+import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorDetails, getAuthErrorMessage, isBusinessAccountRequiredError, isTicketRewardConflictError } from "@/lib/authErrors";
+import { useAuthStore } from "@/stores/authStore";
+import {
+  createDraftReward,
+  createEventReward,
+  getEventById,
+  ticketAlreadyHasReward,
+  updateDraftReward,
+  updateEventReward,
+  type EventResponse,
+  type EventRewardPayload,
+  type EventRewardType,
+} from "@/lib/events";
+import { getMyProducts, type Product } from "@/lib/products";
+import { getStorageFileUrl } from "@/lib/storage";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Image } from "expo-image";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
+import {
+  getRewardSelectorListMaxHeight,
+  getRewardSelectorSheetBottomPadding,
+  getRewardSelectorSheetMaxHeight,
+} from "@/lib/rewardSelectorModalLayout";
+import {
+  getRewardTicketSalesEndError,
+  REWARD_END_DATE_AFTER_TICKET_SALES_END_MESSAGE,
+  REWARD_END_TIME_AFTER_TICKET_SALES_END_MESSAGE,
+} from "@/lib/rewardValidation";
+const isRewardType = (value: unknown): value is EventRewardType =>
+  value === "ticket" || value === "product";
+
+const startOfToday = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+const getInitialRewardDate = (reward?: EventRewardPayload | null, event?: EventResponse | null) => {
+  const source = reward?.expiresAt ?? event?.scheduledAt ?? null;
+  const parsed = source ? new Date(source) : null;
+
+  if (parsed && !Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const fallback = new Date();
+  fallback.setDate(fallback.getDate() + 7);
+  fallback.setSeconds(0, 0);
+
+  return fallback;
+};
+
+const parseInteger = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+
+  return Number.isSafeInteger(parsed) ? parsed : null;
+};
+
+const parseDiscount = (value: string) => {
+  const parsed = parseInteger(value);
+
+  if (parsed === null) {
+    return null;
+  }
+
+  return parsed >= 1 && parsed <= 100 ? parsed : null;
+};
+
+const formatDate = (value: Date) =>
+  value.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+const formatTime = (value: Date) =>
+  value.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    hour12: true,
+    minute: "2-digit",
+  });
+
+const getProductImageUri = (product?: Product | null) => {
+  const key = product?.imageKeys?.[0];
+
+  if (!key) {
+    return null;
+  }
+
+  try {
+    return getStorageFileUrl(key);
+  } catch {
+    return null;
+  }
+};
+
+type SelectorItem = {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  imageUri?: string | null;
+};
+
+type RewardFormErrors = Partial<Record<"endDate" | "endTime", string>>;
+
+export default function RewardDetailsScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ eventId?: string; rewardId?: string; rewardType?: string }>();
+
+  const safeBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)/home");
+    }
+  };
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const eventId = typeof params.eventId === "string" ? params.eventId : null;
+  const rewardId = typeof params.rewardId === "string" ? params.rewardId : null;
+  const rewardType: EventRewardType = isRewardType(params.rewardType) ? params.rewardType : "product";
+  const isProductReward = rewardType === "product";
+  const [event, setEvent] = useState<EventResponse | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectorVisible, setSelectorVisible] = useState(false);
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [offerName, setOfferName] = useState("");
+  const [description, setDescription] = useState("");
+  const [expiresAt, setExpiresAt] = useState(() => getInitialRewardDate());
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [bogoEnabled, setBogoEnabled] = useState(false);
+  const [buyQuantity, setBuyQuantity] = useState("");
+  const [freeQuantity, setFreeQuantity] = useState("");
+  const [capacityLimited, setCapacityLimited] = useState(false);
+  const [capacity, setCapacity] = useState("");
+  const [formErrors, setFormErrors] = useState<RewardFormErrors>({});
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const selectorListOffsetYRef = useRef(0);
+  const fieldRefs = useRef<Record<string, React.ElementRef<typeof View> | null>>({});
+  const activeFieldRef = useRef<string | null>(null);
+  const scrollOffsetRef = useRef(0);
+  const keyboardHeightRef = useRef(0);
+  const keyboardTopRef = useRef(windowHeight);
+  const footerHeightRef = useRef(0);
+
+  const completedProfileTypes = useAuthStore((state) => state.completedProfileTypes);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+
+  const reward = useMemo(
+    () => event?.rewards.find((item) => item.id === rewardId) ?? null,
+    [event?.rewards, rewardId],
+  );
+
+  const selectorItems: SelectorItem[] = useMemo(() => {
+    if (isProductReward) {
+      return products.map((product) => ({
+        id: product.id,
+        title: product.name,
+        subtitle: product.description,
+        imageUri: getProductImageUri(product),
+      }));
+    }
+
+    return (event?.tickets ?? [])
+      .filter((ticket) => !ticketAlreadyHasReward(event?.rewards, ticket.id ?? ticket.name, rewardId))
+      .map((ticket) => ({
+        id: ticket.id ?? ticket.name,
+        title: ticket.name,
+        subtitle: ticket.description,
+      }));
+  }, [event?.rewards, event?.tickets, isProductReward, products, rewardId]);
+
+  const selectedTarget = useMemo(
+    () => selectorItems.find((item) => item.id === selectedTargetId) ?? null,
+    [selectedTargetId, selectorItems],
+  );
+  const selectorSheetBottomPadding = getRewardSelectorSheetBottomPadding(insets.bottom);
+  const selectorSheetMaxHeight = getRewardSelectorSheetMaxHeight({
+    windowHeight,
+    topInset: insets.top,
+    bottomInset: insets.bottom,
+  });
+  const selectorListMaxHeight = getRewardSelectorListMaxHeight({
+    sheetMaxHeight: selectorSheetMaxHeight,
+    bottomPadding: selectorSheetBottomPadding,
+  });
+  const {
+    sheetTranslateY: selectorSheetTranslateY,
+    dragPanHandlers: selectorDragPanHandlers,
+    contentPanHandlers: selectorContentPanHandlers,
+  } = useBottomSheetDragDismiss({
+    visible: selectorVisible,
+    onClose: () => setSelectorVisible(false),
+    canStartContentDrag: () => selectorListOffsetYRef.current <= 0,
+  });
+
+  const selectedTicket = useMemo(
+    () => (!isProductReward && selectedTargetId
+      ? (event?.tickets ?? []).find((t) => t.id === selectedTargetId) ?? null
+      : null),
+    [event?.tickets, isProductReward, selectedTargetId],
+  );
+
+  const ensureFieldVisible = useCallback(
+    (field: string) => {
+      const fieldRef = fieldRefs.current[field];
+
+      if (!fieldRef) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        fieldRef.measureInWindow((_, fieldY, __, fieldHeight) => {
+          const visibleBottom =
+            (keyboardHeightRef.current > 0 ? keyboardTopRef.current : windowHeight) - footerHeightRef.current - 24;
+          const fieldBottom = fieldY + fieldHeight + 16;
+          const delta = fieldBottom - visibleBottom;
+
+          if (delta > 0) {
+            scrollViewRef.current?.scrollTo({
+              animated: true,
+              y: Math.max(0, scrollOffsetRef.current + delta),
+            });
+          }
+        });
+      });
+    },
+    [windowHeight],
+  );
+
+  const focusField = useCallback(
+    (field: string) => {
+      activeFieldRef.current = field;
+      ensureFieldVisible(field);
+    },
+    [ensureFieldVisible],
+  );
+
+  useEffect(() => {
+    selectorListOffsetYRef.current = 0;
+  }, [selectorVisible]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (keyboardEvent) => {
+      keyboardHeightRef.current = keyboardEvent.endCoordinates.height;
+      keyboardTopRef.current = keyboardEvent.endCoordinates.screenY || windowHeight - keyboardEvent.endCoordinates.height;
+      setKeyboardHeight(keyboardEvent.endCoordinates.height);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const field = activeFieldRef.current;
+
+          if (field) {
+            ensureFieldVisible(field);
+          }
+        });
+      });
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      keyboardHeightRef.current = 0;
+      keyboardTopRef.current = windowHeight;
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [ensureFieldVisible]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadData = async () => {
+      if (!eventId) {
+        Alert.alert("Unable to load reward", "Missing event id.");
+        safeBack();
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const [loadedEvent, loadedProducts] = await Promise.all([
+          getEventById(eventId),
+          isProductReward ? getMyProducts() : Promise.resolve([]),
+        ]);
+
+        if (!isActive) {
+          return;
+        }
+
+        setEvent(loadedEvent);
+        setProducts(loadedProducts);
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        Alert.alert("Unable to load reward", getAuthErrorMessage(error, "Please try again."));
+        safeBack();
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadData();
+
+    return () => {
+      isActive = false;
+    };
+  }, [eventId, isProductReward, router]);
+
+  useEffect(() => {
+    if (isLoading || !event) {
+      return;
+    }
+
+    if (reward) {
+      setSelectedTargetId(isProductReward ? reward.productId ?? null : reward.ticketId ?? null);
+      setOfferName(reward.name);
+      setDescription(reward.description ?? "");
+      setExpiresAt(getInitialRewardDate(reward, event));
+      setDiscountEnabled(reward.discountEnabled ?? ((reward.discountPercent ?? 0) > 0));
+      setDiscountPercent(reward.discountPercent ? String(reward.discountPercent) : "");
+      setBogoEnabled(reward.bogoEnabled ?? (typeof reward.buyQuantity === "number" && typeof reward.freeQuantity === "number"));
+      setBuyQuantity(reward.buyQuantity ? String(reward.buyQuantity) : "");
+      setFreeQuantity(reward.freeQuantity ? String(reward.freeQuantity) : "");
+      setCapacityLimited(reward.capacityLimited ?? ((reward.capacity ?? 0) > 0));
+      setCapacity(reward.capacity ? String(reward.capacity) : "");
+      setFormErrors({});
+      return;
+    }
+
+    setSelectedTargetId((current) => current ?? selectorItems[0]?.id ?? null);
+    setOfferName("");
+    setDescription("");
+    setExpiresAt(getInitialRewardDate(null, event));
+    setDiscountEnabled(false);
+    setDiscountPercent("");
+    setBogoEnabled(isProductReward);
+    setBuyQuantity(isProductReward ? "1" : "");
+    setFreeQuantity(isProductReward ? "1" : "");
+    setCapacityLimited(false);
+    setCapacity("");
+    setFormErrors({});
+  }, [event, isLoading, isProductReward, reward, selectorItems]);
+
+  const discountedPrice = useMemo(() => {
+    if (!selectedTicket || selectedTicket.type === "free") return null;
+    if (!discountEnabled) return null;
+    const pct = parseDiscount(discountPercent);
+    if (pct === null) return null;
+    return selectedTicket.price * (1 - pct / 100);
+  }, [selectedTicket, discountEnabled, discountPercent, parseDiscount]);
+
+  const setRewardTicketSalesEndError = useCallback((error: ReturnType<typeof getRewardTicketSalesEndError>) => {
+    if (!error) {
+      setFormErrors({});
+      return;
+    }
+
+    setFormErrors({
+      [error.field]: error.message,
+    });
+  }, []);
+
+  const getSelectedTicketSalesEndError = useCallback(() => {
+    if (isProductReward || !selectedTicket) {
+      return null;
+    }
+
+    return getRewardTicketSalesEndError(expiresAt, selectedTicket.salesEndAt ?? null);
+  }, [expiresAt, isProductReward, selectedTicket]);
+
+  const handleConfirm = async () => {
+    if (!eventId || isSaving) {
+      return;
+    }
+
+    if (!selectedTargetId) {
+      Alert.alert(
+        isProductReward ? "Select product" : "Select ticket",
+        isProductReward ? "Choose a product for this reward." : "Choose a ticket for this reward.",
+      );
+      return;
+    }
+
+    if (
+      !isProductReward
+      && event
+      && ticketAlreadyHasReward(event.rewards, selectedTargetId, rewardId)
+    ) {
+      Alert.alert(
+        "Reward already exists",
+        "This ticket already has a reward. Each ticket can have only one reward. Edit or delete the existing reward before creating another.",
+      );
+      return;
+    }
+
+    const ticketSalesEndError = getSelectedTicketSalesEndError();
+
+    if (ticketSalesEndError) {
+      setRewardTicketSalesEndError(ticketSalesEndError);
+      return;
+    }
+
+    const nextDiscountPercent = discountEnabled ? parseDiscount(discountPercent) : null;
+    const nextBuyQuantity = bogoEnabled ? parseInteger(buyQuantity) : null;
+    const nextFreeQuantity = bogoEnabled ? parseInteger(freeQuantity) : null;
+    const nextCapacity = capacityLimited ? parseInteger(capacity) : null;
+
+    if (!discountEnabled && !bogoEnabled) {
+      Alert.alert("Choose an offer", "Enable Percentage Discount or Buy X Get Y Free.");
+      return;
+    }
+
+    if (discountEnabled && nextDiscountPercent === null) {
+      Alert.alert("Invalid discount", "Enter a whole-number discount from 1 to 100.");
+      return;
+    }
+
+    if (bogoEnabled) {
+      if (nextBuyQuantity === null || nextBuyQuantity < 1 || nextBuyQuantity > 2) {
+        Alert.alert("Invalid buy quantity", "Buy Quantity must be 1 or 2.");
+        return;
+      }
+
+      if (nextFreeQuantity === null || nextFreeQuantity < 1) {
+        Alert.alert("Invalid free quantity", "Free Quantity must be a positive whole number.");
+        return;
+      }
+
+      if (selectedTicket && nextBuyQuantity + nextFreeQuantity > (selectedTicket.availableCount ?? selectedTicket.capacity)) {
+        Alert.alert("Not enough tickets", "Buy X Get Y requires more tickets than are currently available.");
+        return;
+      }
+    }
+
+    if (capacityLimited && (nextCapacity === null || nextCapacity < 1)) {
+      Alert.alert("Invalid user limit", "Limit Users must be a positive whole number.");
+      return;
+    }
+
+    setFormErrors({});
+    setIsSaving(true);
+
+    try {
+      const payload: EventRewardPayload = {
+        rewardType,
+        ticketId: isProductReward ? null : selectedTargetId,
+        productId: isProductReward ? selectedTargetId : null,
+        name: offerName.trim() || (isProductReward ? "Product reward" : "Ticket reward"),
+        description: description.trim() || null,
+        expiresAt: expiresAt.toISOString(),
+        discountEnabled,
+        discountPercent: nextDiscountPercent,
+        bogoEnabled,
+        buyQuantity: nextBuyQuantity,
+        freeQuantity: nextFreeQuantity,
+        capacityLimited,
+        capacity: nextCapacity,
+      };
+
+      const isDraftEvent = event?.status === "draft";
+
+      if (event?.endAt) {
+        const eventEndAt = new Date(event.endAt);
+
+        if (!Number.isNaN(eventEndAt.getTime()) && expiresAt > eventEndAt) {
+          Alert.alert("Invalid expiry date", "Reward expiry must not be after the event end date and time.");
+          return;
+        }
+      }
+
+      if (rewardId) {
+        await (isDraftEvent ? updateDraftReward : updateEventReward)(eventId, rewardId, payload);
+      } else {
+        await (isDraftEvent ? createDraftReward : createEventReward)(eventId, payload);
+      }
+
+      safeBack();
+    } catch (error) {
+      if (isBusinessAccountRequiredError(error)) {
+        if (completedProfileTypes.includes("business")) {
+          Alert.alert(
+            "Business Account Required",
+            "Rewards can only be managed from a Business Account. Switch to your Business Account now?",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Switch Account",
+                onPress: async () => {
+                  try {
+                    await updateProfile({ accountType: "business" });
+                  } catch {
+                    Alert.alert("Switch Failed", "Unable to switch account. Please try again.");
+                  }
+                },
+              },
+            ],
+          );
+        } else {
+          Alert.alert(
+            "Business Account Required",
+            "Rewards can only be managed from a Business Account. Set up your Business Account first.",
+            [
+              { text: "Not Now", style: "cancel" },
+              {
+                text: "Set Up Business Account",
+                onPress: () => {
+                  router.push({
+                    pathname: "/profile-screen/edit-profile",
+                    params: { type: "business", mode: "switch" },
+                  });
+                },
+              },
+            ],
+          );
+        }
+      } else if (isTicketRewardConflictError(error)) {
+        Alert.alert(
+          "Reward already exists",
+          getAuthErrorMessage(
+            error,
+            "This ticket already has a reward. Choose another ticket or edit the existing reward.",
+          ),
+        );
+      } else {
+        const details = getAuthErrorDetails(error);
+
+        if (details?.code === "REWARD_END_DATE_AFTER_TICKET_SALES_END") {
+          setFormErrors({ endDate: REWARD_END_DATE_AFTER_TICKET_SALES_END_MESSAGE });
+          return;
+        }
+
+        if (details?.code === "REWARD_END_TIME_AFTER_TICKET_SALES_END") {
+          setFormErrors({ endTime: REWARD_END_TIME_AFTER_TICKET_SALES_END_MESSAGE });
+          return;
+        }
+
+        Alert.alert("Unable to save reward", getAuthErrorMessage(error, "Please try again."));
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const onDateChange = (_event: unknown, selectedDate?: Date) => {
+    setShowDatePicker(false);
+
+    if (selectedDate) {
+      const nextDate = new Date(expiresAt);
+      nextDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+      nextDate.setSeconds(0, 0);
+      setExpiresAt(nextDate);
+      setFormErrors((current) => ({ ...current, endDate: undefined }));
+    }
+  };
+
+  const onTimeChange = (_event: unknown, selectedTime?: Date) => {
+    setShowTimePicker(false);
+
+    if (selectedTime) {
+      const nextDate = new Date(expiresAt);
+      nextDate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+      setExpiresAt(nextDate);
+      setFormErrors((current) => ({ ...current, endTime: undefined }));
+    }
+  };
+
+  const handleSelectTarget = useCallback(
+    (item: SelectorItem) => {
+      setSelectedTargetId(item.id);
+      setSelectorVisible(false);
+      setFormErrors({});
+    },
+    [],
+  );
+
+  const renderSelectorItem = useCallback(
+    ({ item }: { item: SelectorItem }) => (
+      <TouchableOpacity
+        style={[styles.selectorOption, { borderBottomColor: colors.border }]}
+        activeOpacity={0.8}
+        onPress={() => handleSelectTarget(item)}
+      >
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.selectorImage} contentFit="cover" />
+        ) : (
+          <View style={[styles.selectorIcon, { backgroundColor: colors.background }]}>
+            <Ionicons
+              name={isProductReward ? "cube-outline" : "ticket-outline"}
+              size={20}
+              color={colors.textSecondary}
+            />
+          </View>
+        )}
+        <View style={styles.selectorOptionText}>
+          <Text style={[styles.selectorOptionTitle, { color: colors.text }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          {!!item.subtitle && (
+            <Text style={[styles.selectorOptionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.subtitle}
+            </Text>
+          )}
+        </View>
+        {selectedTargetId === item.id && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+      </TouchableOpacity>
+    ),
+    [
+      colors.background,
+      colors.border,
+      colors.primary,
+      colors.text,
+      colors.textSecondary,
+      handleSelectTarget,
+      isProductReward,
+      selectedTargetId,
+    ],
+  );
+
+  const renderInput = (
+    id: string,
+    label: string,
+    value: string,
+    onChangeText: (text: string) => void,
+    placeholder: string,
+    keyboardType: "default" | "number-pad" | "decimal-pad" = "default",
+  ) => (
+    <View ref={(node) => { fieldRefs.current[id] = node; }} style={styles.inputGroup}>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textSecondary}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        onFocus={() => focusField(id)}
+      />
+    </View>
+  );
+
+  const renderCheckbox = (
+    label: string,
+    checked: boolean,
+    onPress: () => void,
+  ) => (
+    <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={onPress}>
+      <View
+        style={[
+          styles.checkboxBox,
+          {
+            borderColor: checked ? colors.primary : colors.border,
+            backgroundColor: checked ? colors.primary : "transparent",
+          },
+        ]}
+      >
+        {checked ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+      </View>
+      <Text style={[styles.checkboxLabel, { color: colors.text }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const canConfirm = !isSaving && (discountEnabled || bogoEnabled);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      <View style={styles.header}>
+        <BackButton iconName={Cancel01Icon} size={24} />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          {isProductReward ? "Set Product Offer" : "Set Ticket Offer"}
+        </Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+        style={styles.body}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(24, footerHeight + (keyboardHeight > 0 ? 24 : 0)) },
+          ]}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          onScroll={(event) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              {isProductReward ? "PRODUCT" : "TICKET TYPE"}
+            </Text>
+            <TouchableOpacity
+              style={[styles.selector, { backgroundColor: colors.card }]}
+              activeOpacity={0.85}
+              onPress={() => setSelectorVisible(true)}
+            >
+              <Text
+                style={[styles.selectorText, { color: selectedTarget ? colors.text : colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {selectedTarget?.title ?? (isProductReward ? "Select Product" : "Select Ticket")}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {selectedTicket && (
+            <View style={[styles.ticketCard, { backgroundColor: colors.card }]}>
+              <View style={styles.ticketCardRow}>
+                <View style={[styles.ticketTypeBadge, { backgroundColor: selectedTicket.type === "free" ? colors.primary + "22" : colors.textSecondary + "22" }]}>
+                  <Text style={[styles.ticketTypeBadgeText, { color: selectedTicket.type === "free" ? colors.primary : colors.textSecondary }]}>
+                    {selectedTicket.type === "free" ? "Free" : "Paid"}
+                  </Text>
+                </View>
+                {selectedTicket.type === "free" ? (
+                  <Text style={[styles.ticketPrice, { color: colors.text }]}>Free</Text>
+                ) : discountedPrice !== null ? (
+                  <View style={styles.priceContainer}>
+                    <Text style={[styles.ticketPriceStrike, { color: colors.textSecondary }]}>
+                      ${selectedTicket.price.toFixed(2)}
+                    </Text>
+                    <Text style={[styles.ticketPriceDiscounted, { color: colors.primary }]}>
+                      ${discountedPrice.toFixed(2)}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.ticketPrice, { color: colors.text }]}>
+                    ${selectedTicket.price.toFixed(2)}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.ticketCardRow}>
+                <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
+                <Text style={[styles.ticketInfoText, { color: colors.textSecondary }]}>
+                  {selectedTicket.capacity > 0 ? `${selectedTicket.capacity} capacity` : "Unlimited capacity"}
+                </Text>
+                {selectedTicket.salesEndAt && (
+                  <>
+                    <Text style={[styles.ticketInfoDot, { color: colors.textSecondary }]}>·</Text>
+                    <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
+                    <Text style={[styles.ticketInfoText, { color: colors.textSecondary }]}>
+                      {`Sales end ${formatDate(new Date(selectedTicket.salesEndAt))} • ${formatTime(new Date(selectedTicket.salesEndAt))}`}
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {!!selectedTicket.description && (
+                <Text style={[styles.ticketDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {selectedTicket.description}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {renderInput("offerName", "OFFER NAME", offerName, setOfferName, "e.g. Buy 1 get 1 free")}
+          {renderInput("description", "DESCRIPTION", description, setDescription, isProductReward ? "Detail about product" : "Detail about ticket")}
+
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, styles.rowItemLeft]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateSelector,
+                  { backgroundColor: colors.card },
+                  formErrors.endDate ? [styles.inputError, { borderColor: colors.danger }] : null,
+                ]}
+                activeOpacity={0.85}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={17} color={colors.textSecondary} />
+                <Text style={[styles.dateSelectorText, { color: colors.text }]} numberOfLines={1}>
+                  {formatDate(expiresAt)}
+                </Text>
+              </TouchableOpacity>
+              {formErrors.endDate ? (
+                <Text style={[styles.errorText, { color: colors.danger }]}>{formErrors.endDate}</Text>
+              ) : null}
+            </View>
+
+            <View style={[styles.inputGroup, styles.rowItemRight]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateSelector,
+                  { backgroundColor: colors.card },
+                  formErrors.endTime ? [styles.inputError, { borderColor: colors.danger }] : null,
+                ]}
+                activeOpacity={0.85}
+                onPress={() => setShowTimePicker(true)}
+              >
+                <Ionicons name="time-outline" size={17} color={colors.textSecondary} />
+                <Text style={[styles.dateSelectorText, { color: colors.text }]} numberOfLines={1}>
+                  {formatTime(expiresAt)}
+                </Text>
+              </TouchableOpacity>
+              {formErrors.endTime ? (
+                <Text style={[styles.errorText, { color: colors.danger }]}>{formErrors.endTime}</Text>
+              ) : null}
+            </View>
+          </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={expiresAt}
+              mode="date"
+              minimumDate={startOfToday(new Date())}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onDateChange}
+            />
+          )}
+
+          {showTimePicker && (
+            <DateTimePicker
+              value={expiresAt}
+              mode="time"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              is24Hour={false}
+              onChange={onTimeChange}
+            />
+          )}
+
+          {renderCheckbox("Percentage Discount", discountEnabled, () => setDiscountEnabled((value) => !value))}
+          {discountEnabled ? renderInput("discount", "DISCOUNT (%)", discountPercent, setDiscountPercent, "e.g. 10", "number-pad") : null}
+
+          {renderCheckbox("Buy X Get Y Free", bogoEnabled, () => setBogoEnabled((value) => !value))}
+          {bogoEnabled ? (
+            <View style={styles.row}>
+              <View style={[styles.inputGroup, styles.rowItemLeft]}>
+                {renderInput("buyQuantity", "BUY QUANTITY", buyQuantity, setBuyQuantity, "e.g. 1", "number-pad")}
+              </View>
+              <View style={[styles.inputGroup, styles.rowItemRight]}>
+                {renderInput("freeQuantity", "FREE QUANTITY", freeQuantity, setFreeQuantity, "e.g. 1", "number-pad")}
+              </View>
+            </View>
+          ) : null}
+
+          {renderCheckbox("Limit Users", capacityLimited, () => setCapacityLimited((value) => !value))}
+          {capacityLimited ? renderInput("capacity", "USER LIMIT", capacity, setCapacity, "e.g. 100", "number-pad") : null}
+        </ScrollView>
+
+        <View
+          onLayout={(event) => {
+            const nextFooterHeight = event.nativeEvent.layout.height;
+
+            footerHeightRef.current = nextFooterHeight;
+            setFooterHeight(nextFooterHeight);
+          }}
+          style={[styles.footer, { backgroundColor: colors.background }]}
+        >
+          <TouchableOpacity
+            style={[styles.cancelButton, { backgroundColor: colors.card }]}
+            disabled={isSaving}
+            onPress={() => safeBack()}
+          >
+            <Text style={[styles.cancelButtonText, { color: isSaving ? colors.textSecondary : colors.text }]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              { backgroundColor: buttonBackground(colors), opacity: canConfirm ? 1 : 0.45 },
+            ]}
+            disabled={!canConfirm}
+            onPress={handleConfirm}
+          >
+            {isSaving ? (
+              <View style={styles.buttonContent}>
+                <Spinner color={buttonForeground(colors)} size="small" />
+                <Text style={[styles.confirmButtonText, { color: buttonForeground(colors) }]}>Saving...</Text>
+              </View>
+            ) : (
+              <Text style={[styles.confirmButtonText, { color: buttonForeground(colors) }]}>Confirm</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      <Modal visible={selectorVisible} transparent animationType="fade" onRequestClose={() => setSelectorVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setSelectorVisible(false)} />
+          <Animated.View
+            style={[
+              styles.selectorSheet,
+              {
+                backgroundColor: colors.card,
+                maxHeight: selectorSheetMaxHeight,
+                paddingBottom: selectorSheetBottomPadding,
+                transform: [{ translateY: selectorSheetTranslateY }],
+              },
+            ]}
+            {...selectorContentPanHandlers}
+          >
+            <View {...selectorDragPanHandlers}>
+              <Text style={[styles.selectorTitle, { color: colors.text }]}>
+                {isProductReward ? "Select Product" : "Select Ticket"}
+              </Text>
+            </View>
+            {selectorItems.length > 0 ? (
+              <FlatList
+                data={selectorItems}
+                keyExtractor={(item) => item.id}
+                renderItem={renderSelectorItem}
+                style={[styles.selectorList, { maxHeight: selectorListMaxHeight }]}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                keyboardShouldPersistTaps="handled"
+                onScroll={(event) => {
+                  selectorListOffsetYRef.current = event.nativeEvent.contentOffset.y;
+                }}
+                onScrollBeginDrag={(event) => {
+                  selectorListOffsetYRef.current = event.nativeEvent.contentOffset.y;
+                }}
+              />
+            ) : (
+              <Text style={[styles.emptySelectorText, { color: colors.textSecondary }]}>
+                {isProductReward ? "No products available." : "No tickets available."}
+              </Text>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: {
+    flex: 1,
+  },
+  buttonContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+  },
+  cancelButton: {
+    alignItems: "center",
+    borderRadius: 14,
+    flex: 1,
+    paddingVertical: 18,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  checkboxBox: {
+    alignItems: "center",
+    borderRadius: 5,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+  },
+  checkboxLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  checkboxRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+    minHeight: 32,
+  },
+  confirmButton: {
+    alignItems: "center",
+    borderRadius: 14,
+    flex: 1,
+    paddingVertical: 18,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  container: {
+    flex: 1,
+    paddingTop: 10,
+  },
+  dateSelector: {
+    alignItems: "center",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  dateSelectorText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  emptySelectorText: {
+    fontSize: 14,
+    lineHeight: 20,
+    paddingVertical: 18,
+  },
+  errorText: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
+  },
+  footer: {
+    flexDirection: "row",
+    gap: 16,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 18,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  input: {
+    borderRadius: 12,
+    fontSize: 15,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputError: {
+    borderWidth: 1,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  modalOverlay: {
+    backgroundColor: "rgba(0,0,0,0.5)",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  row: {
+    flexDirection: "row",
+  },
+  rowItemLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  rowItemRight: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  scrollContent: {
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
+  selector: {
+    alignItems: "center",
+    borderRadius: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+  selectorIcon: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  selectorImage: {
+    borderRadius: 10,
+    height: 40,
+    width: 40,
+  },
+  selectorList: {
+    maxHeight: 360,
+  },
+  selectorOption: {
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 64,
+  },
+  selectorOptionSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  selectorOptionText: {
+    flex: 1,
+  },
+  selectorOptionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  selectorSheet: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+  selectorText: {
+    flex: 1,
+    fontSize: 15,
+    marginRight: 12,
+  },
+  selectorTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  ticketCard: {
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ticketCardRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  ticketDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  ticketInfoDot: {
+    fontSize: 13,
+  },
+  ticketInfoText: {
+    fontSize: 13,
+  },
+  ticketPrice: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+  ticketTypeBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  ticketTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  priceContainer: {
+    alignItems: "flex-end",
+    flex: 1,
+    gap: 1,
+  },
+  ticketPriceStrike: {
+    fontSize: 12,
+    fontWeight: "500",
+    textDecorationLine: "line-through",
+  },
+  ticketPriceDiscounted: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+});

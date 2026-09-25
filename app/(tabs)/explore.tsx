@@ -1,0 +1,775 @@
+import { Feather, Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/useTheme";
+import { useRouter } from "expo-router";
+import { useAuthStore } from "@/stores/authStore";
+import { subscribe as subscribeRealtime } from "@/lib/socketClient";
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type NotificationItem,
+} from "@/lib/notifications";
+import { followUser, unfollowUser } from "@/lib/users";
+import UserAvatar from "@/components/ui/UserAvatar";
+import { useNotificationStore } from "@/stores/notificationStore";
+import { openPurchasedTicket } from "@/lib/purchasedTicketNavigation";
+
+const isToday = (dateStr: string): boolean => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+};
+
+const formatTime = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs} hr ago`;
+
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const getActorDisplayName = (item: NotificationItem, fallback = "Someone") =>
+  item.actorName?.trim() || (item.actorUsername ? `@${item.actorUsername}` : fallback);
+
+export default function Explore() {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { accessToken } = useAuthStore();
+
+  const cardBg = isDark ? "#16161E" : "#F8F8FB";
+  const cardBorder = isDark ? "#262632" : "#E8E8EE";
+  const accentColor = "#D4B0EB";
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
+
+  const setUnreadCount = useNotificationStore((state) => state.setUnreadCount);
+  const decrementUnread = useNotificationStore((state) => state.decrementUnread);
+  const clearUnread = useNotificationStore((state) => state.clearUnread);
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const data = await getNotifications();
+      setNotifications(data);
+      setUnreadCount(data.filter((n) => !n.isRead).length);
+      const initialFollowingIds = new Set<string>(
+        data
+          .filter((n) => n.actorId && n.isFollowing === true)
+          .map((n) => n.actorId as string),
+      );
+      setFollowingIds(initialFollowingIds);
+    } catch {
+      // silently ignore load errors
+    }
+  }, [setUnreadCount]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    loadNotifications().finally(() => setIsLoading(false));
+  }, [loadNotifications]);
+
+  // Subscribes to the single shared Socket.IO connection (app/lib/socketClient.ts)
+  // instead of opening its own — the connection itself lives at the app root.
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const unsubscribe = subscribeRealtime({
+      onNotification: (notification) => {
+        setNotifications((prev) => [notification, ...prev]);
+      },
+      onNotificationRead: ({ notificationId, unreadCount }) => {
+        setNotifications((prev) =>
+          prev.map((notification) =>
+            notification.id === notificationId ? { ...notification, isRead: true } : notification,
+          ),
+        );
+        setUnreadCount(unreadCount);
+      },
+      onNotificationsReadAll: ({ unreadCount }) => {
+        setNotifications((prev) => prev.map((notification) => ({ ...notification, isRead: true })));
+        setUnreadCount(unreadCount);
+      },
+      onReconnected: () => {
+        void loadNotifications();
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [accessToken, loadNotifications, setUnreadCount]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await loadNotifications();
+    setIsRefreshing(false);
+  }, [loadNotifications]);
+
+  const handleMarkAllRead = useCallback(async () => {
+    try {
+      const unreadCount = await markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      if (typeof unreadCount === "number") {
+        setUnreadCount(unreadCount);
+      } else {
+        clearUnread();
+      }
+    } catch {
+      // silently ignore
+    }
+  }, [clearUnread, setUnreadCount]);
+
+  const markNotificationReadOptimistically = useCallback((item: NotificationItem) => {
+    if (item.isRead) {
+      return;
+    }
+
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === item.id ? { ...notification, isRead: true } : notification,
+      ),
+    );
+    decrementUnread();
+
+    markNotificationRead(item.id)
+      .then((unreadCount) => {
+        if (typeof unreadCount === "number") {
+          setUnreadCount(unreadCount);
+        }
+      })
+      .catch(() => {
+        void loadNotifications();
+      });
+  }, [decrementUnread, loadNotifications, setUnreadCount]);
+
+  const handleNotificationPress = useCallback((item: NotificationItem, navigate?: () => void) => {
+    markNotificationReadOptimistically(item);
+    navigate?.();
+  }, [markNotificationReadOptimistically]);
+
+  const handleFollow = useCallback(async (actorId: string) => {
+    if (followLoadingIds.has(actorId)) return;
+
+    setFollowLoadingIds((prev) => new Set(prev).add(actorId));
+
+    try {
+      if (followingIds.has(actorId)) {
+        await unfollowUser(actorId);
+        setFollowingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(actorId);
+          return next;
+        });
+      } else {
+        await followUser(actorId);
+        setFollowingIds((prev) => new Set(prev).add(actorId));
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setFollowLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(actorId);
+        return next;
+      });
+    }
+  }, [followingIds, followLoadingIds]);
+
+  const todayNotifications = notifications.filter((n) => isToday(n.createdAt));
+  const earlierNotifications = notifications.filter((n) => !isToday(n.createdAt));
+  const hasAnyNotification = notifications.length > 0;
+  const hasUnread = notifications.some((n) => !n.isRead);
+
+  const renderFollowCard = (item: NotificationItem) => {
+    const actorId = item.actorId ?? "";
+    const isFollowing = followingIds.has(actorId);
+    const isLoadingFollow = followLoadingIds.has(actorId);
+
+    return (
+      <View
+        key={item.id}
+        style={[
+          styles.activityCard,
+          { backgroundColor: cardBg, borderColor: cardBorder },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.cardContent}
+          activeOpacity={0.7}
+          onPress={() => {
+            handleNotificationPress(item, () => {
+              if (!actorId) return;
+              router.push({
+                pathname: "/profile-screen/user-profile",
+                params: {
+                  userId: actorId,
+                  name: item.actorName ?? item.actorUsername ?? undefined,
+                  isFollowing: String(isFollowing),
+                  ...(item.actorAvatarUrl ? { avatar: item.actorAvatarUrl } : {}),
+                },
+              });
+            });
+          }}
+        >
+          <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
+          <View style={styles.textContainer}>
+            <Text style={[styles.mainText, { color: colors.textSecondary }]}>
+              <Text style={[styles.boldText, { color: colors.text }]}>
+                {item.actorUsername ? `@${item.actorUsername}` : (item.actorName ?? "Someone")}
+              </Text>{" "}
+              started following you
+            </Text>
+            <View style={styles.timeRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {!item.isRead && (
+                <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+        {actorId ? (
+          <TouchableOpacity
+            style={[
+              styles.followBtn,
+              isFollowing
+                ? {
+                    backgroundColor: isDark ? "rgba(212, 176, 235, 0.08)" : "rgba(212, 176, 235, 0.12)",
+                    borderColor: "rgba(212, 176, 235, 0.35)",
+                    borderWidth: 1,
+                  }
+                : {
+                    backgroundColor: isDark ? "rgba(212, 176, 235, 0.16)" : "rgba(212, 176, 235, 0.22)",
+                    borderColor: accentColor,
+                    borderWidth: 1,
+                  },
+            ]}
+            activeOpacity={0.8}
+            onPress={() => handleFollow(actorId)}
+            disabled={isLoadingFollow}
+          >
+            {isLoadingFollow ? (
+              <ActivityIndicator size="small" color={isDark ? accentColor : "#7A4E96"} />
+            ) : (
+              <Text
+                style={[
+                  styles.followBtnText,
+                  { color: isDark ? (isFollowing ? "rgba(212, 176, 235, 0.75)" : accentColor) : "#7A4E96" },
+                  isFollowing && styles.followingBtnText,
+                ]}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderTicketCard = (item: NotificationItem) => {
+    const isCreatorNotif = item.type === "ticket_creator";
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.activityCard,
+          { backgroundColor: cardBg, borderColor: cardBorder },
+        ]}
+        activeOpacity={0.7}
+        onPress={() => handleNotificationPress(item, () => {
+          if (item.type === "ticket_buyer" && item.orderId && item.ticketId && item.ticketIndex) {
+            void openPurchasedTicket(router, {
+              orderId: item.orderId,
+              ticketId: item.ticketId,
+              ticketIndex: item.ticketIndex,
+            }).catch(() => {
+              if (item.eventId) router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+            });
+          } else if (item.eventId) {
+            router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+          }
+        })}
+      >
+        <View style={styles.cardContent}>
+          <View
+            style={[
+              styles.ticketIconContainer,
+              {
+                backgroundColor: isDark
+                  ? "rgba(212, 176, 235, 0.1)"
+                  : "rgba(212, 176, 235, 0.2)",
+              },
+            ]}
+          >
+            <Ionicons name="ticket" size={20} color={colors.primary} />
+          </View>
+          <View style={styles.textContainer}>
+            {isCreatorNotif ? (
+              <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                <Text style={[styles.boldText, { color: colors.text }]}>
+                  {item.actorUsername ? `@${item.actorUsername}` : (item.actorName ?? "Someone")}
+                </Text>{" "}
+                purchased a ticket for{" "}
+                <Text style={[styles.boldText, { color: colors.text }]}>
+                  {item.eventName ?? "your event"}
+                </Text>
+              </Text>
+            ) : item.title && item.message ? (
+              <>
+                <Text style={[styles.inviteTitle, { color: colors.text }]} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {item.message}
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+                Ticket confirmed for{" "}
+                <Text style={[styles.boldText, { color: colors.text }]}>
+                  {item.eventName ?? "your event"}
+                </Text>
+              </Text>
+            )}
+            <View style={styles.timeRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {!item.isRead && (
+                <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+              )}
+            </View>
+          </View>
+        </View>
+        <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTicketShareCard = (item: NotificationItem) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.activityCard,
+        { backgroundColor: cardBg, borderColor: cardBorder },
+      ]}
+      activeOpacity={0.7}
+      onPress={() => handleNotificationPress(item, () => {
+        if (item.eventId) {
+          router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+        }
+      })}
+    >
+      <View style={styles.cardContent}>
+        <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
+        <View style={styles.textContainer}>
+          <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+            <Text style={[styles.boldText, { color: colors.text }]}>
+              {item.actorUsername ? `@${item.actorUsername}` : (item.actorName ?? "Someone")}
+            </Text>{" "}
+            shared a ticket with you
+            {item.eventName ? (
+              <>
+                {" "}for{" "}
+                <Text style={[styles.boldText, { color: colors.text }]}>{item.eventName}</Text>
+              </>
+            ) : null}
+          </Text>
+          <View style={styles.timeRow}>
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+            {!item.isRead && (
+              <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+            )}
+          </View>
+        </View>
+      </View>
+      <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
+  const renderEventMemberCard = (item: NotificationItem) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.activityCard,
+        { backgroundColor: cardBg, borderColor: cardBorder },
+      ]}
+      activeOpacity={0.7}
+      onPress={() => handleNotificationPress(item, () => {
+        if (item.eventId) {
+          router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+        }
+      })}
+    >
+      <View style={styles.cardContent}>
+        <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
+        <View style={styles.textContainer}>
+          <Text style={[styles.inviteTitle, { color: colors.text }]} numberOfLines={1}>
+            Private event invitation
+          </Text>
+          <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={4}>
+            {"You've been invited by "}
+            <Text style={[styles.boldText, { color: colors.text }]}>
+              {getActorDisplayName(item, "the host")}
+            </Text>
+            {" to "}
+            <Text style={[styles.boldText, { color: colors.text }]}>
+              {item.eventName ?? "a private event"}
+            </Text>
+            {". You're now eligible to join and purchase tickets. Tap to view the event and secure your spot."}
+          </Text>
+          <View style={styles.timeRow}>
+            <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+              {formatTime(item.createdAt)}
+            </Text>
+            {!item.isRead && (
+              <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+            )}
+          </View>
+        </View>
+      </View>
+      <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
+  // Reaction/comment/share notifications share one card. contentType is
+  // authoritative for both copy and tap target — an Event's Interaction
+  // Moment carries the same `type` as a normal Post interaction, so it must
+  // never be inferred from `type` alone, and an Event notification must never
+  // navigate using momentId (that id is the technical Interaction Moment,
+  // not a real standalone Post).
+  const interactionVerb = (type: NotificationItem["type"]): string => {
+    if (type === "moment_comment") return "commented on";
+    if (type === "moment_share") return "shared";
+    return "liked";
+  };
+
+  const renderInteractionCard = (item: NotificationItem) => {
+    const targetLabel = item.contentType === "event" ? "event" : "post";
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.activityCard,
+          { backgroundColor: cardBg, borderColor: cardBorder },
+        ]}
+        activeOpacity={0.7}
+        onPress={() => handleNotificationPress(item, () => {
+          if (item.contentType === "event") {
+            if (item.eventId) {
+              router.push({ pathname: "/event-screen/event", params: { eventId: item.eventId } });
+            }
+            return;
+          }
+          if (item.momentId) {
+            router.push({ pathname: "/post-screen/view-post", params: { postId: item.momentId } });
+          }
+        })}
+      >
+        <View style={styles.cardContent}>
+          <UserAvatar uri={item.actorAvatarUrl} name={item.actorName ?? item.actorUsername} size={44} style={styles.avatar} />
+          <View style={styles.textContainer}>
+            <Text style={[styles.mainText, { color: colors.textSecondary }]} numberOfLines={2}>
+              <Text style={[styles.boldText, { color: colors.text }]}>
+                {getActorDisplayName(item)}
+              </Text>{" "}
+              {interactionVerb(item.type)} your {targetLabel}.
+            </Text>
+            <View style={styles.timeRow}>
+              <Text style={[styles.timeText, { color: colors.textSecondary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {!item.isRead && (
+                <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />
+              )}
+            </View>
+          </View>
+        </View>
+        <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderItem = (item: NotificationItem) => {
+    if (item.type === "follow") return renderFollowCard(item);
+    if (item.type === "ticket_share") return renderTicketShareCard(item);
+    if (item.type === "event_member_added") return renderEventMemberCard(item);
+    if (item.type === "moment_reaction" || item.type === "moment_comment" || item.type === "moment_share") {
+      return renderInteractionCard(item);
+    }
+    return renderTicketCard(item);
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hasAnyNotification) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitleCentered, { color: colors.text }]}>Activity</Text>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.emptyScrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+        >
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconBox, { backgroundColor: colors.card }]}>
+              <Feather name="star" size={32} color={colors.textSecondary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activity yet</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Likes, comments, follows, tickets and rewards will show up here
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
+        {hasUnread && (
+          <TouchableOpacity onPress={handleMarkAllRead}>
+            <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(88, 76 + insets.bottom) },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {todayNotifications.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Today</Text>
+            {todayNotifications.map(renderItem)}
+          </>
+        )}
+
+        {earlierNotifications.length > 0 && (
+          <>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.textSecondary },
+                todayNotifications.length > 0 && { marginTop: 32 },
+              ]}
+            >
+              Earlier
+            </Text>
+            {earlierNotifications.map(renderItem)}
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  headerTitleCentered: {
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    flex: 1,
+  },
+  markReadText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  activityCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  cardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+  },
+  ticketIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  mainText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  inviteTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginBottom: 2,
+  },
+  boldText: {
+    fontWeight: "bold",
+  },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 3,
+  },
+  timeText: {
+    fontSize: 12,
+  },
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  followBtn: {
+    alignItems: "center",
+    borderRadius: 15,
+    height: 30,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  followBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  followingBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+    marginBottom: 100,
+  },
+  emptyIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+});

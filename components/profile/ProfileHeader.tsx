@@ -1,0 +1,379 @@
+import { useTheme } from "@/hooks/useTheme";
+import { Feather } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
+import React from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+import { Menu01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+
+import MoreMenuModal from "../post/MoreMenuModal";
+import BackButton from "../ui/BackButton";
+import ChevronRightIcon from "../ui/ChevronRightIcon";
+import CinematicButton from "../ui/CinematicButton";
+import FadeInOnReady from "../ui/FadeInOnReady";
+import Logo from "../ui/Logo";
+import UserAvatar from "../ui/UserAvatar";
+import { ProfileAvatarSkeleton, ProfileStatsRowSkeleton } from "./ProfileSkeletons";
+
+export type ProfileStats = {
+  events: number;
+  reviews: number;
+  followers: number;
+  following: number;
+  windows: number;
+};
+
+const STORY_RING_COLOR = "#AC86D4";
+
+type ProfileHeaderProps = {
+  userId: string;
+  name?: string | null;
+  avatar?: string | null;
+  stats: ProfileStats;
+  accountType?: "personal" | "business";
+  hasActiveStory?: boolean;
+  isOwnProfile?: boolean;
+  onMenuPress?: () => void;
+  onReport?: () => void;
+  reportDisabled?: boolean;
+  onSave?: () => void;
+  isSaved?: boolean;
+  onBlock?: () => void;
+  blockLabel?: string;
+  blockDisabled?: boolean;
+  onEventsPress?: () => void;
+  onAvatarPress?: () => void;
+  identityLoading?: boolean;
+  statsLoading?: boolean;
+};
+
+export default function ProfileHeader({
+  userId,
+  name,
+  avatar,
+  stats,
+  hasActiveStory = false,
+  isOwnProfile = true,
+  onMenuPress,
+  onReport,
+  reportDisabled = false,
+  onSave,
+  isSaved = false,
+  onBlock,
+  blockLabel,
+  blockDisabled = false,
+  onEventsPress,
+  onAvatarPress,
+  identityLoading = false,
+  statsLoading = false,
+}: ProfileHeaderProps) {
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
+  const [showMore, setShowMore] = React.useState(false);
+  return (
+    <View style={styles.container}>
+      {isOwnProfile ? (
+        <View style={styles.brandedHeader}>
+          <CinematicButton icon={Menu01Icon} onPress={onMenuPress} size={24} />
+
+          <View pointerEvents="none" style={styles.logoSlot}>
+            <Logo width={120} />
+          </View>
+
+          <CinematicButton
+            icon={Search01Icon}
+            onPress={() => router.push("/discover-screen/search")}
+            size={24}
+          />
+        </View>
+      ) : (
+        <View style={styles.topRow}>
+          <BackButton size={20} style={styles.backBtnWithShadow} />
+
+          <TouchableOpacity
+            style={styles.moreBtn}
+            activeOpacity={0.8}
+            onPress={() => setShowMore(true)}
+          >
+            <BlurView
+              intensity={20}
+              tint={isDark ? "dark" : "light"}
+              style={styles.glassCircle}
+            >
+              <Feather name="more-horizontal" size={20} color={colors.text} />
+            </BlurView>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <MoreMenuModal
+        visible={showMore}
+        onClose={() => setShowMore(false)}
+        showDelete={false}
+        onReport={onReport}
+        reportDisabled={reportDisabled}
+        openReportAfterClose
+        onSave={onSave}
+        isSaved={isSaved}
+        onBlock={onBlock}
+        blockLabel={blockLabel}
+        blockDisabled={blockDisabled}
+        top={110} // Positioned under the header button
+      />
+
+      <View style={styles.infoRow}>
+        <TouchableOpacity
+          activeOpacity={0.82}
+          disabled={!onAvatarPress}
+          accessibilityRole={onAvatarPress ? "button" : undefined}
+          accessibilityLabel={`View ${name?.trim() || "user"} profile picture`}
+          onPress={onAvatarPress}
+        >
+          <View
+            style={[
+              styles.avatarBorder,
+              {
+                borderColor: hasActiveStory ? STORY_RING_COLOR : "transparent",
+              },
+            ]}
+          >
+            {identityLoading ? (
+              <ProfileAvatarSkeleton />
+            ) : (
+              <FadeInOnReady>
+                <UserAvatar
+                  uri={avatar}
+                  name={name}
+                  size={80}
+                  style={styles.avatar}
+                  iconSize={36}
+                />
+              </FadeInOnReady>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {statsLoading ? (
+          <ProfileStatsRowSkeleton />
+        ) : (
+          <FadeInOnReady style={styles.statsContainer}>
+            <>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={onEventsPress}
+                disabled={!onEventsPress}
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.events}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                    Events
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/reviews",
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.reviews}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Reviews
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/friends" as never,
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.followers + stats.following}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Friends
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <View
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile-screen/windows" as never,
+                    params: { userId },
+                  })
+                }
+              >
+                <View style={styles.statBox}>
+                  <Text style={[styles.statValue, { color: colors.text }]}>
+                    {stats.windows}
+                  </Text>
+                  <View style={styles.labelRow}>
+                    <Text
+                      style={[styles.statLabel, { color: colors.textSecondary }]}
+                    >
+                      Scenes
+                    </Text>
+                    <View style={styles.chevronWrapper}>
+                      <ChevronRightIcon />
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </>
+          </FadeInOnReady>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  brandedHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 25,
+    paddingHorizontal: 5,
+    position: "relative",
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    height: "100%",
+    padding: 0,
+  },
+  logoSlot: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 25,
+  },
+  glassCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  backBtnWithShadow: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  moreBtn: {},
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+  },
+  avatarBorder: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    padding: 3,
+    borderWidth: 2,
+  },
+  avatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 40,
+  },
+  avatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statsContainer: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  statBox: {
+    alignItems: "center",
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  chevronWrapper: {
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  statLabel: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+  },
+});

@@ -1,0 +1,2052 @@
+import { useTheme } from "@/hooks/useTheme";
+import { Feather } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Animated, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// Components
+import HomeHeader from "@/components/home/HomeHeader";
+import type { HomeFeedFilters } from "@/components/home/FilterModal";
+import MapContainer from "@/components/home/MapContainer";
+import EventFeedCard from "@/components/home/EventFeedCard";
+import PeopleToFollow, { SuggestedUser } from "@/components/home/PeopleToFollow";
+import StoryCarousel, { HomeTabsRow, StoryData } from "@/components/home/StoryCarousel";
+import ParticipatedWindowsList from "@/components/home/ParticipatedWindowsList";
+import CommentsModal from "@/components/post/CommentsModal";
+import FeedPost, { PostData, VIDEO_PLAYBACK_ENABLED } from "@/components/post/FeedPost";
+import ShareModal from "@/components/post/ShareModal";
+import RepostFeedCard from "@/components/post/RepostFeedCard";
+
+import {
+  consumePendingNewMoment,
+  deleteMoment,
+  getFeedMoments,
+  getFeedReposts,
+  shareMoment,
+  type FeedAudience,
+  type Moment,
+  type MomentInteractionSummary,
+  type MomentTimelineItem,
+  type RepostPayload,
+} from "@/lib/moments";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import { mapMomentToPost } from "@/lib/momentPostMapper";
+import { getStorageFileUrl } from "@/lib/storage";
+import {
+  acknowledgePendingVideoMomentUpload,
+  usePendingVideoMomentUploads,
+  type PendingVideoMomentUpload,
+} from "@/lib/pendingMomentUploads";
+import { usePendingVideoMomentSync, type VideoMomentSyncOutcome } from "@/lib/pendingVideoMomentSync";
+import { getDiscoverStories, getFeedStories, getFriendStories } from "@/lib/stories";
+import { buildStoryRow, groupStoriesByAuthor, SELF_TILE_ID } from "@/lib/storyRow";
+import { getSeenStoryIds } from "@/lib/storySeen";
+import { getSuggestedUsers } from "@/lib/users";
+import { getFeedEvents, type EventResponse } from "@/lib/events";
+import { getSmartFeedRankingLocation } from "@/lib/smartFeedRankingLocation";
+import { isLatestFeedRefreshCommit, type FeedRefreshCommit } from "@/lib/feedRefreshCommit";
+import { shouldShowFriendsFeedEmptyState } from "@/lib/friendsFeedEmptyState";
+import {
+  createInitialAudienceFeedState,
+  getAudienceLoadFlags,
+  mergeAudienceFeedCommit,
+  shouldDeferAudienceFeedCommit,
+  type AudienceFeedState,
+} from "@/lib/audienceFeedState";
+import {
+  getEventFilterSectionEvents,
+  getEventFilterSectionHeading,
+  getMixedFeedEvents,
+  isLatestEventRequest,
+  shouldShowEventFilterEmptyState,
+  shouldShowEventFilterSection,
+} from "@/lib/eventFeedLoading";
+import {
+  buildEventFilterRequestParams,
+  createEmptyEventFilters,
+  getEventLocationFilterKey,
+  getNextEventRadiusMiles,
+  hasActiveEventFilters,
+  isBroadEventRadius,
+  isEventRadiusEnabled,
+  isValidEventLocationFilter,
+  mergeCategoryIntoEventFilters,
+  normalizeEventCategoryFilter,
+  resetEventFiltersPreservingDiscoveryCenter,
+  setCategoryInEventFilters,
+  type SharedEventFilters,
+} from "@/lib/eventFilters";
+import type { EventCategory } from "@/constants/eventCategories";
+import { applySmartFeedAuthorDiversity, getSmartFeedCreatorId } from "@/lib/smartFeedDiversity";
+import { useAuthStore } from "@/stores/authStore";
+
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+const SUGGESTED_USERS_INSERT_AFTER = 4;
+const REFRESH_TIMEOUT_MS = 10000;
+const FEED_LOADING_RECOVERY_TIMEOUT_MS = 45000;
+const FEED_VIDEO_VIEWABILITY_THRESHOLD = 60;
+
+type FeedItem =
+  | { type: 'pending_video_upload'; id: string; data: PendingVideoMomentUpload }
+  | { type: 'video_processing'; id: string; data: PostData }
+  | { type: 'post'; id: string; data: PostData }
+  | { type: 'event'; id: string; data: EventResponse }
+  | { type: 'repost'; id: string; data: MomentTimelineItem }
+  | { type: 'suggested_users'; id: string; data: SuggestedUser[] }
+  // Purely a visual boundary between the filtered Event section above and the
+  // normal Smart Feed content below — carries no data of its own.
+  | { type: 'your_feed_header'; id: string };
+
+type PendingFeedRefreshCommit = FeedRefreshCommit<PostData[], EventResponse[], MomentTimelineItem[]>;
+
+// A server Moment whose video is still `queued`/`processing` renders the
+// same skeleton as a local pending upload instead of FeedPost's own black
+// "Video queued for processing" / "Processing video" placeholder — that
+// placeholder remains reserved for cases the user can act on (a `failed`
+// post with its Retry button), never for a state that resolves on its own.
+const isUnresolvedVideoPost = (post: PostData) => (
+  post.mediaItems?.some((item) => (
+    item.type === 'video' &&
+    (item.processingStatus === 'queued' || item.processingStatus === 'processing')
+  )) ?? false
+);
+
+const buildFeedItems = (
+  posts: PostData[],
+  events: EventResponse[],
+  reposts: MomentTimelineItem[],
+  suggestedUsers: SuggestedUser[],
+  pendingVideoUploads: PendingVideoMomentUpload[],
+): FeedItem[] => {
+  type ContentItem =
+    | { type: 'post'; id: string; data: PostData; sortTime: number; smartFeedScore?: number }
+    | { type: 'event'; id: string; data: EventResponse; sortTime: number; smartFeedScore?: number }
+    | { type: 'repost'; id: string; data: MomentTimelineItem; sortTime: number; smartFeedScore?: number };
+
+  const compareContentItems = (left: ContentItem, right: ContentItem) => {
+    if (typeof left.smartFeedScore === 'number' && typeof right.smartFeedScore === 'number') {
+      const scoreDelta = right.smartFeedScore - left.smartFeedScore;
+
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+    }
+
+    return right.sortTime - left.sortTime;
+  };
+
+  const rankedContentItems: ContentItem[] = [
+    ...posts.map((post) => ({
+      type: 'post' as const,
+      id: `moment-${post.id}`,
+      data: post,
+      sortTime: post.createdAt ? new Date(post.createdAt).getTime() : 0,
+      smartFeedScore: post.smartFeedScore,
+    })),
+    ...events.map((event) => ({
+      type: 'event' as const,
+      id: `event-${event.id}`,
+      data: event,
+      sortTime: new Date(event.createdAt).getTime(),
+      smartFeedScore: event.smartFeedScore,
+    })),
+    ...reposts.map((share) => ({
+      type: 'repost' as const,
+      id: `repost-${share.id}`,
+      data: share,
+      sortTime: new Date(share.createdAt).getTime(),
+      smartFeedScore: share.smartFeedScore,
+    })),
+  ].sort(compareContentItems);
+
+  // Post-sort diversity pass only — the smartFeedScore/sortTime ranking
+  // above is unchanged; this only interleaves items after the fact so no
+  // more than SMART_FEED_DIVERSITY.maxConsecutiveSameAuthor consecutive
+  // cards share a creator. See app/lib/smartFeedDiversity.ts.
+  const contentItems = applySmartFeedAuthorDiversity(
+    rankedContentItems,
+    (item) => getSmartFeedCreatorId(item.data),
+  );
+
+  const items: FeedItem[] = pendingVideoUploads
+    .filter((upload) => upload.status !== 'succeeded')
+    .map((upload) => ({
+      type: 'pending_video_upload' as const,
+      id: upload.id,
+      data: upload,
+    }));
+  let contentCount = 0;
+
+  for (const item of contentItems) {
+    if (item.type === 'post') {
+      items.push(
+        isUnresolvedVideoPost(item.data)
+          ? { type: 'video_processing', id: item.id, data: item.data }
+          : { type: 'post', id: item.id, data: item.data },
+      );
+    } else if (item.type === 'event') {
+      items.push({ type: 'event', id: item.id, data: item.data });
+    } else {
+      items.push({ type: 'repost', id: item.id, data: item.data });
+    }
+
+    contentCount++;
+
+    if (contentCount === SUGGESTED_USERS_INSERT_AFTER && suggestedUsers.length > 0) {
+      items.push({ type: 'suggested_users', id: 'feed-suggested-users', data: suggestedUsers });
+    }
+  }
+
+  if (contentCount > 0 && contentCount < SUGGESTED_USERS_INSERT_AFTER && suggestedUsers.length > 0) {
+    items.push({ type: 'suggested_users', id: 'feed-suggested-users', data: suggestedUsers });
+  }
+
+  return items;
+};
+
+const hasVideoMedia = (post: PostData) => (
+  post.mediaItems?.some((item) => item.type === 'video' && Boolean(item.uri?.trim())) ?? false
+);
+
+const hasVideoRepostMedia = (share: MomentTimelineItem) => (
+  share.originalItem?.type !== 'event' &&
+  share.moment.mediaItems?.some((item) => (
+    item.type === 'video' &&
+    Boolean(item.url?.trim() || item.storageKey?.trim())
+  ))
+);
+
+const hasVideoFeedItem = (item?: FeedItem) => {
+  if (!item) {
+    return false;
+  }
+
+  if (item.type === 'post') {
+    return hasVideoMedia(item.data);
+  }
+
+  if (item.type === 'repost') {
+    return hasVideoRepostMedia(item.data);
+  }
+
+  return false;
+};
+
+function FeedSkeletonBlock({ pulse, style, isDark }: { pulse: Animated.Value; style: object; isDark: boolean }) {
+  return (
+    <Animated.View
+      style={[
+        styles.feedSkeletonBlock,
+        style,
+        { opacity: pulse, backgroundColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)" },
+      ]}
+    />
+  );
+}
+
+function FeedSkeletonCard({ pulse, isDark }: { pulse: Animated.Value; isDark: boolean }) {
+  return (
+    <View style={[styles.feedSkeletonCard, !isDark && styles.feedSkeletonCardLight]}>
+      <View style={styles.feedSkeletonHeader}>
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAvatar} />
+        <View style={styles.feedSkeletonAuthor}>
+          <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAuthorLine} />
+          <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonTimeLine} />
+        </View>
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonMenu} />
+      </View>
+      <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonMedia} />
+      <View style={styles.feedSkeletonActions}>
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAction} />
+        <FeedSkeletonBlock pulse={pulse} isDark={isDark} style={styles.feedSkeletonAction} />
+      </View>
+    </View>
+  );
+}
+
+function FeedSkeletonList() {
+  const { isDark } = useTheme();
+  const pulse = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <View
+      style={styles.feedSkeletonList}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {[0, 1, 2].map((item) => (
+        <FeedSkeletonCard key={item} pulse={pulse} isDark={isDark} />
+      ))}
+    </View>
+  );
+}
+
+function EventFeedSkeletonList() {
+  const { isDark } = useTheme();
+  const pulse = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <View
+      style={styles.eventSkeletonList}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {[0, 1].map((item) => (
+        <FeedSkeletonCard key={item} pulse={pulse} isDark={isDark} />
+      ))}
+    </View>
+  );
+}
+
+function PendingVideoPostSkeleton() {
+  const { isDark } = useTheme();
+  const pulse = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <FeedSkeletonCard pulse={pulse} isDark={isDark} />
+    </View>
+  );
+}
+
+// True empty state for the Friends feed only — rendered by the shared feed
+// FlatList's ListEmptyComponent, gated by shouldShowFriendsFeedEmptyState so
+// it can never appear on Discover, during loading, during refresh, or after a
+// (partial) load failure. Styling follows the existing Home empty-state
+// discipline used by ParticipatedWindowsList; the CTA reuses the existing
+// People to Follow route.
+function FriendsFeedEmptyState({ colors }: { colors: { text: string; border: string } }) {
+  return (
+    <View style={styles.friendsFeedEmpty}>
+      <Text style={[styles.friendsFeedEmptyText, { color: colors.text }]}>
+        Follow people to see posts from friends.
+      </Text>
+      <TouchableOpacity
+        style={[styles.friendsFeedEmptyCta, { borderColor: colors.border }]}
+        activeOpacity={0.75}
+        onPress={() => router.push('/discover-screen/people-to-follow')}
+        accessibilityRole="button"
+        accessibilityLabel="People to Follow"
+      >
+        <Text style={[styles.friendsFeedEmptyCtaText, { color: colors.text }]}>People to Follow</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export default function HomeFeed() {
+  const insets = useSafeAreaInsets();
+  const { colors, theme: activeTheme } = useTheme();
+  const userId = useAuthStore((state) => state.user?.id);
+  const [commentModalVisible, setCommentModalVisible] = React.useState(false);
+  const [shareModalVisible, setShareModalVisible] = React.useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedType, setSelectedType] = useState('Feed');
+  const [feedAudience, setFeedAudience] = useState<FeedAudience>("discover");
+  // Independent of feedAudience — "windows" never touches the Discover/
+  // Friends feed state or its data loading below. Discover/Friends behavior
+  // is unchanged; this is purely an additional, additive tab.
+  const [homeAudience, setHomeAudience] = useState<FeedAudience | "windows">("discover");
+  // Lazily mounts ParticipatedWindowsList on first Scenes visit, then keeps
+  // it mounted (hidden, never destroyed) for the rest of the screen's
+  // lifetime, so its own events/loading cache survives switching away to
+  // Discover/Friends and back — see the render tree below.
+  const [hasEverVisitedWindows, setHasEverVisitedWindows] = useState(false);
+  const [stories, setStories] = useState<StoryData[]>([
+    { id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false },
+  ]);
+  const [friendStories, setFriendStories] = useState<StoryData[]>([
+    { id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false },
+  ]);
+  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
+  // Separate Discover/Friends cache, keyed by audience, so switching tabs
+  // never has to clear one audience's data to load the other's — each
+  // audience keeps its own posts/events/reposts plus its own loading
+  // lifecycle (see app/lib/audienceFeedState.ts). `discover` starts
+  // `isInitialLoading: true`: the feed is conceptually loading from the very
+  // first render (the initial `loadFeed` runs from useFocusEffect a beat
+  // later). Without this, the first frames would have no loading flag set +
+  // `feedItems` empty, so `shouldShowFeedSkeleton` would be false and the
+  // feed area would render blank instead of the skeleton on a cold start.
+  const [feedByAudience, setFeedByAudience] = useState<Record<FeedAudience, AudienceFeedState<PostData[], EventResponse[], MomentTimelineItem[]>>>(() => ({
+    discover: createInitialAudienceFeedState({ posts: [], events: [], reposts: [] }, true),
+    friends: createInitialAudienceFeedState({ posts: [], events: [], reposts: [] }, false),
+  }));
+  const activeAudienceFeed = feedByAudience[feedAudience];
+  const feedMomentPosts = activeAudienceFeed.posts;
+  const feedEvents = activeAudienceFeed.events;
+  const feedReposts = activeAudienceFeed.reposts;
+  const hasFeedLoadedOnce = activeAudienceFeed.hasLoadedOnce;
+  const isFeedInitialLoading = activeAudienceFeed.isInitialLoading;
+  const isFeedBackgroundRefreshing = activeAudienceFeed.isBackgroundRefreshing;
+  // Combined "some load for the active tab is in flight" flag — used only
+  // where the original single shared loading flag was consumed for that
+  // general purpose (dev logging, the nearby-events-filter empty-state gate,
+  // the Friends empty-state gate). `shouldShowFeedSkeleton` below uses
+  // `isFeedInitialLoading` specifically, never this combined flag, since a
+  // background refresh must never bring the full skeleton back.
+  const isFeedLoading = isFeedInitialLoading || isFeedBackgroundRefreshing;
+  const friendsFeedLoadState = feedByAudience.friends.friendsLoadState;
+  const [appliedEventFilters, setAppliedEventFilters] = useState<SharedEventFilters>(() => createEmptyEventFilters());
+  const [pendingMapFilterRecenterKey, setPendingMapFilterRecenterKey] = useState<string | null>(null);
+  const [isEventFilterLoading, setIsEventFilterLoading] = useState(false);
+  const [selectedCommentPost, setSelectedCommentPost] = useState<PostData | null>(null);
+  const [selectedSharePost, setSelectedSharePost] = useState<PostData | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeFeedVideoItemId, setActiveFeedVideoItemId] = useState<string | null>(null);
+  const pendingVideoUploads = usePendingVideoMomentUploads();
+  // Request-generation counters are now per-audience, so a stale Discover
+  // response can never be mistaken for the latest Friends response (or vice
+  // versa) even though both audiences can be in flight at the same time.
+  const feedRequestIdRef = useRef<Record<FeedAudience, number>>({ discover: 0, friends: 0 });
+  const eventRequestIdRef = useRef(0);
+  const feedLoadingRecoveryTimerRef = useRef<Record<FeedAudience, ReturnType<typeof setTimeout> | null>>({
+    discover: null,
+    friends: null,
+  });
+  const isRefreshingRef = useRef(false);
+  const feedScrollRef = useRef<FlatList>(null);
+  const isFeedScrollingRef = useRef(false);
+  const feedScrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingFeedRefreshCommitRef = useRef<Record<FeedAudience, PendingFeedRefreshCommit | null>>({
+    discover: null,
+    friends: null,
+  });
+  const activeFeedVideoItemIdRef = useRef<string | null>(null);
+  // Ref mirror of feedByAudience so loadFeed (a stable useCallback) can read
+  // "has this audience already loaded once" without needing feedByAudience
+  // itself in its dependency array — same pattern as feedAudienceRef below.
+  const feedByAudienceRef = useRef(feedByAudience);
+  const appliedEventFiltersRef = useRef(appliedEventFilters);
+  const appliedNearbyFilterKeyRef = useRef(getEventLocationFilterKey(appliedEventFilters.nearby));
+  // Mirror of isEventFilterLoading for event handlers that must not fire a
+  // second time while the previous Event-filter request is still in flight
+  // (no-match "Increase radius" rapid double-tap guard).
+  const isEventFilterLoadingRef = useRef(false);
+  const feedAudienceRef = useRef(feedAudience);
+  const activeThemeRef = useRef(activeTheme);
+  const previousThemeRef = useRef(activeTheme);
+  const feedRuntimeSnapshotRef = useRef({
+    feedMomentPostsLength: 0,
+    feedEventsLength: 0,
+    feedRepostsLength: 0,
+    suggestedUsersLength: 0,
+    feedItemsLength: 0,
+    shouldShowFeedSkeleton: false,
+  });
+  const didMountEventFilterEffectRef = useRef(false);
+  // Tracks suggestion cards removed from `suggestedUsers` because a follow
+  // action (optimistic or confirmed) targeted that user, keyed by user id.
+  // Lets a same-user unfollow/rollback restore the exact original card
+  // instead of leaving it gone until the next suggestions refetch.
+  const pendingSuggestionRemovalsRef = useRef<Map<string, SuggestedUser>>(new Map());
+  const params = useLocalSearchParams<{ showSuccess?: string; view?: string; category?: string | string[] }>();
+
+  useEffect(() => {
+    appliedEventFiltersRef.current = appliedEventFilters;
+    appliedNearbyFilterKeyRef.current = getEventLocationFilterKey(appliedEventFilters.nearby);
+  }, [appliedEventFilters]);
+
+  useEffect(() => {
+    isEventFilterLoadingRef.current = isEventFilterLoading;
+  }, [isEventFilterLoading]);
+
+  useEffect(() => {
+    feedAudienceRef.current = feedAudience;
+  }, [feedAudience]);
+
+  useEffect(() => {
+    feedByAudienceRef.current = feedByAudience;
+  }, [feedByAudience]);
+
+  activeThemeRef.current = activeTheme;
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    const previousTheme = previousThemeRef.current;
+    if (previousTheme === activeTheme) {
+      return;
+    }
+
+    previousThemeRef.current = activeTheme;
+    const snapshot = feedRuntimeSnapshotRef.current;
+    console.log('[XENOG_THEME_CHANGE]', {
+      previousTheme,
+      activeTheme,
+      feedItemsLength: snapshot.feedItemsLength,
+      feedMomentPostsLength: snapshot.feedMomentPostsLength,
+      feedEventsLength: snapshot.feedEventsLength,
+      feedRepostsLength: snapshot.feedRepostsLength,
+      isFeedLoading,
+      isRefreshing,
+      isEventFilterLoading,
+      shouldShowFeedSkeleton: snapshot.shouldShowFeedSkeleton,
+      selectedType,
+    });
+  }, [activeTheme, isEventFilterLoading, isFeedLoading, isRefreshing, selectedType]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.log('[XENOG_HOME_MOUNT]', {
+      activeTheme: activeThemeRef.current,
+    });
+
+    return () => {
+      console.log('[XENOG_HOME_UNMOUNT]', {
+        activeTheme: activeThemeRef.current,
+      });
+    };
+  }, []);
+
+  const clearFeedLoadingRecoveryTimer = useCallback((audience: FeedAudience) => {
+    const timer = feedLoadingRecoveryTimerRef.current[audience];
+    if (timer) {
+      clearTimeout(timer);
+      feedLoadingRecoveryTimerRef.current[audience] = null;
+    }
+  }, []);
+
+  // One recovery timer per audience — a stuck Discover request can no
+  // longer clear Friends' loading state (or vice versa) just because they
+  // happen to share a timeout window.
+  const armFeedLoadingRecoveryTimer = useCallback((audience: FeedAudience, requestId: number) => {
+    clearFeedLoadingRecoveryTimer(audience);
+    feedLoadingRecoveryTimerRef.current[audience] = setTimeout(() => {
+      feedLoadingRecoveryTimerRef.current[audience] = null;
+      const isLatest = isLatestEventRequest(requestId, feedRequestIdRef.current[audience]);
+
+      if (__DEV__) {
+        console.log('[XENOG_LOAD_FEED_RECOVERY]', {
+          audience,
+          requestId,
+          currentRequestId: feedRequestIdRef.current[audience],
+          isLatest,
+        });
+      }
+
+      if (isLatest) {
+        setFeedByAudience((current) => ({
+          ...current,
+          [audience]: { ...current[audience], isInitialLoading: false, isBackgroundRefreshing: false },
+        }));
+      }
+    }, FEED_LOADING_RECOVERY_TIMEOUT_MS);
+  }, [clearFeedLoadingRecoveryTimer]);
+
+  useEffect(() => () => {
+    clearFeedLoadingRecoveryTimer('discover');
+    clearFeedLoadingRecoveryTimer('friends');
+  }, [clearFeedLoadingRecoveryTimer]);
+
+  const beginEventFilterTransition = useCallback(() => {
+    eventRequestIdRef.current += 1;
+    setIsEventFilterLoading(true);
+  }, []);
+
+  const setActiveFeedVideoItemIdIfChanged = useCallback((itemId: string | null) => {
+    if (activeFeedVideoItemIdRef.current === itemId) {
+      return;
+    }
+
+    activeFeedVideoItemIdRef.current = itemId;
+    setActiveFeedVideoItemId(itemId);
+  }, []);
+
+  // Full replace per resolved source, never merge/prepend — server-side
+  // ranking can reorder between requests, so the fresh response is always
+  // the new source of truth. A source that didn't resolve keeps its
+  // previous cached value untouched (see mergeAudienceFeedCommit).
+  const applyFeedRefreshCommit = useCallback((audience: FeedAudience, commit: PendingFeedRefreshCommit) => {
+    setFeedByAudience((current) => ({
+      ...current,
+      [audience]: mergeAudienceFeedCommit(current[audience], commit),
+    }));
+  }, []);
+
+  const flushPendingFeedRefreshCommit = useCallback(() => {
+    (['discover', 'friends'] as const).forEach((audience) => {
+      const pendingCommit = pendingFeedRefreshCommitRef.current[audience];
+
+      if (!isLatestFeedRefreshCommit(pendingCommit, feedRequestIdRef.current[audience])) {
+        pendingFeedRefreshCommitRef.current[audience] = null;
+        return;
+      }
+
+      pendingFeedRefreshCommitRef.current[audience] = null;
+      applyFeedRefreshCommit(audience, pendingCommit);
+    });
+  }, [applyFeedRefreshCommit]);
+
+  // Optimistic per-item patches (follow/block/delete/edit/etc.) apply to
+  // BOTH cached audiences by id — a post/event/repost can legitimately be
+  // cached in Discover and Friends at once, and since every tab refetches on
+  // its next visit anyway (full replace, see applyFeedRefreshCommit above),
+  // this only keeps both caches consistent in the meantime rather than
+  // becoming a new source of truth.
+  const updateFeedPostsForAllAudiences = useCallback((updater: (posts: PostData[]) => PostData[]) => {
+    setFeedByAudience((current) => ({
+      discover: { ...current.discover, posts: updater(current.discover.posts) },
+      friends: { ...current.friends, posts: updater(current.friends.posts) },
+    }));
+  }, []);
+
+  const updateFeedEventsForAllAudiences = useCallback((updater: (events: EventResponse[]) => EventResponse[]) => {
+    setFeedByAudience((current) => ({
+      discover: { ...current.discover, events: updater(current.discover.events) },
+      friends: { ...current.friends, events: updater(current.friends.events) },
+    }));
+  }, []);
+
+  const updateFeedRepostsForAllAudiences = useCallback((updater: (reposts: MomentTimelineItem[]) => MomentTimelineItem[]) => {
+    setFeedByAudience((current) => ({
+      discover: { ...current.discover, reposts: updater(current.discover.reposts) },
+      friends: { ...current.friends, reposts: updater(current.friends.reposts) },
+    }));
+  }, []);
+
+  const clearFeedScrollIdleTimer = useCallback(() => {
+    if (feedScrollIdleTimerRef.current) {
+      clearTimeout(feedScrollIdleTimerRef.current);
+      feedScrollIdleTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearFeedScrollIdleTimer, [clearFeedScrollIdleTimer]);
+
+  const handleFeedScrollActive = useCallback(() => {
+    clearFeedScrollIdleTimer();
+    isFeedScrollingRef.current = true;
+  }, [clearFeedScrollIdleTimer]);
+
+  const handleFeedScrollIdle = useCallback(() => {
+    clearFeedScrollIdleTimer();
+    feedScrollIdleTimerRef.current = setTimeout(() => {
+      feedScrollIdleTimerRef.current = null;
+      isFeedScrollingRef.current = false;
+      flushPendingFeedRefreshCommit();
+    }, 80);
+  }, [clearFeedScrollIdleTimer, flushPendingFeedRefreshCommit]);
+
+  const handleFeedMomentumScrollEnd = useCallback(() => {
+    clearFeedScrollIdleTimer();
+    isFeedScrollingRef.current = false;
+    flushPendingFeedRefreshCommit();
+  }, [clearFeedScrollIdleTimer, flushPendingFeedRefreshCommit]);
+
+  const feedViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: FEED_VIDEO_VIEWABILITY_THRESHOLD,
+    minimumViewTime: 120,
+  }).current;
+
+  // Feed video playback is intentionally disabled for now (VIDEO_PLAYBACK_ENABLED
+  // in FeedPost). Keep this implementation for future video-feature work: it
+  // picks the top-most viewable video item so the player can autoplay it. While
+  // playback is disabled it must not run on every viewability crossing during a
+  // scroll — that only churned activeFeedVideoItemId / extraData / renderItem
+  // for zero benefit. The FlatList below simply does not wire
+  // onViewableItemsChanged while disabled, and this body no-ops as a second
+  // guard so it stays correct if it is ever re-wired first.
+  const onViewableFeedItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (!VIDEO_PLAYBACK_ENABLED) {
+      return;
+    }
+
+    const nextActiveVideoPost = viewableItems
+      .filter((viewToken) => (
+        viewToken.isViewable &&
+        hasVideoFeedItem(viewToken.item)
+      ))
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))[0];
+
+    setActiveFeedVideoItemIdIfChanged(nextActiveVideoPost?.item.id ?? null);
+  }).current;
+
+  useEffect(() => {
+    if (params.showSuccess === "true") {
+      setShowSuccessModal(true);
+      router.setParams({ showSuccess: undefined });
+    }
+
+    if (params.view === 'map') {
+      setSelectedType('Map');
+      router.setParams({ view: undefined });
+    }
+
+    const category = normalizeEventCategoryFilter(
+      Array.isArray(params.category) ? params.category[0] : params.category,
+    );
+
+    if (category) {
+      const nextFilters = mergeCategoryIntoEventFilters(appliedEventFiltersRef.current, category);
+
+      if (nextFilters !== appliedEventFiltersRef.current) {
+        beginEventFilterTransition();
+        setAppliedEventFilters(nextFilters);
+      }
+      router.setParams({ category: undefined });
+    } else if (params.category !== undefined) {
+      router.setParams({ category: undefined });
+    }
+  }, [beginEventFilterTransition, params.category, params.showSuccess, params.view]);
+
+  const loadStories = useCallback(async () => {
+    try {
+      const [discover, friends, seenStoryIds] = await Promise.all([
+        getDiscoverStories().catch(() => getFeedStories()),
+        getFriendStories().catch(() => []),
+        getSeenStoryIds(),
+      ]);
+      setStories(buildStoryRow(groupStoriesByAuthor(discover, seenStoryIds, userId)));
+      setFriendStories(buildStoryRow(groupStoriesByAuthor(friends, seenStoryIds, userId)));
+    } catch {
+      setStories([{ id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false }]);
+      setFriendStories([{ id: SELF_TILE_ID, type: 'add', isSelfTile: true, hasOwnStory: false }]);
+    }
+  }, [userId]);
+
+  const loadFeedEvents = useCallback(async (audience: FeedAudience) => {
+    const requestId = ++eventRequestIdRef.current;
+    setIsEventFilterLoading(true);
+    try {
+      const rankingLocation = await getSmartFeedRankingLocation();
+      const events = await getFeedEvents({
+        // Passive device/GeoIP ranking is the fallback; a broad ("200+")
+        // discovery centre supplies its own rankingLatitude/Longitude via the
+        // request params, so those must win when present.
+        ...rankingLocation,
+        ...buildEventFilterRequestParams(appliedEventFiltersRef.current, {
+          limit: 100,
+          audience,
+        }),
+      });
+
+      if (!isLatestEventRequest(requestId, eventRequestIdRef.current)) return;
+
+      setFeedByAudience((current) => ({
+        ...current,
+        [audience]: { ...current[audience], events },
+      }));
+    } catch {
+      // Preserve the existing feed events if an event-only refresh fails.
+    } finally {
+      if (isLatestEventRequest(requestId, eventRequestIdRef.current)) {
+        setIsEventFilterLoading(false);
+      }
+    }
+  }, []);
+
+  const loadFeed = useCallback(async (audience: FeedAudience = feedAudienceRef.current) => {
+    const requestId = ++feedRequestIdRef.current[audience];
+    const eventRequestId = eventRequestIdRef.current;
+    const wasLoadedBefore = feedByAudienceRef.current[audience].hasLoadedOnce;
+    const beforeSnapshot = feedByAudienceRef.current[audience];
+    if (__DEV__) {
+      console.log('[XENOG_LOAD_FEED_START]', {
+        requestId,
+        audience,
+        currentRequestId: feedRequestIdRef.current[audience],
+        activeTheme: activeThemeRef.current,
+        wasLoadedBefore,
+        feedMomentPostsLength: beforeSnapshot.posts.length,
+        feedEventsLength: beforeSnapshot.events.length,
+        feedRepostsLength: beforeSnapshot.reposts.length,
+      });
+    }
+    // An audience that has already loaded once keeps its cached posts/
+    // events/reposts on screen (isBackgroundRefreshing) instead of showing
+    // the full skeleton again (isInitialLoading) — see getAudienceLoadFlags.
+    const { isInitialLoading, isBackgroundRefreshing } = getAudienceLoadFlags(wasLoadedBefore);
+    setFeedByAudience((current) => ({
+      ...current,
+      [audience]: {
+        ...current[audience],
+        isInitialLoading,
+        isBackgroundRefreshing,
+        friendsLoadState: audience === "friends" ? "loading" : current[audience].friendsLoadState,
+      },
+    }));
+    armFeedLoadingRecoveryTimer(audience, requestId);
+    try {
+      const eventFilters = appliedEventFiltersRef.current;
+      const eventRequestParams = buildEventFilterRequestParams(eventFilters, { limit: 100, audience });
+      // Passive ranking-only location: never prompts, never blocks the feed
+      // (short timeout, resolves to {} on failure → backend GeoIP fallback).
+      const rankingLocationPromise = getSmartFeedRankingLocation();
+      const rankingLocation = await rankingLocationPromise;
+      const [momentsResult, eventsResult, repostsResult] = await Promise.allSettled([
+        // Ordinary social Posts must NOT inherit Event filter criteria. The
+        // Event hashtag / searched-location / radius filters only constrain
+        // Events (getFeedEvents below); forwarding them here previously hid
+        // untagged / out-of-radius / location-less Posts from Discover and
+        // Friends. Standalone Post hashtag/location features are unaffected.
+        getFeedMoments({ audience }),
+        // rankingLocation (passive device/GeoIP) is the fallback; a broad
+        // ("200+") discovery centre carries its own rankingLatitude/Longitude
+        // in eventRequestParams and must take precedence when present.
+        getFeedEvents({ ...rankingLocation, ...eventRequestParams }),
+        getFeedReposts(50, audience),
+      ]);
+      const isLatestSettled = isLatestEventRequest(requestId, feedRequestIdRef.current[audience]);
+
+      if (__DEV__) {
+        console.log('[XENOG_LOAD_FEED_SETTLED]', {
+          requestId,
+          audience,
+          isLatest: isLatestSettled,
+          momentsStatus: momentsResult.status,
+          eventsStatus: eventsResult.status,
+          repostsStatus: repostsResult.status,
+          momentsCount: momentsResult.status === "fulfilled" ? momentsResult.value.length : undefined,
+          eventsCount: eventsResult.status === "fulfilled" ? eventsResult.value.length : undefined,
+          repostsCount: repostsResult.status === 'fulfilled' ? repostsResult.value.length : undefined,
+        });
+      }
+
+      if (!isLatestSettled) {
+        return;
+      }
+
+      // Only for the Friends feed, and only for the latest request: a
+      // zero-item result is a truthful "empty" ONLY when all three feed
+      // sources fulfilled. Any (partial) failure => "error", so the empty
+      // copy is never shown for a network/API failure. The partial-result
+      // commit below is unchanged — successful sources still render.
+      if (audience === "friends") {
+        const allFriendSourcesFulfilled = (
+          momentsResult.status === "fulfilled" &&
+          eventsResult.status === "fulfilled" &&
+          repostsResult.status === "fulfilled"
+        );
+        setFeedByAudience((current) => ({
+          ...current,
+          friends: { ...current.friends, friendsLoadState: allFriendSourcesFulfilled ? "loaded" : "error" },
+        }));
+      }
+
+      const nextCommit: PendingFeedRefreshCommit = {
+        requestId,
+        hasAnyFreshData: (
+          momentsResult.status === "fulfilled" ||
+          eventsResult.status === "fulfilled" ||
+          repostsResult.status === 'fulfilled'
+        ),
+        ...(momentsResult.status === "fulfilled"
+          ? {
+              posts: momentsResult.value
+                .map((moment) => mapMomentToPost(moment, {
+                  storageUrlResolver: getStorageFileUrl,
+                }))
+                .filter((post): post is PostData => Boolean(post)),
+            }
+          : {}),
+        ...(eventsResult.status === "fulfilled" && isLatestEventRequest(eventRequestId, eventRequestIdRef.current)
+          ? { events: eventsResult.value }
+          : {}),
+        ...(repostsResult.status === 'fulfilled' ? { reposts: repostsResult.value } : {}),
+      };
+
+      // Deferring only ever matters for the audience currently on screen —
+      // an inactive audience's commit can't visually disrupt anything, so it
+      // applies immediately regardless of the visible list's scroll state.
+      const isActiveAudience = audience === feedAudienceRef.current;
+      if (shouldDeferAudienceFeedCommit(isActiveAudience, isFeedScrollingRef.current, nextCommit.hasAnyFreshData)) {
+        pendingFeedRefreshCommitRef.current[audience] = nextCommit;
+      } else {
+        pendingFeedRefreshCommitRef.current[audience] = null;
+        applyFeedRefreshCommit(audience, nextCommit);
+      }
+    } finally {
+      const isLatestFinally = isLatestEventRequest(requestId, feedRequestIdRef.current[audience]);
+
+      if (__DEV__) {
+        console.log('[XENOG_LOAD_FEED_FINALLY]', {
+          requestId,
+          audience,
+          currentRequestId: feedRequestIdRef.current[audience],
+          isLatest: isLatestFinally,
+        });
+      }
+
+      if (isLatestFinally) {
+        clearFeedLoadingRecoveryTimer(audience);
+        setFeedByAudience((current) => ({
+          ...current,
+          [audience]: { ...current[audience], isInitialLoading: false, isBackgroundRefreshing: false },
+        }));
+        setIsEventFilterLoading(false);
+      }
+    }
+  }, [applyFeedRefreshCommit, armFeedLoadingRecoveryTimer, clearFeedLoadingRecoveryTimer]);
+
+  useEffect(() => {
+    if (!didMountEventFilterEffectRef.current) {
+      didMountEventFilterEffectRef.current = true;
+      return;
+    }
+
+    void loadFeedEvents(feedAudienceRef.current);
+  }, [appliedEventFilters, loadFeedEvents]);
+
+  const handleAudienceChange = useCallback((audience: FeedAudience) => {
+    if (audience === feedAudience) {
+      return;
+    }
+
+    // Deliberately does NOT clear that audience's cached posts/events/
+    // reposts — loadFeed shows the skeleton only for a tab that has never
+    // loaded before; an already-loaded tab keeps its cached content on
+    // screen while the fresh request runs in the background (see
+    // getAudienceLoadFlags / loadFeed's isInitialLoading/isBackgroundRefreshing
+    // branch). Stopping any playing video and resetting the event-filter
+    // loading flag are still tab-switch-specific side effects, independent
+    // of the feed cache itself.
+    setActiveFeedVideoItemIdIfChanged(null);
+    setIsEventFilterLoading(false);
+    setFeedAudience(audience);
+    void loadFeed(audience);
+  }, [feedAudience, loadFeed, setActiveFeedVideoItemIdIfChanged]);
+
+  // Discover/Friends still flow through handleAudienceChange above —
+  // "windows" only ever changes homeAudience (plus hasEverVisitedWindows on
+  // first visit), never touching feedAudience/loadFeed/the per-audience feed
+  // cache at all.
+  const handleHomeAudienceChange = useCallback((tab: FeedAudience | "windows") => {
+    setHomeAudience(tab);
+    if (tab === "windows") {
+      setHasEverVisitedWindows(true);
+    } else {
+      handleAudienceChange(tab);
+    }
+  }, [handleAudienceChange]);
+
+  const handleFilterChange = useCallback((filters: HomeFeedFilters) => {
+    const nextNearbyKey = getEventLocationFilterKey(filters.nearby);
+    beginEventFilterTransition();
+    setPendingMapFilterRecenterKey(
+      nextNearbyKey && nextNearbyKey !== appliedNearbyFilterKeyRef.current
+        ? nextNearbyKey
+        : null,
+    );
+    setAppliedEventFilters(filters);
+  }, [beginEventFilterTransition]);
+
+  const handleClearEventFilters = useCallback(() => {
+    beginEventFilterTransition();
+    setPendingMapFilterRecenterKey(null);
+    // Same authoritative reset used by the modal: clears every non-location
+    // criterion, returns distance to "Any distance" (radius inactive, anchor
+    // 75), and PRESERVES the discovery centre — current OR searched. One helper
+    // for the Feed chip and the Map "Clear filters" action.
+    setAppliedEventFilters((current) => resetEventFiltersPreservingDiscoveryCenter(current));
+  }, [beginEventFilterTransition]);
+
+  // No-match "Increase radius": widen ONLY the radius to the next canonical
+  // checkpoint on the already-applied filters, preserving the discovery centre
+  // (current or searched) and every other criterion. Commits through the same
+  // handleFilterChange path Feed and Map both use — no Map-local state, no GPS
+  // re-read, no global-sharing mutation. Ignored while an Event-filter request
+  // is in flight so a rapid double-tap can't skip a step.
+  const handleIncreaseEventRadius = useCallback(() => {
+    if (isEventFilterLoadingRef.current) {
+      return;
+    }
+    const nearby = appliedEventFiltersRef.current.nearby;
+    if (
+      !isValidEventLocationFilter(nearby) ||
+      !isEventRadiusEnabled(nearby) || // no active radius to widen ("Any distance")
+      isBroadEventRadius(nearby.radiusMiles)
+    ) {
+      return;
+    }
+    const nextRadius = getNextEventRadiusMiles(nearby.radiusMiles);
+    if (nextRadius <= nearby.radiusMiles) {
+      return;
+    }
+    handleFilterChange({
+      ...appliedEventFiltersRef.current,
+      nearby: { ...nearby, radiusMiles: nextRadius },
+    });
+  }, [handleFilterChange]);
+
+  const handleMapFilterRecenterHandled = useCallback((key: string) => {
+    setPendingMapFilterRecenterKey((currentKey) => (
+      currentKey === key ? null : currentKey
+    ));
+  }, []);
+
+  const handleMapCategoryChange = useCallback((category: EventCategory | null) => {
+    const nextFilters = setCategoryInEventFilters(appliedEventFiltersRef.current, category);
+
+    if (nextFilters !== appliedEventFiltersRef.current) {
+      beginEventFilterTransition();
+      setAppliedEventFilters(nextFilters);
+    }
+  }, [beginEventFilterTransition]);
+
+  const loadSuggestedUsers = useCallback(async () => {
+    try {
+      const users = await getSuggestedUsers(10);
+
+      // A fresh fetch is authoritative — any locally-tracked removal is
+      // superseded by whatever the backend now says.
+      pendingSuggestionRemovalsRef.current.clear();
+
+      setSuggestedUsers(users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        avatarUri: user.avatarUrl?.trim() || (user.avatarKey ? getStorageFileUrl(user.avatarKey) : null),
+        isFollowing: user.isFollowing,
+      })));
+    } catch {
+      // Keep whatever suggestions are already on screen rather than wiping
+      // them out because a secondary refresh request failed.
+    }
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshingRef.current) {
+      return;
+    }
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      await Promise.race([
+        Promise.all([loadStories(), loadFeed(feedAudience), loadSuggestedUsers()]),
+        new Promise((resolve) => setTimeout(resolve, REFRESH_TIMEOUT_MS)),
+      ]);
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+    }
+  }, [feedAudience, loadFeed, loadStories, loadSuggestedUsers]);
+
+  const refreshFeedAfterRepost = useCallback(async () => {
+    await loadFeed(feedAudience);
+    requestAnimationFrame(() => {
+      feedScrollRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+  }, [feedAudience, loadFeed]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (__DEV__) {
+        console.log('[XENOG_HOME_FOCUS]', {
+          activeTheme: activeThemeRef.current,
+          feedAudience,
+          feedItemsLength: feedRuntimeSnapshotRef.current.feedItemsLength,
+        });
+      }
+
+      const pendingMoment = consumePendingNewMoment();
+
+      if (pendingMoment) {
+        const mappedPost = mapMomentToPost(pendingMoment, {
+          storageUrlResolver: getStorageFileUrl,
+        });
+
+        if (mappedPost) {
+          updateFeedPostsForAllAudiences((current) => [mappedPost, ...current.filter((p) => p.id !== mappedPost.id)]);
+        }
+      }
+
+      void loadStories();
+      void loadFeed(feedAudience);
+
+      return () => {
+        if (__DEV__) {
+          console.log('[XENOG_HOME_BLUR]', {
+            activeTheme: activeThemeRef.current,
+            feedAudience,
+          });
+        }
+        clearFeedScrollIdleTimer();
+        isFeedScrollingRef.current = false;
+        pendingFeedRefreshCommitRef.current = { discover: null, friends: null };
+        setActiveFeedVideoItemIdIfChanged(null);
+        isRefreshingRef.current = false;
+        setIsRefreshing(false);
+      };
+    }, [clearFeedScrollIdleTimer, feedAudience, loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged, updateFeedPostsForAllAudiences]),
+  );
+
+  useEffect(() => {
+    if (selectedType !== 'Feed') {
+      setActiveFeedVideoItemIdIfChanged(null);
+    }
+  }, [selectedType, setActiveFeedVideoItemIdIfChanged]);
+
+  useEffect(() => {
+    if (selectedType !== 'Feed' && pendingVideoUploads.some((upload) => upload.status !== 'succeeded')) {
+      setSelectedType('Feed');
+    }
+  }, [pendingVideoUploads, selectedType]);
+
+  useEffect(() => {
+    void loadSuggestedUsers();
+  }, [loadSuggestedUsers]);
+
+  const applyInteractionSummary = useCallback((postId: string, summary: MomentInteractionSummary) => {
+    const applyToPost = (post: PostData) => ({
+      ...post,
+      likesCount: summary.likesCount,
+      commentsCount: summary.commentsCount,
+      sharesCount: summary.sharesCount,
+      isLiked: summary.isLiked,
+    });
+
+    updateFeedPostsForAllAudiences((currentPosts) => currentPosts.map((post) => (
+      post.id === postId ? applyToPost(post) : post
+    )));
+    setSelectedCommentPost((currentPost) => (
+      currentPost?.id === postId ? applyToPost(currentPost) : currentPost
+    ));
+    setSelectedSharePost((currentPost) => (
+      currentPost?.id === postId ? applyToPost(currentPost) : currentPost
+    ));
+  }, [updateFeedPostsForAllAudiences]);
+
+  const handleCommentPress = useCallback((post: PostData) => {
+    setSelectedCommentPost(post);
+    setCommentModalVisible(true);
+  }, []);
+
+  const handleViewMapPress = useCallback(() => {
+    setSelectedType('Map');
+  }, []);
+
+  const handleSharePress = useCallback((post: PostData) => {
+    if (shareModalVisible && selectedSharePost?.id === post.id) {
+      return;
+    }
+
+    setSelectedSharePost(post);
+    setShareModalVisible(true);
+  }, [selectedSharePost?.id, shareModalVisible]);
+
+  const handleRepost = useCallback(async (payload: RepostPayload) => {
+    if (!selectedSharePost) return;
+
+    try {
+      const share = await shareMoment(selectedSharePost.id, payload);
+
+      applyInteractionSummary(selectedSharePost.id, {
+        momentId: selectedSharePost.id,
+        likesCount: share.moment.likesCount,
+        commentsCount: share.moment.commentsCount,
+        sharesCount: share.moment.sharesCount,
+        isLiked: share.moment.isLiked,
+      });
+      updateFeedRepostsForAllAudiences((current) => [share, ...current.filter((item) => item.id !== share.id)]);
+      setShareModalVisible(false);
+      setSelectedSharePost(null);
+      await refreshFeedAfterRepost();
+    } catch (error) {
+      Alert.alert('Unable to repost', getAuthErrorMessage(error, 'Please try sharing this post again.'));
+      throw error;
+    }
+  }, [applyInteractionSummary, refreshFeedAfterRepost, selectedSharePost, updateFeedRepostsForAllAudiences]);
+
+  // Single canonical propagation point for a follow-state change on any user,
+  // regardless of which surface (feed author card, event host card, or
+  // People-to-follow) originated it — every other currently-loaded
+  // representation of that same user id is reconciled here so no surface is
+  // left showing stale Follow/Following state.
+  const handleAuthorFollowChange = useCallback((authorId: string, isFollowing: boolean) => {
+    updateFeedPostsForAllAudiences((currentPosts) => currentPosts.map((post) => (
+      post.authorId === authorId ? { ...post, isFollowing } : post
+    )));
+
+    updateFeedEventsForAllAudiences((currentEvents) => currentEvents.map((event) => (
+      event.host && event.host.id === authorId
+        ? { ...event, host: { ...event.host, isFollowing } }
+        : event
+    )));
+
+    setSuggestedUsers((currentSuggestions) => {
+      if (isFollowing) {
+        // The suggestions endpoint never returns already-followed users, so
+        // the smallest correct reconciliation is to drop the card rather
+        // than leave an obsolete "Follow" suggestion for someone already
+        // followed.
+        const match = currentSuggestions.find((user) => user.id === authorId);
+        if (!match) {
+          return currentSuggestions;
+        }
+        pendingSuggestionRemovalsRef.current.set(authorId, match);
+        return currentSuggestions.filter((user) => user.id !== authorId);
+      }
+
+      // isFollowing === false: only restore a card we ourselves removed
+      // (an unfollow, or a rollback of a failed follow) — never fabricate
+      // suggestion data that didn't come from the backend.
+      const removed = pendingSuggestionRemovalsRef.current.get(authorId);
+      if (!removed || currentSuggestions.some((user) => user.id === authorId)) {
+        return currentSuggestions;
+      }
+      pendingSuggestionRemovalsRef.current.delete(authorId);
+      return [...currentSuggestions, removed];
+    });
+  }, [updateFeedEventsForAllAudiences, updateFeedPostsForAllAudiences]);
+
+  // Immediate local reflection of a Report+Block flow's block step
+  // succeeding — the reported item itself already shows its own
+  // Report+Block success placeholder (handled inside FeedPost/EventFeedCard,
+  // not here), so this only needs to drop the newly-blocked owner's *other*
+  // already-rendered content from the currently mounted Feed. The backend's
+  // existing excludeUserIds filtering remains authoritative on the next
+  // natural refetch — this is not a second persistent filtering system.
+  const handleUserBlockedFromReport = useCallback((blockedOwnerId: string) => {
+    updateFeedPostsForAllAudiences((currentPosts) => currentPosts.filter((post) => post.authorId !== blockedOwnerId));
+    updateFeedEventsForAllAudiences((currentEvents) => currentEvents.filter((event) => event.userId !== blockedOwnerId));
+    updateFeedRepostsForAllAudiences((currentReposts) => currentReposts.filter((share) => (
+      share.moment.userId !== blockedOwnerId && share.sharedBy?.id !== blockedOwnerId
+    )));
+  }, [updateFeedEventsForAllAudiences, updateFeedPostsForAllAudiences, updateFeedRepostsForAllAudiences]);
+
+  const handleDeletePost = useCallback((post: PostData) => {
+    Alert.alert(
+      'Delete post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteMoment(post.id);
+                updateFeedPostsForAllAudiences((currentPosts) => currentPosts.filter((p) => p.id !== post.id));
+                setCommentModalVisible(false);
+                setShareModalVisible(false);
+                setSelectedCommentPost(null);
+                setSelectedSharePost(null);
+              } catch (error) {
+                Alert.alert('Unable to delete post', getAuthErrorMessage(error, 'Please try again.'));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [updateFeedPostsForAllAudiences]);
+
+  // Caption-only edit of the authenticated user's own Post — patches the
+  // existing Feed item by id in place (never appended/reordered as new,
+  // never touches createdAt/Smart Feed freshness). Mirrors the
+  // mapMomentToPost + map-by-id pattern already used by
+  // handleVideoMomentResolved below.
+  const handlePostUpdated = useCallback((updatedMoment: Moment) => {
+    const mappedPost = mapMomentToPost(updatedMoment, { storageUrlResolver: getStorageFileUrl });
+
+    if (!mappedPost) {
+      return;
+    }
+
+    updateFeedPostsForAllAudiences((current) => current.map((post) => (
+      post.id === mappedPost.id ? mappedPost : post
+    )));
+    setSelectedCommentPost((currentPost) => (
+      currentPost?.id === mappedPost.id ? mappedPost : currentPost
+    ));
+    setSelectedSharePost((currentPost) => (
+      currentPost?.id === mappedPost.id ? mappedPost : currentPost
+    ));
+  }, [updateFeedPostsForAllAudiences]);
+
+  // Edits ONLY the authenticated user's own repost commentary — patches the
+  // existing repost by share id in place, never the embedded original
+  // content, never reordered/duplicated, never touches share.createdAt.
+  const handleShareUpdated = useCallback((updatedShare: MomentTimelineItem) => {
+    updateFeedRepostsForAllAudiences((current) => current.map((share) => (
+      share.id === updatedShare.id ? updatedShare : share
+    )));
+  }, [updateFeedRepostsForAllAudiences]);
+
+  const handleShareDeleted = useCallback((shareId: string) => {
+    updateFeedRepostsForAllAudiences((current) => current.filter((share) => share.id !== shareId));
+  }, [updateFeedRepostsForAllAudiences]);
+
+  useEffect(() => {
+    const succeededUploads = pendingVideoUploads.filter((upload) => upload.status === 'succeeded' && upload.moment);
+
+    if (succeededUploads.length === 0) {
+      return;
+    }
+
+    succeededUploads.forEach((upload) => {
+      const post = upload.moment
+        ? mapMomentToPost(upload.moment, { storageUrlResolver: getStorageFileUrl })
+        : null;
+
+      if (post) {
+        updateFeedPostsForAllAudiences((currentPosts) => [post, ...currentPosts.filter((currentPost) => currentPost.id !== post.id)]);
+      }
+
+      acknowledgePendingVideoMomentUpload(upload.id);
+    });
+  }, [pendingVideoUploads, updateFeedPostsForAllAudiences]);
+
+  // Targeted background sync for the specific Feed video posts still stuck
+  // at queued/processing (freshly published, or picked up from a normal
+  // Feed load) — never a full Feed refetch, never a global poll.
+  // Scans BOTH cached audiences, not just the active one — a video stuck
+  // queued/processing can be cached in a tab the user isn't currently
+  // looking at (now that each audience keeps its own cache instead of one
+  // getting cleared on every switch), and it should still resolve/poll in
+  // the background regardless of which tab is on screen.
+  const unresolvedVideoMomentIds = useMemo(() => {
+    const ids = new Set<string>();
+    (['discover', 'friends'] as const).forEach((audience) => {
+      feedByAudience[audience].posts.forEach((post) => {
+        if (isUnresolvedVideoPost(post)) {
+          ids.add(post.id);
+        }
+      });
+    });
+    return [...ids];
+  }, [feedByAudience]);
+
+  const handleVideoMomentResolved = useCallback((momentId: string, outcome: VideoMomentSyncOutcome) => {
+    if (outcome.type === 'not_found') {
+      updateFeedPostsForAllAudiences((current) => current.filter((post) => post.id !== momentId));
+      return;
+    }
+
+    if (outcome.type === 'error_exhausted') {
+      // Surface the existing failed/retry placeholder instead of polling
+      // forever on a permanently broken status request.
+      updateFeedPostsForAllAudiences((current) => current.map((post) => (
+        post.id === momentId
+          ? {
+              ...post,
+              mediaItems: post.mediaItems?.map((item) => (
+                item.type === 'video' && (item.processingStatus === 'queued' || item.processingStatus === 'processing')
+                  ? { ...item, processingStatus: 'failed' as const }
+                  : item
+              )),
+            }
+          : post
+      )));
+      return;
+    }
+
+    const mappedPost = mapMomentToPost(outcome.moment, { storageUrlResolver: getStorageFileUrl });
+
+    updateFeedPostsForAllAudiences((current) => (
+      mappedPost
+        ? current.map((post) => (post.id === momentId ? mappedPost : post))
+        : current.filter((post) => post.id !== momentId)
+    ));
+  }, [updateFeedPostsForAllAudiences]);
+
+  usePendingVideoMomentSync(unresolvedVideoMomentIds, handleVideoMomentResolved);
+
+  const hasAppliedEventFilters = useMemo(
+    () => hasActiveEventFilters(appliedEventFilters),
+    [appliedEventFilters],
+  );
+  const showEventFilterSection = shouldShowEventFilterSection(hasAppliedEventFilters, isEventFilterLoading);
+  const eventFilterSectionEvents = useMemo(
+    () => getEventFilterSectionEvents(feedEvents, hasAppliedEventFilters, isEventFilterLoading),
+    [feedEvents, hasAppliedEventFilters, isEventFilterLoading],
+  );
+  const mixedFeedEvents = useMemo(
+    () => getMixedFeedEvents(feedEvents, showEventFilterSection, isEventFilterLoading),
+    [feedEvents, isEventFilterLoading, showEventFilterSection],
+  );
+  const feedItems = useMemo(() => {
+    const nonEventFeedItems = buildFeedItems(
+      feedMomentPosts,
+      mixedFeedEvents,
+      feedReposts,
+      suggestedUsers,
+      pendingVideoUploads,
+    );
+
+    if (!showEventFilterSection) {
+      return nonEventFeedItems;
+    }
+
+    const eventSectionItems: FeedItem[] = eventFilterSectionEvents.map((event) => ({
+      type: 'event' as const,
+      id: `event-section-${event.id}`,
+      data: event,
+    }));
+
+    // Only shown while the filtered section above is visible AND there's normal
+    // feed content below it to distinguish from — never on the unfiltered feed.
+    const yourFeedHeaderItems: FeedItem[] = nonEventFeedItems.length > 0
+      ? [{ type: 'your_feed_header' as const, id: 'your-feed-header' }]
+      : [];
+
+    return [...eventSectionItems, ...yourFeedHeaderItems, ...nonEventFeedItems];
+  }, [
+    eventFilterSectionEvents,
+    feedMomentPosts,
+    feedReposts,
+    mixedFeedEvents,
+    pendingVideoUploads,
+    showEventFilterSection,
+    suggestedUsers,
+  ]);
+  const showEventFilterEmptyState = shouldShowEventFilterEmptyState({
+    hasAppliedEventFilters,
+    isEventLoading: isEventFilterLoading,
+    isFeedLoading,
+    eventCount: feedEvents.length,
+  });
+  // "Increase radius" is offered only with a real discovery centre whose radius
+  // is an ACTIVE restriction still below the broad max — never when distance is
+  // "Any distance" (nothing to widen). Shared by the Feed row and the Map overlay.
+  const canIncreaseEventRadius = useMemo(
+    () =>
+      isValidEventLocationFilter(appliedEventFilters.nearby) &&
+      isEventRadiusEnabled(appliedEventFilters.nearby) &&
+      !isBroadEventRadius(appliedEventFilters.nearby.radiusMiles),
+    [appliedEventFilters],
+  );
+  // Uses isFeedInitialLoading specifically (never the combined isFeedLoading)
+  // so a background refresh of an already-loaded tab never brings the full
+  // skeleton back — see the isFeedLoading derivation comment above.
+  const shouldShowFeedSkeleton = selectedType === 'Feed' && !hasFeedLoadedOnce && isFeedInitialLoading && feedItems.length === 0 && !isRefreshing;
+  // Friends-only true empty state. Mutually exclusive with the skeleton
+  // (skeleton requires isFeedLoading, this requires !isFeedLoading) and
+  // explicitly guarded to feedAudience === 'friends' so Discover is untouched.
+  const shouldShowFriendsEmpty = shouldShowFriendsFeedEmptyState({
+    selectedType,
+    feedAudience,
+    isFeedLoading,
+    isRefreshing,
+    friendsFeedLoadState,
+    itemCount: feedItems.length,
+  });
+  feedRuntimeSnapshotRef.current = {
+    feedMomentPostsLength: feedMomentPosts.length,
+    feedEventsLength: feedEvents.length,
+    feedRepostsLength: feedReposts.length,
+    suggestedUsersLength: suggestedUsers.length,
+    feedItemsLength: feedItems.length,
+    shouldShowFeedSkeleton,
+  };
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.log('[XENOG_FEED_STATE]', {
+      activeTheme,
+      selectedType,
+      homeAudience,
+      feedAudience,
+      isFeedLoading,
+      isRefreshing,
+      isEventFilterLoading,
+      hasFeedLoadedOnce,
+      feedMomentPostsLength: feedMomentPosts.length,
+      feedEventsLength: feedEvents.length,
+      feedRepostsLength: feedReposts.length,
+      suggestedUsersLength: suggestedUsers.length,
+      feedItemsLength: feedItems.length,
+      shouldShowFeedSkeleton,
+    });
+  }, [
+    activeTheme,
+    selectedType,
+    homeAudience,
+    feedAudience,
+    isFeedLoading,
+    isRefreshing,
+    isEventFilterLoading,
+    hasFeedLoadedOnce,
+    feedMomentPosts.length,
+    feedEvents.length,
+    feedReposts.length,
+    suggestedUsers.length,
+    feedItems.length,
+    shouldShowFeedSkeleton,
+  ]);
+  // While Feed video playback is disabled (VIDEO_PLAYBACK_ENABLED in FeedPost),
+  // activeFeedVideoItemId is never tracked, so it must not sit in the list's
+  // extraData — otherwise it would still be part of the identity FlatList
+  // diffs windowed cells against. Restore the `activeFeedVideoItemId` field
+  // here when the video feature is picked back up.
+  const feedListExtraData = useMemo(
+    () => (VIDEO_PLAYBACK_ENABLED ? { activeFeedVideoItemId, activeTheme } : { activeTheme }),
+    [activeFeedVideoItemId, activeTheme],
+  );
+
+  const renderFeedItem = useCallback(({ item }: { item: FeedItem }) => {
+    if (item.type === 'post') {
+      return (
+        <FeedPost
+          post={item.data}
+          onCommentPress={handleCommentPress}
+          onSharePress={handleSharePress}
+          onViewMapPress={handleViewMapPress}
+          onAuthorFollowChange={handleAuthorFollowChange}
+          onInteractionChange={applyInteractionSummary}
+          onDeletePress={handleDeletePost}
+          onPostUpdated={handlePostUpdated}
+          onAuthorBlocked={handleUserBlockedFromReport}
+          // Feed video playback is intentionally disabled for now
+          // (VIDEO_PLAYBACK_ENABLED in FeedPost); while it is off no card is
+          // ever the "active video", so this never influences render output.
+          isActiveVideo={VIDEO_PLAYBACK_ENABLED && activeFeedVideoItemId === item.id}
+        />
+      );
+    }
+    if (item.type === 'pending_video_upload' || item.type === 'video_processing') {
+      return <PendingVideoPostSkeleton />;
+    }
+    if (item.type === 'event') {
+      return (
+        <EventFeedCard
+          event={item.data}
+          onRepostSuccess={refreshFeedAfterRepost}
+          onHostBlocked={handleUserBlockedFromReport}
+          onHostFollowChange={handleAuthorFollowChange}
+        />
+      );
+    }
+    if (item.type === 'repost') {
+      return (
+        <RepostFeedCard
+          share={item.data}
+          onRepostSuccess={refreshFeedAfterRepost}
+          onShareUpdated={handleShareUpdated}
+          onShareDeleted={handleShareDeleted}
+          // Disabled alongside FeedPost — see the FeedPost isActiveVideo note above.
+          isActiveVideo={VIDEO_PLAYBACK_ENABLED && activeFeedVideoItemId === item.id}
+        />
+      );
+    }
+    if (item.type === 'suggested_users') {
+      return <PeopleToFollow users={item.data} onFollowChange={handleAuthorFollowChange} />;
+    }
+    if (item.type === 'your_feed_header') {
+      return (
+        <View style={styles.yourFeedHeaderSection}>
+          <View style={[styles.yourFeedDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.yourFeedTitle, { color: '#B3B3B3' }]}>Your Feed</Text>
+        </View>
+      );
+    }
+    return null;
+  }, [
+    activeFeedVideoItemId,
+    applyInteractionSummary,
+    colors.border,
+    handleAuthorFollowChange,
+    handleCommentPress,
+    handleDeletePost,
+    handlePostUpdated,
+    handleSharePress,
+    handleShareUpdated,
+    handleShareDeleted,
+    handleUserBlockedFromReport,
+    handleViewMapPress,
+    refreshFeedAfterRepost,
+  ]);
+
+  return (
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <HomeHeader
+          selectedType={selectedType}
+          setSelectedType={setSelectedType}
+          activeFilters={appliedEventFilters}
+          onFilterChange={handleFilterChange}
+          overlay={selectedType === 'Map'}
+        />
+
+        {selectedType === 'Feed' ? (
+          <HomeTabsRow
+            // Visual selection must come from the single canonical
+            // homeAudience value, not feedAudience — feedAudience only
+            // drives Discover/Friends data fetching and is left untouched
+            // (still whatever it was last set to) while Windows is active,
+            // which previously left the Discover/Friends pill highlighted
+            // at the same time as Windows.
+            activeTab={homeAudience === 'windows' ? null : homeAudience}
+            onActiveTabChange={handleHomeAudienceChange}
+            showWindowsTab
+            isWindowsActive={homeAudience === 'windows'}
+            onWindowsPress={() => handleHomeAudienceChange('windows')}
+          />
+        ) : null}
+
+        {selectedType === 'Feed' ? (
+          <>
+            {/* Kept mounted (never unmounted) once first visited, and only
+                hidden via `display: none` while inactive — visually
+                identical to the previous conditional-render branch, but the
+                component's own events/loading state now survives switching
+                away to Discover/Friends and back, instead of being torn
+                down and rebuilt (which forced a full-screen spinner on
+                every return visit). See ParticipatedWindowsList's
+                `isActive` prop for the resulting background-refresh. */}
+            {hasEverVisitedWindows ? (
+              <View style={homeAudience === 'windows' ? styles.activeTabBody : styles.hiddenTabBody}>
+                <ParticipatedWindowsList isActive={homeAudience === 'windows'} />
+              </View>
+            ) : null}
+            <View style={homeAudience === 'windows' ? styles.hiddenTabBody : styles.activeTabBody}>
+              <FlatList
+              ref={feedScrollRef}
+              data={feedItems}
+              keyExtractor={(item) => item.id}
+              extraData={feedListExtraData}
+              // flexGrow is applied ONLY while the Friends true-empty state is
+              // active so the centered empty view can fill the area below the
+              // header. Non-empty feeds keep the default (undefined) container
+              // geometry — unchanged.
+              contentContainerStyle={shouldShowFriendsEmpty ? styles.friendsFeedEmptyContentContainer : undefined}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={3}
+              maxToRenderPerBatch={3}
+              updateCellsBatchingPeriod={40}
+              windowSize={7}
+              // Feed video playback is intentionally disabled for now
+              // (VIDEO_PLAYBACK_ENABLED in FeedPost). Keep the viewability config
+              // + callback above for future video-feature work, but do not wire
+              // them while playback is off: viewability tracking existed only to
+              // pick the autoplay target, and running it on every scroll
+              // crossing churned activeFeedVideoItemId -> HomeFeed render ->
+              // extraData/renderItem for no benefit. VIDEO_PLAYBACK_ENABLED is a
+              // module constant, so this prop pair is stable across renders (no
+              // "changing onViewableItemsChanged on the fly" issue).
+              viewabilityConfig={VIDEO_PLAYBACK_ENABLED ? feedViewabilityConfig : undefined}
+              onViewableItemsChanged={VIDEO_PLAYBACK_ENABLED ? onViewableFeedItemsChanged : undefined}
+              onScrollBeginDrag={handleFeedScrollActive}
+              onMomentumScrollBegin={handleFeedScrollActive}
+              onScrollEndDrag={handleFeedScrollIdle}
+              onMomentumScrollEnd={handleFeedMomentumScrollEnd}
+              removeClippedSubviews={Platform.OS === 'android'}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={colors.primary}
+                />
+              }
+              ListHeaderComponent={(
+                <>
+                  <StoryCarousel
+                    stories={stories}
+                    friendStories={friendStories}
+                    activeTab={feedAudience}
+                  />
+                  {showEventFilterSection ? (
+                    <View style={styles.nearbyEventsSection}>
+                      <View style={styles.nearbyEventsHeaderRow}>
+                        <Text style={[styles.nearbyEventsTitle, { color: '#B3B3B3' }]}>
+                          {getEventFilterSectionHeading(appliedEventFilters.nearby)}
+                        </Text>
+                        {hasAppliedEventFilters ? (
+                          <TouchableOpacity
+                            style={[styles.clearEventFiltersButton, { borderColor: colors.border }]}
+                            activeOpacity={0.75}
+                            onPress={handleClearEventFilters}
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Clear filters"
+                          >
+                            <Text style={[styles.clearEventFiltersText, { color: colors.textSecondary }]}>Clear filters</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                      {isEventFilterLoading ? (
+                        <EventFeedSkeletonList />
+                      ) : showEventFilterEmptyState ? (
+                        <>
+                          <Text style={[styles.nearbyEventsEmptyText, { color: colors.textSecondary }]}>
+                            No events match these filters nearby
+                          </Text>
+                          {canIncreaseEventRadius ? (
+                            <TouchableOpacity
+                              style={[styles.clearEventFiltersButton, styles.increaseRadiusButton, { borderColor: colors.border }]}
+                              activeOpacity={0.75}
+                              onPress={handleIncreaseEventRadius}
+                              disabled={isEventFilterLoading}
+                              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                              accessibilityRole="button"
+                              accessibilityLabel="Increase radius"
+                            >
+                              <Text style={[styles.clearEventFiltersText, { color: colors.textSecondary }]}>Increase radius</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </>
+              )}
+              ListEmptyComponent={
+                shouldShowFeedSkeleton
+                  ? <FeedSkeletonList />
+                  : shouldShowFriendsEmpty
+                    ? <FriendsFeedEmptyState colors={colors} />
+                    : null
+              }
+              ListFooterComponent={shouldShowFeedSkeleton ? null : <View style={{ height: 100 }} />}
+              renderItem={renderFeedItem}
+              />
+            </View>
+          </>
+        ) : (
+          <MapContainer
+            onBack={() => setSelectedType('Feed')}
+            eventFilters={appliedEventFilters}
+            filterRecenterKey={pendingMapFilterRecenterKey}
+            onFilterRecenterHandled={handleMapFilterRecenterHandled}
+            onCategoryChange={handleMapCategoryChange}
+            hasActiveFilters={hasAppliedEventFilters}
+            onClearFilters={handleClearEventFilters}
+            canIncreaseRadius={canIncreaseEventRadius}
+            onIncreaseRadius={handleIncreaseEventRadius}
+          />
+        )}
+      </View>
+
+      <CommentsModal
+        visible={commentModalVisible}
+        onClose={() => {
+          setCommentModalVisible(false);
+          setSelectedCommentPost(null);
+        }}
+        momentId={selectedCommentPost?.id}
+        likesCount={selectedCommentPost?.likesCount ?? 0}
+        sharesCount={selectedCommentPost?.sharesCount ?? 0}
+        onInteractionChange={(summary) => applyInteractionSummary(summary.momentId, summary)}
+      />
+
+      <ShareModal
+        visible={shareModalVisible}
+        onClose={() => {
+          setShareModalVisible(false);
+          setSelectedSharePost(null);
+        }}
+        onRepost={selectedSharePost ? handleRepost : undefined}
+        shareUrl={selectedSharePost ? `https://mooment.app/moments/${selectedSharePost.id}` : undefined}
+        item={selectedSharePost ? {
+          type: 'post',
+          id: selectedSharePost.id,
+          preview: selectedSharePost.caption,
+          imageUrl: selectedSharePost.mediaItems?.[0]?.uri ?? selectedSharePost.mediaUris?.[0],
+          authorName: selectedSharePost.authorName,
+        } : undefined}
+      />
+
+      <Modal visible={showSuccessModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.starContainer}>
+              <Feather name="star" size={60} color={colors.text} />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.text }]}>One Last step</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+              We just need a few quick details to personalized your experience and get your account fully ready to go
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: buttonBackground(colors) }]}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.push('/profile-screen/edit-profile');
+              }}
+            >
+              <Text style={[styles.modalButtonText, { color: buttonForeground(colors) }]}>Add My Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#0e0d12",
+  },
+  container: {
+    flex: 1,
+    paddingTop: 24,
+  },
+  // Toggle Discover/Friends vs. Scenes visibility without unmounting either
+  // — purely layout-neutral (display:none removes a subtree from layout
+  // exactly like the web, no size/position change to the visible sibling).
+  activeTabBody: {
+    flex: 1,
+  },
+  hiddenTabBody: {
+    display: 'none',
+  },
+  nearbyEventsSection: {
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  nearbyEventsHeaderRow: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  nearbyEventsTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "400",
+    letterSpacing: -0.08,
+    lineHeight: 16,
+  },
+  clearEventFiltersButton: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  increaseRadiusButton: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+  },
+  clearEventFiltersText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  nearbyEventsEmptyText: {
+    fontSize: 13,
+    marginTop: 8,
+  },
+  yourFeedHeaderSection: {
+    marginTop: 4,
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  yourFeedDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginBottom: 16,
+  },
+  yourFeedTitle: {
+    fontSize: 16,
+    fontWeight: "400",
+    letterSpacing: -0.08,
+    lineHeight: 16,
+  },
+  friendsFeedEmptyContentContainer: {
+    flexGrow: 1,
+  },
+  friendsFeedEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 16,
+  },
+  friendsFeedEmptyText: {
+    fontSize: 15,
+    lineHeight: 21,
+    textAlign: "center",
+    maxWidth: 290,
+  },
+  friendsFeedEmptyCta: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+  },
+  friendsFeedEmptyCtaText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  feedSkeletonList: {
+    paddingBottom: 100,
+  },
+  eventSkeletonList: {
+    paddingTop: 8,
+  },
+  feedSkeletonCard: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(17, 17, 17, 0.85)",
+  },
+  feedSkeletonCardLight: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#ECECEF",
+  },
+  feedSkeletonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  feedSkeletonBlock: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+  },
+  feedSkeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  feedSkeletonAuthor: {
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 40,
+  },
+  feedSkeletonAuthorLine: {
+    width: "54%",
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  feedSkeletonTimeLine: {
+    width: "32%",
+    height: 10,
+    borderRadius: 5,
+  },
+  feedSkeletonMenu: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  feedSkeletonMedia: {
+    width: "100%",
+    aspectRatio: 1,
+  },
+  feedSkeletonActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    gap: 18,
+  },
+  feedSkeletonAction: {
+    width: 42,
+    height: 14,
+    borderRadius: 7,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    backgroundColor: "#13131A",
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+  },
+  starContainer: {
+    marginBottom: 32,
+    marginTop: 8,
+  },
+  modalTitle: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  modalSubtitle: {
+    color: "#8E8E9B",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 40,
+    paddingHorizontal: 10,
+  },
+  modalButton: {
+    backgroundColor: "#B59EBE",
+    width: "100%",
+    height: 56,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#17121B",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+});

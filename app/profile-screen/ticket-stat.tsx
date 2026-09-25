@@ -1,0 +1,359 @@
+import { Feather } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  StatusBar,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import BackButton from "@/components/ui/BackButton";
+import UserAvatar from "@/components/ui/UserAvatar";
+import { useTheme } from "@/hooks/useTheme";
+import { getAuthErrorMessage } from "@/lib/authErrors";
+import {
+  getEventTicketStatItems,
+  type EventTicketStatItem,
+  type EventTicketStatItemStatus,
+} from "@/lib/payments";
+import { getStorageFileUrl } from "@/lib/storage";
+
+type TicketStatItem = {
+  id: string;
+  name: string;
+  handle: string;
+  avatar?: string | null;
+  status: 'success' | 'failed' | 'pending';
+  ticketType: string;
+  amount: string;
+};
+
+const toStatusIconState = (status?: EventTicketStatItemStatus | string | null): TicketStatItem['status'] => {
+  const normalized = status?.trim().toLowerCase();
+
+  if (normalized === "checked_in" || normalized === "valid" || normalized === "paid" || normalized === "success") {
+    return "success";
+  }
+
+  if (
+    normalized === "cancelled" ||
+    normalized === "canceled" ||
+    normalized === "refunded" ||
+    normalized === "failed"
+  ) {
+    return "failed";
+  }
+
+  return "pending";
+};
+
+const getAvatarUri = (avatarKey?: string | null) => {
+  if (!avatarKey) return null;
+
+  try {
+    return getStorageFileUrl(avatarKey);
+  } catch {
+    return null;
+  }
+};
+
+const formatAmount = (amount: number, currency: string) => {
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const safeCurrency = currency?.trim().toUpperCase() || "USD";
+
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: safeCurrency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(safeAmount);
+  } catch {
+    return `$${safeAmount.toFixed(2)}`;
+  }
+};
+
+const toTicketStatItem = (item: EventTicketStatItem): TicketStatItem => {
+  const attendee = item.attendee ?? null;
+  const username = attendee?.username?.trim();
+
+  return {
+    id: item.id,
+    name: attendee?.name?.trim() || "Attendee",
+    handle: username ? `@${username.replace(/^@+/, "")}` : "",
+    avatar: getAvatarUri(attendee?.avatarKey ?? null),
+    status: toStatusIconState(item.status),
+    ticketType: item.ticketName?.trim() || "Ticket",
+    amount: formatAmount(item.amount, item.currency),
+  };
+};
+
+export default function TicketStatScreen() {
+  const { colors, isDark } = useTheme();
+  const params = useLocalSearchParams<{ eventId?: string }>();
+  const eventId = typeof params.eventId === "string" ? params.eventId.trim() : "";
+  const [items, setItems] = useState<TicketStatItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadStats = useCallback(async (refreshing = false) => {
+    if (!eventId) {
+      setItems([]);
+      setErrorMessage("Ticket stats are unavailable for this event.");
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
+
+    if (refreshing) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    setErrorMessage(null);
+
+    try {
+      const result = await getEventTicketStatItems(eventId);
+      setItems(result.tickets.map(toTicketStatItem));
+    } catch (error) {
+      setItems([]);
+      setErrorMessage(getAuthErrorMessage(error, "Unable to load ticket stats."));
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
+
+  const onRefresh = useCallback(() => {
+    void loadStats(true);
+  }, [loadStats]);
+
+  const getStatusIcon = (status: TicketStatItem['status']) => {
+    switch (status) {
+      case 'success':
+        return (
+          <View style={[styles.statusCircle, { backgroundColor: '#2DB46D' }]}>
+            <Feather name="check" size={14} color="#FFFFFF" />
+          </View>
+        );
+      case 'failed':
+        return (
+          <View style={[styles.statusCircle, { backgroundColor: '#D64646' }]}>
+            <Feather name="x" size={14} color="#FFFFFF" />
+          </View>
+        );
+      case 'pending':
+        return (
+          <View style={[styles.statusCircle, { backgroundColor: colors.textSecondary }]}>
+            <Feather name="minus" size={14} color={colors.background} />
+          </View>
+        );
+    }
+  };
+
+  const renderItem = ({ item }: { item: TicketStatItem }) => (
+    <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.statTopRow}>
+        <View style={styles.userInfo}>
+          <View style={[styles.avatarContainer, { borderColor: colors.primary }]}>
+            <UserAvatar uri={item.avatar} name={item.name} size={48} style={styles.avatar} />
+          </View>
+          <View style={styles.userText}>
+            <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text style={[styles.userHandle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.handle}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={[styles.amount, { color: colors.text }]} numberOfLines={1}>
+          {item.amount}
+        </Text>
+      </View>
+
+      <View style={[styles.ticketInfo, { borderTopColor: colors.border }]}>
+        {getStatusIcon(item.status)}
+        <Text style={[styles.ticketType, { color: colors.text }]} numberOfLines={1}>
+          {item.ticketType}
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      {/* Header */}
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Ticket Stats</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <FlatList
+        data={items}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={[styles.listContent, items.length === 0 ? styles.emptyListContent : null]}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        ListEmptyComponent={(
+          <View style={styles.stateContainer}>
+            {isLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <>
+                <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+                  {errorMessage ?? "No ticket stats yet."}
+                </Text>
+                {errorMessage && eventId ? (
+                  <TouchableOpacity
+                    style={[styles.retryBtn, { borderColor: colors.border }]}
+                    onPress={() => void loadStats()}
+                  >
+                    <Text style={[styles.retryText, { color: colors.text }]}>Retry</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            )}
+          </View>
+        )}
+        showsVerticalScrollIndicator={false}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 18,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  emptyListContent: {
+    flexGrow: 1,
+  },
+  stateContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+  stateText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  retryBtn: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  statTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
+  avatarContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    padding: 2,
+    marginRight: 12,
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+  },
+  userText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  userName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  userHandle: {
+    fontSize: 12,
+  },
+  ticketInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  statusCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  ticketType: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  amount: {
+    flexShrink: 0,
+    maxWidth: 112,
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'right',
+  },
+});

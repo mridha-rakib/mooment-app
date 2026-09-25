@@ -1,0 +1,1011 @@
+import BackButton from '@/components/ui/BackButton';
+import CreateEventStepNavigator from '@/components/create-event/CreateEventStepNavigator';
+import { EVENT_CATEGORIES, isEventCategory, type EventCategory } from '@/constants/eventCategories';
+import { useTheme } from '@/hooks/useTheme';
+import { getAuthErrorMessage } from '@/lib/authErrors';
+import { combineLocalDateAndTime } from '@/lib/eventDateRange';
+import { dateToDateKey, dateToTimeKey, resolveInitialPickerDate } from '@/lib/eventLocalTime';
+import {
+  getEventStepTwoScheduleErrors,
+  isOngoingPublishedEventEdit,
+} from '@/lib/eventStepTwoValidation';
+import {
+  getTicketDeadlineConflicts,
+  getTicketDeadlineDependencyMessage,
+} from '@/lib/ticketAvailability';
+import {
+  getEventWizardStepPath,
+  getEventWizardStepValidity,
+  getEventWizardStepStatesByKey,
+  type EventWizardStepKey,
+} from '@/lib/eventWizardSteps';
+import { fromAgeRestriction, toAgeRestriction, useEventDraftStore } from '@/stores/eventDraftStore';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { z } from 'zod';
+
+import { buttonBackground, buttonForeground } from "@/lib/buttonTheme";
+const AGE_OPTIONS = ['All Ages', '18+', '21+'] as const;
+const MIN_CATEGORIES = 1;
+const MAX_CATEGORIES = 3;
+const REQUIRED_CATEGORY_MESSAGE = 'Select at least 1 category.';
+const MAX_CATEGORY_MESSAGE = 'You can select up to 3 categories.';
+
+type AgeOption = (typeof AGE_OPTIONS)[number];
+
+const isAgeOption = (value: string): value is AgeOption => (AGE_OPTIONS as readonly string[]).includes(value);
+
+const categorySelectionSchema = z
+  .array(z.custom<EventCategory>((value) => isEventCategory(value)))
+  .min(MIN_CATEGORIES, REQUIRED_CATEGORY_MESSAGE)
+  .max(MAX_CATEGORIES, MAX_CATEGORY_MESSAGE)
+  .refine((values) => new Set(values).size === values.length, "Categories must be unique.");
+
+const requiredDate = (message: string) => z.custom<Date>(
+  (value) => value instanceof Date && !Number.isNaN(value.getTime()),
+  { message },
+);
+
+const createEventStepTwoSchema = z.object({
+  ageRestriction: z.enum(AGE_OPTIONS, {
+    invalid_type_error: 'Choose an age restriction for this event.',
+    required_error: 'Choose an age restriction for this event.',
+  }),
+  categories: categorySelectionSchema,
+  startDate: requiredDate('Start date is required'),
+  endDate: requiredDate('End date is required'),
+  startTime: requiredDate('Start time is required'),
+  endTime: requiredDate('End time is required'),
+});
+
+type CreateEventStepTwoValues = z.infer<typeof createEventStepTwoSchema>;
+type CreateEventStepTwoErrors = Partial<Record<keyof CreateEventStepTwoValues, string>>;
+
+export default function CreateEventStep2() {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const draftAgeRestriction = useEventDraftStore((state) => state.ageRestriction);
+  const draftCategories = useEventDraftStore((state) => state.categories);
+  const draftScheduledAt = useEventDraftStore((state) => state.scheduledAt);
+  const draftEndAt = useEventDraftStore((state) => state.endAt);
+  const draftScheduledLocalDate = useEventDraftStore((state) => state.scheduledLocalDate);
+  const draftScheduledLocalTime = useEventDraftStore((state) => state.scheduledLocalTime);
+  const draftEndLocalDate = useEventDraftStore((state) => state.endLocalDate);
+  const draftEndLocalTime = useEventDraftStore((state) => state.endLocalTime);
+  const draftTimezone = useEventDraftStore((state) => state.timezone);
+  const draftTickets = useEventDraftStore((state) => state.tickets);
+  const originalScheduledAt = useEventDraftStore((state) => state.originalScheduledAt);
+  const persistedEndAt = useEventDraftStore((state) => state.persistedEndAt);
+  // Read-only elsewhere-in-wizard fields, needed only to render the step
+  // navigator's eligibility for Basics/Location (this screen never edits
+  // them).
+  const draftName = useEventDraftStore((state) => state.name);
+  const draftDescription = useEventDraftStore((state) => state.description);
+  const draftBannerImageUri = useEventDraftStore((state) => state.bannerImageUri);
+  const draftLocation = useEventDraftStore((state) => state.location);
+  const setStepTwo = useEventDraftStore((state) => state.setStepTwo);
+  const saveDraft = useEventDraftStore((state) => state.saveDraft);
+  const isEditingPublished = useEventDraftStore((state) => state.isEditingPublishedEvent);
+  const isEditingEvent = useEventDraftStore((state) => state.isExistingEventSession);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingAndExiting, setIsSavingAndExiting] = useState(false);
+  const [savedLabel, setSavedLabel] = useState(false);
+  const isMountedRef = useRef(true);
+  const isAdvancingRef = useRef(false);
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
+  const [selectedAge, setSelectedAge] = useState<AgeOption>(() => {
+    const initialAge = fromAgeRestriction(draftAgeRestriction);
+
+    return isAgeOption(initialAge) ? initialAge : 'All Ages';
+  });
+  const [isCategorySheetVisible, setIsCategorySheetVisible] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<EventCategory[]>(
+    draftCategories.filter(isEventCategory).slice(0, MAX_CATEGORIES),
+  );
+  const selectedCategoriesRef = useRef(selectedCategories);
+  // Batch 3A picker hydration priority: explicit stored wall-clock parts >
+  // absolute instant reinterpreted in the Event's IANA timezone > legacy
+  // device-local interpretation of the absolute instant.
+  const validInitialStartAt = resolveInitialPickerDate(
+    draftScheduledLocalDate && draftScheduledLocalTime
+      ? { dateKey: draftScheduledLocalDate, time: draftScheduledLocalTime }
+      : null,
+    draftScheduledAt,
+    draftTimezone,
+  );
+  const validInitialEndAt = resolveInitialPickerDate(
+    draftEndLocalDate && draftEndLocalTime
+      ? { dateKey: draftEndLocalDate, time: draftEndLocalTime }
+      : null,
+    draftEndAt,
+    draftTimezone,
+  );
+  const [startDate, setStartDate] = useState<Date | null>(validInitialStartAt);
+  const [endDate, setEndDate] = useState<Date | null>(validInitialEndAt);
+  const [startTime, setStartTime] = useState<Date | null>(validInitialStartAt);
+  const [endTime, setEndTime] = useState<Date | null>(validInitialEndAt);
+  // True once the user explicitly changes a start / end picker in this visit.
+  // A venue-only edit leaves these false so the schedule is NOT re-sent as an
+  // explicit edit (the backend then runs its venue-change wall-clock branch).
+  const startScheduleTouchedRef = useRef(false);
+  const endScheduleTouchedRef = useRef(false);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  const [errors, setErrors] = useState<CreateEventStepTwoErrors>({});
+  const isOngoingEdit = isOngoingPublishedEventEdit({
+    isEditingPublishedEvent: isEditingPublished,
+    originalScheduledAt,
+    persistedEndAt,
+  });
+  const pickerButtonColors = {
+    negativeButton: { label: 'Cancel', textColor: colors.textSecondary },
+    positiveButton: { label: 'OK', textColor: colors.primary },
+  };
+
+  const clearFieldError = (field: keyof CreateEventStepTwoErrors) => {
+    setErrors((currentErrors) => {
+      if (!currentErrors[field]) {
+        return currentErrors;
+      }
+
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[field];
+      return nextErrors;
+    });
+  };
+
+  const onStartDateChange = (event: any, selectedDate?: Date) => {
+    setShowStartDatePicker(false);
+    if (selectedDate) {
+      setStartDate(selectedDate);
+      startScheduleTouchedRef.current = true;
+      clearFieldError('startDate');
+    }
+  };
+
+  const onEndDateChange = (event: any, selectedDate?: Date) => {
+    setShowEndDatePicker(false);
+    if (selectedDate) {
+      setEndDate(selectedDate);
+      endScheduleTouchedRef.current = true;
+      clearFieldError('endDate');
+    }
+  };
+
+  const onStartTimeChange = (event: any, selectedTime?: Date) => {
+    setShowStartTimePicker(false);
+    if (selectedTime) {
+      setStartTime(selectedTime);
+      startScheduleTouchedRef.current = true;
+      clearFieldError('startTime');
+    }
+  };
+
+  const onEndTimeChange = (event: any, selectedTime?: Date) => {
+    setShowEndTimePicker(false);
+    if (selectedTime) {
+      setEndTime(selectedTime);
+      endScheduleTouchedRef.current = true;
+      clearFieldError('endTime');
+    }
+  };
+
+  const formatDate = (d: Date) => {
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (d: Date) => {
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  const handleAgeSelect = (age: AgeOption) => {
+    setSelectedAge(age);
+    clearFieldError('ageRestriction');
+  };
+
+  const setCategoryError = (message?: string) => {
+    setErrors((currentErrors) => ({ ...currentErrors, categories: message }));
+  };
+
+  const handleCategoryToggle = (category: EventCategory) => {
+    const currentCategories = selectedCategoriesRef.current;
+
+    if (currentCategories.includes(category)) {
+      const nextCategories = currentCategories.filter((item) => item !== category);
+      selectedCategoriesRef.current = nextCategories;
+      setSelectedCategories(nextCategories);
+      setCategoryError(nextCategories.length === 0 ? REQUIRED_CATEGORY_MESSAGE : undefined);
+      return;
+    }
+
+    if (currentCategories.length >= MAX_CATEGORIES) {
+      setCategoryError(MAX_CATEGORY_MESSAGE);
+      return;
+    }
+
+    const nextCategories = [...currentCategories, category];
+    selectedCategoriesRef.current = nextCategories;
+    setSelectedCategories(nextCategories);
+    clearFieldError('categories');
+  };
+
+  const validateCategorySelection = () => {
+    const result = categorySelectionSchema.safeParse(selectedCategories);
+
+    if (!result.success) {
+      setCategoryError(result.error.errors[0]?.message ?? REQUIRED_CATEGORY_MESSAGE);
+      return false;
+    }
+
+    clearFieldError('categories');
+    return true;
+  };
+
+  const handleCategoryContinue = () => {
+    if (!validateCategorySelection()) {
+      return;
+    }
+
+    setIsCategorySheetVisible(false);
+  };
+
+  const persistStepTwo = (values?: CreateEventStepTwoValues) => {
+    let scheduledAt: string | null = null;
+
+    if (isOngoingEdit && originalScheduledAt) {
+      scheduledAt = originalScheduledAt;
+    } else if (values) {
+      scheduledAt = combineLocalDateAndTime(values.startDate, values.startTime).toISOString();
+    } else if (startDate && startTime) {
+      scheduledAt = combineLocalDateAndTime(startDate, startTime).toISOString();
+    }
+
+    const eventEndAt = values
+      ? combineLocalDateAndTime(values.endDate, values.endTime).toISOString()
+      : endDate && endTime
+        ? combineLocalDateAndTime(endDate, endTime).toISOString()
+        : null;
+
+    // Batch 3A — venue-local wall-clock transport. Derived from the VISIBLE
+    // picker components (never `.toISOString()`, which shifts through the device
+    // zone). Sent when the schedule is explicit intent: a new Event, or a
+    // start/end picker touched this visit. Ongoing edits keep their locked start
+    // untouched, so no start parts are emitted for them.
+    const startPickerDate = values?.startDate ?? startDate;
+    const startPickerTime = values?.startTime ?? startTime;
+    const endPickerDate = values?.endDate ?? endDate;
+    const endPickerTime = values?.endTime ?? endTime;
+    const isNewEvent = !isEditingEvent;
+    const startTouched = startScheduleTouchedRef.current;
+    const endTouched = endScheduleTouchedRef.current;
+    const emitSchedule = isNewEvent || startTouched || endTouched;
+
+    let scheduledLocalDate: string | null | undefined;
+    let scheduledLocalTime: string | null | undefined;
+    let endLocalDate: string | null | undefined;
+    let endLocalTime: string | null | undefined;
+
+    if (emitSchedule) {
+      if (isOngoingEdit) {
+        scheduledLocalDate = null;
+        scheduledLocalTime = null;
+      } else if (startPickerDate && startPickerTime) {
+        scheduledLocalDate = dateToDateKey(startPickerDate);
+        scheduledLocalTime = dateToTimeKey(startPickerTime);
+      }
+      if (endPickerDate && endPickerTime) {
+        endLocalDate = dateToDateKey(endPickerDate);
+        endLocalTime = dateToTimeKey(endPickerTime);
+      }
+    }
+
+    setStepTwo({
+      ageRestriction: toAgeRestriction(values?.ageRestriction ?? selectedAge),
+      categories: values?.categories ?? selectedCategories,
+      scheduledAt,
+      endAt: eventEndAt,
+      scheduledLocalDate,
+      scheduledLocalTime,
+      endLocalDate,
+      endLocalTime,
+      scheduleWallClockDirty: emitSchedule ? true : undefined,
+    });
+  };
+
+  // EVT-002: step-navigator eligibility. Details (this screen) is evaluated
+  // from live local state, since it hasn't been flushed to the store yet;
+  // every other step is evaluated from the store's already-persisted values.
+  const stepValidity = getEventWizardStepValidity({
+    name: draftName,
+    description: draftDescription,
+    bannerImageUri: draftBannerImageUri,
+    categoryCount: selectedCategories.length,
+    hasStart: Boolean(startDate && startTime),
+    hasEnd: Boolean(endDate && endTime),
+    location: draftLocation,
+  });
+  const stepStates = getEventWizardStepStatesByKey(stepValidity, 'details');
+
+  const handleStepNavigatorPress = (step: EventWizardStepKey) => {
+    if (step === 'details') return;
+    // Persist whatever is currently selected, valid or not — a navigator tap
+    // must never discard in-progress edits, and must never call the backend
+    // (Save Draft remains the only explicit persistence action).
+    persistStepTwo();
+    router.replace(getEventWizardStepPath(step));
+  };
+
+  const handleSaveDraft = async () => {
+    if (isSaving) return;
+    if (!validateCategorySelection()) {
+      setIsCategorySheetVisible(true);
+      return;
+    }
+    persistStepTwo();
+    setIsSaving(true);
+
+    try {
+      await saveDraft();
+      setSavedLabel(true);
+      setTimeout(() => setSavedLabel(false), 2000);
+    } catch (error) {
+      Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleNextDraftSaveError = (error: unknown) => {
+    Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+  };
+
+  const validateStepTwo = (): CreateEventStepTwoValues | null => {
+    const result = createEventStepTwoSchema.safeParse({
+      ageRestriction: selectedAge,
+      categories: selectedCategories,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+    });
+
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+
+      setErrors({
+        ageRestriction: fieldErrors.ageRestriction?.[0],
+        categories: fieldErrors.categories?.[0],
+        startDate: fieldErrors.startDate?.[0],
+        endDate: fieldErrors.endDate?.[0],
+        startTime: fieldErrors.startTime?.[0],
+        endTime: fieldErrors.endTime?.[0],
+      });
+
+      return null;
+    }
+
+    const scheduleErrors = getEventStepTwoScheduleErrors(result.data, {
+      isOngoingEdit,
+      originalScheduledAt,
+    });
+
+    if (Object.keys(scheduleErrors).length > 0) {
+      setErrors(scheduleErrors);
+      return null;
+    }
+
+    // EVT-013, Part D/E/F: the Event End the host just chose must not leave
+    // any existing ticket tier's salesEndAt invalid. This is additive to the
+    // schedule checks above (which run first and take precedence for
+    // unrelated Start/End problems) and never mutates a ticket — it only
+    // blocks progression until the host explicitly fixes the affected tier
+    // from Step 4. The proposed End itself is left exactly as selected.
+    const proposedEventEndAt = combineLocalDateAndTime(result.data.endDate, result.data.endTime);
+    const deadlineConflicts = getTicketDeadlineConflicts(draftTickets, proposedEventEndAt, draftTimezone);
+
+    if (deadlineConflicts.length > 0) {
+      setErrors({
+        endDate: getTicketDeadlineDependencyMessage(deadlineConflicts) ?? undefined,
+      });
+      return null;
+    }
+
+    setErrors({});
+    return result.data;
+  };
+
+  const handleSaveAndExit = async () => {
+    if (isSaving || isSavingAndExiting) return;
+    const values = validateStepTwo();
+
+    if (!values) return;
+
+    persistStepTwo(values);
+    setIsSavingAndExiting(true);
+
+    try {
+      const event = await saveDraft();
+      if (isMountedRef.current) {
+        router.replace({ pathname: '/event-screen/event', params: { eventId: event.id, mode: 'host' } });
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert('Unable to save changes', getAuthErrorMessage(error, 'Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSavingAndExiting(false);
+      }
+    }
+  };
+
+  const handleNext = async () => {
+    if (isSaving || isSavingAndExiting || isAdvancingRef.current) return;
+    const values = validateStepTwo();
+
+    if (!values) return;
+
+    persistStepTwo(values);
+
+    if (!isEditingPublished) {
+      isAdvancingRef.current = true;
+      const draftSave = saveDraft();
+      router.push('/create-event/step-3');
+      void draftSave
+        .catch(handleNextDraftSaveError)
+        .finally(() => {
+          isAdvancingRef.current = false;
+        });
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await saveDraft();
+      if (isMountedRef.current) {
+        router.push('/create-event/step-3');
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      Alert.alert(isEditingPublished ? 'Unable to save changes' : 'Unable to save draft', getAuthErrorMessage(error, 'Your progress was not saved. Please try again.'));
+    } finally {
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/create-event')} />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</Text>
+        {isEditingPublished ? (
+          <TouchableOpacity onPress={handleSaveAndExit} disabled={isSaving || isSavingAndExiting}>
+            <Text style={[styles.saveDraft, { color: colors.primary, opacity: (isSaving || isSavingAndExiting) ? 0.5 : 1 }]}>
+              {isSavingAndExiting ? 'Saving…' : 'Save & Exit'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={handleSaveDraft} disabled={isSaving}>
+            <Text style={[styles.saveDraft, { color: savedLabel ? '#4CAF50' : colors.primary, opacity: isSaving ? 0.5 : 1 }]}>
+              {isSaving ? 'Saving…' : savedLabel ? 'Saved ✓' : 'Save Draft'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Step navigator */}
+      <CreateEventStepNavigator stepStates={stepStates} onStepPress={handleStepNavigatorPress} />
+
+      {/* Form Content */}
+      <View style={styles.formContainer}>
+        {/* Age Restrictions */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>AGE RESTRICTIONS</Text>
+          <View style={styles.chipRow}>
+            {AGE_OPTIONS.map((age) => (
+              <TouchableOpacity
+                key={age}
+                style={[
+                  styles.chip,
+                  { borderColor: colors.border },
+                  selectedAge === age ? { backgroundColor: colors.text, borderColor: colors.text } : { backgroundColor: 'transparent' },
+                ]}
+                onPress={() => handleAgeSelect(age)}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    selectedAge === age ? { color: colors.background } : { color: colors.text },
+                  ]}
+                >
+                  {age}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {errors.ageRestriction ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.ageRestriction}</Text> : null}
+        </View>
+
+        {/* Categories */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>CATEGORIES (1–3)</Text>
+          <TouchableOpacity 
+            style={[
+              styles.selector,
+              { backgroundColor: colors.card, borderColor: errors.categories ? colors.danger : 'transparent' },
+            ]}
+            onPress={() => setIsCategorySheetVisible(true)}
+          >
+            <Text
+              numberOfLines={1}
+              style={selectedCategories.length ? [styles.categorySummary, { color: colors.text }] : [styles.selectorPlaceholder, { color: colors.textSecondary }]}
+            >
+              {selectedCategories.length ? selectedCategories.join(', ') : 'Select 1–3 categories'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+          {errors.categories ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.categories}</Text> : null}
+        </View>
+
+        {/* Start/end dates and times — EVT-007: grouped by event boundary
+            (Start row, End row), not by field type, so the Start Date +
+            Start Time pairing and End Date + End Time pairing are visually
+            obvious. Field bindings/handlers are unchanged from before —
+            only the JSX order/grouping moved. */}
+        <View style={styles.dateTimeGroup}>
+          <View style={[styles.row, styles.dateRow]}>
+            <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>START DATE</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.startDate ? colors.danger : 'transparent' },
+                  isOngoingEdit ? styles.disabledControl : null,
+                ]}
+                onPress={() => setShowStartDatePicker(true)}
+                disabled={isOngoingEdit}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.compactSelectorText, { color: startDate && !isOngoingEdit ? colors.text : colors.textSecondary }]} numberOfLines={1}>
+                  {startDate ? formatDate(startDate) : 'Select date'}
+                </Text>
+              </TouchableOpacity>
+              {errors.startDate ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.startDate}</Text> : null}
+            </View>
+
+            <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>START TIME</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.startTime ? colors.danger : 'transparent' },
+                  isOngoingEdit ? styles.disabledControl : null,
+                ]}
+                onPress={() => setShowStartTimePicker(true)}
+                disabled={isOngoingEdit}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text
+                  style={[styles.compactSelectorText, { color: startTime && !isOngoingEdit ? colors.text : colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {startTime ? formatTime(startTime) : 'Select time'}
+                </Text>
+              </TouchableOpacity>
+              {errors.startTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.startTime}</Text> : null}
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={[styles.dateTimeColumn, { marginRight: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END DATE</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.endDate ? colors.danger : 'transparent' },
+                ]}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.compactSelectorText, { color: endDate ? colors.text : colors.textSecondary }]} numberOfLines={1}>
+                  {endDate ? formatDate(endDate) : 'Select date'}
+                </Text>
+              </TouchableOpacity>
+              {errors.endDate ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endDate}</Text> : null}
+            </View>
+
+            <View style={[styles.dateTimeColumn, { marginLeft: 8 }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>END TIME</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  { backgroundColor: colors.card, borderColor: errors.endTime ? colors.danger : 'transparent' },
+                ]}
+                onPress={() => setShowEndTimePicker(true)}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text
+                  style={[styles.compactSelectorText, { color: endTime ? colors.text : colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {endTime ? formatTime(endTime) : 'Select time'}
+                </Text>
+              </TouchableOpacity>
+              {errors.endTime ? <Text style={[styles.errorText, { color: colors.danger }]}>{errors.endTime}</Text> : null}
+            </View>
+          </View>
+        </View>
+
+        {showStartDatePicker && !isOngoingEdit && (
+          <DateTimePicker
+            value={startDate ?? new Date()}
+            mode="date"
+            minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onStartDateChange}
+          />
+        )}
+
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={endDate ?? startDate ?? new Date()}
+            mode="date"
+            minimumDate={startDate
+              ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+              : new Date(new Date().setHours(0, 0, 0, 0))}
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onEndDateChange}
+          />
+        )}
+
+        {showStartTimePicker && !isOngoingEdit && (
+          <DateTimePicker
+            value={startTime ?? new Date()}
+            mode="time"
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour={false}
+            onChange={onStartTimeChange}
+          />
+        )}
+
+        {showEndTimePicker && (
+          <DateTimePicker
+            value={endTime ?? new Date()}
+            mode="time"
+            negativeButton={pickerButtonColors.negativeButton}
+            positiveButton={pickerButtonColors.positiveButton}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour={false}
+            onChange={onEndTimeChange}
+          />
+        )}
+      </View>
+
+      {/* Spacer to push footer down */}
+      <View style={{ flex: 1 }} />
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.nextButton, { backgroundColor: buttonBackground(colors) }]}
+          onPress={handleNext}
+          disabled={isSaving || isSavingAndExiting}
+        >
+          <Text style={[styles.nextButtonText, { color: buttonForeground(colors) }]}>{isSaving ? 'Saving…' : 'Next'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Category Bottom Sheet */}
+      <Modal
+        visible={isCategorySheetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsCategorySheetVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setIsCategorySheetVisible(false)}>
+          <View style={styles.modalOverlay} />
+        </TouchableWithoutFeedback>
+        <View style={[styles.bottomSheet, { backgroundColor: colors.card }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Select Categories</Text>
+          <Text style={[styles.categoryCount, { color: colors.textSecondary }]}>
+            {selectedCategories.length}/{MAX_CATEGORIES} selected
+          </Text>
+          {errors.categories ? (
+            <Text style={[styles.sheetError, { color: colors.danger }]}>{errors.categories}</Text>
+          ) : null}
+          
+          <ScrollView style={styles.categoryList} showsVerticalScrollIndicator={false}>
+            {EVENT_CATEGORIES.map((item) => {
+              const isSelected = selectedCategories.includes(item);
+
+              return (
+                <TouchableOpacity
+                  key={item}
+                  style={styles.categoryItem}
+                  onPress={() => handleCategoryToggle(item)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      { color: colors.textSecondary },
+                      isSelected && [styles.categoryTextSelected, { color: colors.text }],
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                  <Ionicons
+                    name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={22}
+                    color={isSelected ? colors.primary : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={[styles.sheetFooter, { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 20 }]}>
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={() => setIsCategorySheetVisible(false)}
+            >
+              <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.continueButton, { backgroundColor: buttonBackground(colors) }]}
+              onPress={handleCategoryContinue}
+            >
+              <Text style={[styles.continueButtonText, { color: buttonForeground(colors) }]}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 18,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+    marginLeft: 20,
+  },
+  saveDraft: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  stepContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  stepText: {
+    fontSize: 13,
+  },
+  formContainer: {
+    paddingHorizontal: 16,
+  },
+  inputGroup: {
+    marginBottom: 24,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  chip: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  selector: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  selectorLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  disabledControl: {
+    opacity: 0.55,
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 6,
+  },
+  selectorPlaceholder: {
+    fontSize: 15,
+  },
+  selectorText: {
+    fontSize: 15,
+  },
+  categorySummary: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 10,
+  },
+  compactSelectorText: {
+    flex: 1,
+    fontSize: 13,
+  },
+  dateTimeGroup: {
+    marginBottom: 24,
+  },
+  dateRow: {
+    marginBottom: 20,
+  },
+  dateTimeColumn: {
+    flex: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 24,
+    paddingTop: 16,
+  },
+  nextButton: {
+    paddingVertical: 18,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  nextButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 10,
+    paddingHorizontal: 20,
+    maxHeight: '80%',
+  },
+  sheetHandle: {
+    width: 60,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  categoryCount: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  sheetError: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  categoryList: {
+    marginBottom: 20,
+  },
+  categoryItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+  },
+  categoryText: {
+    fontSize: 16,
+  },
+  categoryTextSelected: {
+    fontWeight: '700',
+  },
+  sheetFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    paddingTop: 10,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  continueButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  continueButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

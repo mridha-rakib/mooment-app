@@ -1,0 +1,505 @@
+import { Feather } from "@expo/vector-icons";
+import BackButton from "@/components/ui/BackButton";
+import { Spinner } from "@/components/ui/spinner";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, AppState, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View, StatusBar } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useDispatch } from "react-redux";
+import { setTheme } from "@/redux/slice/preference";
+import { useTheme } from "@/hooks/useTheme";
+import { writeThemePreference } from "@/lib/themePreference";
+import { useAuthStore } from "@/stores/authStore";
+import { useLocationSharingStore } from "@/stores/locationSharingStore";
+
+type ExpoNotificationsModule = typeof import("expo-notifications");
+type NotificationPermissionResponse = Awaited<ReturnType<ExpoNotificationsModule["getPermissionsAsync"]>>;
+type NotificationPermissionState = "unknown" | "granted" | "denied" | "blocked";
+
+const isNotificationPermissionGranted = (permission: NotificationPermissionResponse) =>
+  permission.granted || permission.status === "granted";
+
+const getNotificationPermissionState = (
+  permission: NotificationPermissionResponse,
+): NotificationPermissionState => {
+  if (isNotificationPermissionGranted(permission)) {
+    return "granted";
+  }
+
+  return permission.canAskAgain === false ? "blocked" : "denied";
+};
+
+type SettingItemProps = {
+  icon: string;
+  label: string;
+  type?: 'toggle' | 'arrow' | 'dropdown';
+  value?: boolean;
+  onValueChange?: (val: boolean) => void;
+  onPress?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  accessibilityRole?: 'link' | 'button';
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+};
+
+const SettingItem = ({ icon, label, type = 'arrow', value, onValueChange, onPress, disabled, loading, accessibilityRole, accessibilityLabel, accessibilityHint, colors }: SettingItemProps & { colors: any }) => (
+  <TouchableOpacity
+    style={[styles.settingItem, { backgroundColor: colors.card, borderColor: colors.border }, disabled && styles.settingItemDisabled]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={type === 'toggle' ? 1 : 0.7}
+    accessibilityRole={type === 'toggle' ? undefined : (accessibilityRole ?? 'button')}
+    accessibilityLabel={accessibilityLabel ?? label}
+    accessibilityHint={accessibilityHint}
+  >
+    <View style={styles.settingItemLeft}>
+      <Feather name={icon as any} size={18} color={colors.textSecondary} />
+      <Text style={[styles.settingLabel, { color: colors.text }]}>{label}</Text>
+    </View>
+    <View style={styles.settingItemRight}>
+      {type === 'toggle' && (
+        <View style={styles.toggleGroup}>
+          {loading && <Spinner size="small" color={colors.textSecondary} />}
+          <Switch
+            value={value}
+            onValueChange={onValueChange}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor={value ? (colors.isDark ? '#FFFFFF' : colors.background) : '#FFFFFF'}
+            ios_backgroundColor={colors.border}
+            disabled={disabled}
+            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+          />
+        </View>
+      )}
+      {type === 'arrow' && <Feather name="chevron-right" size={18} color={colors.textSecondary} />}
+      {type === 'dropdown' && <Feather name="chevron-down" size={18} color={colors.textSecondary} />}
+    </View>
+  </TouchableOpacity>
+);
+
+export default function SettingsScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const dispatch = useDispatch();
+  const { colors, isDark } = useTheme();
+  const user = useAuthStore((state) => state.user);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const logout = useAuthStore((state) => state.logout);
+  const enableLocationSharing = useLocationSharingStore((state) => state.enableSharing);
+  const disableLocationSharing = useLocationSharingStore((state) => state.disableSharing);
+  const isLocationSyncing = useLocationSharingStore((state) => state.isSyncing);
+
+  // Settings states
+  const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
+  const [notificationPermissionState, setNotificationPermissionState] =
+    useState<NotificationPermissionState>("unknown");
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const notificationUpdateRef = useRef(false);
+  // Transient, display-only value: lets the Switch move the instant the user taps it
+  // instead of waiting on permission/GPS/PATCH, without becoming a second source of truth.
+  const [pendingLocationValue, setPendingLocationValue] = useState<boolean | null>(null);
+  const locationEnabled = pendingLocationValue !== null
+    ? pendingLocationValue
+    : Boolean(user?.currentLocationSharingEnabled);
+  const backendNotificationsEnabled = user?.notificationsEnabled ?? true;
+  const notificationOsPermissionGranted = notificationPermissionState === "granted";
+  const notificationEnabled = backendNotificationsEnabled && notificationOsPermissionGranted;
+
+  const refreshNotificationPermission = useCallback(async () => {
+    try {
+      const Notifications = await import("expo-notifications");
+      const permission = await Notifications.getPermissionsAsync();
+      setNotificationPermissionState(getNotificationPermissionState(permission));
+    } catch {
+      setNotificationPermissionState("unknown");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshNotificationPermission();
+  }, [refreshNotificationPermission]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshNotificationPermission();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshNotificationPermission]);
+
+  const handleLocationSharingChange = async (nextValue: boolean) => {
+    if (isLocationSyncing) {
+      return;
+    }
+
+    setPendingLocationValue(nextValue);
+
+    try {
+      if (nextValue) {
+        await enableLocationSharing();
+      } else {
+        await disableLocationSharing();
+      }
+      // enableSharing()/disableSharing() only resolve after authStore.user has
+      // already been updated, so it's safe to drop the transient value now.
+      setPendingLocationValue(null);
+    } catch (error) {
+      setPendingLocationValue(null);
+      Alert.alert(
+        "Current Location",
+        error instanceof Error ? error.message : "Unable to update current location sharing.",
+      );
+    }
+  };
+
+  const handleDarkModeChange = (nextValue: boolean) => {
+    const nextTheme = nextValue ? 'dark' : 'light';
+
+    dispatch(setTheme(nextTheme));
+    void writeThemePreference(nextTheme);
+  };
+
+  const handleNotificationChange = async (nextValue: boolean) => {
+    if (notificationUpdateRef.current) {
+      return;
+    }
+
+    notificationUpdateRef.current = true;
+    setIsUpdatingNotifications(true);
+
+    try {
+      if (!nextValue) {
+        await updateProfile({
+          notificationsEnabled: false,
+        });
+        return;
+      }
+
+      const Notifications = await import("expo-notifications");
+      let permission = await Notifications.getPermissionsAsync();
+      let nextPermissionState = getNotificationPermissionState(permission);
+
+      if (nextPermissionState === "denied" && permission.canAskAgain !== false) {
+        permission = await Notifications.requestPermissionsAsync();
+        nextPermissionState = getNotificationPermissionState(permission);
+      }
+
+      setNotificationPermissionState(nextPermissionState);
+
+      if (nextPermissionState === "granted") {
+        await updateProfile({
+          notificationsEnabled: true,
+        });
+        return;
+      }
+
+      if (backendNotificationsEnabled) {
+        await updateProfile({
+          notificationsEnabled: false,
+        });
+      }
+
+      if (nextPermissionState === "blocked") {
+        Alert.alert(
+          "Notifications Disabled",
+          "Enable notifications in your device settings to receive alerts.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Open Settings",
+              onPress: () => {
+                void Linking.openSettings().catch(() => {
+                  Alert.alert("Notifications", "Unable to open device settings.");
+                });
+              },
+            },
+          ],
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        "Notifications",
+        error instanceof Error ? error.message : "Unable to update notification preference.",
+      );
+    } finally {
+      notificationUpdateRef.current = false;
+      setIsUpdatingNotifications(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    setIsSigningOut(true);
+
+    try {
+      await logout();
+      if (router.canDismiss()) {
+        router.dismissAll();
+      }
+      router.replace('/auth-screen/onboarding');
+    } catch (error) {
+      setIsSigningOut(false);
+      Alert.alert(
+        "Sign Out",
+        error instanceof Error ? error.message : "Unable to sign out. Please try again.",
+      );
+    }
+  };
+
+  const handleSignOutPress = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out", style: "destructive", onPress: () => void handleSignOut() },
+    ]);
+  };
+
+  const handleDeleteAccountPress = () => {
+    router.push('/profile-screen/delete-account');
+  };
+
+  return (
+    <View style={[styles.safe, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <BackButton />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 72, 96) },
+        ]}
+      >
+        
+        {/* ESSENTIALS Section */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ESSENTIALS</Text>
+        <View style={styles.sectionGroup}>
+          <SettingItem
+            icon="map-pin"
+            label="Current Location"
+            type="toggle"
+            value={locationEnabled}
+            onValueChange={handleLocationSharingChange}
+            disabled={isLocationSyncing}
+            loading={isLocationSyncing}
+            colors={colors}
+          />
+          <SettingItem 
+            icon="bell" 
+            label="Notification" 
+            type="toggle" 
+            value={notificationEnabled}
+            onValueChange={handleNotificationChange}
+            disabled={isUpdatingNotifications}
+            loading={isUpdatingNotifications}
+            colors={colors}
+          />
+          <SettingItem 
+            icon="moon" 
+            label="Dark Mode" 
+            type="toggle" 
+            value={isDark}
+            onValueChange={handleDarkModeChange}
+            colors={colors}
+          />
+          <SettingItem
+            icon="slash"
+            label="Blocked Accounts"
+            onPress={() => router.push('/profile-screen/blocked-accounts')}
+            colors={colors}
+          />
+        </View>
+
+        {/* BUSINESS Section — only visible for business accounts */}
+        {user?.accountType === 'business' && (
+          <>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BUSINESS</Text>
+            <View style={styles.sectionGroup}>
+              <SettingItem
+                icon="sliders"
+                label="Payout Preferences"
+                onPress={() => router.push('/profile-screen/payout-preferences')}
+                colors={colors}
+              />
+              <SettingItem
+                icon="credit-card"
+                label="Withdrawal Method"
+                onPress={() => router.push('/profile-screen/withdrawal-method')}
+                colors={colors}
+              />
+              <SettingItem
+                icon="briefcase"
+                label="Bank Account"
+                onPress={() => router.push('/profile-screen/bank-account')}
+                colors={colors}
+              />
+              <SettingItem
+                icon="list"
+                label="Payout History"
+                onPress={() => router.push('/profile-screen/payout-history')}
+                colors={colors}
+              />
+            </View>
+          </>
+        )}
+
+        {/* TERMS & POLICIES Section */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TERMS & POLICIES</Text>
+        <View style={styles.sectionGroup}>
+          <SettingItem
+            icon="file-text"
+            label="Terms & Conditions"
+            onPress={() => router.push('/profile-screen/terms')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Terms and Conditions"
+            accessibilityHint="Opens the Terms and Conditions document"
+          />
+          <SettingItem
+            icon="shield"
+            label="Privacy & Policy"
+            onPress={() => router.push('/profile-screen/privacy')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Privacy Policy"
+            accessibilityHint="Opens the Privacy Policy document"
+          />
+          <SettingItem
+            icon="rotate-ccw"
+            label="Refund Policy"
+            onPress={() => router.push('/profile-screen/refund')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Refund Policy"
+            accessibilityHint="Opens the Refund Policy document"
+          />
+          <SettingItem
+            icon="headphones"
+            label="Contact Support"
+            onPress={() => router.push('/profile-screen/contact-support')}
+            colors={colors}
+            accessibilityRole="link"
+            accessibilityLabel="Support"
+            accessibilityHint="Opens the support request screen"
+          />
+        </View>
+
+        {/* ACCOUNT Section */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
+        <View style={styles.sectionGroup}>
+          <SettingItem
+            icon="log-out"
+            label="Sign Out"
+            onPress={handleSignOutPress}
+            disabled={isSigningOut}
+            loading={isSigningOut}
+            colors={colors}
+          />
+        </View>
+
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={[
+            styles.deleteAccountBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+          onPress={handleDeleteAccountPress}
+          accessibilityRole="button"
+          accessibilityLabel="Delete Account"
+          accessibilityHint="Opens the account deletion screen"
+        >
+          <Text style={[styles.deleteAccountText, { color: colors.danger }]}>Delete Account</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginTop: 25,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  sectionGroup: {
+    borderRadius: 12,
+  },
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  settingItemDisabled: {
+    opacity: 0.65,
+  },
+  settingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  settingItemRight: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteAccountBtn: {
+    marginTop: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  deleteAccountText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+});

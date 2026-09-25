@@ -1,0 +1,410 @@
+import React from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import MapScreen, { type MapFilterRecenterIntent, type MapMarkerData } from "@/components/ui/MapScreen";
+import { getMapEventPage, type EventResponse, type EventMapQuery } from "@/lib/events";
+import { formatEventTimeDisplay } from "@/lib/eventTimeDisplay";
+import {
+  createEmptyEventFilters,
+  getEventLocationFilterKey,
+  isValidEventLocationFilter,
+  type SharedEventFilters,
+} from "@/lib/eventFilters";
+import {
+  buildMapEventRequestParams,
+  getMapViewportPageBudget,
+  getMapViewportRequestKey,
+  getRadiusAwareMapZoom,
+  hasBoundedNearbyFilter,
+  type EventMapViewport,
+} from "@/lib/mapEventRequests";
+import { EVENT_BANNER_FALLBACK_URI, resolveEventBannerUri } from "@/lib/eventBanner";
+import { formatEventAgeRestriction } from "@/lib/eventAgeRestriction";
+import { getMapTicketSummary } from "@/lib/mapTicketSummary";
+import { getCategoryMarkerColor } from "@/constants/categoryColors";
+import type { EventCategory } from "@/constants/eventCategories";
+import { isValidLocationCoordinate } from "@/lib/locationSharing";
+
+const EVENT_MAP_LIMIT = 100;
+const VIEWPORT_REQUEST_DEBOUNCE_MS = 500;
+// Same fallback image as Event Detail (see app/lib/eventBanner.ts), so an
+// Event with no banner never shows different stock imagery depending on
+// which surface renders it.
+const FALLBACK_EVENT_IMAGE = EVENT_BANNER_FALLBACK_URI;
+
+type MapContainerProps = {
+  onBack?: () => void;
+  logoText?: string;
+  eventFilters?: SharedEventFilters;
+  filterRecenterKey?: string | null;
+  onFilterRecenterHandled?: (key: string) => void;
+  onCategoryChange?: (category: EventCategory | null) => void;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
+  canIncreaseRadius?: boolean;
+  onIncreaseRadius?: () => void;
+};
+
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const isValidMapboxCoordinate = (coordinate: [number, number]) =>
+  isValidLocationCoordinate({
+    longitude: coordinate[0],
+    latitude: coordinate[1],
+  });
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const getDistanceMiles = (from: [number, number], to: [number, number]) => {
+  const earthRadiusKm = 6371;
+  const [fromLongitude, fromLatitude] = from;
+  const [toLongitude, toLatitude] = to;
+  const latitudeDelta = toRadians(toLatitude - fromLatitude);
+  const longitudeDelta = toRadians(toLongitude - fromLongitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(fromLatitude)) *
+      Math.cos(toRadians(toLatitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  const distanceKm = 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return distanceKm * 0.621371;
+};
+
+const formatDistanceFromMiles = (miles: number | null) => {
+  if (miles === null) {
+    return "nearby";
+  }
+
+  if (miles < 0.1) {
+    return "nearby";
+  }
+
+  return `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toString()} mi`;
+};
+
+// Batch 3C — venue-local primary time for the Map card (agrees with Batch 3B
+// filtering + Event Detail). Falls back to device-local rendering when the Event
+// has no known timezone.
+const buildMapEventSchedule = (event: EventResponse) => {
+  const model = formatEventTimeDisplay({
+    scheduledAt: event.scheduledAt,
+    endAt: event.endAt,
+    timezone: event.timezone,
+  });
+  const zoneSuffix = model.primaryZoneText ? ` ${model.primaryZoneText}` : "";
+  return {
+    eventDate: model.primaryDateText || "Date TBA",
+    eventTime: model.primaryTimeText ? `${model.primaryTimeText}${zoneSuffix}` : "Time TBA",
+    eventEndDate: model.primaryEndDateText ?? (model.primaryEndTimeText ? model.primaryDateText : "Date TBA"),
+    eventEndTime: model.primaryEndTimeText ? `${model.primaryEndTimeText}${zoneSuffix}` : "Time TBA",
+    eventViewerDateTime: model.showViewerEquivalent ? model.viewerDateTimeText : null,
+  };
+};
+
+const formatLocation = (event: EventResponse) =>
+  event.location?.venue || event.location?.address || event.location?.searchLabel || "Location TBA";
+
+const getHostName = (event: EventResponse) =>
+  (event.host?.username || event.host?.name || `user-${event.userId.slice(-4)}`).replace(/^@/, "");
+
+const toMapMarker = (
+  event: EventResponse,
+  userLocation: [number, number] | null,
+  activeCategory: EventCategory | null,
+): MapMarkerData | null => {
+  const latitude = event.location?.latitude;
+  const longitude = event.location?.longitude;
+
+  if (!isFiniteCoordinate(latitude) || !isFiniteCoordinate(longitude)) {
+    return null;
+  }
+
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+  const primaryCategory = categories[0] ?? null;
+  const distanceMiles = userLocation ? getDistanceMiles(userLocation, [longitude, latitude]) : null;
+  const ticketSummary = getMapTicketSummary(event.tickets);
+
+  return {
+    id: event.id,
+    latitude,
+    longitude,
+    image: resolveEventBannerUri(event, FALLBACK_EVENT_IMAGE) ?? FALLBACK_EVENT_IMAGE,
+    label: event.name || "Event",
+    glowColor: getCategoryMarkerColor({ category: primaryCategory, categories, activeCategory }),
+    category: primaryCategory,
+    categories,
+    scheduledAt: event.scheduledAt ?? null,
+    endAt: event.endAt ?? null,
+    hostName: getHostName(event),
+    distance: formatDistanceFromMiles(distanceMiles),
+    distanceMeters: distanceMiles === null ? null : distanceMiles * 1609.344,
+    isLive: event.status === "live",
+    eventStatus: event.status,
+    crowdStatus: event.crowdStatus ?? null,
+    checkedInCount: typeof event.checkedInCount === "number" ? event.checkedInCount : 0,
+    ...buildMapEventSchedule(event),
+    location: formatLocation(event),
+    // Same authoritative source as Feed / Event Detail / Profile:
+    // publicGoingSummary.going (paid, non-cancelled ticket passes). Never
+    // checkedInCount — that has different semantics and stays on the marker glow.
+    attendeesCount: event.publicGoingSummary?.going ?? 0,
+    ageLimit: formatEventAgeRestriction(event.ageRestriction),
+    price: ticketSummary.priceLabel,
+    ticketsAvailable: ticketSummary.ticketsAvailableLabel,
+    ticketSalesEndDate: ticketSummary.salesEndLabel,
+    ticketTypeCount: ticketSummary.ticketTypeCountLabel,
+  };
+};
+
+const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((marker, index) => {
+    const nextMarker = right[index];
+
+    return Boolean(
+      nextMarker &&
+        marker.id === nextMarker.id &&
+        marker.latitude === nextMarker.latitude &&
+        marker.longitude === nextMarker.longitude &&
+        marker.image === nextMarker.image &&
+        marker.label === nextMarker.label &&
+        marker.glowColor === nextMarker.glowColor &&
+        marker.distance === nextMarker.distance &&
+        marker.distanceMeters === nextMarker.distanceMeters &&
+        marker.checkedInCount === nextMarker.checkedInCount &&
+        marker.isLive === nextMarker.isLive &&
+        marker.endAt === nextMarker.endAt &&
+        marker.eventEndDate === nextMarker.eventEndDate &&
+        marker.eventEndTime === nextMarker.eventEndTime,
+    );
+  });
+};
+
+const applyMarkersIfChanged = (
+  setMarkers: React.Dispatch<React.SetStateAction<MapMarkerData[]>>,
+  nextMarkers: MapMarkerData[],
+) => {
+  setMarkers((currentMarkers) => (
+    areMarkerListsEqual(currentMarkers, nextMarkers) ? currentMarkers : nextMarkers
+  ));
+};
+
+export default function MapContainer({
+  onBack,
+  logoText = "Mooment",
+  eventFilters = createEmptyEventFilters(),
+  filterRecenterKey = null,
+  onFilterRecenterHandled,
+  onCategoryChange,
+  hasActiveFilters = false,
+  onClearFilters,
+  canIncreaseRadius = false,
+  onIncreaseRadius,
+}: MapContainerProps) {
+  const [markers, setMarkers] = React.useState<MapMarkerData[]>([]);
+  const [userLocation, setUserLocation] = React.useState<[number, number] | null>(null);
+  const [settledViewport, setSettledViewport] = React.useState<EventMapViewport | null>(null);
+  const [debouncedViewport, setDebouncedViewport] = React.useState<EventMapViewport | null>(null);
+  // True once the current Event request has finished (success or failure), so
+  // the Map can tell "still loading" apart from "settled with zero matches".
+  const [eventsSettled, setEventsSettled] = React.useState(false);
+  const lastSettledKeyRef = React.useRef<string | null>(null);
+  const mapRequestIdRef = React.useRef(0);
+  const debouncedViewportKeyRef = React.useRef<string | null>(null);
+  const lastNearbyClearKeyRef = React.useRef<string | null>(null);
+  const didMountFocusRefreshRef = React.useRef(false);
+  const [focusRefreshKey, setFocusRefreshKey] = React.useState(0);
+
+  // Refresh Map event data (checked-in counts, live status, etc.) whenever
+  // this screen regains focus (e.g. returning from an event detail screen),
+  // reusing the exact same fetch effect below. Skip the very first focus
+  // callback, which fires on initial mount right alongside the effect's own
+  // initial fetch, to avoid firing two identical requests at once.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!didMountFocusRefreshRef.current) {
+        didMountFocusRefreshRef.current = true;
+        return;
+      }
+
+      setFocusRefreshKey((key) => key + 1);
+    }, []),
+  );
+
+  // Keep a ref so the async fetch always reads the latest location without
+  // being listed as an effect dependency (which would re-trigger fetches on
+  // every raw GPS update even when the rounded query coords are unchanged).
+  const userLocationRef = React.useRef<[number, number] | null>(null);
+  React.useEffect(() => {
+    userLocationRef.current = userLocation;
+  }, [userLocation]);
+
+  React.useEffect(() => {
+    const viewportKey = getMapViewportRequestKey(settledViewport);
+
+    if (!viewportKey) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (debouncedViewportKeyRef.current === viewportKey) {
+        return;
+      }
+
+      debouncedViewportKeyRef.current = viewportKey;
+      setDebouncedViewport(settledViewport);
+    }, VIEWPORT_REQUEST_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [settledViewport]);
+
+  // Bounded radius (1–199) → circular nearby request, no viewport. Broad ("200+")
+  // and no-centre both use the visible viewport as the display window.
+  const requestViewport = hasBoundedNearbyFilter(eventFilters) ? null : debouncedViewport;
+  const pageBudget = React.useMemo(
+    () => getMapViewportPageBudget(eventFilters, requestViewport),
+    [eventFilters, requestViewport],
+  );
+  const mapRequestParams = React.useMemo<EventMapQuery | null>(
+    () => buildMapEventRequestParams(eventFilters, requestViewport, EVENT_MAP_LIMIT),
+    [eventFilters, requestViewport],
+  );
+  const mapRequestKey = React.useMemo(() => JSON.stringify(mapRequestParams), [mapRequestParams]);
+  const filterRecenterIntent = React.useMemo<MapFilterRecenterIntent | null>(() => {
+    if (!filterRecenterKey || !isValidEventLocationFilter(eventFilters.nearby)) {
+      return null;
+    }
+
+    const nearbyKey = getEventLocationFilterKey(eventFilters.nearby);
+    if (nearbyKey !== filterRecenterKey) {
+      return null;
+    }
+
+    return {
+      key: filterRecenterKey,
+      coordinate: [eventFilters.nearby.longitude, eventFilters.nearby.latitude],
+      zoomLevel: getRadiusAwareMapZoom(eventFilters.nearby.radiusMiles),
+    };
+  }, [eventFilters.nearby, filterRecenterKey]);
+
+  React.useEffect(() => {
+    if (!mapRequestParams) {
+      return;
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    const requestId = ++mapRequestIdRef.current;
+    // Only drop the "settled" flag on a genuine query change (not a silent
+    // focus refresh that reuses the same key) so the no-match copy doesn't
+    // flicker while refreshed data loads.
+    if (mapRequestKey !== lastSettledKeyRef.current) {
+      setEventsSettled(false);
+    }
+    // Only clear already-rendered markers when the nearby filter's actual
+    // value changed (a genuine filter change). A silent focus refresh reuses
+    // the same nearby key, so it must not flash markers to empty while the
+    // refreshed page loads.
+    const nearbyClearKey = isValidEventLocationFilter(eventFilters.nearby)
+      ? getEventLocationFilterKey(eventFilters.nearby)
+      : null;
+    if (nearbyClearKey && nearbyClearKey !== lastNearbyClearKeyRef.current) {
+      applyMarkersIfChanged(setMarkers, []);
+    }
+    lastNearbyClearKeyRef.current = nearbyClearKey;
+
+    const loadMapEvents = async () => {
+      const markerById = new Map<string, MapMarkerData>();
+      let cursor: string | null | undefined;
+      let hasRenderedFirstPage = false;
+      let pagesFetched = 0;
+
+      try {
+        do {
+          const page = await getMapEventPage({
+            ...mapRequestParams,
+            ...(cursor ? { cursor } : {}),
+          }, { signal: abortController.signal });
+
+          if (!isMounted || requestId !== mapRequestIdRef.current) {
+            return;
+          }
+
+          pagesFetched += 1;
+          const distanceReference = isValidEventLocationFilter(eventFilters.nearby)
+            ? [eventFilters.nearby.longitude, eventFilters.nearby.latitude] as [number, number]
+            : userLocationRef.current;
+
+          page.events
+            .map((event) => toMapMarker(event, distanceReference, eventFilters.category ?? null))
+            .filter((marker): marker is MapMarkerData => Boolean(marker))
+            .forEach((marker) => {
+              markerById.set(marker.id, marker);
+            });
+
+          hasRenderedFirstPage = true;
+          const nextMarkers = [...markerById.values()];
+          if (pagesFetched === 1 || !page.nextCursor || (pageBudget && pagesFetched >= pageBudget)) {
+            applyMarkersIfChanged(setMarkers, nextMarkers);
+          }
+          cursor = page.nextCursor;
+        } while (cursor && (!pageBudget || pagesFetched < pageBudget));
+
+        if (isMounted && requestId === mapRequestIdRef.current) {
+          lastSettledKeyRef.current = mapRequestKey;
+          setEventsSettled(true);
+        }
+      } catch {
+        if (isMounted && requestId === mapRequestIdRef.current) {
+          if (!hasRenderedFirstPage) {
+            applyMarkersIfChanged(setMarkers, []);
+          }
+          lastSettledKeyRef.current = mapRequestKey;
+          setEventsSettled(true);
+        }
+      }
+    };
+
+    void loadMapEvents();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [eventFilters.category, eventFilters.nearby, focusRefreshKey, mapRequestKey, mapRequestParams, pageBudget]);
+
+  const handleUserLocationChange = React.useCallback((coordinate: [number, number]) => {
+    if (isValidMapboxCoordinate(coordinate)) {
+      setUserLocation(coordinate);
+    }
+  }, []);
+
+  const handleViewportChange = React.useCallback((viewport: EventMapViewport) => {
+    setSettledViewport(viewport);
+  }, []);
+
+  return (
+    <MapScreen
+      markers={markers}
+      logoText={logoText}
+      onBack={onBack}
+      onUserLocationChange={handleUserLocationChange}
+      onViewportChange={handleViewportChange}
+      filterRecenterIntent={filterRecenterIntent}
+      onFilterRecenterHandled={onFilterRecenterHandled}
+      selectedCategory={eventFilters.category ?? null}
+      onCategoryChange={onCategoryChange}
+      hasActiveFilters={hasActiveFilters}
+      onClearFilters={onClearFilters}
+      canIncreaseRadius={canIncreaseRadius}
+      onIncreaseRadius={onIncreaseRadius}
+      noEventMatches={hasActiveFilters && eventsSettled && markers.length === 0}
+    />
+  );
+}

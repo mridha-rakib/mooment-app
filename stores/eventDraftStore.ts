@@ -1,0 +1,929 @@
+import { create } from "zustand";
+import { isEventCategory, type EventCategory } from "@/constants/eventCategories";
+import {
+  createDraftTicket,
+  createEventTicket,
+  deleteEvent,
+  deleteDraftTicket,
+  deleteEventTicket,
+  publishEvent,
+  reorderEventTickets,
+  saveEventDraft,
+  updateDraftTicket,
+  updateEvent,
+  updateEventTicket,
+} from "@/lib/events";
+import type {
+  EventAgeRestriction,
+  EventLocation,
+  EventImageDisplay,
+  EventPayload,
+  EventPrivacy,
+  EventResponse,
+  EventTicketPayload,
+  EventTicketRequestPayload,
+} from "@/lib/events";
+import { toEventTicketInput } from "@/lib/eventTicketPayload";
+import { moveTicketInArray } from "@/lib/ticketReorder";
+import { getStorageFileUrl, uploadFileToStorage } from "@/lib/storage";
+import {
+  instantToWallClockPartsForEvent,
+  type EventWallClockParts,
+} from "@/lib/eventLocalTime";
+import { refreshHostedEventEligibility } from "@/stores/hostedEventEligibilityStore";
+
+export type EventDraftTicket = EventTicketPayload & {
+  localId: string;
+};
+
+type EventDraftState = {
+  draftId: string | null;
+  isEditingPublishedEvent: boolean;
+  isExistingEventSession: boolean;
+  originalScheduledAt: string | null;
+  persistedEndAt: string | null;
+  publishedEventBaseline: string | null;
+  publishedEventBaselineEvent: EventResponse | null;
+  name: string;
+  description: string;
+  bannerImageUri: string | null;
+  bannerImageKey: string | null;
+  // The real MIME type reported by the image picker for `bannerImageUri`,
+  // captured (and validated) at selection time. `null` for a restored
+  // remote URI/legacy session, where upload doesn't apply or the type isn't
+  // known — `buildEventPayload` falls back to a filename-based guess then.
+  bannerContentType: string | null;
+  bannerOriginalImageUri: string | null;
+  bannerOriginalImageKey: string | null;
+  bannerImageDisplay: EventImageDisplay | null;
+  ageRestriction: EventAgeRestriction;
+  categories: EventCategory[];
+  scheduledAt: string | null;
+  endAt: string | null;
+  // Batch 3A — venue-local wall-clock transport. `scheduledAt`/`endAt` above stay
+  // as legacy/compat absolute values; these carry the user's VISIBLE selection so
+  // the server can interpret it in the resolved venue timezone.
+  scheduledLocalDate: string | null;
+  scheduledLocalTime: string | null;
+  endLocalDate: string | null;
+  endLocalTime: string | null;
+  // IANA venue timezone from the server (edit hydration only in this batch).
+  timezone: string | null;
+  // True only when the user explicitly edited a start/end picker this session.
+  // Gates whether local wall-clock parts are sent on an EXISTING Event (a
+  // venue-only edit must not masquerade as a schedule edit).
+  scheduleWallClockDirty: boolean;
+  location: EventLocation;
+  tickets: EventDraftTicket[];
+  privacy: EventPrivacy;
+  setStepOne: (payload: {
+    name: string;
+    description: string;
+    bannerImageUri: string | null;
+    bannerContentType?: string | null;
+    bannerOriginalImageUri?: string | null;
+    bannerImageDisplay?: EventImageDisplay | null;
+  }) => void;
+  setStepTwo: (payload: {
+    ageRestriction: EventAgeRestriction;
+    categories: EventCategory[];
+    scheduledAt: string | null;
+    endAt: string | null;
+    scheduledLocalDate?: string | null;
+    scheduledLocalTime?: string | null;
+    endLocalDate?: string | null;
+    endLocalTime?: string | null;
+    scheduleWallClockDirty?: boolean;
+  }) => void;
+  setStepThree: (payload: { location: EventLocation }) => void;
+  setPrivacy: (privacy: EventPrivacy) => void;
+  upsertTicket: (ticket: Partial<EventDraftTicket>) => void;
+  deleteTicket: (localId: string) => void;
+  // EVT-014 reorder: array position only — never touches ticket field data.
+  // For a draft, this is purely local; the normal Save Draft flow persists
+  // the new order later. For a published event, it also optimistically
+  // persists through the dedicated, IDs-only reorder endpoint, rolling back
+  // on failure — the general update-event path is not used here because it
+  // does not merge tickets by ID and would risk clobbering availableCount.
+  moveTicket: (localId: string, direction: "up" | "down") => Promise<void>;
+  saveTicket: (ticket: Partial<EventDraftTicket>) => Promise<EventResponse>;
+  removeTicket: (localId: string) => Promise<EventResponse | null>;
+  // EVT-015 — ephemeral, UI-only signal: set the instant a brand-new ticket
+  // tier finishes saving successfully, so Step 4 can show the "Ticket
+  // created" confirmation on the same trip back. Never sent to the API,
+  // never persisted, and not part of any Event payload — Step 4 consumes it
+  // once (on focus) and immediately clears it via
+  // clearNewlyCreatedTicketSignal so it cannot retrigger later.
+  newlyCreatedTicketLocalId: string | null;
+  markTicketCreated: (localId: string) => void;
+  clearNewlyCreatedTicketSignal: () => void;
+  lastPublishedDraftId: string | null;
+  clearLastPublishedDraftId: () => void;
+  saveDraft: () => Promise<EventResponse>;
+  publish: () => Promise<EventResponse>;
+  discardDraft: () => Promise<void>;
+  loadFromEvent: (event: EventResponse) => void;
+  resetDraft: () => void;
+  startCreateSession: () => void;
+};
+
+const DEFAULT_TICKET_ID = "default-general-ticket";
+
+const createDefaultTicket = (): EventDraftTicket => ({
+  capacity: 42,
+  description: "Entry from 9pm. Standing only.",
+  localId: DEFAULT_TICKET_ID,
+  name: "General Ticket",
+  price: 45,
+  salesEndAt: null,
+  type: "pay",
+});
+
+const createInitialState = () => {
+  return {
+    scheduledAt: null,
+    draftId: null,
+    isEditingPublishedEvent: false,
+    isExistingEventSession: false,
+    originalScheduledAt: null,
+    persistedEndAt: null,
+    publishedEventBaseline: null,
+    publishedEventBaselineEvent: null,
+    name: "",
+    description: "",
+    bannerImageUri: null,
+    bannerImageKey: null,
+    bannerContentType: null,
+    bannerOriginalImageUri: null,
+    bannerOriginalImageKey: null,
+    bannerImageDisplay: null,
+    ageRestriction: "all_ages" as EventAgeRestriction,
+    categories: [],
+    endAt: null,
+    scheduledLocalDate: null,
+    scheduledLocalTime: null,
+    endLocalDate: null,
+    endLocalTime: null,
+    timezone: null,
+    scheduleWallClockDirty: false,
+    location: {},
+    tickets: [],
+    newlyCreatedTicketLocalId: null,
+    privacy: "public" as EventPrivacy,
+  };
+};
+
+const isRemoteUri = (uri: string) => /^https?:\/\//i.test(uri);
+
+const requiresBannerUpload = (uri: string | null, key: string | null) =>
+  Boolean(uri && !isRemoteUri(uri) && !key);
+
+// Filename-based fallback, used only when no reliable picker-reported MIME
+// type is available (e.g. the Android "original" content:// URI, which
+// shares the same underlying photo as the validated `bannerImageUri` pick
+// but has no separate MIME reading of its own).
+const getImageContentType = (uri: string, knownContentType?: string | null) => {
+  if (knownContentType === "image/jpeg" || knownContentType === "image/png") {
+    return knownContentType;
+  }
+
+  const normalizedUri = uri.toLowerCase().split("?")[0] ?? uri.toLowerCase();
+
+  if (normalizedUri.endsWith(".png")) {
+    return "image/png";
+  }
+
+  return "image/jpeg";
+};
+
+const getImageExtension = (contentType: string) => (contentType === "image/png" ? "png" : "jpg");
+
+export const toAgeRestriction = (value: string): EventAgeRestriction => {
+  if (value === "18+") {
+    return "18_plus";
+  }
+
+  if (value === "21+") {
+    return "21_plus";
+  }
+
+  return "all_ages";
+};
+
+export const fromAgeRestriction = (value: EventAgeRestriction) => {
+  if (value === "18_plus") {
+    return "18+";
+  }
+
+  if (value === "21_plus") {
+    return "21+";
+  }
+
+  return "All Ages";
+};
+
+// Allowlist sanitizer (see app/lib/eventTicketPayload.ts) — a draft ticket is
+// a full response ticket plus `localId`, so this both drops the local-only
+// field and, critically, drops every server-owned/computed response field
+// (salesEnded, availableCount) rather than relying on an exclusion list that
+// has to be kept in sync by hand every time a new response field is added.
+const toEventTicketInputs = (tickets: EventDraftTicket[]): EventTicketRequestPayload[] =>
+  tickets.map(toEventTicketInput);
+
+const stripTicketIdentity = ({
+  id: _id,
+  ...ticket
+}: EventTicketRequestPayload): Omit<EventTicketRequestPayload, "id"> => ticket;
+
+const createTicketLocalId = (index: number) => `ticket-${Date.now()}-${index}`;
+
+const mergeTicketsFromEvent = (
+  eventTickets: EventTicketPayload[],
+  currentTickets: EventDraftTicket[],
+): EventDraftTicket[] =>
+  eventTickets.map((ticket, index) => {
+    const currentTicket = currentTickets.find((item) => {
+      if (ticket.id && item.id === ticket.id) {
+        return true;
+      }
+
+      return ticket.id ? item.localId === ticket.id : false;
+    });
+
+    return {
+      ...ticket,
+      localId: currentTicket?.localId ?? ticket.id ?? createTicketLocalId(index),
+    };
+  });
+
+// Batch 3A — rebuild venue-local wall-clock parts from an authoritative server
+// Event (absolute instant + resolved IANA timezone). `null` when the Event has
+// no known timezone, so callers keep the legacy device-local behaviour.
+const deriveEventWallClockParts = (
+  event: Pick<EventResponse, "scheduledAt" | "endAt" | "timezone">,
+): {
+  scheduledLocalDate: string | null;
+  scheduledLocalTime: string | null;
+  endLocalDate: string | null;
+  endLocalTime: string | null;
+} | null => {
+  if (!event.timezone) {
+    return null;
+  }
+  const start: EventWallClockParts | null = instantToWallClockPartsForEvent(
+    event.scheduledAt ?? null,
+    event.timezone,
+  );
+  const end: EventWallClockParts | null = instantToWallClockPartsForEvent(
+    event.endAt ?? null,
+    event.timezone,
+  );
+  if (!start && !end) {
+    return null;
+  }
+  return {
+    scheduledLocalDate: start?.dateKey ?? null,
+    scheduledLocalTime: start?.time ?? null,
+    endLocalDate: end?.dateKey ?? null,
+    endLocalTime: end?.time ?? null,
+  };
+};
+
+const getEventSyncState = (event: EventResponse, currentTickets: EventDraftTicket[]) => ({
+  draftId: event.id,
+  isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
+  publishedEventBaseline: getPublishedEventBaseline(event),
+  publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
+  persistedEndAt: event.endAt ?? null,
+  timezone: event.timezone ?? null,
+  bannerImageKey: event.bannerImageKey ?? null,
+  bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+  bannerImageDisplay: event.bannerImageDisplay ?? null,
+  tickets: mergeTicketsFromEvent(event.tickets, currentTickets),
+});
+
+const normalizeForComparison = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeForComparison);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((normalized, key) => {
+        const nextValue = (value as Record<string, unknown>)[key];
+
+        if (nextValue !== undefined) {
+          normalized[key] = normalizeForComparison(nextValue);
+        }
+
+        return normalized;
+      }, {});
+  }
+
+  return value;
+};
+
+const stringifyComparablePayload = (payload: EventPayload) =>
+  JSON.stringify(normalizeForComparison(payload));
+
+const isPersistedEventEditStatus = (status: EventResponse["status"]) =>
+  status === "published" || status === "live";
+
+const getComparablePayloadFromState = (state: EventDraftState): EventPayload | null => {
+  if (
+    requiresBannerUpload(state.bannerImageUri, state.bannerImageKey) ||
+    requiresBannerUpload(state.bannerOriginalImageUri, state.bannerOriginalImageKey)
+  ) {
+    return null;
+  }
+
+  return {
+    ageRestriction: state.ageRestriction,
+    bannerImageKey: state.bannerImageKey,
+    bannerOriginalImageKey: state.bannerOriginalImageKey ?? state.bannerImageKey,
+    bannerImageDisplay: state.bannerImageDisplay,
+    category: state.categories[0] ?? null,
+    categories: state.categories,
+    description: state.description.trim() || null,
+    location: state.location,
+    name: state.name.trim() || null,
+    privacy: state.privacy,
+    scheduledAt: state.scheduledAt,
+    endAt: state.endAt,
+    tickets: toEventTicketInputs(state.tickets),
+  };
+};
+
+const getComparablePayloadFromEvent = (event: EventResponse): EventPayload => {
+  const categories = event.categories?.length ? event.categories : event.category ? [event.category] : [];
+
+  return {
+    ageRestriction: event.ageRestriction ?? "all_ages",
+    bannerImageKey: event.bannerImageKey ?? null,
+    bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+    bannerImageDisplay: event.bannerImageDisplay ?? null,
+    category: categories[0] ?? null,
+    categories,
+    description: event.description?.trim() || null,
+    location: event.location ?? {},
+    name: event.name?.trim() || null,
+    privacy: event.privacy,
+    scheduledAt: event.scheduledAt ?? null,
+    endAt: event.endAt ?? null,
+    tickets: toEventTicketInputs(mergeTicketsFromEvent(event.tickets, [])),
+  };
+};
+
+const getPublishedEventBaseline = (event: EventResponse) =>
+  event.status === "published" ? stringifyComparablePayload(getComparablePayloadFromEvent(event)) : null;
+
+const isDraftNotFoundError = (error: unknown) => {
+  const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response;
+  const message = response?.data?.message?.toLowerCase() ?? "";
+
+  return response?.status === 404 && message.includes("draft") && message.includes("not found");
+};
+
+const assertValidCategories = (categories: EventCategory[]) => {
+  if (categories.length === 0) {
+    throw new Error("Select at least 1 category before saving the event.");
+  }
+
+  if (categories.length > 3) {
+    throw new Error("You can select up to 3 categories.");
+  }
+
+  if (categories.some((category) => !isEventCategory(category))) {
+    throw new Error("Select valid event categories.");
+  }
+
+  if (new Set(categories).size !== categories.length) {
+    throw new Error("Categories must be unique.");
+  }
+};
+
+// Save calls can originate from different event steps before the previous
+// screen has fully unmounted. Serialize them so two calls cannot both POST a
+// new draft or let an older response race a newer update.
+let draftSaveQueue: Promise<unknown> = Promise.resolve();
+let draftLifecycleVersion = 0;
+
+// Serializes published-event ticket-reorder API calls so rapid Move Up/Down
+// taps produce sequential requests, never overlapping/out-of-order writes.
+let ticketReorderQueue: Promise<unknown> = Promise.resolve();
+
+export const useEventDraftStore = create<EventDraftState>((set, get) => ({
+  ...createInitialState(),
+  lastPublishedDraftId: null,
+  clearLastPublishedDraftId: () => set({ lastPublishedDraftId: null }),
+
+  setStepOne: ({
+    name,
+    description,
+    bannerImageUri,
+    bannerContentType,
+    bannerOriginalImageUri,
+    bannerImageDisplay,
+  }) => {
+    set((state) => ({
+      name,
+      description,
+      bannerImageUri,
+      bannerImageKey: bannerImageUri === state.bannerImageUri ? state.bannerImageKey : null,
+      bannerContentType:
+        bannerImageUri === state.bannerImageUri ? state.bannerContentType : bannerContentType ?? null,
+      bannerOriginalImageUri: bannerOriginalImageUri ?? bannerImageUri,
+      bannerOriginalImageKey:
+        (bannerOriginalImageUri ?? bannerImageUri) === state.bannerOriginalImageUri ? state.bannerOriginalImageKey : null,
+      // Only reset crop/display metadata when the banner asset itself is
+      // actually changing (or the caller explicitly supplies a new value,
+      // e.g. a future crop UI). A save/navigation that leaves the banner
+      // untouched must not silently drop a restored draft's crop metadata.
+      bannerImageDisplay:
+        bannerImageDisplay !== undefined
+          ? bannerImageDisplay
+          : bannerImageUri === state.bannerImageUri
+            ? state.bannerImageDisplay
+            : null,
+    }));
+  },
+
+  setStepTwo: ({
+    ageRestriction,
+    categories,
+    scheduledAt,
+    endAt,
+    scheduledLocalDate,
+    scheduledLocalTime,
+    endLocalDate,
+    endLocalTime,
+    scheduleWallClockDirty,
+  }) => {
+    set((state) => ({
+      ageRestriction,
+      categories,
+      scheduledAt,
+      endAt,
+      scheduledLocalDate:
+        scheduledLocalDate === undefined ? state.scheduledLocalDate : scheduledLocalDate,
+      scheduledLocalTime:
+        scheduledLocalTime === undefined ? state.scheduledLocalTime : scheduledLocalTime,
+      endLocalDate: endLocalDate === undefined ? state.endLocalDate : endLocalDate,
+      endLocalTime: endLocalTime === undefined ? state.endLocalTime : endLocalTime,
+      scheduleWallClockDirty:
+        scheduleWallClockDirty === undefined
+          ? state.scheduleWallClockDirty
+          : scheduleWallClockDirty,
+    }));
+  },
+
+  setStepThree: ({ location }) => {
+    set({ location });
+  },
+
+  setPrivacy: (privacy) => {
+    set({ privacy });
+  },
+
+  upsertTicket: (ticket) => {
+    const currentTickets = get().tickets;
+    const localId = ticket.localId ?? DEFAULT_TICKET_ID;
+    const nextTicket: EventDraftTicket = {
+      ...createDefaultTicket(),
+      ...(currentTickets.find((item) => item.localId === localId) ?? {}),
+      ...ticket,
+      localId,
+    };
+    const existing = currentTickets.some((item) => item.localId === localId);
+
+    set({
+      tickets: existing
+        ? currentTickets.map((item) => (item.localId === localId ? nextTicket : item))
+        : [...currentTickets, nextTicket],
+    });
+  },
+
+  deleteTicket: (localId) => {
+    set({ tickets: get().tickets.filter((ticket) => ticket.localId !== localId) });
+  },
+
+  moveTicket: async (localId, direction) => {
+    const state = get();
+    const tickets = state.tickets;
+    const nextTickets = moveTicketInArray(tickets, localId, direction);
+
+    if (nextTickets === tickets) {
+      // No-op: unknown localId, or already at the first/last position.
+      return;
+    }
+
+    // Local reorder is always synchronous and immediate — Step 4 reflects
+    // the new order with no network round trip, whether this is a draft or
+    // a published event.
+    set({ tickets: nextTickets });
+
+    if (!state.isEditingPublishedEvent || !state.draftId) {
+      // Draft-only: the normal Save Draft flow persists array order later
+      // (a never-published ticket has no real availableCount to lose).
+      return;
+    }
+
+    const draftId = state.draftId;
+    const orderedIds = nextTickets
+      .map((ticket) => ticket.id)
+      .filter((id): id is string => Boolean(id));
+
+    if (orderedIds.length !== nextTickets.length) {
+      // An unsaved local-only tier has no server id yet — nothing meaningful
+      // to reorder server-side until it exists there too.
+      return;
+    }
+
+    const operation = ticketReorderQueue
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const event = await reorderEventTickets(draftId, orderedIds);
+
+          set(getEventSyncState(event, get().tickets));
+        } catch (error) {
+          set({ tickets });
+          throw error;
+        }
+      });
+
+    ticketReorderQueue = operation;
+    return operation;
+  },
+
+  markTicketCreated: (localId) => {
+    set({ newlyCreatedTicketLocalId: localId });
+  },
+
+  clearNewlyCreatedTicketSignal: () => {
+    set({ newlyCreatedTicketLocalId: null });
+  },
+
+  saveTicket: async (ticket) => {
+    const state = get();
+    const previousTickets = state.tickets;
+    const localId = ticket.localId ?? DEFAULT_TICKET_ID;
+    const existingTicket = previousTickets.find((item) => item.localId === localId);
+    const nextTicket: EventDraftTicket = {
+      ...createDefaultTicket(),
+      ...(existingTicket ?? {}),
+      ...ticket,
+      localId,
+    };
+    const nextTickets = existingTicket
+      ? previousTickets.map((item) => (item.localId === localId ? nextTicket : item))
+      : [...previousTickets, nextTicket];
+
+    set({ tickets: nextTickets });
+
+    try {
+      const currentState = get();
+
+      if (!currentState.draftId) {
+        return await currentState.saveDraft();
+      }
+
+      if (currentState.isEditingPublishedEvent) {
+        const ticketPayload = toEventTicketInput(nextTicket);
+        const event = nextTicket.id
+          ? await updateEventTicket(currentState.draftId, nextTicket.id, stripTicketIdentity(ticketPayload))
+          : await createEventTicket(currentState.draftId, ticketPayload);
+
+        set(getEventSyncState(event, nextTickets));
+
+        return event;
+      }
+
+      const hasUnsavedSiblings = nextTickets.some((t) => !t.id && t.localId !== localId);
+
+      if (hasUnsavedSiblings) {
+        return await currentState.saveDraft();
+      }
+
+      const ticketPayload = toEventTicketInput(nextTicket);
+      const event = nextTicket.id
+        ? await updateDraftTicket(currentState.draftId, nextTicket.id, stripTicketIdentity(ticketPayload))
+        : await createDraftTicket(currentState.draftId, ticketPayload);
+
+      set(getEventSyncState(event, nextTickets));
+
+      return event;
+    } catch (error) {
+      set({ tickets: previousTickets });
+      throw error;
+    }
+  },
+
+  removeTicket: async (localId) => {
+    const state = get();
+    const previousTickets = state.tickets;
+    const ticket = previousTickets.find((item) => item.localId === localId);
+    const nextTickets = previousTickets.filter((item) => item.localId !== localId);
+
+    set({ tickets: nextTickets });
+
+    if (!ticket) {
+      return null;
+    }
+
+    try {
+      if (!state.draftId || !ticket.id) {
+        return state.draftId ? await get().saveDraft() : null;
+      }
+
+      if (state.isEditingPublishedEvent) {
+        if (!ticket.id) {
+          return await get().saveDraft();
+        }
+
+        const event = await deleteEventTicket(state.draftId, ticket.id);
+
+        set(getEventSyncState(event, nextTickets));
+
+        return event;
+      }
+
+      const event = await deleteDraftTicket(state.draftId, ticket.id);
+
+      set(getEventSyncState(event, nextTickets));
+
+      return event;
+    } catch (error) {
+      set({ tickets: previousTickets });
+      throw error;
+    }
+  },
+
+  saveDraft: () => {
+    const lifecycleVersion = draftLifecycleVersion;
+    const operation = draftSaveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const state = get();
+
+        if (state.isEditingPublishedEvent && state.draftId) {
+          const comparablePayload = getComparablePayloadFromState(state);
+
+          if (
+            comparablePayload &&
+            state.publishedEventBaseline &&
+            state.publishedEventBaselineEvent &&
+            stringifyComparablePayload(comparablePayload) === state.publishedEventBaseline
+          ) {
+            return state.publishedEventBaselineEvent;
+          }
+        }
+
+        const payload = await buildEventPayload(state);
+        const event = state.isEditingPublishedEvent && state.draftId
+          ? await updateEvent(state.draftId, payload)
+          : await saveEventDraft(payload, state.draftId);
+
+        if (lifecycleVersion !== draftLifecycleVersion) {
+          return event;
+        }
+
+        set({
+          ...getEventSyncState(event, get().tickets),
+          // Batch 3A: the saved Event's instant + timezone are now authoritative
+          // (covers DST normalisation + server-side venue conversion). Drop the
+          // provisional dirty flag so a later venue-only edit isn't treated as a
+          // schedule edit.
+          ...(deriveEventWallClockParts(event) ?? {}),
+          scheduleWallClockDirty: false,
+          bannerImageKey: event.bannerImageKey ?? get().bannerImageKey,
+          bannerOriginalImageKey: event.bannerOriginalImageKey ?? get().bannerOriginalImageKey,
+          bannerImageDisplay: event.bannerImageDisplay ?? get().bannerImageDisplay,
+        });
+
+        if (state.isEditingPublishedEvent) {
+          await refreshHostedEventEligibility();
+        }
+
+        return event;
+      });
+
+    draftSaveQueue = operation;
+    return operation;
+  },
+
+  publish: async () => {
+    await draftSaveQueue.catch(() => undefined);
+
+    const state = get();
+    assertValidCategories(state.categories);
+    if (!state.scheduledAt || !state.endAt) {
+      throw new Error("Select the event start and end dates and times before publishing.");
+    }
+    const payload = await buildEventPayload(state);
+
+    // Persist newly-uploaded S3 keys immediately so that if the API call fails
+    // and the user retries, buildEventPayload sees the keys and skips re-upload.
+    if (payload.bannerImageKey && payload.bannerImageKey !== state.bannerImageKey) {
+      set({ bannerImageKey: payload.bannerImageKey });
+    }
+    if (payload.bannerOriginalImageKey && payload.bannerOriginalImageKey !== state.bannerOriginalImageKey) {
+      set({ bannerOriginalImageKey: payload.bannerOriginalImageKey });
+    }
+
+    const publishedPayload = {
+      ...payload,
+      ageRestriction: state.ageRestriction,
+      category: state.categories[0],
+      categories: state.categories,
+      location: state.location,
+      name: state.name.trim() || "Untitled Event",
+      privacy: state.privacy,
+      scheduledAt: state.scheduledAt,
+      endAt: state.endAt,
+      tickets: toEventTicketInputs(state.tickets),
+    };
+    let event: EventResponse;
+
+    try {
+      event = await publishEvent(publishedPayload, state.draftId);
+    } catch (error) {
+      if (state.isEditingPublishedEvent || !state.draftId || !isDraftNotFoundError(error)) {
+        throw error;
+      }
+
+      set({ draftId: null });
+      event = await publishEvent(publishedPayload);
+    }
+
+    set({
+      ...getEventSyncState(event, state.tickets),
+      ...(deriveEventWallClockParts(event) ?? {}),
+      scheduleWallClockDirty: false,
+      bannerImageKey: event.bannerImageKey ?? state.bannerImageKey,
+      bannerOriginalImageKey: event.bannerOriginalImageKey ?? state.bannerOriginalImageKey,
+      bannerImageDisplay: event.bannerImageDisplay ?? state.bannerImageDisplay,
+      lastPublishedDraftId: state.draftId,
+    });
+
+    await refreshHostedEventEligibility();
+
+    return event;
+  },
+
+  loadFromEvent: (event) => {
+    draftLifecycleVersion += 1;
+
+    const bannerImageUri = event.bannerImageKey ? getStorageFileUrl(event.bannerImageKey) : null;
+    const bannerOriginalImageUri = event.bannerOriginalImageKey
+      ? getStorageFileUrl(event.bannerOriginalImageKey)
+      : bannerImageUri;
+    const wallClock = deriveEventWallClockParts(event);
+
+    set({
+      draftId: event.id,
+      isEditingPublishedEvent: isPersistedEventEditStatus(event.status),
+      // loadFromEvent is only ever called when opening an already-persisted
+      // Event/draft for editing, unlike a fresh Create session where draftId
+      // is only assigned later by autosave — so this is set unconditionally
+      // here, independent of status, and never touched by saveDraft/publish.
+      isExistingEventSession: true,
+      publishedEventBaseline: getPublishedEventBaseline(event),
+      publishedEventBaselineEvent: isPersistedEventEditStatus(event.status) ? event : null,
+      originalScheduledAt: event.scheduledAt ?? null,
+      persistedEndAt: event.endAt ?? null,
+      name: event.name ?? "",
+      description: event.description ?? "",
+      bannerImageUri,
+      bannerImageKey: event.bannerImageKey ?? null,
+      // A restored Event's banner is already a remote key/URI — no local
+      // picker MIME type applies until the user selects a new image.
+      bannerContentType: null,
+      bannerOriginalImageUri,
+      bannerOriginalImageKey: event.bannerOriginalImageKey ?? event.bannerImageKey ?? null,
+      bannerImageDisplay: event.bannerImageDisplay ?? null,
+      ageRestriction: event.ageRestriction ?? "all_ages",
+      categories: event.categories?.length ? event.categories : event.category ? [event.category] : [],
+      scheduledAt: event.scheduledAt ?? null,
+      endAt: event.endAt ?? null,
+      timezone: event.timezone ?? null,
+      // Batch 3A: seed picker hydration from the venue-local wall-clock when the
+      // Event carries a timezone; otherwise leave null so Step 2 falls back to
+      // legacy device-local interpretation of `scheduledAt`.
+      scheduledLocalDate: wallClock?.scheduledLocalDate ?? null,
+      scheduledLocalTime: wallClock?.scheduledLocalTime ?? null,
+      endLocalDate: wallClock?.endLocalDate ?? null,
+      endLocalTime: wallClock?.endLocalTime ?? null,
+      // A freshly opened Event is not a schedule edit until the user touches a picker.
+      scheduleWallClockDirty: false,
+      location: event.location ?? {},
+      tickets: event.tickets.length > 0 ? mergeTicketsFromEvent(event.tickets, []) : [],
+      privacy: event.privacy,
+    });
+  },
+
+  discardDraft: async () => {
+    await draftSaveQueue.catch(() => undefined);
+
+    const { draftId, isEditingPublishedEvent } = get();
+    if (draftId && !isEditingPublishedEvent) {
+      await deleteEvent(draftId);
+    }
+    draftLifecycleVersion += 1;
+    set(createInitialState());
+  },
+
+  resetDraft: () => {
+    draftLifecycleVersion += 1;
+    set(createInitialState());
+  },
+
+  startCreateSession: () => {
+    get().resetDraft();
+  },
+}));
+
+const buildEventPayload = async (state: EventDraftState): Promise<EventPayload> => {
+  let bannerImageKey = state.bannerImageKey;
+  let bannerOriginalImageKey = state.bannerOriginalImageKey;
+  const uploadBanner = async () => {
+    if (!state.bannerImageUri || isRemoteUri(state.bannerImageUri) || bannerImageKey) {
+      return bannerImageKey;
+    }
+
+    const contentType = getImageContentType(state.bannerImageUri, state.bannerContentType);
+    const extension = getImageExtension(contentType);
+
+    return uploadFileToStorage({
+      contentType,
+      key: `events/banners/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
+      uri: state.bannerImageUri,
+    });
+  };
+
+  const uploadOriginalBanner = async () => {
+    if (!state.bannerOriginalImageUri || isRemoteUri(state.bannerOriginalImageUri) || bannerOriginalImageKey) {
+      return bannerOriginalImageKey;
+    }
+
+    const contentType = getImageContentType(state.bannerOriginalImageUri, state.bannerContentType);
+    const extension = getImageExtension(contentType);
+
+    try {
+      return await uploadFileToStorage({
+        contentType,
+        key: `events/banners/originals/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
+        uri: state.bannerOriginalImageUri,
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  [bannerImageKey, bannerOriginalImageKey] = await Promise.all([
+    uploadBanner(),
+    uploadOriginalBanner(),
+  ]);
+
+  return {
+    ageRestriction: state.ageRestriction,
+    bannerImageKey,
+    bannerOriginalImageKey: bannerOriginalImageKey ?? bannerImageKey,
+    bannerImageDisplay: state.bannerImageDisplay,
+    category: state.categories[0] ?? null,
+    categories: state.categories,
+    description: state.description.trim() || null,
+    location: state.location,
+    name: state.name.trim() || null,
+    privacy: state.privacy,
+    scheduledAt: state.scheduledAt,
+    endAt: state.endAt,
+    ...buildWallClockTransportFields(state),
+    tickets: toEventTicketInputs(state.tickets),
+  };
+};
+
+// Batch 3A — attach the venue-local wall-clock transport fields to an outgoing
+// draft/publish payload. Included when the schedule is explicit intent:
+//   - a NEW Event (its schedule is always intentional once entered), OR
+//   - the user touched a start/end picker this session.
+// A venue-only edit on an existing Event therefore sends NO local parts, so the
+// backend's venue-change wall-clock-preservation branch runs.
+const buildWallClockTransportFields = (
+  state: EventDraftState,
+): Pick<
+  EventPayload,
+  "scheduledLocalDate" | "scheduledLocalTime" | "endLocalDate" | "endLocalTime"
+> => {
+  const includeWallClock = !state.isExistingEventSession || state.scheduleWallClockDirty;
+  if (!includeWallClock) {
+    return {};
+  }
+  return {
+    ...(state.scheduledLocalDate ? { scheduledLocalDate: state.scheduledLocalDate } : {}),
+    ...(state.scheduledLocalTime ? { scheduledLocalTime: state.scheduledLocalTime } : {}),
+    ...(state.endLocalDate ? { endLocalDate: state.endLocalDate } : {}),
+    ...(state.endLocalTime ? { endLocalTime: state.endLocalTime } : {}),
+  };
+};
