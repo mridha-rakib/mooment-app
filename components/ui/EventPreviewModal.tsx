@@ -20,7 +20,7 @@ import Animated, {
 import { useTheme } from '@/hooks/useTheme';
 import { buttonBackground, buttonForeground } from '@/lib/buttonTheme';
 import CrowdStatusBadge from '@/components/events/CrowdStatusBadge';
-import type { CrowdStatus } from '@/lib/events';
+import { EVENT_LIFECYCLE_LABELS, type CrowdStatus, type EventLifecycle } from '@/lib/events';
 import {
   EVENT_CARD_HORIZONTAL_INSET,
   MAP_PREVIEW_CONTAINER_PADDING,
@@ -35,6 +35,7 @@ export type EventPreviewModalItem = {
   hostName?: string;
   distance?: string;
   isLive?: boolean;
+  lifecycle?: EventLifecycle | null;
   eventStatus?: string | null;
   crowdStatus?: CrowdStatus | null;
   eventDate?: string;
@@ -63,6 +64,7 @@ type EventPreviewModalProps = {
   hostName?: string;
   distance?: string;
   isLive?: boolean;
+  lifecycle?: EventLifecycle | null;
   eventStatus?: string | null;
   crowdStatus?: CrowdStatus | null;
   eventDate?: string;
@@ -102,6 +104,7 @@ export default function EventPreviewModal({
   hostName = "host",
   distance = "nearby",
   isLive = false,
+  lifecycle = null,
   eventStatus = null,
   crowdStatus = null,
   eventDate = "Date TBA",
@@ -154,6 +157,7 @@ export default function EventPreviewModal({
     hostName,
     distance,
     isLive,
+    lifecycle,
     eventStatus,
     crowdStatus,
     eventDate,
@@ -178,6 +182,7 @@ export default function EventPreviewModal({
     eventTitle,
     hostName,
     isLive,
+    lifecycle,
     eventStatus,
     crowdStatus,
     location,
@@ -238,7 +243,8 @@ export default function EventPreviewModal({
     const itemThemeColor = item.themeColor ?? themeColor;
     const itemDistance = item.distance ?? "nearby";
     const distanceLabel = itemDistance === "nearby" ? "nearby" : `${itemDistance} away`;
-    const itemIsLive = item.isLive || item.eventStatus === "live";
+    const itemLifecycle = item.lifecycle ?? null;
+    const itemIsLive = itemLifecycle === "live";
 
     return (
       <View style={[styles.previewSlide, { width: itemWidth }]}>
@@ -267,13 +273,19 @@ export default function EventPreviewModal({
         {/* Status region — reserved height so live vs non-live never changes
             the slide footprint or the CTA offset. */}
         <View style={styles.statusRow}>
-          {itemIsLive ? (
+          {itemLifecycle ? (
             <>
-              <Animated.View style={[styles.liveBadge, styles.liveBadgeActive, liveBadgePulseStyle]}>
-                <Animated.View style={[styles.liveDot, { backgroundColor: colors.danger }, liveDotPulseStyle]} />
-                <Text style={[styles.liveText, { color: colors.danger }]}>Live</Text>
+              <Animated.View style={[
+                styles.liveBadge,
+                itemIsLive ? styles.liveBadgeActive : styles.lifecycleBadgeInactive,
+                itemIsLive && liveBadgePulseStyle,
+              ]}>
+                {itemIsLive ? <Animated.View style={[styles.liveDot, { backgroundColor: colors.danger }, liveDotPulseStyle]} /> : null}
+                <Text style={[styles.liveText, { color: itemIsLive ? colors.danger : colors.textSecondary }]}>
+                  {EVENT_LIFECYCLE_LABELS[itemLifecycle]}
+                </Text>
               </Animated.View>
-              <CrowdStatusBadge eventStatus={item.eventStatus} crowdStatus={item.crowdStatus} />
+              <CrowdStatusBadge eventLifecycle={itemLifecycle} crowdStatus={item.crowdStatus} />
             </>
           ) : null}
         </View>
@@ -497,6 +509,10 @@ const styles = StyleSheet.create({
   liveBadgeActive: {
     backgroundColor: 'rgba(255, 59, 48, 0.16)',
     borderColor: 'rgba(255, 59, 48, 0.28)',
+  },
+  lifecycleBadgeInactive: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   liveDot: {
     width: 6,

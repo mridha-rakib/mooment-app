@@ -25,12 +25,12 @@ const COLORS = {
   primary: "#B2ABBA",
   text: "#FFFFFF",
   textMuted: "#8E8E9B",
-  liveGreen: "#FF3B30", // matches shared theme colors.danger — "Live Now" red per product decision
+  liveGreen: "#FF3B30",
   liveGreenBg: "rgba(72, 11, 10, 0.88)",
   startingSoonColor: "#F59E0B",
   startingSoonBg: "rgba(40,32,10,0.88)",
-  lastCallColor: "#EF4444",
-  lastCallBg: "rgba(40,10,10,0.88)",
+  endedColor: "#EF4444",
+  endedBg: "rgba(40,10,10,0.88)",
 };
 
 const RADIUS_OPTIONS = [
@@ -43,9 +43,10 @@ const RADIUS_OPTIONS = [
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
-  { key: "live_now", label: "Live Now" },
+  { key: "live", label: "Live" },
   { key: "starting_soon", label: "Starting Soon" },
-  { key: "last_call", label: "Last Call" },
+  { key: "upcoming", label: "Upcoming" },
+  { key: "ended", label: "Ended" },
 ] as const;
 
 type StatusFilter = "all" | NowEventStatus;
@@ -98,13 +99,16 @@ const formatEventTime = (event: Pick<NowModeEventResponse, "scheduledAt" | "time
 const getStatusConfig = (
   status: NowEventStatus,
 ): { label: string; color: string; bg: string } => {
-  if (status === "live_now") {
-    return { label: "Live Now", color: COLORS.liveGreen, bg: COLORS.liveGreenBg };
+  if (status === "live") {
+    return { label: "Live", color: COLORS.liveGreen, bg: COLORS.liveGreenBg };
   }
   if (status === "starting_soon") {
     return { label: "Starting Soon", color: COLORS.startingSoonColor, bg: COLORS.startingSoonBg };
   }
-  return { label: "Last Call", color: COLORS.lastCallColor, bg: COLORS.lastCallBg };
+  if (status === "upcoming") {
+    return { label: "Upcoming", color: COLORS.startingSoonColor, bg: COLORS.startingSoonBg };
+  }
+  return { label: "Ended", color: COLORS.endedColor, bg: COLORS.endedBg };
 };
 
 const getHostName = (event: NowModeEventResponse): string =>
@@ -350,7 +354,7 @@ export default function NowModeScreen({ onBack }: NowModeScreenProps) {
       ? events
       : events.filter((e) => e.nowStatus === statusFilter);
 
-  const liveCount = events.filter((e) => e.nowStatus === "live_now").length;
+  const liveCount = events.filter((e) => e.nowStatus === "live").length;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -409,14 +413,14 @@ export default function NowModeScreen({ onBack }: NowModeScreenProps) {
             onPress={() => setStatusFilter(f.key as StatusFilter)}
             activeOpacity={0.7}
           >
-            {f.key === "live_now" && (
+            {f.key === "live" && (
               <View style={[styles.filterDot, { backgroundColor: COLORS.liveGreen }]} />
             )}
             {f.key === "starting_soon" && (
               <View style={[styles.filterDot, { backgroundColor: COLORS.startingSoonColor }]} />
             )}
-            {f.key === "last_call" && (
-              <View style={[styles.filterDot, { backgroundColor: COLORS.lastCallColor }]} />
+            {f.key === "ended" && (
+              <View style={[styles.filterDot, { backgroundColor: COLORS.endedColor }]} />
             )}
             <Text
               style={[styles.filterTabText, statusFilter === f.key && styles.filterTabTextActive]}

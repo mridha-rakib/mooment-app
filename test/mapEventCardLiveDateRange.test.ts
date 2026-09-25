@@ -76,17 +76,19 @@ test("LIVE map preview visual is red using the existing danger token", () => {
   assert.match(eventPreviewModalSource, /backgroundColor:\s*'rgba\(255, 59, 48, 0\.16\)'/);
   assert.match(eventPreviewModalSource, /borderColor:\s*'rgba\(255, 59, 48, 0\.28\)'/);
   assert.match(eventPreviewModalSource, /backgroundColor:\s*colors\.danger/);
-  assert.match(eventPreviewModalSource, /<Text style=\{\[styles\.liveText,\s*\{\s*color:\s*colors\.danger\s*\}\]\}>Live<\/Text>/);
+  assert.match(eventPreviewModalSource, /itemIsLive \? colors\.danger : colors\.textSecondary/);
+  assert.match(eventPreviewModalSource, /EVENT_LIFECYCLE_LABELS\[itemLifecycle\]/);
 });
 
 test("non-live map preview does not render the animated LIVE pulse", () => {
-  assert.match(eventPreviewModalSource, /const itemIsLive = item\.isLive \|\| item\.eventStatus === "live";/);
+  assert.match(eventPreviewModalSource, /const itemLifecycle = item\.lifecycle \?\? null;/);
+  assert.match(eventPreviewModalSource, /const itemIsLive = itemLifecycle === "live";/);
   // The status region is now always rendered (with a reserved minHeight) so
   // live vs non-live cannot change the slide height; the animated LIVE badge
   // itself is still gated behind `itemIsLive`.
   assert.match(
     eventPreviewModalSource,
-    /<View style=\{styles\.statusRow\}>\s*\{itemIsLive \? \(\s*<>\s*<Animated\.View style=\{\[styles\.liveBadge,\s*styles\.liveBadgeActive,\s*liveBadgePulseStyle\]\}>/,
+    /<View style=\{styles\.statusRow\}>\s*\{itemLifecycle \? \(\s*<>\s*<Animated\.View style=\{\[/,
   );
   assert.match(eventPreviewModalSource, /statusRow:\s*\{\s*minHeight: MAP_PREVIEW_STATUS_REGION_HEIGHT,/);
 });
@@ -94,7 +96,7 @@ test("non-live map preview does not render the animated LIVE pulse", () => {
 test("Busy and Not Busy badge rendering remains delegated to the existing component", () => {
   assert.match(
     eventPreviewModalSource,
-    /<CrowdStatusBadge eventStatus=\{item\.eventStatus\} crowdStatus=\{item\.crowdStatus\} \/>/,
+    /<CrowdStatusBadge eventLifecycle=\{itemLifecycle\} crowdStatus=\{item\.crowdStatus\} \/>/,
   );
 });
 

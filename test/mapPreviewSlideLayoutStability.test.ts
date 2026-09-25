@@ -93,8 +93,8 @@ test("6. View Event CTA is pinned to a stable bottom position by a flexible spac
   assert.match(previewSource, /name="arrow-right"/);
 });
 
-test("7. status region is always rendered with a reserved height (live badge still gated by itemIsLive)", () => {
-  assert.match(previewSource, /<View style=\{styles\.statusRow\}>\s*\{itemIsLive \? \(/);
+test("7. status region is always rendered with a reserved height (canonical badge does not change layout)", () => {
+  assert.match(previewSource, /<View style=\{styles\.statusRow\}>\s*\{itemLifecycle \? \(/);
   assert.match(previewSource, /statusRow:\s*\{\s*minHeight:\s*MAP_PREVIEW_STATUS_REGION_HEIGHT,/);
   assert.ok(MAP_PREVIEW_STATUS_REGION_HEIGHT >= 24);
 });
@@ -200,7 +200,7 @@ test("16. distance is not duplicated — it stays in the header subtitle only", 
 });
 
 test("17. crowd badge + live pulse wiring and the disabled Add-to-Calendar path are untouched", () => {
-  assert.match(previewSource, /<CrowdStatusBadge eventStatus=\{item\.eventStatus\} crowdStatus=\{item\.crowdStatus\} \/>/);
+  assert.match(previewSource, /<CrowdStatusBadge eventLifecycle=\{itemLifecycle\} crowdStatus=\{item\.crowdStatus\} \/>/);
   assert.match(previewSource, /const showCalendarAction = false;/);
   assert.doesNotMatch(previewSource, /withRepeat|withSequence|withTiming|useSharedValue|setInterval|Animated\.loop/);
 });

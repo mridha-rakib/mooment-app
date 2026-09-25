@@ -112,8 +112,9 @@ test("J/L — EventFeedCard badge consumes backend lifecycle, not persisted stat
   assert.doesNotMatch(eventFeedCardSource, /Live Now/);
 });
 
-test("K — Map preview live flag follows persisted event.status", () => {
-  assert.match(mapContainerSource, /isLive: event\.status === "live"/);
+test("K — Map preview live flag follows canonical event.lifecycle", () => {
+  assert.match(mapContainerSource, /isLive: event\.lifecycle === "live"/);
+  assert.doesNotMatch(mapContainerSource, /isLive: event\.status === "live"/);
 });
 
 // ───────────────────────────── Map attendee count (B–D) ──────────────────

@@ -139,7 +139,8 @@ const toMapMarker = (
     hostName: getHostName(event),
     distance: formatDistanceFromMiles(distanceMiles),
     distanceMeters: distanceMiles === null ? null : distanceMiles * 1609.344,
-    isLive: event.status === "live",
+    isLive: event.lifecycle === "live",
+    lifecycle: event.lifecycle,
     eventStatus: event.status,
     crowdStatus: event.crowdStatus ?? null,
     checkedInCount: typeof event.checkedInCount === "number" ? event.checkedInCount : 0,
@@ -177,6 +178,7 @@ const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
         marker.distanceMeters === nextMarker.distanceMeters &&
         marker.checkedInCount === nextMarker.checkedInCount &&
         marker.isLive === nextMarker.isLive &&
+        marker.lifecycle === nextMarker.lifecycle &&
         marker.endAt === nextMarker.endAt &&
         marker.eventEndDate === nextMarker.eventEndDate &&
         marker.eventEndTime === nextMarker.eventEndTime,

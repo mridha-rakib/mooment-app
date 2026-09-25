@@ -26,8 +26,8 @@ const STATUS_CONFIG: Record<PostTagEventStatus, { label: string; color: string; 
   live:          { label: 'Live',          color: '#FF3B30', bg: 'rgba(255,59,48,0.12)', dot: true },
   // CRT-003: reuses the existing amber "upcoming" badge treatment.
   starting_soon: { label: 'Starting Soon', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', dot: false },
-  active:        { label: 'Active',        color: '#16D869', bg: 'transparent',           dot: false },
   upcoming:      { label: 'Upcoming',      color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', dot: false },
+  ended:         { label: 'Ended',         color: '#8E8E9B', bg: 'transparent',           dot: false },
 };
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop';

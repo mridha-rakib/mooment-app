@@ -65,32 +65,33 @@ test("FeedPost event-overlay Live Now badge now uses the red family instead of h
   assert.doesNotMatch(feedPostSource, /rgba\(22, 216, 105/);
 });
 
-test("NowModeScreen live_now status now uses the red family instead of hardcoded green", () => {
+test("NowModeScreen canonical Live status uses the red family instead of hardcoded green", () => {
   assert.match(nowModeScreenSource, /liveGreen:\s*"#FF3B30"/);
   assert.match(nowModeScreenSource, /liveGreenBg:\s*"rgba\(72, 11, 10, 0\.88\)"/);
   assert.doesNotMatch(nowModeScreenSource, /#0DC143/);
   assert.doesNotMatch(nowModeScreenSource, /rgba\(20,37,22,0\.88\)/);
 });
 
-test("NowModeScreen leaves starting_soon and last_call colors untouched (out of scope)", () => {
+test("NowModeScreen preserves Starting Soon and supplies the canonical Ended treatment", () => {
   assert.match(nowModeScreenSource, /startingSoonColor:\s*"#F59E0B"/);
-  assert.match(nowModeScreenSource, /lastCallColor:\s*"#EF4444"/);
+  assert.match(nowModeScreenSource, /endedColor:\s*"#EF4444"/);
 });
 
 test("EventPickerModal (post event-tag picker) 'live' status now uses red instead of hardcoded green", () => {
   assert.match(eventPickerModalSource, /live:\s*\{ label: 'Live',\s*color: '#FF3B30', bg: 'rgba\(255,59,48,0\.12\)', dot: true \}/);
 });
 
-test("EventPickerModal leaves unrelated statuses (active/starting_soon/upcoming) untouched", () => {
-  assert.match(eventPickerModalSource, /active:\s*\{ label: 'Active',\s*color: '#16D869', bg: 'transparent',\s*dot: false \}/);
+test("EventPickerModal uses the canonical non-live statuses", () => {
   assert.match(eventPickerModalSource, /starting_soon:\s*\{ label: 'Starting Soon', color: '#F59E0B'/);
   assert.match(eventPickerModalSource, /upcoming:\s*\{ label: 'Upcoming',\s*color: '#F59E0B'/);
+  assert.match(eventPickerModalSource, /ended:\s*\{ label: 'Ended',\s*color: '#8E8E9B'/);
+  assert.doesNotMatch(eventPickerModalSource, /label: 'Active'/);
 });
 
 // --- 4. Labels / business logic untouched ---
 test("migrated Feed no longer uses Live Now lifecycle copy", () => {
   assert.doesNotMatch(eventFeedCardSource, /Live Now/);
-  assert.match(nowModeScreenSource, /label:\s*"Live Now"/);
+  assert.doesNotMatch(nowModeScreenSource, /Live Now|Last Call/);
   assert.match(feedPostSource, />Live Now</);
 });
 

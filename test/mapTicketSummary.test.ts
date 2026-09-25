@@ -185,11 +185,11 @@ test("Start/End event date rows are derived from scheduledAt/endAt via the share
 
 test("LIVE pulse and Busy/Not Busy wiring in the preview card are untouched", () => {
   assert.match(eventPreviewModalSource, /interpolate\(livePulseProgress\.value,\s*\[0,\s*1\]/);
-  assert.match(eventPreviewModalSource, /<Text style=\{\[styles\.liveText,\s*\{\s*color:\s*colors\.danger\s*\}\]\}>Live<\/Text>/);
+  assert.match(eventPreviewModalSource, /itemIsLive \? colors\.danger : colors\.textSecondary/);
   assert.doesNotMatch(eventPreviewModalSource, /withRepeat|withSequence|withTiming|useSharedValue|setInterval|Animated\.loop/);
   assert.match(
     eventPreviewModalSource,
-    /<CrowdStatusBadge eventStatus=\{item\.eventStatus\} crowdStatus=\{item\.crowdStatus\} \/>/,
+    /<CrowdStatusBadge eventLifecycle=\{itemLifecycle\} crowdStatus=\{item\.crowdStatus\} \/>/,
   );
 });
 

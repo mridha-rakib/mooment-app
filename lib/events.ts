@@ -388,7 +388,7 @@ export type EventFeedQuery = {
   audience?: FeedAudience;
 };
 
-export type NowEventStatus = "live_now" | "starting_soon" | "last_call";
+export type NowEventStatus = EventLifecycle;
 
 export type NowModeEventResponse = EventResponse & {
   nowStatus: NowEventStatus;
@@ -439,9 +439,7 @@ export type EventHostReviewResponse = {
   createdAt: string;
 };
 
-// "starting_soon" is additive (CRT-003) — an upcoming Event within the
-// backend's STARTING_SOON_MS of its start. Existing values are unchanged.
-export type PostTagEventStatus = "live" | "starting_soon" | "active" | "upcoming";
+export type PostTagEventStatus = EventLifecycle;
 
 export type PostTagEvent = {
   id: string;

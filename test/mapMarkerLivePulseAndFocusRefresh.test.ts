@@ -67,10 +67,11 @@ test("a selected category the event does not have falls back to the first-catego
   assert.equal(color, getCategoryMarkerColor({ category: "Parties & Celebrations" }));
 });
 
-// ── B. Authoritative live status (only event.status === "live" may pulse) ──
+// ── B. Canonical lifecycle authority (only lifecycle === "live" may pulse) ──
 
-test("MapContainer sources isLive from the authoritative event.status field", () => {
-  assert.match(mapContainerSource, /isLive:\s*event\.status\s*===\s*"live"/);
+test("MapContainer sources isLive from the canonical event.lifecycle field", () => {
+  assert.match(mapContainerSource, /isLive:\s*event\.lifecycle\s*===\s*"live"/);
+  assert.doesNotMatch(mapContainerSource, /isLive:\s*event\.status\s*===\s*"live"/);
 });
 
 test("MapContainer no longer computes isLive from the scheduled-time/12-hour heuristic", () => {

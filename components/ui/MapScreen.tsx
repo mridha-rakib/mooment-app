@@ -76,6 +76,7 @@ import {
   getLivePulsePeakOpacity,
   getMarkerGlowBaseOpacity,
 } from "@/constants/mapMarkerGlow";
+import type { EventLifecycle } from "@/lib/events";
 import CinematicButton from "./CinematicButton";
 import EventPreviewModal from "./EventPreviewModal";
 
@@ -149,6 +150,7 @@ export type MapMarkerData = MapCarouselMarker & {
   distance?: string | null;
   distanceMeters?: number | null;
   isLive?: boolean;
+  lifecycle?: EventLifecycle | null;
   eventStatus?: string | null;
   crowdStatus?: import("@/lib/events").CrowdStatus | null;
   checkedInCount?: number;
@@ -1218,6 +1220,7 @@ export default function MapScreen({
       hostName: marker.hostName ?? undefined,
       distance: marker.distance ?? undefined,
       isLive: marker.isLive,
+      lifecycle: marker.lifecycle ?? null,
       eventStatus: marker.eventStatus,
       crowdStatus: marker.crowdStatus ?? null,
       eventDate: marker.eventDate ?? undefined,
@@ -1581,6 +1584,7 @@ export default function MapScreen({
         hostName={selectedMarker?.hostName ?? undefined}
         distance={selectedMarker?.distance ?? undefined}
         isLive={selectedMarker?.isLive}
+        lifecycle={selectedMarker?.lifecycle ?? null}
         eventStatus={selectedMarker?.eventStatus}
         crowdStatus={selectedMarker?.crowdStatus ?? null}
         eventDate={selectedMarker?.eventDate ?? undefined}
