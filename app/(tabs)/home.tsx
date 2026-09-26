@@ -2,7 +2,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Animated, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
+import { Alert, Animated, DeviceEventEmitter, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -32,6 +32,7 @@ import {
   type RepostPayload,
 } from "@/lib/moments";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { EVENT_ADMISSION_CHANGED_EVENT } from "@/lib/payments";
 import { mapMomentToPost } from "@/lib/momentPostMapper";
 import { getStorageFileUrl } from "@/lib/storage";
 import {
@@ -1121,7 +1122,17 @@ export default function HomeFeed() {
       void loadStories();
       void loadFeed(feedAudience);
 
+      const admissionChangedSubscription = DeviceEventEmitter.addListener(
+        EVENT_ADMISSION_CHANGED_EVENT,
+        () => {
+          if (selectedType === "Feed") {
+            void loadFeed(feedAudienceRef.current);
+          }
+        },
+      );
+
       return () => {
+        admissionChangedSubscription.remove();
         if (__DEV__) {
           console.log('[XENOG_HOME_BLUR]', {
             activeTheme: activeThemeRef.current,
@@ -1135,7 +1146,7 @@ export default function HomeFeed() {
         isRefreshingRef.current = false;
         setIsRefreshing(false);
       };
-    }, [clearFeedScrollIdleTimer, feedAudience, loadFeed, loadStories, setActiveFeedVideoItemIdIfChanged, updateFeedPostsForAllAudiences]),
+    }, [clearFeedScrollIdleTimer, feedAudience, loadFeed, loadStories, selectedType, setActiveFeedVideoItemIdIfChanged, updateFeedPostsForAllAudiences]),
   );
 
   useEffect(() => {
