@@ -1,4 +1,5 @@
 import React from "react";
+import { DeviceEventEmitter } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import MapScreen, { type MapFilterRecenterIntent, type MapMarkerData } from "@/components/ui/MapScreen";
 import { getMapEventPage, type EventResponse, type EventMapQuery } from "@/lib/events";
@@ -23,6 +24,7 @@ import { getMapTicketSummary } from "@/lib/mapTicketSummary";
 import { getCategoryMarkerColor } from "@/constants/categoryColors";
 import type { EventCategory } from "@/constants/eventCategories";
 import { isValidLocationCoordinate } from "@/lib/locationSharing";
+import { EVENT_ADMISSION_CHANGED_EVENT } from "@/lib/payments";
 
 const EVENT_MAP_LIMIT = 100;
 const VIEWPORT_REQUEST_DEBOUNCE_MS = 500;
@@ -176,6 +178,7 @@ const areMarkerListsEqual = (left: MapMarkerData[], right: MapMarkerData[]) => {
         marker.glowColor === nextMarker.glowColor &&
         marker.distance === nextMarker.distance &&
         marker.distanceMeters === nextMarker.distanceMeters &&
+        marker.crowdStatus === nextMarker.crowdStatus &&
         marker.checkedInCount === nextMarker.checkedInCount &&
         marker.isLive === nextMarker.isLive &&
         marker.lifecycle === nextMarker.lifecycle &&
@@ -236,6 +239,17 @@ export default function MapContainer({
       setFocusRefreshKey((key) => key + 1);
     }, []),
   );
+
+  React.useEffect(() => {
+    const admissionChangedSubscription = DeviceEventEmitter.addListener(
+      EVENT_ADMISSION_CHANGED_EVENT,
+      () => setFocusRefreshKey((key) => key + 1),
+    );
+
+    return () => {
+      admissionChangedSubscription.remove();
+    };
+  }, []);
 
   // Keep a ref so the async fetch always reads the latest location without
   // being listed as an effect dependency (which would re-trigger fetches on

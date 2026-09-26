@@ -91,6 +91,7 @@ import {
     ActivityIndicator,
     Alert,
     Animated,
+    DeviceEventEmitter,
     Dimensions,
     Keyboard,
     KeyboardAvoidingView,
@@ -108,6 +109,7 @@ import {
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomSheetDragDismiss } from "@/components/ui/useBottomSheetDragDismiss";
+import { EVENT_ADMISSION_CHANGED_EVENT } from "@/lib/payments";
 
 const { width } = Dimensions.get("window");
 const CHAT_COMPOSER_KEYBOARD_GAP = 8;
@@ -838,10 +840,20 @@ const EventScreen = () => {
 
       void loadEventDetails({ isActive: () => isActive });
 
+      const admissionChangedSubscription = DeviceEventEmitter.addListener(
+        EVENT_ADMISSION_CHANGED_EVENT,
+        () => {
+          if (event?.status !== "draft") {
+            void loadEventDetails({ isActive: () => isActive });
+          }
+        },
+      );
+
       return () => {
         isActive = false;
+        admissionChangedSubscription.remove();
       };
-    }, [eventId, isLoading, loadEventDetails]),
+    }, [event?.status, eventId, isLoading, loadEventDetails]),
   );
 
   const handleRefresh = useCallback(async () => {

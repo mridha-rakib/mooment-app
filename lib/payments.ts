@@ -381,6 +381,15 @@ export const emitTicketWalletChanged = (payload: TicketWalletChangedEvent = {}) 
   DeviceEventEmitter.emit(TICKET_WALLET_CHANGED_EVENT, payload);
 };
 
+// This deliberately carries no crowd value or event ID. Scanner success does
+// not reliably return an event ID, so visible Event surfaces re-read their
+// existing authoritative REST data after a same-device admission mutation.
+export const EVENT_ADMISSION_CHANGED_EVENT = "xenog.eventAdmission.changed";
+
+export const emitEventAdmissionChanged = () => {
+  DeviceEventEmitter.emit(EVENT_ADMISSION_CHANGED_EVENT);
+};
+
 // A ticket purchase / confirm / cancel / refund changes authoritative event
 // inventory (availableCount) and, once paid/refunded, publicGoingSummary.going.
 // Drop the module-cached EventResponse for every affected event so the next
@@ -506,6 +515,7 @@ export const refundCheckoutOrder = async (orderId: string): Promise<CheckoutOrde
 
   invalidateEventCachesForOrder(order);
   emitTicketWalletChanged();
+  emitEventAdmissionChanged();
 
   return order;
 };
@@ -866,6 +876,7 @@ export const cancelTicketPass = async ({
 
   invalidateCachedEventById(eventId);
   emitTicketWalletChanged();
+  emitEventAdmissionChanged();
 
   return cancellation;
 };
@@ -969,6 +980,7 @@ export const scanTicketQrCode = async (checkInCode: string, eventId?: string): P
   }
 
   emitTicketWalletChanged();
+  emitEventAdmissionChanged();
 
   return ticket;
 };
