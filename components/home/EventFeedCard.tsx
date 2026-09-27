@@ -202,6 +202,7 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
   const timestamp = timeAgo(event.publishedAt ?? event.createdAt);
   const likedByContext = useMemo(() => formatLikedByContext(event), [event]);
   const isPublic = event.privacy === "public";
+  const privacyLabel = event.privacy === "private" ? "Private" : event.privacy === "locked" ? "Locked" : "Public";
   const isOwnEvent = Boolean(currentUserId && currentUserId === event.userId);
   const eventId = event.id?.trim() || null;
   const canViewEventStats = Boolean(
@@ -729,14 +730,23 @@ function EventFeedCard({ event, headerLabel, repostCaption, taggedFriendNames = 
       ) : null}
       {/* ── Header ──────────────────────────────────────────────── */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.hostRow} activeOpacity={0.7} onPress={goToHostProfile}>
+        <TouchableOpacity
+          style={styles.hostRow}
+          activeOpacity={0.7}
+          onPress={goToHostProfile}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${hostName} profile. Event access: ${privacyLabel}`}
+        >
           <UserAvatar uri={hostAvatarUri} name={hostName} size={40} style={styles.avatar} />
           <View style={styles.hostMeta}>
             <Text style={[styles.hostName, { color: isDark ? "#FFFFFF" : colors.text }]} numberOfLines={1}>{hostName}</Text>
             <View style={styles.hostSubRow}>
               {Boolean(timestamp) && <Text style={styles.timestamp}>{timestamp}</Text>}
               {Boolean(timestamp) && <View style={styles.dot} />}
-              <Feather name={isPublic ? "globe" : "lock"} size={11} color="#777" />
+              <View style={styles.accessIndicator}>
+                <Feather name={isPublic ? "globe" : "lock"} size={11} color="#777" />
+                <Text style={styles.accessText}>{privacyLabel}</Text>
+              </View>
             </View>
           </View>
         </TouchableOpacity>
@@ -1197,6 +1207,16 @@ const styles = StyleSheet.create({
   },
   upcomingStatusBadge: {
     backgroundColor: "rgba(28, 46, 78, 0.82)",
+  },
+  accessIndicator: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  accessText: {
+    color: "#777",
+    fontSize: 11,
+    lineHeight: 14,
   },
   startingSoonStatusBadge: {
     backgroundColor: "rgba(92, 60, 12, 0.82)",

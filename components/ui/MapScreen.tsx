@@ -297,6 +297,8 @@ const MapMarker = React.memo(({
           style={styles.satMarkerContainer}
           onPress={onPress}
           activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={isLive ? `${label}, Live` : label}
         >
           {/* Image Radial Glow - Moved behind the bubble */}
           <Animated.View pointerEvents="none" style={[styles.satImageGlow, animatedSatImageGlowStyle]}>
@@ -386,6 +388,8 @@ const MapMarker = React.memo(({
         style={styles.markerContent}
         onPress={onPress}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={isLive ? `${label}, Live` : label}
       >
         {/* Soft Radial Glow Layer */}
         <Animated.View

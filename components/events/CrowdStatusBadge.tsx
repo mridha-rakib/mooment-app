@@ -56,6 +56,9 @@ export default function CrowdStatusBadge({ eventLifecycle, eventStatus, crowdSta
       entering={FadeIn.duration(220)}
       style={[styles.badge, colorStyle, style]}
       pointerEvents="none"
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`Crowd status: ${CROWD_LABELS[crowdStatus]}`}
     >
       <Text style={[styles.text, { color: textColor }]} numberOfLines={1}>
         {CROWD_LABELS[crowdStatus]}
@@ -95,6 +98,9 @@ export function EventLifecycleBadge({ lifecycle, style }: { lifecycle?: EventLif
       entering={FadeIn.duration(220)}
       style={[styles.liveBadge, lifecycle !== "live" && styles.nonLiveLifecycleBadge, style]}
       pointerEvents="none"
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`Event status: ${EVENT_LIFECYCLE_LABELS[lifecycle]}`}
     >
       {lifecycle === "live" ? <LiveDot color={colors.danger} /> : null}
       <Text style={[styles.liveText, { color: lifecycle === "live" ? colors.danger : "#B8B8C2" }]} numberOfLines={1}>
