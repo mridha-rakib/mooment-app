@@ -11,8 +11,12 @@ const initialSelector = stepFive.slice(
   stepFive.indexOf("</View>\n\n      {/* Spacer */}"),
 );
 const privacyHandler = eventDetail.slice(
-  eventDetail.indexOf("const handlePrivacyChange = async"),
+  eventDetail.indexOf("const handlePrivacyChange ="),
   eventDetail.indexOf("const renderHeader = () =>"),
+);
+const privacyCommitHandler = eventDetail.slice(
+  eventDetail.indexOf("const commitPrivacyChange = async"),
+  eventDetail.indexOf("const handlePrivacyChange ="),
 );
 
 test("initial create exposes exactly Public and Private, with confirmed privacy copy", () => {
@@ -25,7 +29,7 @@ test("initial create exposes exactly Public and Private, with confirmed privacy 
 });
 
 test("draft Preview reuses the privacy selector for Public-to-Locked before publishing", () => {
-  assert.match(privacyHandler, /isDraftPreview\s*\n\s*\? await saveEventDraft\(\{ privacy: newPrivacy \}, event\.id\)/);
+  assert.match(privacyCommitHandler, /isDraftPreview\s*\n\s*\? await saveEventDraft\(\{ privacy: newPrivacy \}, event\.id\)/);
   assert.match(eventDetail, /onPress=\{\(\) => handlePrivacyChange\("locked"\)\}/);
   assert.match(eventDetail, /\(!isDraftPreview \|\| event\?\.privacy !== "private"\)/);
   assert.match(eventDetail, /\{!isDraftPreview && \(/);
@@ -33,8 +37,8 @@ test("draft Preview reuses the privacy selector for Public-to-Locked before publ
 });
 
 test("published privacy management uses the existing privacy-only update path for all three values", () => {
-  assert.match(privacyHandler, /newPrivacy: EventPrivacy/);
-  assert.match(privacyHandler, /: await updateEvent\(event\.id, \{ privacy: newPrivacy \}\)/);
+  assert.match(privacyCommitHandler, /newPrivacy: EventPrivacy/);
+  assert.match(privacyCommitHandler, /: await updateEvent\(event\.id, \{ privacy: newPrivacy \}\)/);
   for (const privacy of ["public", "locked", "private"]) {
     assert.match(eventDetail, new RegExp(`handlePrivacyChange\\(\\"${privacy}\\"\\)`));
   }
