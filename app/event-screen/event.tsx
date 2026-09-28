@@ -473,6 +473,7 @@ const EventScreen = () => {
   const [previewEditSelectorVisible, setPreviewEditSelectorVisible] = useState(false);
   const [privacyDropdownVisible, setPrivacyDropdownVisible] = useState(false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+  const isUpdatingPrivacyRef = useRef(false);
   const [isPublishingDraft, setIsPublishingDraft] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowPending, setIsFollowPending] = useState(false);
@@ -1869,9 +1870,7 @@ const EventScreen = () => {
     }
   };
 
-  const handlePrivacyChange = async (newPrivacy: EventPrivacy) => {
-    setPrivacyDropdownVisible(false);
-
+  const commitPrivacyChange = async (newPrivacy: EventPrivacy) => {
     if (!event || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
       return;
     }
@@ -1880,6 +1879,11 @@ const EventScreen = () => {
       return;
     }
 
+    if (isUpdatingPrivacyRef.current) {
+      return;
+    }
+
+    isUpdatingPrivacyRef.current = true;
     setIsUpdatingPrivacy(true);
 
     try {
@@ -1890,8 +1894,43 @@ const EventScreen = () => {
     } catch (error) {
       Alert.alert("Unable to update privacy", getAuthErrorMessage(error, "Please try again."));
     } finally {
+      isUpdatingPrivacyRef.current = false;
       setIsUpdatingPrivacy(false);
     }
+  };
+
+  const handlePrivacyChange = (newPrivacy: EventPrivacy) => {
+    setPrivacyDropdownVisible(false);
+
+    if (!event || !isHostMode || isUpdatingPrivacy || event.privacy === newPrivacy) {
+      return;
+    }
+
+    const requiresAccessConfirmation =
+      (event.privacy === "public" && newPrivacy === "locked") ||
+      (event.privacy === "locked" && newPrivacy === "public");
+
+    if (!requiresAccessConfirmation) {
+      void commitPrivacyChange(newPrivacy);
+      return;
+    }
+
+    const isLocking = newPrivacy === "locked";
+    Alert.alert(
+      "Change event access?",
+      isLocking
+        ? "New attendees will need the existing Locked-event access flow. Existing attendees and issued tickets will not be removed."
+        : "This event will become publicly accessible under the existing Public-event rules. Existing attendees and issued tickets will not be changed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: () => {
+            void commitPrivacyChange(newPrivacy);
+          },
+        },
+      ],
+    );
   };
 
   const renderHeader = () => (
